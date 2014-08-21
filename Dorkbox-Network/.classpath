@@ -5,22 +5,22 @@
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/jsonbeans-0.2.jar"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry kind="lib" path="/Dependencies/kryo/objenesis-1.2.jar" sourcepath="/Dependencies/kryo/objenesis-1.2-sources.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/javassist/javassist.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/logging/slf4j-api-1.7.5.jar" sourcepath="/Dependencies/logging/slf4j-api-1.7.5-sources.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/logging/logback-classic-1.0.13.jar" sourcepath="/Dependencies/logging/logback-classic-1.0.13-sources.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/logging/logback-core-1.0.13.jar" sourcepath="/Dependencies/logging/logback-core-1.0.13-sources.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/logging/minlog-1.2-to-slf4j.jar" sourcepath="/Dependencies/logging/minlog-1.2-to-slf4j-sources.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/barchart-udt/barchart-udt-bundle-2.3.1.jar" sourcepath="/Dependencies/barchart-udt/barchart-udt-bundle-2.3.1-sources.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/barchart-udt/barchart-udt-core-2.3.1.jar"/>
+	<classpathentry kind="lib" path="/Dependencies/kryo/objenesis-1.2.jar" sourcepath="/Dependencies/kryo/objenesis-1.2-sources.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/javassist/javassist.jar" sourcepath="/Dependencies/javassist/javassist-src.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/logging/slf4j-api-1.7.5.jar" sourcepath="/Dependencies/logging/slf4j-api-1.7.5-sources.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/logging/logback-classic-1.0.13.jar" sourcepath="/Dependencies/logging/logback-classic-1.0.13-sources.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/logging/logback-core-1.0.13.jar" sourcepath="/Dependencies/logging/logback-core-1.0.13-sources.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/logging/minlog-1.2-to-slf4j.jar" sourcepath="/Dependencies/logging/minlog-1.2-to-slf4j-sources.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/barchart-udt/barchart-udt-bundle-2.3.1.jar" sourcepath="/Dependencies/barchart-udt/barchart-udt-bundle-2.3.1-sources.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/barchart-udt/barchart-udt-core-2.3.1.jar" sourcepath="/Dependencies/barchart-udt/barchart-udt-core-2.3.1-sources.zip"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/Dorkbox-Util"/>
-	<classpathentry kind="lib" path="/Dependencies/kryo/reflectasm.jar" sourcepath="/Dependencies/kryo/reflectasm-src.jar"/>
+	<classpathentry kind="lib" path="/Dependencies/kryo/reflectasm.jar" sourcepath="/Dependencies/kryo/reflectasm-src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/BouncyCastleCrypto/bcpkix-jdk15on-151.jar" sourcepath="/Dependencies/BouncyCastleCrypto/bcpkix-jdk15on-151-src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/BouncyCastleCrypto/bcprov-debug-jdk15on-151.jar" sourcepath="/Dependencies/BouncyCastleCrypto/bcprov-jdk15on-151-src.zip"/>
-	<classpathentry kind="lib" path="/Dependencies/kryo/kryo2-debug.jar" sourcepath="/Dependencies/kryo/kryo2-source.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/netty/netty-all-4.1.0.jar" sourcepath="/Dependencies/netty/netty-all-4.1.0-sources.jar">
+	<classpathentry kind="lib" path="/Dependencies/kryo/kryo2-debug.jar" sourcepath="/Dependencies/kryo/kryo2-source.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/netty/netty-all-4.1.0.jar" sourcepath="/Dependencies/netty/netty-all-4.1.0-sources.zip">
 		<attributes>
-			<attribute name="javadoc_location" value="jar:platform:/resource/Dependencies/netty/netty-all-4.1.0-javadoc.jar!/"/>
+			<attribute name="javadoc_location" value="jar:platform:/resource/Dependencies/netty/netty-all-4.1.0-javadoc.zip!/"/>
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="lib" path="/Dependencies/asm/asm-5.0.3.jar" sourcepath="/Dependencies/asm/asm-5.0.3-src.zip"/>

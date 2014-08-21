@@ -33,7 +33,7 @@ class PropertyStore extends SettingsStore {
 
 
     // the name of the file that contains the saved properties
-    private static final String SETTINGS_FILE_NAME = "settings.dat";
+    private static final String SETTINGS_FILE_NAME = "settings.db";
 
     private final Storage storage;
     private Props props = new Props();
@@ -150,10 +150,5 @@ class PropertyStore extends SettingsStore {
         this.storage.save();
 
         return remove != null;
-    }
-
-    @Override
-    public void shutdown() {
-        Storage.shutdown();
     }
 }

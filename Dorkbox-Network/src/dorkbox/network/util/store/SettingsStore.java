@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dorkbox.network.util.SecurityException;
+import dorkbox.util.Storage;
 
 /**
  * This class provides a way for the network stack to use the server's database, instead of a property file (which it uses when stand-alone)
@@ -292,7 +293,9 @@ public abstract class SettingsStore {
     public abstract boolean removeRegisteredServerKey(byte[] hostAddress) throws SecurityException;
 
     /**
-     * Take the proper steps to shutdown the connection store, if necessary.
+     * Take the proper steps to shutdown the storage system.
      */
-    public abstract void shutdown();
+    public void shutdown() {
+        Storage.shutdown();
+    }
 }
