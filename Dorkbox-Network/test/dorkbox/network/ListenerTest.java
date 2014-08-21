@@ -18,7 +18,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 
-public class ListenerTest extends DorknetTestCase {
+public class ListenerTest extends BaseTest {
 
     private final String origString = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; // lots of a's to encourage compression
     private final int limit = 20;

@@ -21,7 +21,7 @@ import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.SerializationManager;
 
 @SuppressWarnings({"rawtypes"})
-public class IdleTest extends DorknetTestCase {
+public class IdleTest extends BaseTest {
     private volatile boolean success = false;
 
     enum ConnectionType {

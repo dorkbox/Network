@@ -18,7 +18,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 
-public class MultipleThreadTest extends DorknetTestCase {
+public class MultipleThreadTest extends BaseTest {
     AtomicInteger sent = new AtomicInteger(0);
     AtomicInteger totalClientCounter = new AtomicInteger(1);
     AtomicInteger receivedServer = new AtomicInteger(1);

@@ -9,7 +9,7 @@ import org.junit.Test;
 
 import dorkbox.network.Client;
 import dorkbox.network.ConnectionOptions;
-import dorkbox.network.DorknetTestCase;
+import dorkbox.network.BaseTest;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
@@ -17,7 +17,7 @@ import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.SerializationManager;
 
-public class RmiSendObjectTest extends DorknetTestCase {
+public class RmiSendObjectTest extends BaseTest {
     private RmiBridge serverRMI;
 
     /**

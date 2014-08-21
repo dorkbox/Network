@@ -18,7 +18,7 @@ import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.SerializationManager;
 
-public class PingPongTest extends DorknetTestCase {
+public class PingPongTest extends BaseTest {
     private volatile String fail;
 
     int tries = 1000;

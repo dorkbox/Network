@@ -14,7 +14,7 @@ import dorkbox.network.util.store.SettingsStore;
 
 
 
-public class ReflectionSecurityTest extends DorknetTestCase {
+public class ReflectionSecurityTest extends BaseTest {
     private static boolean RUN_TEST = false;
 
     @Test

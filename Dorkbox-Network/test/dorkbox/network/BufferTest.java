@@ -16,7 +16,7 @@ import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.SerializationManager;
 
-public class BufferTest extends DorknetTestCase {
+public class BufferTest extends BaseTest {
     private static final int OBJ_SIZE = 1024 * 10;
 
     private volatile int finalCheckAmount = 0;

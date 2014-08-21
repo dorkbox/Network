@@ -13,7 +13,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 
-public class ConnectionTest extends DorknetTestCase {
+public class ConnectionTest extends BaseTest {
 
     @Test
     public void connectLocal() throws IOException, InitializationException, SecurityException {

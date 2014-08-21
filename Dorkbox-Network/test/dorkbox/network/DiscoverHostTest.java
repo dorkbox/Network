@@ -13,7 +13,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 
-public class DiscoverHostTest extends DorknetTestCase {
+public class DiscoverHostTest extends BaseTest {
     volatile boolean connected = false;
 
     @Test

@@ -15,7 +15,7 @@ import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 
 
-public class PingTest extends DorknetTestCase {
+public class PingTest extends BaseTest {
 
     private volatile int response = -1;
 

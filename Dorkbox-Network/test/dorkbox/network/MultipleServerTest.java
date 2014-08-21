@@ -13,7 +13,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 
-public class MultipleServerTest extends DorknetTestCase {
+public class MultipleServerTest extends BaseTest {
     AtomicInteger received = new AtomicInteger();
 
     @Test

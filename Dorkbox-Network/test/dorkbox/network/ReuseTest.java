@@ -14,7 +14,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 
-public class ReuseTest extends DorknetTestCase {
+public class ReuseTest extends BaseTest {
     AtomicInteger serverCount;
     AtomicInteger clientCount;
 

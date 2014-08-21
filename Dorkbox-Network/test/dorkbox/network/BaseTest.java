@@ -22,7 +22,7 @@ import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.entropy.Entropy;
 import dorkbox.network.util.entropy.SimpleEntropy;
 
-public abstract class DorknetTestCase {
+public abstract class BaseTest {
 
     static {
         // we want our entropy generation to be simple (ie, no user interaction to generate)
@@ -42,7 +42,7 @@ public abstract class DorknetTestCase {
     private volatile Timer timer;
     boolean fail_check;
 
-    public DorknetTestCase () {
+    public BaseTest () {
         System.out.println("---- " + getClass().getSimpleName());
 
         // assume SLF4J is bound to logback in the current environment
@@ -107,14 +107,14 @@ public abstract class DorknetTestCase {
         this.timer.schedule(new TimerTask() {
             @Override
             public void run () {
-                synchronized (DorknetTestCase.this.endPoints) {
-                    for (EndPoint endPoint : DorknetTestCase.this.endPoints) {
+                synchronized (BaseTest.this.endPoints) {
+                    for (EndPoint endPoint : BaseTest.this.endPoints) {
                         endPoint.stop();
                     }
-                    DorknetTestCase.this.endPoints.clear();
-                    DorknetTestCase.this.timer.cancel();
-                    DorknetTestCase.this.timer.purge();
-                    DorknetTestCase.this.timer = null;
+                    BaseTest.this.endPoints.clear();
+                    BaseTest.this.timer.cancel();
+                    BaseTest.this.timer.purge();
+                    BaseTest.this.timer = null;
                 }
             }
         }, stopAfterMillis);
@@ -142,7 +142,7 @@ public abstract class DorknetTestCase {
                 @Override
                 public void run () {
                     stopEndPoints();
-                    DorknetTestCase.this.fail_check = true;
+                    BaseTest.this.fail_check = true;
                 }
             };
             this.timer.schedule(failTask, stopAfterMillis+3000L);

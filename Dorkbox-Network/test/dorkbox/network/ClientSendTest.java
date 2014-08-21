@@ -15,7 +15,7 @@ import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.SerializationManager;
 
-public class ClientSendTest extends DorknetTestCase {
+public class ClientSendTest extends BaseTest {
 
     private AtomicBoolean checkPassed = new AtomicBoolean(false);
 

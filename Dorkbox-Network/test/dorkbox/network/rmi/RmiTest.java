@@ -11,7 +11,7 @@ import org.junit.Test;
 
 import dorkbox.network.Client;
 import dorkbox.network.ConnectionOptions;
-import dorkbox.network.DorknetTestCase;
+import dorkbox.network.BaseTest;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
@@ -19,7 +19,7 @@ import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.SerializationManager;
 
-public class RmiTest extends DorknetTestCase {
+public class RmiTest extends BaseTest {
 
     private static final int CLIENT_ID = 4321;
     private static final int SERVER_ID = 1234;

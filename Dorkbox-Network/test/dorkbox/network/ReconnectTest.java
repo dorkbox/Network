@@ -16,7 +16,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
 
-public class ReconnectTest extends DorknetTestCase {
+public class ReconnectTest extends BaseTest {
 
     @Test
     public void reconnect() throws IOException, InitializationException, SecurityException {
