@@ -73,8 +73,8 @@ public class Client extends EndPointClient {
         if (options.localChannelName != null && (options.tcpPort > 0 || options.udpPort > 0 || options.host != null) ||
             options.localChannelName == null && (options.tcpPort == 0 || options.udpPort == 0 || options.host == null)
            ) {
-            String msg = name + " Local channel use and TCP/UDP use are MUTUALLY exclusive. Unable to determine intent.";
-            logger.error(msg);
+            String msg = this.name + " Local channel use and TCP/UDP use are MUTUALLY exclusive. Unable to determine intent.";
+            this.logger.error(msg);
             throw new IllegalArgumentException(msg);
         }
 
@@ -82,7 +82,7 @@ public class Client extends EndPointClient {
 
         if (isAndroid && options.udtPort > 0) {
             // Android does not support UDT.
-            logger.info("Android does not support UDT.");
+            this.logger.info("Android does not support UDT.");
             options.udtPort = -1;
         }
 
@@ -92,43 +92,43 @@ public class Client extends EndPointClient {
 
         // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
         SecurityManager s = System.getSecurityManager();
-        ThreadGroup nettyGroup = new ThreadGroup(s != null ? s.getThreadGroup() : Thread.currentThread().getThreadGroup(), name + " (Netty)");
+        ThreadGroup nettyGroup = new ThreadGroup(s != null ? s.getThreadGroup() : Thread.currentThread().getThreadGroup(), this.name + " (Netty)");
 
         if (options.localChannelName != null && options.tcpPort < 0 && options.udpPort < 0 && options.udtPort < 0) {
             // no networked bootstraps. LOCAL connection only
             Bootstrap localBootstrap = new Bootstrap();
-            bootstraps.add(new BootstrapWrapper("LOCAL", -1, localBootstrap));
+            this.bootstraps.add(new BootstrapWrapper("LOCAL", -1, localBootstrap));
 
             EventLoopGroup boss;
 
-            boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(name + "-LOCAL", nettyGroup));
+            boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-LOCAL", nettyGroup));
 
             localBootstrap.group(boss)
                           .channel(LocalChannel.class)
                           .remoteAddress(new LocalAddress(options.localChannelName))
-                          .handler(new RegistrationLocalHandlerClient(name, registrationWrapper));
+                          .handler(new RegistrationLocalHandlerClient(this.name, this.registrationWrapper));
 
             manageForShutdown(boss);
         }
         else {
             if (options.tcpPort > 0) {
                 Bootstrap tcpBootstrap = new Bootstrap();
-                bootstraps.add(new BootstrapWrapper("TCP", options.tcpPort, tcpBootstrap));
+                this.bootstraps.add(new BootstrapWrapper("TCP", options.tcpPort, tcpBootstrap));
 
                 EventLoopGroup boss;
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
-                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(name + "-TCP", nettyGroup));
+                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
                     tcpBootstrap.channel(OioSocketChannel.class);
                 } else {
-                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(name + "-TCP", nettyGroup));
+                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
                     tcpBootstrap.channel(NioSocketChannel.class);
                 }
 
                 tcpBootstrap.group(boss)
                             .remoteAddress(options.host, options.tcpPort)
-                            .handler(new RegistrationRemoteHandlerClientTCP(name, registrationWrapper, serializationManager));
+                            .handler(new RegistrationRemoteHandlerClientTCP(this.name, this.registrationWrapper, this.serializationManager));
 
 
                 manageForShutdown(boss);
@@ -141,23 +141,23 @@ public class Client extends EndPointClient {
 
             if (options.udpPort > 0) {
                 Bootstrap udpBootstrap = new Bootstrap();
-                bootstraps.add(new BootstrapWrapper("UDP", options.udpPort, udpBootstrap));
+                this.bootstraps.add(new BootstrapWrapper("UDP", options.udpPort, udpBootstrap));
 
                 EventLoopGroup boss;
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
-                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(name + "-UDP", nettyGroup));
+                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-UDP", nettyGroup));
                     udpBootstrap.channel(OioDatagramChannel.class);
                 } else {
-                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(name + "-UDP", nettyGroup));
+                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-UDP", nettyGroup));
                     udpBootstrap.channel(NioDatagramChannel.class);
                 }
 
                 udpBootstrap.group(boss)
                             .localAddress(new InetSocketAddress(0))
                             .remoteAddress(new InetSocketAddress(options.host, options.udpPort))
-                            .handler(new RegistrationRemoteHandlerClientUDP(name, registrationWrapper, serializationManager));
+                            .handler(new RegistrationRemoteHandlerClientUDP(this.name, this.registrationWrapper, this.serializationManager));
 
                 manageForShutdown(boss);
 
@@ -180,24 +180,24 @@ public class Client extends EndPointClient {
                     Class.forName("com.barchart.udt.nio.SelectorProviderUDT");
                     udtAvailable = true;
                 } catch (Throwable e) {
-                    logger.error("Requested a UDT connection on port {}, but the barchart UDT libraries are not loaded.", options.udtPort);
+                    this.logger.error("Requested a UDT connection on port {}, but the barchart UDT libraries are not loaded.", options.udtPort);
                 }
 
                 if (udtAvailable) {
                     // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
                     // Annoying and abusing the classloader, but it works well.
                     Bootstrap udtBootstrap = new Bootstrap();
-                    bootstraps.add(new BootstrapWrapper("UDT", options.udtPort, udtBootstrap));
+                    this.bootstraps.add(new BootstrapWrapper("UDT", options.udtPort, udtBootstrap));
 
                     EventLoopGroup boss;
 
-                    boss = UdtEndpointProxy.getClientWorker(DEFAULT_THREAD_POOL_SIZE, name, nettyGroup);
+                    boss = UdtEndpointProxy.getClientWorker(DEFAULT_THREAD_POOL_SIZE, this.name, nettyGroup);
 
                     UdtEndpointProxy.setChannelFactory(udtBootstrap);
 
                     udtBootstrap.group(boss)
                                 .remoteAddress(options.host, options.udtPort)
-                                .handler(new RegistrationRemoteHandlerClientUDT(name, registrationWrapper, serializationManager));
+                                .handler(new RegistrationRemoteHandlerClientUDT(this.name, this.registrationWrapper, this.serializationManager));
 
                     manageForShutdown(boss);
                 }
@@ -222,7 +222,7 @@ public class Client extends EndPointClient {
      * Allows the client to reconnect to the last connected server
      */
     public void reconnect() {
-        reconnect(connectionTimeout);
+        reconnect(this.connectionTimeout);
     }
 
     /**
@@ -255,18 +255,18 @@ public class Client extends EndPointClient {
 
         // make sure we are not trying to connect during a close or stop event.
         // This will wait until we have finished shutting down.
-        synchronized (shutdownInProgress) {
+        synchronized (this.shutdownInProgress) {
         }
 
         // have to BLOCK here, because we don't want sendTCP() called before registration is complete
-        synchronized (registrationLock) {
-            registrationInProgress = true;
+        synchronized (this.registrationLock) {
+            this.registrationInProgress = true;
 
             // we will only do a local channel when NOT doing TCP/UDP channels. This is EXCLUSIVE. (XOR)
-            int size = bootstraps.size();
+            int size = this.bootstraps.size();
             for (int i=0;i<size;i++) {
-                registrationComplete = i == size-1;
-                BootstrapWrapper bootstrapWrapper = bootstraps.get(i);
+                this.registrationComplete = i == size-1;
+                BootstrapWrapper bootstrapWrapper = this.bootstraps.get(i);
                 ChannelFuture future;
 
                 if (connectionTimeout != 0) {
@@ -282,40 +282,40 @@ public class Client extends EndPointClient {
                     future.await();
 
                 } catch (Exception e) {
-                    if (logger.isDebugEnabled()) {
-                        logger.error("Could not connect to the {} server on port {}.", bootstrapWrapper.type, bootstrapWrapper.port, e.getCause());
+                    if (this.logger.isDebugEnabled()) {
+                        this.logger.error("Could not connect to the {} server on port {}.", bootstrapWrapper.type, bootstrapWrapper.port, e.getCause());
                     } else {
-                        logger.error("Could not connect to the {} server{}.", bootstrapWrapper.type, bootstrapWrapper.port);
+                        this.logger.error("Could not connect to the {} server{}.", bootstrapWrapper.type, bootstrapWrapper.port);
                     }
 
-                    registrationInProgress = false;
+                    this.registrationInProgress = false;
                     stop();
                     return;
                 }
 
                 if (!future.isSuccess()) {
-                    if (logger.isDebugEnabled()) {
-                        logger.error("Could not connect to the {} server.", bootstrapWrapper.type, future.cause());
+                    if (this.logger.isDebugEnabled()) {
+                        this.logger.error("Could not connect to the {} server.", bootstrapWrapper.type, future.cause());
                     } else {
-                        logger.error("Could not connect to the {} server.", bootstrapWrapper.type);
+                        this.logger.error("Could not connect to the {} server.", bootstrapWrapper.type);
                     }
 
-                    registrationInProgress = false;
+                    this.registrationInProgress = false;
                     stop();
                     return;
                 }
 
-                logger.trace("Waiting for registration from server.");
+                this.logger.trace("Waiting for registration from server.");
                 manageForShutdown(future);
 
                 // WAIT for the next one to complete.
                 try {
-                    registrationLock.wait();
+                    this.registrationLock.wait();
                 } catch (InterruptedException e) {
                 }
             }
 
-            registrationInProgress = false;
+            this.registrationInProgress = false;
         }
     }
 
@@ -327,28 +327,28 @@ public class Client extends EndPointClient {
      * of the normal eventloop patterns, and it is confusing to the user to have to manually flush the channel each time.
      */
     public ConnectionBridge send() {
-        return new ConnectionBridgeFlushAlways(connectionManager.getConnection0().send());
+        return new ConnectionBridgeFlushAlways(this.connectionManager.getConnection0().send());
     }
 
     /**
      * Expose methods to send objects to a destination when the connection has become idle.
      */
     public IdleBridge sendOnIdle(IdleSender<?, ?> sender) {
-        return connectionManager.getConnection0().sendOnIdle(sender);
+        return this.connectionManager.getConnection0().sendOnIdle(sender);
     }
 
     /**
      * Expose methods to send objects to a destination when the connection has become idle.
      */
     public IdleBridge sendOnIdle(Object message) {
-        return connectionManager.getConnection0().sendOnIdle(message);
+        return this.connectionManager.getConnection0().sendOnIdle(message);
     }
 
     /**
      * Returns a future that will have the last calculated return trip time.
      */
     public Ping ping() {
-        return connectionManager.getConnection0().send().ping();
+        return this.connectionManager.getConnection0().send().ping();
     }
 
     /**
@@ -359,7 +359,7 @@ public class Client extends EndPointClient {
      * This is preferred to {@link getConnections}, as it properly does some error checking
      */
     public Connection getConnection() {
-        return connectionManager.getConnection0();
+        return this.connectionManager.getConnection0();
     }
 
     /**
@@ -368,10 +368,10 @@ public class Client extends EndPointClient {
     @Override
     public void close() {
         // in case a different thread is blocked waiting for registration.
-        synchronized (registrationLock) {
-            if (registrationInProgress) {
+        synchronized (this.registrationLock) {
+            if (this.registrationInProgress) {
                 try {
-                    registrationLock.wait();
+                    this.registrationLock.wait();
                 } catch (InterruptedException e) {
                 }
             }
