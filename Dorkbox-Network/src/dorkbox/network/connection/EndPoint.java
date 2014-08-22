@@ -140,7 +140,7 @@ public abstract class EndPoint {
         this.name = name;
         this.logger = org.slf4j.LoggerFactory.getLogger(name);
 
-        this.registrationWrapper = new RegistrationWrapper(this);
+        this.registrationWrapper = new RegistrationWrapper(this, this.logger);
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
         if (options.settingsStore == null) {

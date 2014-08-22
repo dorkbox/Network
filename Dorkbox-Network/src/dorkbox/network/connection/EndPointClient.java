@@ -10,6 +10,8 @@ import dorkbox.network.util.SecurityException;
 public class EndPointClient extends EndPointWithSerialization {
 
     protected final Object registrationLock = new Object();
+    protected volatile boolean registrationInProgress = false;
+
     protected volatile boolean registrationComplete = false;
 
     public EndPointClient(String name, ConnectionOptions options) throws InitializationException, SecurityException {
@@ -23,16 +25,16 @@ public class EndPointClient extends EndPointWithSerialization {
     @Override
     protected boolean continueRegistration0() {
         // we need to cache the value, since it can change in a different thread before we have the chance to return the value.
-        boolean complete = registrationComplete;
+        boolean complete = this.registrationComplete;
 
         // notify the block, but only if we are not ready.
         if (!complete) {
-            synchronized (registrationLock) {
-                registrationLock.notifyAll();
+            synchronized (this.registrationLock) {
+                this.registrationLock.notifyAll();
             }
         }
 
-        logger.trace("Registered protocol from server.");
+        this.logger.trace("Registered protocol from server.");
 
         // only let us continue with connections (this starts up the client/server implementations) once ALL of the
         // bootstraps have connected
@@ -44,13 +46,21 @@ public class EndPointClient extends EndPointWithSerialization {
      * will BLOCK until it has successfully registered it's connections.
      */
     @Override
-    protected final void connectionConnected0(Connection connection) {
+    final void connectionConnected0(Connection connection) {
         // invokes the listener.connection() method, and initialize the connection channels with whatever extra info they might need.
         super.connectionConnected0(connection);
 
         // notify the block
-        synchronized (registrationLock) {
-            registrationLock.notifyAll();
+        synchronized (this.registrationLock) {
+            this.registrationLock.notifyAll();
         }
+    }
+
+    /**
+     * Internal call to abort registration if the shutdown command is issued during channel registration.
+     */
+    void abortRegistration() {
+        this.registrationInProgress = false;
+        stop();
     }
 }

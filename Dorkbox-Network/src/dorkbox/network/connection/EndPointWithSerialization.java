@@ -45,11 +45,11 @@ public class EndPointWithSerialization extends EndPoint {
         }
 
         // we don't care about un-instantiated/constructed members, since the class type is the only interest.
-        connectionManager = new ConnectionManager(name, connection0(null).getClass());
+        this.connectionManager = new ConnectionManager(name, connection0(null).getClass());
 
         // setup our TCP kryo encoders
-        registrationWrapper.setKryoTcpEncoder(new KryoEncoder(serializationManager));
-        registrationWrapper.setKryoTcpCryptoEncoder(new KryoEncoderCrypto(serializationManager));
+        this.registrationWrapper.setKryoTcpEncoder(new KryoEncoder(this.serializationManager));
+        this.registrationWrapper.setKryoTcpCryptoEncoder(new KryoEncoderCrypto(this.serializationManager));
 
 
         this.serializationManager.setReferences(false);
@@ -65,14 +65,14 @@ public class EndPointWithSerialization extends EndPoint {
 
 
         // add the ping listener (internal use only!)
-        connectionManager.add(new PingListener(name));
+        this.connectionManager.add(new PingListener(name));
 
-        Runtime.getRuntime().removeShutdownHook(shutdownHook);
-        shutdownHook = new Thread() {
+        Runtime.getRuntime().removeShutdownHook(this.shutdownHook);
+        this.shutdownHook = new Thread() {
             @Override
             public void run() {
                 // connectionManager.shutdown accurately reflects the state of the app. Safe to use here
-                if (connectionManager != null && !connectionManager.shutdown) {
+                if (EndPointWithSerialization.this.connectionManager != null && !EndPointWithSerialization.this.connectionManager.shutdown) {
                     EndPointWithSerialization.this.stop();
                 }
             }
@@ -84,7 +84,7 @@ public class EndPointWithSerialization extends EndPoint {
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
      */
     public SerializationManager getSerialization() {
-        return serializationManager;
+        return this.serializationManager;
     }
 
     /**
@@ -95,16 +95,16 @@ public class EndPointWithSerialization extends EndPoint {
      */
     public RmiBridge getRmiBridge() {
         synchronized (this) {
-            if (remoteObjectSpace == null) {
+            if (this.remoteObjectSpace == null) {
                 if (isConnected()) {
                     throw new RuntimeException("Cannot create a remote object space after the remote endpoint has already connected!");
                 }
 
-                remoteObjectSpace = new RmiBridge(name);
+                this.remoteObjectSpace = new RmiBridge(this.logger, this.name);
             }
         }
 
-        return remoteObjectSpace;
+        return this.remoteObjectSpace;
     }
 
 
@@ -141,30 +141,30 @@ public class EndPointWithSerialization extends EndPoint {
                 wrapper = new ChannelLocalWrapper(metaChannel);
             } else {
                 if (this instanceof EndPointServer) {
-                    wrapper = new ChannelNetworkWrapper(metaChannel, registrationWrapper);
+                    wrapper = new ChannelNetworkWrapper(metaChannel, this.registrationWrapper);
                 } else {
                     wrapper = new ChannelNetworkWrapper(metaChannel, null);
                 }
             }
 
-            connection = newConnection(name);
+            connection = newConnection(this.name);
 
             // now initialize the connection channels with whatever extra info they might need.
-            connection.init(this, new Bridge(wrapper, connectionManager));
+            connection.init(this, new Bridge(wrapper, this.connectionManager));
 
             metaChannel.connection = connection;
 
             // notify our remote object space that it is able to receive method calls.
             synchronized (this) {
-                if (remoteObjectSpace != null) {
-                    remoteObjectSpace.addConnection(connection);
+                if (this.remoteObjectSpace != null) {
+                    this.remoteObjectSpace.addConnection(connection);
                 }
             }
         } else {
             // getting the baseClass
 
             // have to add the networkAssociate to a map of "connected" computers
-            connection = newConnection(name);
+            connection = newConnection(this.name);
         }
 
         return connection;
@@ -176,27 +176,27 @@ public class EndPointWithSerialization extends EndPoint {
      *
      * Only the CLIENT injects in front of this)
      */
-    protected void connectionConnected0(Connection connection) {
-        isConnected.set(true);
+    void connectionConnected0(Connection connection) {
+        this.isConnected.set(true);
 
         // prep the channel wrapper
         connection.prep();
 
-        connectionManager.connectionConnected(connection);
+        this.connectionManager.connectionConnected(connection);
     }
 
     /**
      * Expose methods to modify the listeners (connect/disconnect/idle/receive events).
      */
     public final ListenerBridge listeners() {
-        return connectionManager;
+        return this.connectionManager;
     }
 
     /**
      * Returns a non-modifiable list of active connections
      */
     public List<Connection> getConnections() {
-        return connectionManager.getConnections();
+        return this.connectionManager.getConnections();
     }
 
     /**
@@ -204,7 +204,7 @@ public class EndPointWithSerialization extends EndPoint {
      */
     @SuppressWarnings("unchecked")
     public <C extends Connection> Collection<C> getConnectionsAs() {
-        return (Collection<C>) connectionManager.getConnections();
+        return (Collection<C>) this.connectionManager.getConnections();
     }
 
     /**
@@ -213,7 +213,7 @@ public class EndPointWithSerialization extends EndPoint {
     @Override
     public void close() {
         // stop does the same as this + more
-        connectionManager.closeConnections();
+        this.connectionManager.closeConnections();
 
         super.close();
     }
@@ -223,6 +223,6 @@ public class EndPointWithSerialization extends EndPoint {
      */
     @Override
     protected void stopExtraActions() {
-        connectionManager.stop();
+        this.connectionManager.stop();
     }
 }

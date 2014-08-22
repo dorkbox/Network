@@ -12,6 +12,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.List;
 
+import org.slf4j.Logger;
+
 import dorkbox.network.Broadcast;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
@@ -41,13 +43,13 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
 
     public RegistrationRemoteHandlerServerUDP(String name, RegistrationWrapper registrationWrapper, SerializationManager serializationManager) {
         this.name = name + " Registration-UDP-Server";
-        logger = org.slf4j.LoggerFactory.getLogger(this.name);
+        this.logger = org.slf4j.LoggerFactory.getLogger(this.name);
         this.registrationWrapper = registrationWrapper;
         this.serializationManager = serializationManager;
 
         // absolutely MUST send packet > 0 across, otherwise netty will think it failed to write to the socket, and keep trying. (bug was fixed by netty. Keeping this code)
-        discoverResponseBuffer = Unpooled.buffer(1);
-        discoverResponseBuffer.writeByte(Broadcast.broadcastResponseID);
+        this.discoverResponseBuffer = Unpooled.buffer(1);
+        this.discoverResponseBuffer.writeByte(Broadcast.broadcastResponseID);
     }
 
     /**
@@ -61,7 +63,7 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
     @Override
     public void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
         // log UDP errors.
-        logger.error("Exception caught in UDP stream.", cause);
+        this.logger.error("Exception caught in UDP stream.", cause);
         super.exceptionCaught(context, cause);
     }
 
@@ -91,18 +93,23 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
         InetSocketAddress remoteAddress = msg.sender();
 
         // must have a remote address in the packet. (ie, ignore broadcast)
+        Logger logger2 = this.logger;
         if (remoteAddress == null) {
-            logger.debug("Ignoring packet with null UDP remote address. (Is it broadcast?)");
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("Ignoring packet with null UDP remote address. (Is it broadcast?)");
+            }
             return;
         }
 
         if (data.readableBytes() == 1) {
             if (data.readByte() == Broadcast.broadcastID) {
                 // CANNOT use channel.getRemoteAddress()
-                channel.writeAndFlush(new UdpWrapper(discoverResponseBuffer, remoteAddress));
-                logger.debug("Responded to host discovery from: {}", remoteAddress);
+                channel.writeAndFlush(new UdpWrapper(this.discoverResponseBuffer, remoteAddress));
+                if (logger2.isDebugEnabled()) {
+                    logger2.debug("Responded to host discovery from: {}", remoteAddress);
+                }
             } else {
-                logger.error("Invalid signature for 'Discover Host' from remote address: {}", remoteAddress);
+                logger2.error("Invalid signature for 'Discover Host' from remote address: {}", remoteAddress);
             }
         } else {
             // we cannot use the REGULAR pipeline, since we can't pass along the remote address for
@@ -116,13 +123,13 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
 
     public final void sendUDP(ChannelHandlerContext context, Object object, ByteBuf buffer, InetSocketAddress udpRemoteAddress) {
 
-        Connection networkConnection = registrationWrapper.getServerUDP(udpRemoteAddress);
+        Connection networkConnection = this.registrationWrapper.getServerUDP(udpRemoteAddress);
         if (networkConnection != null) {
             // try to write data! (IT SHOULD ALWAYS BE ENCRYPTED HERE!)
-            serializationManager.writeWithCryptoUdp(networkConnection, buffer, object);
+            this.serializationManager.writeWithCryptoUdp(networkConnection, buffer, object);
         } else {
             // this means we are still in the REGISTRATION phase.
-            serializationManager.write(buffer, object);
+            this.serializationManager.write(buffer, object);
         }
     }
 
@@ -130,19 +137,20 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
     // this will be invoked by the UdpRegistrationHandlerServer. Remember, TCP will be established first.
     public final void receivedUDP(ChannelHandlerContext context, Channel channel, ByteBuf data, InetSocketAddress udpRemoteAddress) throws Exception {
         // registration is the ONLY thing NOT encrypted
-        if (serializationManager.isEncrypted(data)) {
+        Logger logger2 = this.logger;
+        if (this.serializationManager.isEncrypted(data)) {
             // we need to FORWARD this message "down the pipeline".
 
-            ConnectionImpl connection = registrationWrapper.getServerUDP(udpRemoteAddress);
+            ConnectionImpl connection = this.registrationWrapper.getServerUDP(udpRemoteAddress);
             if (connection != null) {
                 // try to read data! (IT SHOULD ALWAYS BE ENCRYPTED HERE!)
                 Object object;
 
                 try {
-                    object = serializationManager.readWithCryptoUdp(connection, data, data.writerIndex());
+                    object = this.serializationManager.readWithCryptoUdp(connection, data, data.writerIndex());
                 } catch (NetException e) {
-                    logger.error("UDP unable to deserialize buffer", e);
-                    shutdown(registrationWrapper, channel);
+                    logger2.error("UDP unable to deserialize buffer", e);
+                    shutdown(this.registrationWrapper, channel);
                     return;
                 }
 
@@ -159,10 +167,10 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
             Object object;
 
             try {
-                object = serializationManager.read(data, data.writerIndex());
+                object = this.serializationManager.read(data, data.writerIndex());
             } catch (NetException e) {
-                logger.error("UDP unable to deserialize buffer", e);
-                shutdown(registrationWrapper, channel);
+                logger2.error("UDP unable to deserialize buffer", e);
+                shutdown(this.registrationWrapper, channel);
                 return;
             }
 
@@ -173,7 +181,7 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
                 try {
                     // find out and make sure that UDP and TCP are talking to the same server
                     InetAddress udpRemoteServer = udpRemoteAddress.getAddress();
-                    IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
+                    IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
                     Entries<MetaChannel> entries = channelMap.entries();
 
                     while (entries.hasNext()) {
@@ -188,14 +196,14 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
                                 matches = true;
                                 break;
                             } else {
-                                logger.error("Mismatch UDP and TCP client addresses! UDP: {}  TCP: {}", udpRemoteServer, tcpRemoteAddress);
-                                shutdown(registrationWrapper, channel);
+                                logger2.error("Mismatch UDP and TCP client addresses! UDP: {}  TCP: {}", udpRemoteServer, tcpRemoteAddress);
+                                shutdown(this.registrationWrapper, channel);
                                 return;
                             }
                         }
                     }
                 } finally {
-                    registrationWrapper.releaseChannelMap();
+                    this.registrationWrapper.releaseChannelMap();
                 }
 
 
@@ -217,17 +225,19 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
 
                     channel.writeAndFlush(new UdpWrapper(register, udpRemoteAddress));
 
-                    logger.trace("Register UDP connection from {}", udpRemoteAddress);
+                    if (logger2.isTraceEnabled()) {
+                        logger2.trace("Register UDP connection from {}", udpRemoteAddress);
+                    }
                     return;
                 }
 
                 // if we get here, there was a failure!
-                logger.error("Error trying to register UDP without udp specified! UDP: {}", udpRemoteAddress);
-                shutdown(registrationWrapper, channel);
+                logger2.error("Error trying to register UDP without udp specified! UDP: {}", udpRemoteAddress);
+                shutdown(this.registrationWrapper, channel);
                 return;
             }
             else {
-                logger.error("UDP attempting to spoof client! Unencrypted packet other than registration received.");
+                logger2.error("UDP attempting to spoof client! Unencrypted packet other than registration received.");
                 shutdown(null, channel);
                 return;
             }
@@ -238,7 +248,7 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
      * Copied from RegistrationHandler. There were issues accessing it as static with generics.
      */
     public MetaChannel shutdown(RegistrationWrapper registrationWrapper, Channel channel) {
-        logger.error("SHUTDOWN HANDLER REACHED! SOMETHING MESSED UP! TRYING TO ABORT");
+        this.logger.error("SHUTDOWN HANDLER REACHED! SOMETHING MESSED UP! TRYING TO ABORT");
 
         // shutdown. Something messed up. Only reach this is something messed up.
         // properly shutdown the TCP/UDP channels.

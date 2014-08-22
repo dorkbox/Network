@@ -10,6 +10,8 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.slf4j.Logger;
+
 import dorkbox.network.rmi.RmiMessages;
 import dorkbox.network.util.ConcurrentHashMapFactory;
 import dorkbox.util.ClassHelper;
@@ -31,11 +33,11 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
 
     public ConnectionManager(String name, Class<?> baseClass) {
         this.name = name;
-        logger = org.slf4j.LoggerFactory.getLogger(name);
+        this.logger = org.slf4j.LoggerFactory.getLogger(name);
 
         this.baseClass = baseClass;
 
-        listeners = new ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>() {
+        this.listeners = new ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>() {
             private static final long serialVersionUID = 8404650379739727012L;
 
             @Override
@@ -44,7 +46,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
             }
         };
 
-        localManagers = new ConcurrentHashMapFactory<Connection, ConnectionManager>() {
+        this.localManagers = new ConcurrentHashMapFactory<Connection, ConnectionManager>() {
             private static final long serialVersionUID = -1656860453153611896L;
 
             @Override
@@ -85,13 +87,13 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         Class<?> genericClass = ClassHelper.getGenericParameterAsClassForSuperClass(clazz, 0);
 
         // if we are null, it means that we have no generics specified for our listener!
-        if (genericClass == baseClass || genericClass == null) {
+        if (genericClass == this.baseClass || genericClass == null) {
             // we are the base class, so we are fine.
             addListener0(listener);
             return;
 
         } else if (ClassHelper.hasInterface(Connection.class, genericClass) &&
-                  !ClassHelper.hasParentClass(baseClass, genericClass)) {
+                  !ClassHelper.hasParentClass(this.baseClass, genericClass)) {
 
             // now we must make sure that the PARENT class is NOT the base class. ONLY the base class is allowed!
             addListener0(listener);
@@ -109,10 +111,13 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
     private final void addListener0(Listener listener) {
         Class<?> type = listener.getObjectType();
 
-        CopyOnWriteArrayList<Listener<Connection, Object>> list = listeners.getOrCreate(type);
+        CopyOnWriteArrayList<Listener<Connection, Object>> list = this.listeners.getOrCreate(type);
         list.addIfAbsent(listener);
 
-        logger.trace("listener added: {} <{}>", listener.getClass().getName(), listener.getObjectType());
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("listener added: {} <{}>", listener.getClass().getName(), listener.getObjectType());
+        }
     }
 
     /**
@@ -136,12 +141,15 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
 
         Class<?> type = listener.getObjectType();
 
-        CopyOnWriteArrayList<Listener<Connection, Object>> list = listeners.get(type);
+        CopyOnWriteArrayList<Listener<Connection, Object>> list = this.listeners.get(type);
         if (list != null) {
             list.remove(listener);
         }
 
-        logger.trace("listener removed: {} <{}>", listener.getClass().getName(), listener.getObjectType());
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("listener removed: {} <{}>", listener.getClass().getName(), listener.getObjectType());
+        }
     }
 
     /**
@@ -150,9 +158,9 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
    @Override
    public final void removeAll() {
-       listeners.clear();
+       this.listeners.clear();
 
-       logger.trace("all listeners removed !!");
+       this.logger.trace("all listeners removed !!");
    }
 
    /**
@@ -166,9 +174,9 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
             throw new IllegalArgumentException("classType cannot be null.");
         }
 
-        listeners.remove(classType);
+        this.listeners.remove(classType);
 
-        logger.trace("all listeners removed for type: {}", classType.getClass().getName());
+        this.logger.trace("all listeners removed for type: {}", classType.getClass().getName());
     }
 
 
@@ -189,10 +197,10 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         Class<?> objectType = message.getClass();
 
         // this is the GLOBAL version (unless it's the call from below, then it's the connection scoped version)
-        CopyOnWriteArrayList<Listener<Connection, Object>> list = listeners.get(objectType);
+        CopyOnWriteArrayList<Listener<Connection, Object>> list = this.listeners.get(objectType);
         if (list != null) {
             for (Listener<Connection, Object> listener : list) {
-                if (shutdown) {
+                if (this.shutdown) {
                     return;
                 }
 
@@ -214,7 +222,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
             objectType = objectType.getSuperclass();
             while (objectType != null) {
                 // check to see if we have what we are looking for in our CURRENT class
-                list = listeners.get(objectType);
+                list = this.listeners.get(objectType);
 
                 if (list != null) {
                     break;
@@ -226,7 +234,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
 
             if (list != null) {
                 for (Listener<Connection, Object> listener : list) {
-                    if (shutdown) {
+                    if (this.shutdown) {
                         return;
                     }
 
@@ -234,7 +242,10 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
                     foundListener = true;
                 }
             } else if (!foundListener) {
-                logger.debug("----------- LISTENER NOT REGISTERED FOR TYPE: {}", message.getClass().getSimpleName());
+                Logger logger2 = this.logger;
+                if (logger2.isDebugEnabled()) {
+                    this.logger.debug("----------- LISTENER NOT REGISTERED FOR TYPE: {}", message.getClass().getSimpleName());
+                }
             }
         }
 
@@ -244,7 +255,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         }
 
         // now have to account for additional connection listener managers (non-global).
-        ConnectionManager localManager = localManagers.get(connection);
+        ConnectionManager localManager = this.localManagers.get(connection);
         if (localManager != null) {
             // if we found a listener during THIS method call, we need to let the NEXT method call know,
             // so it doesn't spit out error for not handling a message (since that message MIGHT have
@@ -260,13 +271,13 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public final void notifyOnIdle(Connection connection) {
-        Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = listeners.entrySet();
+        Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = this.listeners.entrySet();
         CopyOnWriteArrayList<Listener<Connection,Object>> list;
         for (Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> entry : entrySet) {
             list = entry.getValue();
             if (list != null) {
                 for (Listener<Connection,Object> listener : list) {
-                    if (shutdown) {
+                    if (this.shutdown) {
                         return;
                     }
 
@@ -277,7 +288,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         }
 
         // now have to account for additional (local) listener managers.
-        ConnectionManager localManager = localManagers.get(connection);
+        ConnectionManager localManager = this.localManagers.get(connection);
         if (localManager != null) {
             localManager.notifyOnIdle(connection);
         }
@@ -292,16 +303,16 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
     public void connectionConnected(Connection connection) {
         // only TCP channels are passed in.
         // create a new connection!
-        connections.add(connection);
+        this.connections.add(connection);
 
         try {
-            Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = listeners.entrySet();
+            Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = this.listeners.entrySet();
             CopyOnWriteArrayList<Listener<Connection,Object>> list;
             for (Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> entry : entrySet) {
                 list = entry.getValue();
                 if (list != null) {
                     for (Listener<Connection,Object> listener : list) {
-                        if (shutdown) {
+                        if (this.shutdown) {
                             return;
                         }
                         listener.connected(connection);
@@ -311,7 +322,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
             }
 
             // now have to account for additional (local) listener managers.
-            ConnectionManager localManager = localManagers.get(connection);
+            ConnectionManager localManager = this.localManagers.get(connection);
             if (localManager != null) {
                 localManager.connectionConnected(connection);
             }
@@ -327,13 +338,13 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public void connectionDisconnected(Connection connection) {
-        Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = listeners.entrySet();
+        Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = this.listeners.entrySet();
         CopyOnWriteArrayList<Listener<Connection,Object>> list;
         for (Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> entry : entrySet) {
             list = entry.getValue();
             if (list != null) {
                 for (Listener<Connection, Object> listener : list) {
-                    if (shutdown) {
+                    if (this.shutdown) {
                         return;
                     }
 
@@ -343,15 +354,15 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         }
 
         // now have to account for additional (local) listener managers.
-        ConnectionManager localManager = localManagers.get(connection);
+        ConnectionManager localManager = this.localManagers.get(connection);
         if (localManager != null) {
             localManager.connectionDisconnected(connection);
 
             // remove myself from the "global" listeners so we can have our memory cleaned up.
-            localManagers.remove(connection);
+            this.localManagers.remove(connection);
         }
 
-        connections.remove(connection);
+        this.connections.remove(connection);
     }
 
 
@@ -362,13 +373,13 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public void connectionError(Connection connection, Throwable throwable) {
-        Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = listeners.entrySet();
+        Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = this.listeners.entrySet();
         CopyOnWriteArrayList<Listener<Connection,Object>> list;
         for (Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> entry : entrySet) {
             list = entry.getValue();
             if (list != null) {
                 for (Listener<Connection, Object> listener : list) {
-                    if (shutdown) {
+                    if (this.shutdown) {
                         return;
                     }
 
@@ -379,7 +390,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         }
 
         // now have to account for additional (local) listener managers.
-        ConnectionManager localManager = localManagers.get(connection);
+        ConnectionManager localManager = this.localManagers.get(connection);
         if (localManager != null) {
             localManager.connectionError(connection, throwable);
         }
@@ -392,7 +403,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public List<Connection> getConnections() {
-        return Collections.unmodifiableList(connections);
+        return Collections.unmodifiableList(this.connections);
     }
 
 
@@ -403,15 +414,18 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         // it is POSSIBLE to add a connection-specfic listener (via connection.addListener), meaning that ONLY
         // that listener is notified on that event (ie, admin type listeners)
 
-        ConnectionManager lm = localManagers.getOrCreate(connection, connection.toString());
+        ConnectionManager lm = this.localManagers.getOrCreate(connection, connection.toString());
 
-        logger.debug("Connection specific Listener Manager added on connection: {}", connection);
+        Logger logger2 = this.logger;
+        if (logger2.isDebugEnabled()) {
+            this.logger.debug("Connection specific Listener Manager added on connection: {}", connection);
+        }
 
         return lm;
     }
 
     final void removeListenerManager(Connection connection) {
-        localManagers.remove(connection);
+        this.localManagers.remove(connection);
     }
 
 
@@ -421,7 +435,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      * @return Returns a FAST list of active connections.
      */
     public final Collection<Connection> getConnections0() {
-        return connections;
+        return this.connections;
     }
 
     /**
@@ -430,8 +444,8 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      * @return Returns a FAST first connection (for client!).
      */
     public final Connection getConnection0() {
-        if (connections.iterator().hasNext()) {
-            return connections.iterator().next();
+        if (this.connections.iterator().hasNext()) {
+            return this.connections.iterator().next();
         } else {
             throw new RuntimeException("Not connected to a remote computer. Unable to continue!");
         }
@@ -443,19 +457,19 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      * @return a boolean indicating if there are any listeners registered with this manager.
      */
     final boolean hasListeners() {
-        return listeners.isEmpty();
+        return this.listeners.isEmpty();
     }
 
     /**
      * Closes all associated resources/threads/connections
      */
     final void stop() {
-        shutdown = true;
+        this.shutdown = true;
 
         // disconnect the sessions
         closeConnections();
 
-        listeners.clear();
+        this.listeners.clear();
     }
 
     /**
@@ -463,7 +477,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     final void closeConnections() {
         // close the sessions
-        Iterator<Connection> iterator = connections.iterator();
+        Iterator<Connection> iterator = this.connections.iterator();
         while (iterator.hasNext()) {
             Connection connection = iterator.next();
             // Close the connection.  Make sure the close operation ends because
@@ -471,6 +485,6 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
             // Necessary otherwise workers won't close.
             connection.close();
         }
-        connections.clear();
+        this.connections.clear();
     }
 }

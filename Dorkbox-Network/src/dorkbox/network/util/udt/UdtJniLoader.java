@@ -33,7 +33,10 @@ public class UdtJniLoader implements LibraryLoader {
             location = tempFile.getParent();
             tempFile.delete();
 
-            logger.debug("Adjusted UDT JNI library location: {}", location);
+            Logger logger2 = logger;
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("Adjusted UDT JNI library location: {}", location);
+            }
 
             LibraryLoaderUDT loader = new LibraryLoaderUDT();
             loader.load(location);

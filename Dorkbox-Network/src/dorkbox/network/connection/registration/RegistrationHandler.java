@@ -19,7 +19,7 @@ public abstract class RegistrationHandler extends ChannelInboundHandlerAdapter {
 
     public RegistrationHandler(String name, RegistrationWrapper registrationWrapper) {
         this.name = name + " Discovery/Registration";
-        logger = org.slf4j.LoggerFactory.getLogger(this.name);
+        this.logger = org.slf4j.LoggerFactory.getLogger(this.name);
         this.registrationWrapper = registrationWrapper;
     }
 
@@ -34,7 +34,7 @@ public abstract class RegistrationHandler extends ChannelInboundHandlerAdapter {
             context.fireChannelRegistered();
             success = true;
         } catch (Throwable t) {
-            logger.error("Failed to initialize a channel. Closing: {}", context.channel(), t);
+            this.logger.error("Failed to initialize a channel. Closing: {}", context.channel(), t);
         } finally {
             if (!success) {
                 context.close();
@@ -44,12 +44,12 @@ public abstract class RegistrationHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelActive(ChannelHandlerContext context) throws Exception {
-        logger.error("ChannelActive NOT IMPLEMENTED!");
+        this.logger.error("ChannelActive NOT IMPLEMENTED!");
     }
 
     @Override
     public void channelRead(ChannelHandlerContext context, Object message) throws Exception {
-        logger.error("MessageReceived NOT IMPLEMENTED!");
+        this.logger.error("MessageReceived NOT IMPLEMENTED!");
     }
 
     @Override
@@ -61,7 +61,7 @@ public abstract class RegistrationHandler extends ChannelInboundHandlerAdapter {
     public abstract void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception;
 
     public MetaChannel shutdown(RegistrationWrapper registrationWrapper, Channel channel) {
-        logger.error("SHUTDOWN HANDLER REACHED! SOMETHING MESSED UP! TRYING TO ABORT");
+        this.logger.error("SHUTDOWN HANDLER REACHED! SOMETHING MESSED UP! TRYING TO ABORT");
 
         // shutdown. Something messed up. Only reach this is something messed up.
         // properly shutdown the TCP/UDP channels.
@@ -84,6 +84,7 @@ public abstract class RegistrationHandler extends ChannelInboundHandlerAdapter {
                 }
 
             } finally {
+                registrationWrapper.abortRegistrationIfClient();
                 registrationWrapper.releaseChannelMap();
             }
         }

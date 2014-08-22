@@ -45,8 +45,6 @@ import dorkbox.network.util.udt.UdtEndpointProxy;
 public class Client extends EndPointClient {
     private List<BootstrapWrapper> bootstraps = new LinkedList<BootstrapWrapper>();
 
-    private volatile boolean registrationInProgress = false;
-
     private volatile int connectionTimeout = 5000; // default
 
     /**
@@ -265,6 +263,10 @@ public class Client extends EndPointClient {
             // we will only do a local channel when NOT doing TCP/UDP channels. This is EXCLUSIVE. (XOR)
             int size = this.bootstraps.size();
             for (int i=0;i<size;i++) {
+                if (!this.registrationInProgress) {
+                    break;
+                }
+
                 this.registrationComplete = i == size-1;
                 BootstrapWrapper bootstrapWrapper = this.bootstraps.get(i);
                 ChannelFuture future;
@@ -310,7 +312,7 @@ public class Client extends EndPointClient {
 
                 // WAIT for the next one to complete.
                 try {
-                    this.registrationLock.wait();
+                    this.registrationLock.wait(connectionTimeout);
                 } catch (InterruptedException e) {
                 }
             }

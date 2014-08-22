@@ -18,6 +18,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
@@ -83,7 +85,7 @@ public class RmiBridge {
             public void received(final Connection connection, final InvokeMethod invokeMethod) {
                 boolean found = false;
 
-                Iterator<Connection> iterator = connections.iterator();
+                Iterator<Connection> iterator = RmiBridge.this.connections.iterator();
                 while (iterator.hasNext()) {
                     Connection c = iterator.next();
                     if (c == connection) {
@@ -97,14 +99,14 @@ public class RmiBridge {
                     return;
                 }
 
-                final Object target = idToObject.get(invokeMethod.objectID);
+                final Object target = RmiBridge.this.idToObject.get(invokeMethod.objectID);
                 if (target == null) {
-                    logger.warn("Ignoring remote invocation request for unknown object ID: {}",
+                    RmiBridge.this.logger.warn("Ignoring remote invocation request for unknown object ID: {}",
                                 invokeMethod.objectID);
                     return;
                 }
 
-                if (executor == null) {
+                if (RmiBridge.this.executor == null) {
                     defaultExectutor.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -114,7 +116,7 @@ public class RmiBridge {
                         }
                     });
                 } else {
-                    executor.execute(new Runnable() {
+                    RmiBridge.this.executor.execute(new Runnable() {
                         @Override
                         public void run() {
                             invoke(connection,
@@ -138,17 +140,10 @@ public class RmiBridge {
      * <p>
      * For safety, this should ONLY be called by {@link EndPoint#getRmiBridge() }
      */
-    public RmiBridge(String name) {
+    public RmiBridge(Logger logger, String name) {
+        this.logger = logger;
         this.name = "RMI - " + name + " (remote)";
-        logger = org.slf4j.LoggerFactory.getLogger(this.name);
-
-        Class<?> callerClass = sun.reflect.Reflection.getCallerClass(2);
-        // starts with will allow for anonymous inner classes.
-        if (callerClass != null && callerClass.getName().startsWith(EndPoint.class.getName())) {
-            instances.addIfAbsent(this);
-        } else {
-            throw new RuntimeException("It is UNSAFE to access this constructor DIRECTLY. Please use Endpoint.getRmiBridge()");
-        }
+        instances.addIfAbsent(this);
     }
 
     /**
@@ -181,10 +176,13 @@ public class RmiBridge {
         if (object == null) {
             throw new IllegalArgumentException("object cannot be null.");
         }
-        idToObject.put(objectID, object);
-        objectToID.put(object, objectID);
+        this.idToObject.put(objectID, object);
+        this.objectToID.put(object, objectID);
 
-        logger.trace("Object registered with ObjectSpace as {}:{}", objectID, object);
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            this.logger.trace("Object registered with ObjectSpace as {}:{}", objectID, object);
+        }
     }
 
     /**
@@ -192,14 +190,14 @@ public class RmiBridge {
      * invocation messages.
      */
     public void close() {
-        Iterator<Connection> iterator = connections.iterator();
+        Iterator<Connection> iterator = this.connections.iterator();
         while (iterator.hasNext()) {
             Connection connection = iterator.next();
-            connection.listeners().remove(invokeListener);
+            connection.listeners().remove(this.invokeListener);
         }
 
         instances.remove(this);
-        logger.trace("Closed ObjectSpace.");
+        this.logger.trace("Closed ObjectSpace.");
     }
 
     /**
@@ -207,12 +205,15 @@ public class RmiBridge {
      * no longer be able to access it.
      */
     public void remove(int objectID) {
-        Object object = idToObject.remove(objectID);
+        Object object = this.idToObject.remove(objectID);
         if (object != null) {
-            objectToID.remove(object, 0);
+            this.objectToID.remove(object, 0);
         }
 
-        logger.trace("Object {} removed from ObjectSpace: {}", objectID, object);
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("Object {} removed from ObjectSpace: {}", objectID, object);
+        }
     }
 
     /**
@@ -220,15 +221,18 @@ public class RmiBridge {
      * no longer be able to access it.
      */
     public void remove(Object object) {
-        if (!idToObject.containsValue(object, true)) {
+        if (!this.idToObject.containsValue(object, true)) {
             return;
         }
 
-        int objectID = idToObject.findKey(object, true, -1);
-        idToObject.remove(objectID);
-        objectToID.remove(object, 0);
+        int objectID = this.idToObject.findKey(object, true, -1);
+        this.idToObject.remove(objectID);
+        this.objectToID.remove(object, 0);
 
-        logger.trace("Object {} removed from ObjectSpace: {}", objectID, object);
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("Object {} removed from ObjectSpace: {}", objectID, object);
+        }
     }
 
     /**
@@ -240,10 +244,10 @@ public class RmiBridge {
             throw new IllegalArgumentException("connection cannot be null.");
         }
 
-        connections.addIfAbsent(connection);
-        connection.listeners().add(invokeListener);
+        this.connections.addIfAbsent(connection);
+        connection.listeners().add(this.invokeListener);
 
-        logger.trace("Added connection to ObjectSpace: {}", connection);
+        this.logger.trace("Added connection to ObjectSpace: {}", connection);
     }
 
     /**
@@ -255,10 +259,10 @@ public class RmiBridge {
             throw new IllegalArgumentException("connection cannot be null.");
         }
 
-        connection.listeners().remove(invokeListener);
-        connections.remove(connection);
+        connection.listeners().remove(this.invokeListener);
+        this.connections.remove(connection);
 
-        logger.trace("Removed connection from ObjectSpace: {}", connection);
+        this.logger.trace("Removed connection from ObjectSpace: {}", connection);
     }
 
     /**
@@ -271,7 +275,7 @@ public class RmiBridge {
      *            The remote side of this connection requested the invocation.
      */
     protected void invoke(Connection connection, Object target, InvokeMethod invokeMethod) {
-        if (logger.isDebugEnabled()) {
+        if (this.logger.isDebugEnabled()) {
             String argString = "";
             if (invokeMethod.args != null) {
                 argString = Arrays.deepToString(invokeMethod.args);
@@ -283,7 +287,7 @@ public class RmiBridge {
             stringBuilder.append(":").append(invokeMethod.objectID);
             stringBuilder.append("#").append(invokeMethod.method.getName());
             stringBuilder.append("(").append(argString).append(")");
-            logger.debug(stringBuilder.toString());
+            this.logger.debug(stringBuilder.toString());
         }
 
         byte responseID = invokeMethod.responseID;

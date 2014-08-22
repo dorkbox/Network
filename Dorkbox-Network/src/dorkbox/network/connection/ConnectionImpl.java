@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
+import org.slf4j.Logger;
 
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleObjectSender;
@@ -236,7 +237,10 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      */
     @Override
     public final void self(Object message) {
-        this.logger.trace("Sending LOCAL {}", message);
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("Sending LOCAL {}", message);
+        }
         this.sessionManager.notifyOnMessage(this, message);
     }
 
@@ -245,13 +249,18 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      */
     @Override
     public final ConnectionPoint TCP(Object message) {
+        Logger logger2 = this.logger;
         if (!this.closeInProgress.get()) {
-            this.logger.trace("Sending TCP {}", message);
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("Sending TCP {}", message);
+            }
             ConnectionPoint tcp = this.channelWrapper.tcp();
             tcp.write(message);
             return tcp;
         } else {
-            this.logger.debug("writing TCP while closed: {}", message);
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("writing TCP while closed: {}", message);
+            }
             return null;
         }
 
@@ -262,13 +271,18 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      */
     @Override
     public ConnectionPoint UDP(Object message) {
+        Logger logger2 = this.logger;
         if (!this.closeInProgress.get()) {
-            this.logger.trace("Sending UDP {}", message);
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("Sending UDP {}", message);
+            }
             ConnectionPoint udp = this.channelWrapper.udp();
             udp.write(message);
             return udp;
         } else {
-            this.logger.debug("writing UDP while closed: {}", message);
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("writing UDP while closed: {}", message);
+            }
             return null;
         }
     }
@@ -278,13 +292,18 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      */
     @Override
     public final ConnectionPoint UDT(Object message) {
+        Logger logger2 = this.logger;
         if (!this.closeInProgress.get()) {
-            this.logger.trace("Sending UDT {}", message);
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("Sending UDT {}", message);
+            }
             ConnectionPoint udt = this.channelWrapper.udt();
             udt.write(message);
             return udt;
         } else {
-            this.logger.debug("writing UDT while closed: {}", message);
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("writing UDT while closed: {}", message);
+            }
             return null;
         }
     }

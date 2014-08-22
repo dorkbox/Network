@@ -11,6 +11,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.bouncycastle.crypto.CipherParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.slf4j.Logger;
 
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.pipeline.KryoEncoder;
@@ -39,9 +40,9 @@ public class RegistrationWrapper implements UdpServer {
     private KryoEncoder kryoTcpEncoder;
     private KryoEncoderCrypto kryoTcpCryptoEncoder;
 
-    public RegistrationWrapper(EndPoint endPoint) {
+    public RegistrationWrapper(EndPoint endPoint, Logger logger) {
         this.endPoint = endPoint;
-        this.logger = org.slf4j.LoggerFactory.getLogger(endPoint.name);
+        this.logger = logger;
 
         if (endPoint instanceof EndPointServer) {
             this.udpRemoteMap = new ConcurrentHashMap<InetSocketAddress, ConnectionImpl>();
@@ -141,8 +142,11 @@ public class RegistrationWrapper implements UdpServer {
         byte[] hostAddress = address.getAddress();
 
         ECPublicKeyParameters savedPublicKey = this.endPoint.propertyStore.getRegisteredServerKey(hostAddress);
+        Logger logger2 = this.logger;
         if (savedPublicKey == null) {
-            this.logger.debug("Adding new remote IP address key for {}", address.getHostAddress());
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("Adding new remote IP address key for {}", address.getHostAddress());
+            }
             this.endPoint.propertyStore.addRegisteredServerKey(hostAddress, publicKey);
         } else {
             // COMPARE!
@@ -155,7 +159,7 @@ public class RegistrationWrapper implements UdpServer {
                 }
 
                 //whoa! abort since something messed up!
-                this.logger.error("Invalid or non-matching public key from remote server. Their public key has changed. To fix, remove entry for: {}", byAddress);
+                logger2.error("Invalid or non-matching public key from remote server. Their public key has changed. To fix, remove entry for: {}", byAddress);
                 return false;
             }
         }
@@ -166,7 +170,10 @@ public class RegistrationWrapper implements UdpServer {
     public void removeRegisteredServerKey(byte[] hostAddress) throws SecurityException {
         ECPublicKeyParameters savedPublicKey = this.endPoint.propertyStore.getRegisteredServerKey(hostAddress);
         if (savedPublicKey != null) {
-            this.logger.debug("Deleteing remote IP address key {}.{}.{}.{}", hostAddress[0], hostAddress[1], hostAddress[2], hostAddress[3]);
+            Logger logger2 = this.logger;
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("Deleteing remote IP address key {}.{}.{}.{}", hostAddress[0], hostAddress[1], hostAddress[2], hostAddress[3]);
+            }
             this.endPoint.propertyStore.removeRegisteredServerKey(hostAddress);
         }
     }
@@ -181,9 +188,12 @@ public class RegistrationWrapper implements UdpServer {
         if (metaChannel != null && metaChannel.udpRemoteAddress != null) {
             this.udpRemoteMap.put(metaChannel.udpRemoteAddress, metaChannel.connection);
 
-            this.logger.debug("Connected to remote UDP connection. [{} <== {}]",
-                         metaChannel.udpChannel.localAddress().toString(),
-                         metaChannel.udpRemoteAddress.toString());
+            Logger logger2 = this.logger;
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("Connected to remote UDP connection. [{} <== {}]",
+                                  metaChannel.udpChannel.localAddress().toString(),
+                                  metaChannel.udpRemoteAddress.toString());
+            }
         }
     }
 
@@ -195,7 +205,10 @@ public class RegistrationWrapper implements UdpServer {
     public final void unRegisterServerUDP(InetSocketAddress udpRemoteAddress) {
         if (udpRemoteAddress != null) {
             this.udpRemoteMap.remove(udpRemoteAddress);
-            this.logger.info("Closed remote UDP connection: {}", udpRemoteAddress.toString());
+            Logger logger2 = this.logger;
+            if (logger2.isInfoEnabled()) {
+                logger2.info("Closed remote UDP connection: {}", udpRemoteAddress.toString());
+            }
         }
     }
 
@@ -208,6 +221,12 @@ public class RegistrationWrapper implements UdpServer {
             return this.udpRemoteMap.get(udpRemoteAddress);
         } else {
             return null;
+        }
+    }
+
+    public void abortRegistrationIfClient() {
+        if (this.endPoint instanceof EndPointClient) {
+            ((EndPointClient)this.endPoint).abortRegistration();
         }
     }
 }
