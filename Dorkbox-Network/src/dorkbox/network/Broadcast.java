@@ -22,6 +22,8 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostHandler;
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostInitializer;
 
@@ -95,13 +97,16 @@ public class Broadcast {
 
         List<InetAddress> servers = new ArrayList<InetAddress>();
 
-        logger.info("Searching for host on port: {}", udpPort);
+        Logger logger2 = logger;
+        if (logger2.isInfoEnabled()) {
+            logger2.info("Searching for host on port: {}", udpPort);
+        }
 
         Enumeration<NetworkInterface> networkInterfaces;
         try {
             networkInterfaces = NetworkInterface.getNetworkInterfaces();
         } catch (SocketException e) {
-            logger.error("Host discovery failed.", e);
+            logger2.error("Host discovery failed.", e);
             return new ArrayList<InetAddress>(0);
         }
 
@@ -114,7 +119,9 @@ public class Broadcast {
 
                 // don't use IPv6!
                 if (address instanceof Inet6Address) {
-                    logger.info("Not using IPv6 address: {}", address);
+                    if (logger2.isInfoEnabled()) {
+                        logger2.info("Not using IPv6 address: {}", address);
+                    }
                     continue;
                 }
 
@@ -134,12 +141,12 @@ public class Broadcast {
                         future = udpBootstrap.bind();
                         future.await();
                     } catch (InterruptedException e) {
-                        logger.error("Could not bind to random UDP address on the server.", e.getCause());
+                        logger2.error("Could not bind to random UDP address on the server.", e.getCause());
                         throw new IllegalArgumentException();
                     }
 
                     if (!future.isSuccess()) {
-                        logger.error("Could not bind to random UDP address on the server.", future.cause());
+                        logger2.error("Could not bind to random UDP address on the server.", future.cause());
                         throw new IllegalArgumentException();
                     }
 
@@ -151,7 +158,9 @@ public class Broadcast {
 
                         // response is received.  If the channel is not closed within 5 seconds, move to the next one.
                         if (!channel1.closeFuture().awaitUninterruptibly(discoverTimeoutMillis)) {
-                            logger.info("Host discovery timed out.");
+                            if (logger2.isInfoEnabled()) {
+                                logger2.info("Host discovery timed out.");
+                            }
                         } else {
                             InetSocketAddress attachment = channel1.attr(ClientDiscoverHostHandler.STATE).get();
                             servers.add(attachment.getAddress());
@@ -181,7 +190,9 @@ public class Broadcast {
 
                             // response is received.  If the channel is not closed within 5 seconds, move to the next one.
                             if (!channel1.closeFuture().awaitUninterruptibly(discoverTimeoutMillis)) {
-                                logger.info("Host discovery timed out.");
+                                if (logger2.isInfoEnabled()) {
+                                    logger2.info("Host discovery timed out.");
+                                }
                             } else {
                                 InetSocketAddress attachment = channel1.attr(ClientDiscoverHostHandler.STATE).get();
                                 servers.add(attachment.getAddress());
@@ -208,16 +219,16 @@ public class Broadcast {
 
 
 
-        if (logger.isInfoEnabled() && !servers.isEmpty()) {
+        if (logger2.isInfoEnabled() && !servers.isEmpty()) {
             if (fetchAllServers) {
                 StringBuilder stringBuilder = new StringBuilder();
                 stringBuilder.append("Discovered servers: (").append(servers.size()).append(")");
                 for (InetAddress server : servers) {
                     stringBuilder.append("/n").append(server).append(":").append(udpPort);
                 }
-                logger.info(stringBuilder.toString());
+                logger2.info(stringBuilder.toString());
             } else {
-                logger.info("Discovered server: {}:{}", servers.get(0), udpPort);
+                logger2.info("Discovered server: {}:{}", servers.get(0), udpPort);
             }
         }
 

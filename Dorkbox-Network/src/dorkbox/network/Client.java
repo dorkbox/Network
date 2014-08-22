@@ -19,6 +19,8 @@ import java.net.InetSocketAddress;
 import java.util.LinkedList;
 import java.util.List;
 
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionBridge;
 import dorkbox.network.connection.ConnectionBridgeFlushAlways;
@@ -68,11 +70,12 @@ public class Client extends EndPointClient {
     public Client(ConnectionOptions options) throws InitializationException, SecurityException {
         super("Client", options);
 
+        Logger logger2 = this.logger;
         if (options.localChannelName != null && (options.tcpPort > 0 || options.udpPort > 0 || options.host != null) ||
             options.localChannelName == null && (options.tcpPort == 0 || options.udpPort == 0 || options.host == null)
            ) {
             String msg = this.name + " Local channel use and TCP/UDP use are MUTUALLY exclusive. Unable to determine intent.";
-            this.logger.error(msg);
+            logger2.error(msg);
             throw new IllegalArgumentException(msg);
         }
 
@@ -80,7 +83,9 @@ public class Client extends EndPointClient {
 
         if (isAndroid && options.udtPort > 0) {
             // Android does not support UDT.
-            this.logger.info("Android does not support UDT.");
+            if (logger2.isInfoEnabled()) {
+                logger2.info("Android does not support UDT.");
+            }
             options.udtPort = -1;
         }
 
@@ -178,7 +183,7 @@ public class Client extends EndPointClient {
                     Class.forName("com.barchart.udt.nio.SelectorProviderUDT");
                     udtAvailable = true;
                 } catch (Throwable e) {
-                    this.logger.error("Requested a UDT connection on port {}, but the barchart UDT libraries are not loaded.", options.udtPort);
+                    logger2.error("Requested a UDT connection on port {}, but the barchart UDT libraries are not loaded.", options.udtPort);
                 }
 
                 if (udtAvailable) {

@@ -14,6 +14,9 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
+
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.EndPointServer;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerTCP;
@@ -65,9 +68,12 @@ public class Server extends EndPointServer {
         // you have to make sure to use this.serializatino
         super("Server", options);
 
+        Logger logger2 = this.logger;
         if (isAndroid && options.udtPort > 0) {
             // Android does not support UDT.
-            logger.info("Android does not support UDT.");
+            if (logger2.isInfoEnabled()) {
+                logger2.info("Android does not support UDT.");
+            }
             options.udtPort = -1;
         }
 
@@ -77,41 +83,41 @@ public class Server extends EndPointServer {
 
         this.localChannelName = options.localChannelName;
 
-        if (localChannelName != null ) {
-            localBootstrap = new ServerBootstrap();
+        if (this.localChannelName != null ) {
+            this.localBootstrap = new ServerBootstrap();
         } else {
-            localBootstrap = null;
+            this.localBootstrap = null;
         }
 
-        if (tcpPort > 0) {
-            tcpBootstrap = new ServerBootstrap();
+        if (this.tcpPort > 0) {
+            this.tcpBootstrap = new ServerBootstrap();
         } else {
-            tcpBootstrap = null;
+            this.tcpBootstrap = null;
         }
 
-        if (udpPort > 0) {
-            udpBootstrap = new Bootstrap();
+        if (this.udpPort > 0) {
+            this.udpBootstrap = new Bootstrap();
         } else {
-            udpBootstrap = null;
+            this.udpBootstrap = null;
         }
 
-        if (udtPort > 0) {
+        if (this.udtPort > 0) {
             // check to see if we have UDT available!
             boolean udtAvailable = false;
             try {
                 Class.forName("com.barchart.udt.nio.SelectorProviderUDT");
                 udtAvailable = true;
             } catch (Throwable e) {
-                logger.error("Requested a UDT service on port {}, but the barchart UDT libraries are not loaded.", udtPort);
+                logger2.error("Requested a UDT service on port {}, but the barchart UDT libraries are not loaded.", this.udtPort);
             }
 
             if (udtAvailable) {
-                udtBootstrap = new ServerBootstrap();
+                this.udtBootstrap = new ServerBootstrap();
             } else {
-                udtBootstrap = null;
+                this.udtBootstrap = null;
             }
         } else {
-            udtBootstrap = null;
+            this.udtBootstrap = null;
         }
 
         //TODO: do we need to set the snd/rcv buffer?
@@ -120,7 +126,7 @@ public class Server extends EndPointServer {
 
         // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
         SecurityManager s = System.getSecurityManager();
-        ThreadGroup nettyGroup = new ThreadGroup(s != null ? s.getThreadGroup() : Thread.currentThread().getThreadGroup(), name + " (Netty)");
+        ThreadGroup nettyGroup = new ThreadGroup(s != null ? s.getThreadGroup() : Thread.currentThread().getThreadGroup(), this.name + " (Netty)");
 
 
         // always use local channels on the server.
@@ -128,74 +134,74 @@ public class Server extends EndPointServer {
             EventLoopGroup boss;
             EventLoopGroup worker;
 
-            if (localBootstrap != null) {
-                boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(name + "-boss-LOCAL", nettyGroup));
-                worker = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(name + "-worker-LOCAL", nettyGroup));
+            if (this.localBootstrap != null) {
+                boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-boss-LOCAL", nettyGroup));
+                worker = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-LOCAL", nettyGroup));
 
-                localBootstrap.group(boss, worker)
+                this.localBootstrap.group(boss, worker)
                               .channel(LocalServerChannel.class)
                               .localAddress(new LocalAddress(this.localChannelName))
-                              .childHandler(new RegistrationLocalHandlerServer(name, registrationWrapper));
+                              .childHandler(new RegistrationLocalHandlerServer(this.name, this.registrationWrapper));
 
                 manageForShutdown(boss);
                 manageForShutdown(worker);
             }
         }
 
-        if (tcpBootstrap != null) {
+        if (this.tcpBootstrap != null) {
             EventLoopGroup boss;
             EventLoopGroup worker;
 
             if (isAndroid) {
                 // android ONLY supports OIO (not NIO)
-                boss = new OioEventLoopGroup(0, new NamedThreadFactory(name + "-boss-TCP", nettyGroup));
-                worker = new OioEventLoopGroup(0, new NamedThreadFactory(name + "-worker-TCP", nettyGroup));
-                tcpBootstrap.channel(OioServerSocketChannel.class);
+                boss = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-boss-TCP", nettyGroup));
+                worker = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
+                this.tcpBootstrap.channel(OioServerSocketChannel.class);
             } else {
-                boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(name + "-boss-TCP", nettyGroup));
-                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(name + "-worker-TCP", nettyGroup));
-                tcpBootstrap.channel(NioServerSocketChannel.class);
+                boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-boss-TCP", nettyGroup));
+                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
+                this.tcpBootstrap.channel(NioServerSocketChannel.class);
             }
 
             manageForShutdown(boss);
             manageForShutdown(worker);
 
-            tcpBootstrap.group(boss, worker)
+            this.tcpBootstrap.group(boss, worker)
                         .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
-                        .childHandler(new RegistrationRemoteHandlerServerTCP(name, registrationWrapper, serializationManager));
+                        .childHandler(new RegistrationRemoteHandlerServerTCP(this.name, this.registrationWrapper, this.serializationManager));
 
             if (options.host != null) {
-                tcpBootstrap.localAddress(options.host, tcpPort);
+                this.tcpBootstrap.localAddress(options.host, this.tcpPort);
             } else {
-                tcpBootstrap.localAddress(tcpPort);
+                this.tcpBootstrap.localAddress(this.tcpPort);
             }
 
             // android screws up on this!!
-            tcpBootstrap.option(ChannelOption.TCP_NODELAY, !isAndroid);
-            tcpBootstrap.childOption(ChannelOption.TCP_NODELAY, !isAndroid);
+            this.tcpBootstrap.option(ChannelOption.TCP_NODELAY, !isAndroid);
+            this.tcpBootstrap.childOption(ChannelOption.TCP_NODELAY, !isAndroid);
 
-            tcpBootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
+            this.tcpBootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
         }
 
 
-        if (udpBootstrap != null) {
+        if (this.udpBootstrap != null) {
             EventLoopGroup worker;
 
             if (isAndroid) {
                 // android ONLY supports OIO (not NIO)
-                worker = new OioEventLoopGroup(0, new NamedThreadFactory(name + "-worker-UDP", nettyGroup));
-                udpBootstrap.channel(OioDatagramChannel.class);
+                worker = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
+                this.udpBootstrap.channel(OioDatagramChannel.class);
             } else {
-                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(name + "-worker-UDP", nettyGroup));
-                udpBootstrap.channel(NioDatagramChannel.class);
+                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
+                this.udpBootstrap.channel(NioDatagramChannel.class);
             }
 
             manageForShutdown(worker);
 
-            udpBootstrap.group(worker)
+            this.udpBootstrap.group(worker)
                          // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                        .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
-                        .handler(new RegistrationRemoteHandlerServerUDP(name, registrationWrapper, serializationManager));
+                        .localAddress(this.udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
+                        .handler(new RegistrationRemoteHandlerServerUDP(this.name, this.registrationWrapper, this.serializationManager));
 
 
             // Enable to READ from MULTICAST data (ie, 192.168.1.0)
@@ -206,26 +212,26 @@ public class Server extends EndPointServer {
             // THEN once done
             //    socket.leaveGroup(group), close the socket
             // Enable to WRITE to MULTICAST data (ie, 192.168.1.0)
-            udpBootstrap.option(ChannelOption.SO_BROADCAST, false);
-            udpBootstrap.option(ChannelOption.SO_SNDBUF, udpMaxSize);
+            this.udpBootstrap.option(ChannelOption.SO_BROADCAST, false);
+            this.udpBootstrap.option(ChannelOption.SO_SNDBUF, udpMaxSize);
         }
 
 
-        if (udtBootstrap != null) {
+        if (this.udtBootstrap != null) {
             EventLoopGroup boss;
             EventLoopGroup worker;
 
             // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
             // Annoying and abusing the classloader, but it works well.
-            boss = UdtEndpointProxy.getServerBoss(DEFAULT_THREAD_POOL_SIZE, name, nettyGroup);
-            worker = UdtEndpointProxy.getServerWorker(DEFAULT_THREAD_POOL_SIZE, name, nettyGroup);
+            boss = UdtEndpointProxy.getServerBoss(DEFAULT_THREAD_POOL_SIZE, this.name, nettyGroup);
+            worker = UdtEndpointProxy.getServerWorker(DEFAULT_THREAD_POOL_SIZE, this.name, nettyGroup);
 
-            UdtEndpointProxy.setChannelFactory(udtBootstrap);
-            udtBootstrap.group(boss, worker)
+            UdtEndpointProxy.setChannelFactory(this.udtBootstrap);
+            this.udtBootstrap.group(boss, worker)
                         .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
                          // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                        .localAddress(udtPort)
-                        .childHandler(new RegistrationRemoteHandlerServerUDT(name, registrationWrapper, serializationManager));
+                        .localAddress(this.udtPort)
+                        .childHandler(new RegistrationRemoteHandlerServerUDT(this.name, this.registrationWrapper, this.serializationManager));
 
             manageForShutdown(boss);
             manageForShutdown(worker);
@@ -254,7 +260,7 @@ public class Server extends EndPointServer {
     public void bind(boolean blockUntilTerminate) {
         // make sure we are not trying to connect during a close or stop event.
         // This will wait until we have finished starting up/shutting down.
-        synchronized (shutdownInProgress) {
+        synchronized (this.shutdownInProgress) {
         }
 
 
@@ -263,90 +269,90 @@ public class Server extends EndPointServer {
         ChannelFuture future;
 
         // LOCAL
-        if (localBootstrap != null) {
+        if (this.localBootstrap != null) {
             try {
-                future = localBootstrap.bind();
+                future = this.localBootstrap.bind();
                 future.await();
             } catch (InterruptedException e) {
-                logger.error("Could not bind to LOCAL address on the server.", e.getCause());
+                this.logger.error("Could not bind to LOCAL address on the server.", e.getCause());
                 stop();
                 throw new IllegalArgumentException();
             }
 
             if (!future.isSuccess()) {
-                logger.error("Could not bind to LOCAL address on the server.", future.cause());
+                this.logger.error("Could not bind to LOCAL address on the server.", future.cause());
                 stop();
                 throw new IllegalArgumentException();
             }
 
-            logger.info("Listening on LOCAL address: '{}'", localChannelName);
+            this.logger.info("Listening on LOCAL address: '{}'", this.localChannelName);
             manageForShutdown(future);
         }
 
 
         // TCP
-        if (tcpBootstrap != null) {
+        if (this.tcpBootstrap != null) {
             // Wait until the connection attempt succeeds or fails.
             try {
-                future = tcpBootstrap.bind();
+                future = this.tcpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                logger.error("Could not bind to TCP port {} on the server.", tcpPort, e.getCause());
+                this.logger.error("Could not bind to TCP port {} on the server.", this.tcpPort, e.getCause());
                 stop();
                 throw new IllegalArgumentException("Could not bind to TCP port");
             }
 
             if (!future.isSuccess()) {
-                logger.error("Could not bind to TCP port {} on the server.", tcpPort , future.cause());
+                this.logger.error("Could not bind to TCP port {} on the server.", this.tcpPort , future.cause());
                 stop();
                 throw new IllegalArgumentException("Could not bind to TCP port");
             }
 
-            logger.info("Listening on TCP port: {}", tcpPort);
+            this.logger.info("Listening on TCP port: {}", this.tcpPort);
             manageForShutdown(future);
         }
 
         // UDP
-        if (udpBootstrap != null) {
+        if (this.udpBootstrap != null) {
             // Wait until the connection attempt succeeds or fails.
             try {
-                future = udpBootstrap.bind();
+                future = this.udpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                logger.error("Could not bind to UDP port {} on the server.", udpPort, e.getCause());
+                this.logger.error("Could not bind to UDP port {} on the server.", this.udpPort, e.getCause());
                 stop();
                 throw new IllegalArgumentException("Could not bind to UDP port");
             }
 
             if (!future.isSuccess()) {
-                logger.error("Could not bind to UDP port {} on the server.", udpPort, future.cause());
+                this.logger.error("Could not bind to UDP port {} on the server.", this.udpPort, future.cause());
                 stop();
                 throw new IllegalArgumentException("Could not bind to UDP port");
             }
 
-            logger.info("Listening on UDP port: {}", udpPort);
+            this.logger.info("Listening on UDP port: {}", this.udpPort);
             manageForShutdown(future);
         }
 
         // UDT
-        if (udtBootstrap != null) {
+        if (this.udtBootstrap != null) {
             // Wait until the connection attempt succeeds or fails.
             try {
-                future = udtBootstrap.bind();
+                future = this.udtBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                logger.error("Could not bind to UDT port {} on the server.", udtPort, e.getCause());
+                this.logger.error("Could not bind to UDT port {} on the server.", this.udtPort, e.getCause());
                 stop();
                 throw new IllegalArgumentException("Could not bind to UDT port");
             }
 
             if (!future.isSuccess()) {
-                logger.error("Could not bind to UDT port {} on the server.", udtPort, future.cause());
+                this.logger.error("Could not bind to UDT port {} on the server.", this.udtPort, future.cause());
                 stop();
                 throw new IllegalArgumentException("Could not bind to UDT port");
             }
 
-            logger.info("Listening on UDT port: {}", udtPort);
+            this.logger.info("Listening on UDT port: {}", this.udtPort);
             manageForShutdown(future);
         }
 
