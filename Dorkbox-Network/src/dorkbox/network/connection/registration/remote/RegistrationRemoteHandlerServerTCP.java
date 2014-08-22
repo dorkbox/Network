@@ -18,6 +18,7 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.util.Arrays;
+import org.slf4j.Logger;
 
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
@@ -128,6 +129,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
             }
 
             // make sure this connection was properly registered in the map. (IT SHOULD BE)
+            Logger logger2 = this.logger;
             if (metaChannel != null) {
                 metaChannel.updateTcpRoundTripTime();
                 SecureRandom secureRandom = this.registrationWrapper.getSecureRandom();
@@ -136,7 +138,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                 if (metaChannel.connectionID == null) {
                     // whoa! Didn't send valid public key info!
                     if (registration.publicKey == null) {
-                        this.logger.error("Null ECC public key during client handshake. This shouldn't happen!");
+                        logger2.error("Null ECC public key during client handshake. This shouldn't happen!");
                         shutdown(this.registrationWrapper, channel);
 
                         ReferenceCountUtil.release(message);
@@ -151,7 +153,9 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
 
                     if (!valid) {
                         //whoa! abort since something messed up! (log happens inside of validate method)
-                        this.logger.info("Invalid ECC public key for IP {} during handshake with client. Toggling extra flag in channel to indicate this.", tcpRemoteClient.getAddress().getHostAddress());
+                        if (this.logger.isInfoEnabled()) {
+                            logger2.info("Invalid ECC public key for IP {} during handshake with client. Toggling extra flag in channel to indicate this.", tcpRemoteClient.getAddress().getHostAddress());
+                        }
                         metaChannel.changedRemoteKey = true;
                     }
 
@@ -224,7 +228,9 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
 
                     channel.write(register);
 
-                    this.logger.trace("Assigning new random connection ID for TCP and performing ECDH.");
+                    if (logger2.isTraceEnabled()) {
+                        logger2.trace("Assigning new random connection ID for TCP and performing ECDH.");
+                    }
 
                     // re-sync the TCP delta round trip time
                     metaChannel.updateTcpRoundTripTime();
@@ -244,7 +250,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                             byte[] payload = Crypto.AES.decrypt(getAesEngine(), metaChannel.aesKey, metaChannel.aesIV, registration.payload);
 
                             if (payload.length == 0) {
-                                this.logger.error("Invalid decryption of payload. Aborting.");
+                                logger2.error("Invalid decryption of payload. Aborting.");
                                 shutdown(this.registrationWrapper, channel);
 
                                 ReferenceCountUtil.release(message);
@@ -254,7 +260,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                             ECPublicKeyParameters ecdhPubKey = EccPublicKeySerializer.read(new Input(payload));
 
                             if (ecdhPubKey == null) {
-                                this.logger.error("Invalid decode of ecdh public key. Aborting.");
+                                logger2.error("Invalid decode of ecdh public key. Aborting.");
                                 shutdown(this.registrationWrapper, channel);
 
                                 ReferenceCountUtil.release(message);
@@ -302,7 +308,10 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                             channel.eventLoop().schedule(new Runnable() {
                                 @Override
                                 public void run() {
-                                    RegistrationRemoteHandlerServerTCP.this.logger.trace("Notify Connection");
+                                    Logger logger2 = RegistrationRemoteHandlerServerTCP.this.logger;
+                                    if (logger2.isTraceEnabled()) {
+                                        logger2.trace("Notify Connection");
+                                    }
                                     notifyConnection(chan2);
                                 }}, metaChannel.getNanoSecBetweenTCP() * 2, TimeUnit.NANOSECONDS);
                         }
@@ -313,7 +322,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                 }
             }
             // this should NEVER happen!
-            this.logger.error("Error registering TCP channel! MetaChannel is null!");
+            logger2.error("Error registering TCP channel! MetaChannel is null!");
         }
 
         shutdown(this.registrationWrapper, channel);

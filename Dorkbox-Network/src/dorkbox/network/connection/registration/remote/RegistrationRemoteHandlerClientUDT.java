@@ -7,6 +7,8 @@ import io.netty.util.ReferenceCountUtil;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -28,7 +30,7 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
      */
     @Override
     protected void initChannel(Channel channel) {
-        logger.trace("Channel registered: {}", channel.getClass().getSimpleName());
+        this.logger.trace("Channel registered: {}", channel.getClass().getSimpleName());
 
         // TCP & UDT
 
@@ -41,7 +43,8 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
      */
     @Override
     public void channelActive(ChannelHandlerContext context) throws Exception {
-        if (logger.isDebugEnabled()) {
+        Logger logger2 = this.logger;
+        if (logger2.isDebugEnabled()) {
            super.channelActive(context);
         }
 
@@ -57,7 +60,7 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
             InetAddress udtRemoteServer = udtRemoteAddress.getAddress();
 
             try {
-                IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
+                IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
                 Entries<MetaChannel> entries = channelMap.entries();
                 while (entries.hasNext()) {
                     MetaChannel metaChannel = entries.next().value;
@@ -74,14 +77,16 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
                 }
 
             } finally {
-                registrationWrapper.releaseChannelMap();
+                this.registrationWrapper.releaseChannelMap();
             }
 
             if (!success) {
                 throw new RuntimeException("UDT cannot connect to a remote server before TCP is established!");
             }
 
-            logger.trace("Start new UDT Connection. Sending request to server");
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("Start new UDT Connection. Sending request to server");
+            }
 
             Registration registration = new Registration();
             // client start the handshake with a registration packet
@@ -100,10 +105,10 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
         MetaChannel metaChannel = null;
 
         try {
-            IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
+            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
             metaChannel = channelMap.get(channel.hashCode());
         } finally {
-            registrationWrapper.releaseChannelMap();
+            this.registrationWrapper.releaseChannelMap();
         }
 
         if (metaChannel != null) {
@@ -115,8 +120,8 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
 
                 OptimizeUtils optimizeUtils = OptimizeUtils.get();
                 if (!optimizeUtils.canReadInt(payload)) {
-                    logger.error("Invalid decryption of connection ID. Aborting.");
-                    shutdown(registrationWrapper, channel);
+                    this.logger.error("Invalid decryption of connection ID. Aborting.");
+                    shutdown(this.registrationWrapper, channel);
 
                     ReferenceCountUtil.release(message);
                     return;
@@ -126,17 +131,17 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
 
                 MetaChannel metaChannel2 = null;
                 try {
-                    IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
+                    IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
                     metaChannel2 = channelMap.get(connectionID);
                 } finally {
-                    registrationWrapper.releaseChannelMap();
+                    this.registrationWrapper.releaseChannelMap();
                 }
 
                 if (metaChannel2 != null) {
                     // hooray! we are successful
 
                     // notify the client that we are ready to continue registering other session protocols (bootstraps)
-                    boolean isDoneWithRegistration = registrationWrapper.continueRegistration0();
+                    boolean isDoneWithRegistration = this.registrationWrapper.continueRegistration0();
 
                     // tell the server we are done, and to setup crypto on it's side
                     if (isDoneWithRegistration) {
@@ -159,8 +164,8 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
 
         // if we get here, there was an error!
 
-        logger.error("Error registering UDT with remote server!");
-        shutdown(registrationWrapper, channel);
+        this.logger.error("Error registering UDT with remote server!");
+        shutdown(this.registrationWrapper, channel);
         ReferenceCountUtil.release(message);
     }
 }

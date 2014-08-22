@@ -1,5 +1,7 @@
 package dorkbox.network.connection;
 
+import org.slf4j.Logger;
+
 import dorkbox.network.ConnectionOptions;
 import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.SecurityException;
@@ -34,7 +36,10 @@ public class EndPointClient extends EndPointWithSerialization {
             }
         }
 
-        this.logger.trace("Registered protocol from server.");
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("Registered protocol from server.");
+        }
 
         // only let us continue with connections (this starts up the client/server implementations) once ALL of the
         // bootstraps have connected

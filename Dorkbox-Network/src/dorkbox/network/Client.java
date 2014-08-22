@@ -281,6 +281,7 @@ public class Client extends EndPointClient {
                     bootstrapWrapper.bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectionTimeout);
                 }
 
+                Logger logger2 = this.logger;
                 try {
                     // UDP : When this is CONNECT on a udp socket will ONLY accept UDP traffic from the remote address (ip/port combo).
                     //       If the reply isn't from the correct port, then the other end will receive a "Port Unreachable" exception.
@@ -289,10 +290,10 @@ public class Client extends EndPointClient {
                     future.await();
 
                 } catch (Exception e) {
-                    if (this.logger.isDebugEnabled()) {
-                        this.logger.error("Could not connect to the {} server on port {}.", bootstrapWrapper.type, bootstrapWrapper.port, e.getCause());
+                    if (logger2.isDebugEnabled()) {
+                        logger2.debug("Could not connect to the {} server on port {}.", bootstrapWrapper.type, bootstrapWrapper.port, e.getCause());
                     } else {
-                        this.logger.error("Could not connect to the {} server{}.", bootstrapWrapper.type, bootstrapWrapper.port);
+                        logger2.error("Could not connect to the {} server{}.", bootstrapWrapper.type, bootstrapWrapper.port);
                     }
 
                     this.registrationInProgress = false;
@@ -301,10 +302,10 @@ public class Client extends EndPointClient {
                 }
 
                 if (!future.isSuccess()) {
-                    if (this.logger.isDebugEnabled()) {
-                        this.logger.error("Could not connect to the {} server.", bootstrapWrapper.type, future.cause());
+                    if (logger2.isDebugEnabled()) {
+                        logger2.debug("Could not connect to the {} server.", bootstrapWrapper.type, future.cause());
                     } else {
-                        this.logger.error("Could not connect to the {} server.", bootstrapWrapper.type);
+                        logger2.error("Could not connect to the {} server.", bootstrapWrapper.type);
                     }
 
                     this.registrationInProgress = false;
@@ -312,7 +313,9 @@ public class Client extends EndPointClient {
                     return;
                 }
 
-                this.logger.trace("Waiting for registration from server.");
+                if (logger2.isTraceEnabled()) {
+                    logger2.trace("Waiting for registration from server.");
+                }
                 manageForShutdown(future);
 
                 // WAIT for the next one to complete.

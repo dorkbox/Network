@@ -13,6 +13,7 @@ import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
 import org.bouncycastle.crypto.engines.AESFastEngine;
+import org.slf4j.Logger;
 
 import com.esotericsoftware.kryo.ClassResolver;
 import com.esotericsoftware.kryo.Kryo;
@@ -352,6 +353,7 @@ public class KryoSerializationManager implements SerializationManager {
     private final void write0(Connection connection, ByteBuf buffer, Object message, boolean doCrypto) {
         nextAvailable:
         while (true) {
+            Logger logger2 = logger;
             for (int i=0;i<this.numberOfInstances;i++) {
                 boolean wasAvailable = this.kryoLocks[i].compareAndSet(false, true);
 
@@ -414,7 +416,9 @@ public class KryoSerializationManager implements SerializationManager {
 
                     // AES CRYPTO
                     if (doCrypto) {
-                        logger.trace("Encrypting data with - AES {}", connection);
+                        if (logger2.isTraceEnabled()) {
+                            logger2.trace("Encrypting data with - AES {}", connection);
+                        }
 
                         length = Crypto.AES.encrypt(this.aesEngines[i], connection.getCryptoParameters(),
                                                     bufferWithData, bufferTempData, length);
@@ -446,7 +450,10 @@ public class KryoSerializationManager implements SerializationManager {
                     break nextAvailable;
                 }
             }
-            logger.trace("Waiting for another WRITE Kryo. It was full.");
+
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("Waiting for another WRITE Kryo. It was full.");
+            }
 
             // none were available. wait a small amount of time and try again
             synchronized (this.instanceWaitLock) {
@@ -512,6 +519,7 @@ public class KryoSerializationManager implements SerializationManager {
     @SuppressWarnings("unchecked")
     private final Object read0(Connection connection, ByteBuf buffer, int length, boolean doCrypto) {
         while (true) {
+            Logger logger2 = logger;
             for (int i=0;i<this.numberOfInstances;i++) {
                 boolean wasAvailable = this.kryoLocks[i].compareAndSet(false, true);
 
@@ -541,7 +549,9 @@ public class KryoSerializationManager implements SerializationManager {
                             throw new NetException("Unable to perform crypto when data does not to use crypto!");
                         }
 
-                        logger.trace("Decrypting data with - AES " + connection);
+                        if (logger2.isTraceEnabled()) {
+                            logger2.trace("Decrypting data with - AES " + connection);
+                        }
 
                         Crypto.AES.decrypt(this.aesEngines[i], connection.getCryptoParameters(),
                                            bufferWithData, bufferTempData, length);
@@ -604,7 +614,9 @@ public class KryoSerializationManager implements SerializationManager {
                 }
             }
 
-            logger.trace("Waiting for another READ Kryo. It was full.");
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("Waiting for another READ Kryo. It was full.");
+            }
 
             // none were available. wait a small amount of time and try again
             synchronized (this.instanceWaitLock) {

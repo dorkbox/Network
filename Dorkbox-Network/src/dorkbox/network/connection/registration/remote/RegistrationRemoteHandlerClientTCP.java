@@ -17,6 +17,7 @@ import org.bouncycastle.crypto.engines.IESEngine;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECParameterSpec;
+import org.slf4j.Logger;
 
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
@@ -104,7 +105,8 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
      */
     @Override
     public void channelActive(ChannelHandlerContext context) throws Exception {
-        if (this.logger.isDebugEnabled()) {
+        Logger logger2 = this.logger;
+        if (logger2.isDebugEnabled()) {
            super.channelActive(context);
         }
 
@@ -125,7 +127,9 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
             this.registrationWrapper.releaseChannelMap();
         }
 
-        this.logger.trace("Start new TCP Connection. Sending request to server");
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("Start new TCP Connection. Sending request to server");
+        }
 
         Registration registration = new Registration();
         registration.publicKey = this.registrationWrapper.getPublicKey();
@@ -316,7 +320,10 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
                             channel.eventLoop().schedule(new Runnable() {
                                 @Override
                                 public void run() {
-                                    RegistrationRemoteHandlerClientTCP.this.logger.trace("Notify Connection");
+                                    Logger logger2 = RegistrationRemoteHandlerClientTCP.this.logger;
+                                    if (logger2.isTraceEnabled()) {
+                                        logger2.trace("Notify Connection");
+                                    }
                                     notifyConnection(metaChannel2);
                                 }}, metaChannel.getNanoSecBetweenTCP() * 2, TimeUnit.NANOSECONDS);
                         }

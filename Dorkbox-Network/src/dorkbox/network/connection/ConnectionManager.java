@@ -160,7 +160,10 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
    public final void removeAll() {
        this.listeners.clear();
 
-       this.logger.trace("all listeners removed !!");
+       Logger logger2 = this.logger;
+       if (logger2.isTraceEnabled()) {
+           logger2.trace("all listeners removed !!");
+       }
    }
 
    /**
@@ -176,7 +179,10 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
 
         this.listeners.remove(classType);
 
-        this.logger.trace("all listeners removed for type: {}", classType.getClass().getName());
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("all listeners removed for type: {}", classType.getClass().getName());
+        }
     }
 
 

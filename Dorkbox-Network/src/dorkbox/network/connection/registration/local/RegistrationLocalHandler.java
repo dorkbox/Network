@@ -1,5 +1,7 @@
 package dorkbox.network.connection.registration.local;
 
+import org.slf4j.Logger;
+
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -25,15 +27,18 @@ public abstract class RegistrationLocalHandler extends RegistrationHandler {
         metaChannel.localChannel = channel;
 
         try {
-            IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
+            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
             channelMap.put(channel.hashCode(), metaChannel);
         } finally {
-            registrationWrapper.releaseChannelMap();
+            this.registrationWrapper.releaseChannelMap();
         }
 
-        logger.trace("New LOCAL connection.");
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("New LOCAL connection.");
+        }
 
-        registrationWrapper.connection0(metaChannel);
+        this.registrationWrapper.connection0(metaChannel);
 
         // have to setup connection handler
         ChannelPipeline pipeline = channel.pipeline();
@@ -45,7 +50,7 @@ public abstract class RegistrationLocalHandler extends RegistrationHandler {
      */
     @Override
     public void channelActive(ChannelHandlerContext context) throws Exception {
-        if (logger.isDebugEnabled()) {
+        if (this.logger.isDebugEnabled()) {
             Channel channel = context.channel();
 
             StringBuilder builder = new StringBuilder(76);
@@ -55,7 +60,7 @@ public abstract class RegistrationLocalHandler extends RegistrationHandler {
             builder.append(channel.remoteAddress());
             builder.append("]");
 
-            logger.debug(builder.toString());
+            this.logger.debug(builder.toString());
         }
     }
 
@@ -70,14 +75,14 @@ public abstract class RegistrationLocalHandler extends RegistrationHandler {
     public final void channelInactive(ChannelHandlerContext context) throws Exception {
         Channel channel = context.channel();
 
-        logger.info("Closed LOCAL connection: {}", channel.remoteAddress());
+        this.logger.info("Closed LOCAL connection: {}", channel.remoteAddress());
 
         long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
         // also, once we notify, we unregister this.
 
         try {
-            IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
+            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
             Entries<MetaChannel> entries = channelMap.entries();
             while (entries.hasNext()) {
                 MetaChannel metaChannel = entries.next().value;
@@ -89,7 +94,7 @@ public abstract class RegistrationLocalHandler extends RegistrationHandler {
                 }
             }
         } finally {
-            registrationWrapper.releaseChannelMap();
+            this.registrationWrapper.releaseChannelMap();
         }
 
         super.channelInactive(context);
@@ -99,7 +104,7 @@ public abstract class RegistrationLocalHandler extends RegistrationHandler {
     public void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
         Channel channel = context.channel();
 
-        logger.error("Unexpected exception while trying to receive data on LOCAL channel.  ({})" + System.getProperty("line.separator"), channel.remoteAddress(), cause);
+        this.logger.error("Unexpected exception while trying to receive data on LOCAL channel.  ({})" + System.getProperty("line.separator"), channel.remoteAddress(), cause);
         if (channel.isOpen()) {
             channel.close();
         }

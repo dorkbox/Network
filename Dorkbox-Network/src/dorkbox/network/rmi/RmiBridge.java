@@ -197,7 +197,10 @@ public class RmiBridge {
         }
 
         instances.remove(this);
-        this.logger.trace("Closed ObjectSpace.");
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("Closed ObjectSpace.");
+        }
     }
 
     /**
