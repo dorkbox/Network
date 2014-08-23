@@ -25,5 +25,5 @@ public interface ConnectionBridgeServer {
      * Exposes methods to send the object to all server connections (except the specified one)
      * over the network. (or via LOCAL when it's a local channel).
      */
-    public ConnectionExceptsBridgeServer except();
+    public ConnectionExceptSpecifiedBridgeServer except();
 }

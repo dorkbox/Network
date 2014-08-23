@@ -1,7 +1,7 @@
 package dorkbox.network.connection;
 
 
-public interface ConnectionExceptsBridgeServer {
+public interface ConnectionExceptSpecifiedBridgeServer {
 
     /**
      * Sends the object to all server connections (except the specified one)

@@ -337,7 +337,7 @@ public abstract class EndPoint {
     }
 
     // This actually does the "stopping", since there is some logic to making sure we don't deadlock, this is important
-    private final void stopInThread () {
+    private final void stopInThread() {
         // tell the blocked "bind" method that it may continue (and exit)
         this.blockUntilDone.release();
 

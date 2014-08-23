@@ -139,9 +139,10 @@ public class Server extends EndPointServer {
                 worker = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-LOCAL", nettyGroup));
 
                 this.localBootstrap.group(boss, worker)
-                              .channel(LocalServerChannel.class)
-                              .localAddress(new LocalAddress(this.localChannelName))
-                              .childHandler(new RegistrationLocalHandlerServer(this.name, this.registrationWrapper));
+                                   .channel(LocalServerChannel.class)
+                                   .localAddress(new LocalAddress(this.localChannelName))
+                                   .childHandler(new RegistrationLocalHandlerServer(this.name,
+                                                                                    this.registrationWrapper));
 
                 manageForShutdown(boss);
                 manageForShutdown(worker);
@@ -167,8 +168,10 @@ public class Server extends EndPointServer {
             manageForShutdown(worker);
 
             this.tcpBootstrap.group(boss, worker)
-                        .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
-                        .childHandler(new RegistrationRemoteHandlerServerTCP(this.name, this.registrationWrapper, this.serializationManager));
+                             .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
+                             .childHandler(new RegistrationRemoteHandlerServerTCP(this.name,
+                                                                                  this.registrationWrapper,
+                                                                                  this.serializationManager));
 
             if (options.host != null) {
                 this.tcpBootstrap.localAddress(options.host, this.tcpPort);
@@ -228,10 +231,12 @@ public class Server extends EndPointServer {
 
             UdtEndpointProxy.setChannelFactory(this.udtBootstrap);
             this.udtBootstrap.group(boss, worker)
-                        .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
-                         // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                        .localAddress(this.udtPort)
-                        .childHandler(new RegistrationRemoteHandlerServerUDT(this.name, this.registrationWrapper, this.serializationManager));
+                             .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
+                             // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
+                             .localAddress(this.udtPort)
+                             .childHandler(new RegistrationRemoteHandlerServerUDT(this.name,
+                                                                                  this.registrationWrapper,
+                                                                                  this.serializationManager));
 
             manageForShutdown(boss);
             manageForShutdown(worker);

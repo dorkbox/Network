@@ -109,7 +109,8 @@ public class Client extends EndPointClient {
             localBootstrap.group(boss)
                           .channel(LocalChannel.class)
                           .remoteAddress(new LocalAddress(options.localChannelName))
-                          .handler(new RegistrationLocalHandlerClient(this.name, this.registrationWrapper));
+                          .handler(new RegistrationLocalHandlerClient(this.name,
+                                                                      this.registrationWrapper));
 
             manageForShutdown(boss);
         }
@@ -131,7 +132,9 @@ public class Client extends EndPointClient {
 
                 tcpBootstrap.group(boss)
                             .remoteAddress(options.host, options.tcpPort)
-                            .handler(new RegistrationRemoteHandlerClientTCP(this.name, this.registrationWrapper, this.serializationManager));
+                            .handler(new RegistrationRemoteHandlerClientTCP(this.name,
+                                                                            this.registrationWrapper,
+                                                                            this.serializationManager));
 
 
                 manageForShutdown(boss);
@@ -160,7 +163,9 @@ public class Client extends EndPointClient {
                 udpBootstrap.group(boss)
                             .localAddress(new InetSocketAddress(0))
                             .remoteAddress(new InetSocketAddress(options.host, options.udpPort))
-                            .handler(new RegistrationRemoteHandlerClientUDP(this.name, this.registrationWrapper, this.serializationManager));
+                            .handler(new RegistrationRemoteHandlerClientUDP(this.name,
+                                                                            this.registrationWrapper,
+                                                                            this.serializationManager));
 
                 manageForShutdown(boss);
 
@@ -200,25 +205,14 @@ public class Client extends EndPointClient {
 
                     udtBootstrap.group(boss)
                                 .remoteAddress(options.host, options.udtPort)
-                                .handler(new RegistrationRemoteHandlerClientUDT(this.name, this.registrationWrapper, this.serializationManager));
+                                .handler(new RegistrationRemoteHandlerClientUDT(this.name,
+                                                                                this.registrationWrapper,
+                                                                                this.serializationManager));
 
                     manageForShutdown(boss);
                 }
             }
         }
-
-        // this thread will prevent the application from closing, since the JVM only exits when all non-daemon threads have ended.
-        // We will wait until Client.stop() is called before exiting.
-        // NOTE: if we are the webserver, then this method will be called for EVERY web connection made
-//        Thread exitThread = new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                waitForStop();
-//            }
-//        });
-//        exitThread.setDaemon(false);
-//        exitThread.setName("Exit Monitor (Client)");
-//        exitThread.start();
     }
 
     /**

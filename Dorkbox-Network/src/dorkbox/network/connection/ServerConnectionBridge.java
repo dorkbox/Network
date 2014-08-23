@@ -2,7 +2,7 @@ package dorkbox.network.connection;
 
 import java.util.Collection;
 
-public class ServerConnectionBridge implements ConnectionBridgeServer, ConnectionExceptsBridgeServer {
+public class ServerConnectionBridge implements ConnectionBridgeServer, ConnectionExceptSpecifiedBridgeServer {
 
     private final ConnectionManager connectionManager;
 
@@ -52,7 +52,7 @@ public class ServerConnectionBridge implements ConnectionBridgeServer, Connectio
      * over the network. (or via LOCAL when it's a local channel).
      */
     @Override
-    public ConnectionExceptsBridgeServer except() {
+    public ConnectionExceptSpecifiedBridgeServer except() {
         return this;
     }
 

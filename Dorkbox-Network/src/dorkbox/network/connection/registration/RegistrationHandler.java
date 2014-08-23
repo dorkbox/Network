@@ -84,8 +84,8 @@ public abstract class RegistrationHandler extends ChannelInboundHandlerAdapter {
                 }
 
             } finally {
-                registrationWrapper.abortRegistrationIfClient();
                 registrationWrapper.releaseChannelMap();
+                registrationWrapper.abortRegistrationIfClient();
             }
         }
 

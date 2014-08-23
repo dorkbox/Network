@@ -12,41 +12,40 @@ public class ConnectionBridgeFlushAlways implements ConnectionBridge {
 
     @Override
     public void self(Object message) {
-        originalBridge.self(message);
+        this.originalBridge.self(message);
         flush();
     }
 
     @Override
     public ConnectionPoint TCP(Object message) {
-        ConnectionPoint connection = originalBridge.TCP(message);
+        ConnectionPoint connection = this.originalBridge.TCP(message);
         connection.flush();
         return connection;
     }
 
     @Override
     public ConnectionPoint UDP(Object message) {
-        ConnectionPoint connection = originalBridge.UDP(message);
+        ConnectionPoint connection = this.originalBridge.UDP(message);
         connection.flush();
         return connection;
     }
 
     @Override
     public ConnectionPoint UDT(Object message) {
-        ConnectionPoint connection = originalBridge.UDT(message);
+        ConnectionPoint connection = this.originalBridge.UDT(message);
         connection.flush();
         return connection;
     }
 
     @Override
     public Ping ping() {
-        Ping ping = originalBridge.ping();
+        Ping ping = this.originalBridge.ping();
         flush();
         return ping;
     }
 
     @Override
     public void flush() {
-        originalBridge.flush();
+        this.originalBridge.flush();
     }
-
 }
