@@ -30,8 +30,8 @@ import com.esotericsoftware.kryo.util.IntMap;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.ObjectIntMap;
 import dorkbox.network.util.SerializationManager;
+import dorkbox.util.primativeCollections.ObjectIntMap;
 
 /**
  * Allows methods on objects to be invoked remotely over TCP. Objects are

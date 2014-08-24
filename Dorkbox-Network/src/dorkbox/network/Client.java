@@ -32,10 +32,10 @@ import dorkbox.network.connection.registration.local.RegistrationLocalHandlerCli
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientTCP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDT;
-import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.NamedThreadFactory;
-import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 
 /**

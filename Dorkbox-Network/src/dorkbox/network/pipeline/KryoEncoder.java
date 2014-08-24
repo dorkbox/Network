@@ -7,8 +7,8 @@ import io.netty.handler.codec.MessageToByteEncoder;
 
 import com.esotericsoftware.kryo.KryoException;
 
-import dorkbox.network.util.NetException;
 import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 
 @Sharable

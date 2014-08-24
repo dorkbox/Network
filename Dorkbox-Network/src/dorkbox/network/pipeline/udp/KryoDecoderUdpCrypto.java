@@ -10,8 +10,8 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 import java.util.List;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.util.NetException;
 import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.exceptions.NetException;
 
 @Sharable
 public class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {

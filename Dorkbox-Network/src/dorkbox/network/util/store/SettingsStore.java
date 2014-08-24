@@ -6,7 +6,7 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import dorkbox.network.util.SecurityException;
+import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.util.Storage;
 
 /**

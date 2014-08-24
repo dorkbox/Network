@@ -5,8 +5,8 @@ import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import dorkbox.network.connection.RegistrationWrapper;
-import dorkbox.network.util.primativeCollections.IntMap;
-import dorkbox.network.util.primativeCollections.IntMap.Entries;
+import dorkbox.util.primativeCollections.IntMap;
+import dorkbox.util.primativeCollections.IntMap.Entries;
 
 @Sharable
 public abstract class RegistrationHandler extends ChannelInboundHandlerAdapter {

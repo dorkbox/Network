@@ -8,8 +8,8 @@ import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.junit.Test;
 
-import dorkbox.network.util.InitializationException;
-import dorkbox.network.util.SecurityException;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.network.util.store.SettingsStore;
 
 

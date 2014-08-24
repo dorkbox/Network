@@ -4,36 +4,36 @@ Legal:
 
   - Copyright (c) 2010 and beyond, dorkbox llc. All rights reserved.
 
-    This software is a commercial product. Use, redistribution, and 
+    This software is a commercial product. Use, redistribution, and
     modification without a license is NOT permitted. Contact
     license@dorkbox.com for a license.
 
-    Neither the name of dorkbox, dorkbox llc, or dorkbox.com or the names of 
-    its contributors may be used to endorse or promote products derived from 
+    Neither the name of dorkbox, dorkbox llc, or dorkbox.com or the names of
+    its contributors may be used to endorse or promote products derived from
     this software without specific prior written permission.
 
     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE 
-    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
     SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
-    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
     THE POSSIBILITY OF SUCH DAMAGE.
 
-    THIS SOFTWARE IS NOT DESIGNED OR INTENDED FOR USE OR RESALE AS 
+    THIS SOFTWARE IS NOT DESIGNED OR INTENDED FOR USE OR RESALE AS
     ON-LINE CONTROL EQUIPMENT IN HAZARDOUS ENVIRONMENTS REQUIRING FAIL-SAFE
-    PERFORMANCE, SUCH AS IN THE OPERATION OF NUCLEAR FACILITIES, AIRCRAFT 
-    NAVIGATION OR COMMUNICATION SYSTEMS, AIR TRAFFIC CONTROL, DIRECT LIFE 
+    PERFORMANCE, SUCH AS IN THE OPERATION OF NUCLEAR FACILITIES, AIRCRAFT
+    NAVIGATION OR COMMUNICATION SYSTEMS, AIR TRAFFIC CONTROL, DIRECT LIFE
     SUPPORT MACHINES, OR WEAPONS SYSTEMS, IN WHICH THE FAILURE OF THE SOFTWARE
-    COULD LEAD DIRECTLY TO DEATH, PERSONAL INJURY, OR SEVERE PHYSICAL OR 
+    COULD LEAD DIRECTLY TO DEATH, PERSONAL INJURY, OR SEVERE PHYSICAL OR
     ENVIRONMENTAL DAMAGE ("HIGH RISK ACTIVITIES").
 
     THIS AGREEMENT IS GOVERNED THE INTELLECTUAL PROPERTY LAWS OF THE UNITED
-    STATES OF AMERICA. NO PARTY TO THIS AGREEMENT WILL BRING A LEGAL ACTION 
+    STATES OF AMERICA. NO PARTY TO THIS AGREEMENT WILL BRING A LEGAL ACTION
     UNDER THIS AGREEMENT MORE THAN ONE YEAR AFTER THE CAUSE OF ACTION AROSE.
     EACH PARTY WAIVES ITS RIGHTS TO A JURY TRIAL IN ANY RESULTING LITIGATION.
 
@@ -47,25 +47,25 @@ Legal:
         https://bxa.ntis.gov/
 
     Details of the U.S. Commercial Encryption Export Controls can be found at
-    the Bureau of Industry and Security (BIS) web site. 
+    the Bureau of Industry and Security (BIS) web site.
         http://www.bis.doc.gov/
 
     PROHIBITED END USERS
     ALL products are prohibited for export/reexport to the following:
 
-    - Any company or national of Cuba, Iran, North Korea, Sudan, and Syria. 
+    - Any company or national of Cuba, Iran, North Korea, Sudan, and Syria.
       Licenses to these countries and parties are presumed denied.
 
-    - Re-export to these countries is prohibited; if you "know or have reason 
+    - Re-export to these countries is prohibited; if you "know or have reason
       to know" that an illegal reshipment will take place, you may not ship to
       such a user.
 
-    - Entities listed on any U.S. Government Denied Party/Person List. See BIS's 
-      The Denied Persons List, the Office of Foreign Assets Control's Economic 
-      and Trade sanctions list, (OFAC), and the Office of Defense Trade 
+    - Entities listed on any U.S. Government Denied Party/Person List. See BIS's
+      The Denied Persons List, the Office of Foreign Assets Control's Economic
+      and Trade sanctions list, (OFAC), and the Office of Defense Trade
       Controls (DTC).
 
-    - Any customer you know or have reason to know, who is involved in the 
+    - Any customer you know or have reason to know, who is involved in the
       design, development, manufacture or production of nuclear technology, or
       nuclear, biological or chemical "weapons of mass destruction."
 
@@ -74,11 +74,19 @@ Legal:
 
 
 
+
+  - ArraysAsListSerializer,
+    UnmodifiableCollectionsSerializer  - Apache 2.0 license
+    https://github.com/magro/kryo-serializers
+    Copyright 2010 Martin Grotzke
+
+
+
   - ASM - Bytecode manipulation framework and utilities - New BSD license
     http://asm.ow2.org/
     Copyright (c) 2012 France Télécom
     All rights reserved.
-    
+
 
 
   - BarchartUDT - BSD license
@@ -90,17 +98,23 @@ Legal:
   - BouncyCastle - MIT X11 License
     http://www.bouncycastle.org
     Copyright (c) 2000 - 2009 The Legion Of The Bouncy Castle
-    
-    
-    
+
+
+
+  - FieldAnnotationAwareSerializer  - Apache 2.0 license
+    https://github.com/magro/kryo-serializers
+    Copyright 2010 Martin Grotzke, Rafael Winterhalter
+
+
+
   - JAVASSIST - Apache 2.0 license
     http://www.csg.is.titech.ac.jp/~chiba/javassist/
     Copyright (C) 1999- Shigeru Chiba. All Rights Reserved.
     Contributor(s): Bill Burke, Jason T. Greene
     Note: it is licensed under the MPL/LGPL/Apache triple license
-    
-    
-    
+
+
+
   - JsonBeans, Kryo, Minlog (Minlog-SLF4J), ReflectASM  - New BSD license
     http://code.google.com/p/jsonbeans/
     http://code.google.com/p/kryo/
@@ -115,34 +129,41 @@ Legal:
     https://github.com/magro/kryo-serializers
     Copyright 2010 Martin Grotzke
 
-    
-    
+
+
   - Logback - EPL v1.0
     http://logback.qos.ch/
-    Copyright (C) 1999-2012, QOS.ch. All rights reserved. 
-    
-    
-    
+    Copyright (C) 1999-2012, QOS.ch. All rights reserved.
+
+
+
   - MathUtils, IntArray, IntMap - Apache 2.0 license
     http://github.com/libgdx/libgdx/
     Copyright (c) 2013
     Mario Zechner <badlogicgames@gmail.com>
-    Nathan Sweet <nathan.sweet@gmail.com> 
-  
-  
-  
+    Nathan Sweet <nathan.sweet@gmail.com>
+
+
+
+  - MersenneTwisterFast, v20 - BSD license
+    http://www.cs.gmu.edu/~sean/research/mersenne/MersenneTwisterFast.java
+    Copyright (c) 2003 by Sean Luke.
+    Portions copyright (c) 1993 by Michael Lecuyer.
+
+
+
   - Netty - Apache 2.0 license
     http://netty.io
-    Copyright (c) 2013 The Netty Project  
+    Copyright (c) 2013 The Netty Project
 
 
 
   - Objenesis - Apache 2.0 license
     http://http://code.google.com/p/objenesis/
     Copyright (c) 2003-2009, Joe Walnes, Henri Tremblay, Leonardo Mesquita
-    
-    
-    
+
+
+
   - SLF4J - MIT license.
     http://www.slf4j.org/
     Copyright (c) 2004-2008 QOS.ch
@@ -154,6 +175,7 @@ Legal:
     http://udt.sourceforge.net/
     Copyright 2001 - 2009, The Board of Trustees of the University of Illinois.
     All rights reserved.
-    
-    
-    
+
+
+
+

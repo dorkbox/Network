@@ -23,16 +23,16 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import dorkbox.network.ConnectionOptions;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.rmi.RmiBridge;
-import dorkbox.network.util.InitializationException;
-import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.entropy.Entropy;
 import dorkbox.network.util.entropy.SimpleEntropy;
-import dorkbox.network.util.primativeCollections.IntMap;
-import dorkbox.network.util.primativeCollections.IntMap.Entries;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.crypto.Crypto;
+import dorkbox.util.primativeCollections.IntMap;
+import dorkbox.util.primativeCollections.IntMap.Entries;
 
 /** represents the base of a client/server end point */
 public abstract class EndPoint {

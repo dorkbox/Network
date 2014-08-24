@@ -10,7 +10,7 @@ import org.slf4j.Logger;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
-import dorkbox.network.util.primativeCollections.IntMap;
+import dorkbox.util.primativeCollections.IntMap;
 
 public class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
 

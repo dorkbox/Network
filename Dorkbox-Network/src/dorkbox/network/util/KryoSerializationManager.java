@@ -28,6 +28,8 @@ import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
 import dorkbox.network.rmi.RmiRegisterClassesCallback;
 import dorkbox.network.rmi.SerializerRegistration;
+import dorkbox.network.util.exceptions.NetException;
+import dorkbox.network.util.serializers.UnmodifiableCollectionsSerializer;
 import dorkbox.util.crypto.Crypto;
 import dorkbox.util.crypto.bouncycastle.GCMBlockCipher_ByteBuf;
 

@@ -5,7 +5,7 @@ import io.netty.channel.Channel;
 import java.net.InetSocketAddress;
 
 import dorkbox.network.connection.UdpServer;
-import dorkbox.network.util.NetException;
+import dorkbox.network.util.exceptions.NetException;
 
 public class ChannelNetworkUdp extends ChannelNetwork {
 

@@ -16,9 +16,9 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.InputStreamSender;
-import dorkbox.network.util.InitializationException;
-import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
 
 @SuppressWarnings({"rawtypes"})
 public class IdleTest extends BaseTest {

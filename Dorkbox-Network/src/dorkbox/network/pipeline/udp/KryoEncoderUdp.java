@@ -13,8 +13,8 @@ import java.util.List;
 import com.esotericsoftware.kryo.KryoException;
 
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.util.NetException;
 import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.exceptions.NetException;
 
 @Sharable
 // UDP uses messages --- NOT bytebuf!

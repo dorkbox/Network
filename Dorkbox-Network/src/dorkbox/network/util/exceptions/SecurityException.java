@@ -1,4 +1,4 @@
-package dorkbox.network.util;
+package dorkbox.network.util.exceptions;
 
 public class SecurityException extends Exception {
 

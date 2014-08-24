@@ -26,12 +26,12 @@ import com.esotericsoftware.kryo.io.Output;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
-import dorkbox.network.util.RandomConnectionIdGenerator;
 import dorkbox.network.util.SerializationManager;
-import dorkbox.network.util.primativeCollections.IntMap;
+import dorkbox.util.MathUtils;
 import dorkbox.util.bytes.OptimizeUtils;
 import dorkbox.util.crypto.Crypto;
 import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
+import dorkbox.util.primativeCollections.IntMap;
 
 public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer {
 
@@ -160,13 +160,13 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                     }
 
 
-                    Integer connectionID = RandomConnectionIdGenerator.getRandom();
+                    Integer connectionID = MathUtils.randomInt();
                     // if I'm unlucky, keep from confusing connections!
 
                     try {
                         IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
                         while (channelMap.containsKey(connectionID)) {
-                            connectionID = RandomConnectionIdGenerator.getRandom();
+                            connectionID = MathUtils.randomInt();
                         }
 
                         metaChannel.connectionID = connectionID;

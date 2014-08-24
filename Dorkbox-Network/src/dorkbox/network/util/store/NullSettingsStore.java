@@ -6,7 +6,7 @@ import java.security.SecureRandom;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
-import dorkbox.network.util.SecurityException;
+import dorkbox.network.util.exceptions.SecurityException;
 
 public class NullSettingsStore extends SettingsStore {
 

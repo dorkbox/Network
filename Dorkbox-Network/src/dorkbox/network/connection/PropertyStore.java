@@ -59,7 +59,7 @@ class PropertyStore extends SettingsStore {
      * Simple, property based method to getting the private key of the server
      */
     @Override
-    public synchronized ECPrivateKeyParameters getPrivateKey() throws dorkbox.network.util.SecurityException {
+    public synchronized ECPrivateKeyParameters getPrivateKey() throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
         return this.props.serverPrivateKey;
@@ -69,7 +69,7 @@ class PropertyStore extends SettingsStore {
      * Simple, property based method for saving the private key of the server
      */
     @Override
-    public synchronized void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws dorkbox.network.util.SecurityException {
+    public synchronized void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
         this.props.serverPrivateKey = serverPrivateKey;
@@ -81,7 +81,7 @@ class PropertyStore extends SettingsStore {
      * Simple, property based method to getting the public key of the server
      */
     @Override
-    public synchronized ECPublicKeyParameters getPublicKey() throws dorkbox.network.util.SecurityException {
+    public synchronized ECPublicKeyParameters getPublicKey() throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
         return this.props.serverPublicKey;
@@ -91,7 +91,7 @@ class PropertyStore extends SettingsStore {
      * Simple, property based method for saving the public key of the server
      */
     @Override
-    public synchronized void savePublicKey(ECPublicKeyParameters serverPublicKey) throws dorkbox.network.util.SecurityException {
+    public synchronized void savePublicKey(ECPublicKeyParameters serverPublicKey) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
         this.props.serverPublicKey = serverPublicKey;
@@ -122,7 +122,7 @@ class PropertyStore extends SettingsStore {
      * Simple, property based method to getting a connected computer by host IP address
      */
     @Override
-    public synchronized ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.SecurityException {
+    public synchronized ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(RegistrationWrapper.class);
 
         return this.props.registeredServer.get(new ByteArrayWrapper(hostAddress));
@@ -132,7 +132,7 @@ class PropertyStore extends SettingsStore {
      * Saves a connected computer by host IP address and public key
      */
     @Override
-    public synchronized void addRegisteredServerKey(byte[] hostAddress, ECPublicKeyParameters publicKey) throws dorkbox.network.util.SecurityException {
+    public synchronized void addRegisteredServerKey(byte[] hostAddress, ECPublicKeyParameters publicKey) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(RegistrationWrapper.class);
 
         this.props.registeredServer.put(new ByteArrayWrapper(hostAddress), publicKey);
@@ -143,7 +143,7 @@ class PropertyStore extends SettingsStore {
      * Deletes a registered computer by host IP address
      */
     @Override
-    public synchronized boolean removeRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.SecurityException {
+    public synchronized boolean removeRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(RegistrationWrapper.class);
 
         ECPublicKeyParameters remove = this.props.registeredServer.remove(new ByteArrayWrapper(hostAddress));

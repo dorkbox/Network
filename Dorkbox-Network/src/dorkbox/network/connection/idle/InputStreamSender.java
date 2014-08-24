@@ -6,7 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.util.NetException;
+import dorkbox.network.util.exceptions.NetException;
 
 abstract public class InputStreamSender<C extends Connection> extends IdleSender<C,byte[]> {
 

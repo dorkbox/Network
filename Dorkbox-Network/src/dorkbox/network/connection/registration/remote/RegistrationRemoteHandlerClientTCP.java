@@ -25,12 +25,12 @@ import com.esotericsoftware.kryo.io.Output;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
-import dorkbox.network.util.SecurityException;
 import dorkbox.network.util.SerializationManager;
-import dorkbox.network.util.primativeCollections.IntMap;
+import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.util.bytes.OptimizeUtils;
 import dorkbox.util.crypto.Crypto;
 import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
+import dorkbox.util.primativeCollections.IntMap;
 
 public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient {
 

@@ -18,9 +18,9 @@ import ch.qos.logback.classic.joran.JoranConfigurator;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.ConsoleAppender;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.util.InitializationException;
 import dorkbox.network.util.entropy.Entropy;
 import dorkbox.network.util.entropy.SimpleEntropy;
+import dorkbox.network.util.exceptions.InitializationException;
 
 public abstract class BaseTest {
 

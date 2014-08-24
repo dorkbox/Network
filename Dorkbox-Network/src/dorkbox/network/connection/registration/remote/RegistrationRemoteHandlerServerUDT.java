@@ -11,10 +11,10 @@ import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.SerializationManager;
-import dorkbox.network.util.primativeCollections.IntMap;
-import dorkbox.network.util.primativeCollections.IntMap.Entries;
 import dorkbox.util.bytes.OptimizeUtils;
 import dorkbox.util.crypto.Crypto;
+import dorkbox.util.primativeCollections.IntMap;
+import dorkbox.util.primativeCollections.IntMap.Entries;
 
 public class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandlerServer {
 

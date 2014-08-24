@@ -1,5 +1,5 @@
 
-package dorkbox.network.util;
+package dorkbox.network.util.exceptions;
 
 public class NetException extends RuntimeException {
     private static final long serialVersionUID = 2963139576811306988L;

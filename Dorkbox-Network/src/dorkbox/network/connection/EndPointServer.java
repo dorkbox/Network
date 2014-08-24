@@ -1,8 +1,8 @@
 package dorkbox.network.connection;
 
 import dorkbox.network.ConnectionOptions;
-import dorkbox.network.util.InitializationException;
-import dorkbox.network.util.SecurityException;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
 
 /**
  * This serves the purpose of making sure that specific methods are not available to the end user.

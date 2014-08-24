@@ -10,8 +10,8 @@ import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.InitializationException;
-import dorkbox.network.util.SecurityException;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
 
 public class MultipleServerTest extends BaseTest {
     AtomicInteger received = new AtomicInteger();

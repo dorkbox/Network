@@ -1,9 +1,8 @@
 package dorkbox.network.pipeline;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.util.NetException;
 import dorkbox.network.util.SerializationManager;
-
+import dorkbox.network.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;

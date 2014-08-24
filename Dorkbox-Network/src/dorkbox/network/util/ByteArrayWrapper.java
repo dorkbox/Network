@@ -3,7 +3,7 @@ package dorkbox.network.util;
 import java.util.Arrays;
 
 /**
- * Necessary to provide equals and hashcode for byte arrays (if they are to be used in a map/set/etc)
+ * Necessary to provide equals and hashcode for byte arrays (if they are to be used as keys in a map/set/etc)
  */
 public final class ByteArrayWrapper {
     private final byte[] data;

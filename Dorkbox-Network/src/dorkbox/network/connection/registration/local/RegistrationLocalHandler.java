@@ -9,8 +9,8 @@ import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
-import dorkbox.network.util.primativeCollections.IntMap;
-import dorkbox.network.util.primativeCollections.IntMap.Entries;
+import dorkbox.util.primativeCollections.IntMap;
+import dorkbox.util.primativeCollections.IntMap.Entries;
 
 public abstract class RegistrationLocalHandler extends RegistrationHandler {
 
