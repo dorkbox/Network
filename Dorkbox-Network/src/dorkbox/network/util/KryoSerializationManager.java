@@ -20,7 +20,10 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory;
+import com.esotericsoftware.kryo.factories.SerializerFactory;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
+import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
 
 import dorkbox.network.connection.Connection;
@@ -229,6 +232,19 @@ public class KryoSerializationManager implements SerializationManager {
     }
 
     /**
+     * Sets the serializer factory to use when no {@link #addDefaultSerializer(Class, Class) default serializers} match
+     * an object's type. Default is {@link ReflectionSerializerFactory} with {@link FieldSerializer}.
+     *
+     * @see #newDefaultSerializer(Class)
+     */
+    @Override
+    public void setDefaultSerializer(SerializerFactory factory) {
+        for (Kryo k : this.kryos) {
+            k.setDefaultSerializer(factory);
+        }
+    }
+
+    /**
      * If the class is not registered and {@link SerializationManager#setRegistrationRequired(boolean)} is false, it is
      * automatically registered using the {@link SerializationManager#addDefaultSerializer(Class, Class) default serializer}.
      *
@@ -270,7 +286,9 @@ public class KryoSerializationManager implements SerializationManager {
     }
 
     /**
-     * attempt to allocate the given index. This MUST be wrapped in a synchronized call.!
+     * attempt to allocate the given index.
+     *
+     * Note that this is not thread safe
      */
     private final void allocateLazy(int index) {
         // keyed off the snappy instance

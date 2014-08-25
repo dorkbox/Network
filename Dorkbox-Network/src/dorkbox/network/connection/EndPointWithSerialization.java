@@ -1,12 +1,17 @@
 package dorkbox.network.connection;
 
+import java.lang.annotation.Annotation;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.crypto.params.IESParameters;
 import org.bouncycastle.crypto.params.IESWithCipherParameters;
+
+import com.esotericsoftware.kryo.factories.SerializerFactory;
 
 import dorkbox.network.ConnectionOptions;
 import dorkbox.network.connection.ping.PingListener;
@@ -23,6 +28,8 @@ import dorkbox.network.util.KryoSerializationManager;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.network.util.serializers.FieldAnnotationAwareSerializer;
+import dorkbox.network.util.serializers.IgnoreSerialization;
 import dorkbox.util.crypto.serialization.EccPrivateKeySerializer;
 import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
 import dorkbox.util.crypto.serialization.IesParametersSerializer;
@@ -62,6 +69,13 @@ public class EndPointWithSerialization extends EndPoint {
         this.serializationManager.register(ECPublicKeyParameters.class, new EccPublicKeySerializer());
         this.serializationManager.register(ECPrivateKeyParameters.class, new EccPrivateKeySerializer());
         this.serializationManager.register(Registration.class);
+
+
+        // ignore fields that have the "IgnoreSerialization" annotation.
+        Set<Class<? extends Annotation>> marks = new HashSet<Class<? extends Annotation>>();
+        marks.add(IgnoreSerialization.class);
+        SerializerFactory disregardingFactory = new FieldAnnotationAwareSerializer.Factory(marks, true);
+        this.serializationManager.setDefaultSerializer(disregardingFactory);
 
 
         // add the ping listener (internal use only!)

@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 
 import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.factories.SerializerFactory;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.rmi.RmiRegisterClassesCallback;
@@ -77,5 +78,9 @@ public class NullSerializationManager implements SerializationManager {
 
     @Override
     public void registerForRmiClasses(RmiRegisterClassesCallback callback) {
+    }
+
+    @Override
+    public void setDefaultSerializer(SerializerFactory factory) {
     }
 }
