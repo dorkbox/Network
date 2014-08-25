@@ -22,10 +22,10 @@ import dorkbox.network.connection.registration.local.RegistrationLocalHandlerSer
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerTCP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerUDP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerUDT;
-import dorkbox.network.util.NamedThreadFactory;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.network.util.udt.UdtEndpointProxy;
+import dorkbox.util.NamedThreadFactory;
 
 
 /**

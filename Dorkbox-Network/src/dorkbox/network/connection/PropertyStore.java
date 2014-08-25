@@ -9,9 +9,9 @@ import java.util.Map;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
-import dorkbox.network.util.ByteArrayWrapper;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.Storage;
+import dorkbox.util.bytes.ByteArrayWrapper;
 import dorkbox.util.properties.PropertiesProvider;
 
 /**

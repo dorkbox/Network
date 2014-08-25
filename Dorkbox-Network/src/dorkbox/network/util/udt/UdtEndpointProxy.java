@@ -1,7 +1,6 @@
 package dorkbox.network.util.udt;
 
-import dorkbox.network.util.NamedThreadFactory;
-
+import dorkbox.util.NamedThreadFactory;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.EventLoopGroup;
