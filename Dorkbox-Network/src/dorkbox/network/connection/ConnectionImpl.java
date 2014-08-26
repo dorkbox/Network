@@ -186,11 +186,11 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      */
     public final void ping0(PingMessage ping) {
         if (this.channelWrapper.udp() != null) {
-            send().UDP(ping).flush();
+            UDP(ping).flush();
         } else if (this.channelWrapper.udt() != null) {
-            send().UDT(ping).flush();
+            UDT(ping).flush();
         } else {
-            send().TCP(ping).flush();
+            TCP(ping).flush();
         }
     }
 
@@ -212,7 +212,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * @return true if this connection is also configured to use UDP
      */
     @Override
-    public final boolean hasUdp() {
+    public final boolean hasUDP() {
         return this.channelWrapper.udp() != null;
     }
 
@@ -220,7 +220,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * @return true if this connection is also configured to use UDT
      */
     @Override
-    public final boolean hasUdt() {
+    public final boolean hasUDT() {
         return this.channelWrapper.udt() != null;
     }
 

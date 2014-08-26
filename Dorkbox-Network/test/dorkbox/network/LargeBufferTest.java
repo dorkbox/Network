@@ -16,7 +16,7 @@ import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
-public class BufferTest extends BaseTest {
+public class LargeBufferTest extends BaseTest {
     private static final int OBJ_SIZE = 1024 * 10;
 
     private volatile int finalCheckAmount = 0;
@@ -43,15 +43,15 @@ public class BufferTest extends BaseTest {
 
             @Override
             public void received (Connection connection, LargeMessage object) {
-                System.err.println("Server ack message: " + received.get());
+//                System.err.println("Server ack message: " + received.get());
                 connection.send().TCP(object);
-                receivedBytes.addAndGet(object.bytes.length);
+                this.receivedBytes.addAndGet(object.bytes.length);
 
-                if (received.incrementAndGet() == messageCount) {
+                if (this.received.incrementAndGet() == messageCount) {
                     System.out.println("Server received all " + messageCount + " messages!");
-                    System.out.println("Server received and sent " + receivedBytes.get() + " bytes.");
-                    serverCheck = finalCheckAmount - receivedBytes.get();
-                    System.out.println("Server missed " + serverCheck + " bytes.");
+                    System.out.println("Server received and sent " + this.receivedBytes.get() + " bytes.");
+                    LargeBufferTest.this.serverCheck = LargeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
+                    System.out.println("Server missed " + LargeBufferTest.this.serverCheck + " bytes.");
                     stopEndPoints();
                 }
             }
@@ -68,16 +68,16 @@ public class BufferTest extends BaseTest {
 
             @Override
             public void received (Connection connection, LargeMessage object) {
-                receivedBytes.addAndGet(object.bytes.length);
+                this.receivedBytes.addAndGet(object.bytes.length);
 
-                int count = received.incrementAndGet();
+                int count = this.received.incrementAndGet();
                 //System.out.println("Client received " + count + " messages.");
 
                 if (count == messageCount) {
                     System.out.println("Client received all " + messageCount + " messages!");
-                    System.out.println("Client received and sent " + receivedBytes.get() + " bytes.");
-                    clientCheck = finalCheckAmount - receivedBytes.get();
-                    System.out.println("Client missed " + clientCheck + " bytes.");
+                    System.out.println("Client received and sent " + this.receivedBytes.get() + " bytes.");
+                    LargeBufferTest.this.clientCheck = LargeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
+                    System.out.println("Client missed " + LargeBufferTest.this.clientCheck + " bytes.");
                 }
             }
         });
@@ -87,7 +87,7 @@ public class BufferTest extends BaseTest {
         random.nextBytes(b);
 
         for (int i = 0; i < messageCount; i++) {
-            finalCheckAmount += OBJ_SIZE;
+            this.finalCheckAmount += OBJ_SIZE;
             System.err.println("  Client sending number: " + i);
             client.send().TCP(new LargeMessage(b));
         }
@@ -95,12 +95,12 @@ public class BufferTest extends BaseTest {
 
         waitForThreads();
 
-        if (clientCheck > 0) {
-            fail("Client missed " + clientCheck + " bytes.");
+        if (this.clientCheck > 0) {
+            fail("Client missed " + this.clientCheck + " bytes.");
         }
 
-        if (serverCheck > 0) {
-            fail("Server missed " + serverCheck + " bytes.");
+        if (this.serverCheck > 0) {
+            fail("Server missed " + this.serverCheck + " bytes.");
         }
     }
 

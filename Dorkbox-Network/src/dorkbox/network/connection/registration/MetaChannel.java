@@ -7,7 +7,7 @@ import java.net.InetSocketAddress;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
-import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.Connection;
 
 
 public class MetaChannel {
@@ -28,7 +28,7 @@ public class MetaChannel {
 
     public Channel udtChannel   = null;
 
-    public ConnectionImpl connection; // only needed until the connection has been notified.
+    public Connection connection; // only needed until the connection has been notified.
 
     public ECPublicKeyParameters publicKey; // used for ECC crypto + handshake on NETWORK (remote) connections. This is the remote public key.
 
@@ -43,40 +43,40 @@ public class MetaChannel {
     public boolean changedRemoteKey = false;
 
     public void close() {
-        if (localChannel != null) {
-            localChannel.close();
+        if (this.localChannel != null) {
+            this.localChannel.close();
         }
 
-        if (tcpChannel != null) {
-            tcpChannel.close();
+        if (this.tcpChannel != null) {
+            this.tcpChannel.close();
         }
 
-        if (udtChannel != null) {
-            udtChannel.close();
+        if (this.udtChannel != null) {
+            this.udtChannel.close();
         }
 
         // only the CLIENT will have this.
-        if (udpChannel != null && udpRemoteAddress == null) {
-            udpChannel.close();
+        if (this.udpChannel != null && this.udpRemoteAddress == null) {
+            this.udpChannel.close();
         }
     }
 
     public void close(long maxShutdownWaitTimeInMilliSeconds) {
-        if (localChannel != null) {
-            localChannel.close();
+        if (this.localChannel != null) {
+            this.localChannel.close();
         }
 
-        if (tcpChannel != null) {
-            tcpChannel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+        if (this.tcpChannel != null) {
+            this.tcpChannel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }
 
-        if (udtChannel != null) {
-            udtChannel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+        if (this.udtChannel != null) {
+            this.udtChannel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }
 
         // only the CLIENT will have this.
-        if (udpChannel != null && udpRemoteAddress == null) {
-            udpChannel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+        if (this.udpChannel != null && this.udpRemoteAddress == null) {
+            this.udpChannel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }
     }
 
@@ -84,10 +84,10 @@ public class MetaChannel {
      * Update the TCP round trip time. Make sure to REFRESH this every time you SEND TCP data!!
      */
     public void updateTcpRoundTripTime() {
-        nanoSecBetweenTCP = System.nanoTime() - nanoSecBetweenTCP;
+        this.nanoSecBetweenTCP = System.nanoTime() - this.nanoSecBetweenTCP;
     }
 
     public long getNanoSecBetweenTCP() {
-        return nanoSecBetweenTCP;
+        return this.nanoSecBetweenTCP;
     }
 }

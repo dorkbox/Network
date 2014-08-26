@@ -31,13 +31,21 @@ public class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
      */
     @Override
     public final void init() {
-        remoteAddress = ((LocalAddress) this.channel.remoteAddress()).id();
+        this.remoteAddress = ((LocalAddress) this.channel.remoteAddress()).id();
+    }
+
+    /**
+     * Write an object to the underlying channel
+     */
+    @Override
+    public void write(Object object) {
+        this.channel.write(object);
+        this.shouldFlush.set(true);
     }
 
     @Override
-    public void write(Object object) {
-        channel.write(object);
-        shouldFlush.set(true);
+    public void waitForWriteToComplete() {
+        // it's immediate, since it's in the same JVM.
     }
 
     /**
@@ -45,8 +53,8 @@ public class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
      */
     @Override
     public void flush() {
-        if (shouldFlush.compareAndSet(true, false)) {
-            channel.flush();
+        if (this.shouldFlush.compareAndSet(true, false)) {
+            this.channel.flush();
         }
     }
 
@@ -54,8 +62,10 @@ public class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
     public void close(Connection connection, ISessionManager sessionManager) {
         long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
+        this.shouldFlush.set(false);
+
         // Wait until the connection is closed or the connection attempt fails.
-        channel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+        this.channel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
     }
 
     @Override
@@ -85,17 +95,17 @@ public class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
 
     @Override
     public final String getRemoteHost() {
-        return remoteAddress;
+        return this.remoteAddress;
     }
 
     @Override
     public int id() {
-        return channel.hashCode();
+        return this.channel.hashCode();
     }
 
     @Override
     public int hashCode() {
-        return channel.hashCode();
+        return this.channel.hashCode();
     }
 
     @Override

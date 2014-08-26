@@ -99,25 +99,39 @@ public abstract class BaseTest {
     }
 
     public void stopEndPoints(int stopAfterMillis) {
-        if (this.timer == null) {
-            this.timer = new Timer("UnitTest timeout timer");
-        }
+        if (stopAfterMillis > 0) {
+            if (this.timer == null) {
+                this.timer = new Timer("UnitTest timeout timer");
+            }
 
-        // don't automatically timeout when we are testing.
-        this.timer.schedule(new TimerTask() {
-            @Override
-            public void run () {
-                synchronized (BaseTest.this.endPoints) {
-                    for (EndPoint endPoint : BaseTest.this.endPoints) {
-                        endPoint.stop();
+            // don't automatically timeout when we are testing.
+            this.timer.schedule(new TimerTask() {
+                @Override
+                public void run () {
+                    synchronized (BaseTest.this.endPoints) {
+                        for (EndPoint endPoint : BaseTest.this.endPoints) {
+                            endPoint.stop();
+                        }
+                        BaseTest.this.endPoints.clear();
                     }
-                    BaseTest.this.endPoints.clear();
                     BaseTest.this.timer.cancel();
                     BaseTest.this.timer.purge();
                     BaseTest.this.timer = null;
                 }
+            }, stopAfterMillis);
+        } else {
+            synchronized (BaseTest.this.endPoints) {
+                for (EndPoint endPoint : BaseTest.this.endPoints) {
+                    endPoint.stop();
+                }
+                BaseTest.this.endPoints.clear();
             }
-        }, stopAfterMillis);
+            if (BaseTest.this.timer != null) {
+                BaseTest.this.timer.cancel();
+                BaseTest.this.timer.purge();
+                BaseTest.this.timer = null;
+            }
+        }
     }
 
     public void waitForThreads(int stopAfterSecondsOrMillis) {
@@ -138,14 +152,15 @@ public abstract class BaseTest {
         TimerTask failTask = null;
 
         if (stopAfterMillis > 0L) {
+            stopEndPoints(stopAfterMillis);
+
             failTask = new TimerTask() {
                 @Override
                 public void run () {
-                    stopEndPoints();
                     BaseTest.this.fail_check = true;
                 }
             };
-            this.timer.schedule(failTask, stopAfterMillis+3000L);
+            this.timer.schedule(failTask, stopAfterMillis+10000L);
         }
 
         while (true) {

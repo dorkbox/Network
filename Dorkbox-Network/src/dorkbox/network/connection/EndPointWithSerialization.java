@@ -130,7 +130,7 @@ public class EndPointWithSerialization extends EndPoint {
      * @param bridge null when retrieving the subclass type (internal use only). Non-null when creating a new (and real) connection.
      * @return a new network connection
      */
-    public ConnectionImpl newConnection(String name) {
+    public Connection newConnection(String name) {
         return new ConnectionImpl(name);
     }
 
@@ -142,8 +142,8 @@ public class EndPointWithSerialization extends EndPoint {
      *
      * @param metaChannel can be NULL (when getting the baseClass)
      */
-    protected final ConnectionImpl connection0(MetaChannel metaChannel) {
-        ConnectionImpl connection;
+    protected final Connection connection0(MetaChannel metaChannel) {
+        Connection connection;
 
         // setup the extras needed by the network connection.
         // These properties are ASSGINED in the same thread that CREATED the object. Only the AES info needs to be

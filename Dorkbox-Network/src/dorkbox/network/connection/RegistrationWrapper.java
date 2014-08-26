@@ -117,7 +117,7 @@ public class RegistrationWrapper implements UdpServer {
      *
      * @param metaChannel can be NULL (when getting the baseClass)
      */
-    public ConnectionImpl connection0(MetaChannel metaChannel) {
+    public Connection connection0(MetaChannel metaChannel) {
         if (this.endPoint instanceof EndPointWithSerialization) {
             return ((EndPointWithSerialization)this.endPoint).connection0(metaChannel);
         }
@@ -186,7 +186,7 @@ public class RegistrationWrapper implements UdpServer {
     @Override
     public final void registerServerUDP(MetaChannel metaChannel) {
         if (metaChannel != null && metaChannel.udpRemoteAddress != null) {
-            this.udpRemoteMap.put(metaChannel.udpRemoteAddress, metaChannel.connection);
+            this.udpRemoteMap.put(metaChannel.udpRemoteAddress, (ConnectionImpl) metaChannel.connection);
 
             Logger logger2 = this.logger;
             if (logger2.isDebugEnabled()) {

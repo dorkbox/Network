@@ -58,12 +58,12 @@ public interface Connection {
     /**
      * @return true if this connection is also configured to use UDP
      */
-    public boolean hasUdp();
+    public boolean hasUDP();
 
     /**
      * @return true if this connection is also configured to use UDT
      */
-    public boolean hasUdt();
+    public boolean hasUDT();
 
     /**
      * Expose methods to send objects to a destination (such as a custom object or a standard ping)

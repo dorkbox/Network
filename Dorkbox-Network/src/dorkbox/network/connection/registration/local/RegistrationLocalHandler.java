@@ -1,10 +1,12 @@
 package dorkbox.network.connection.registration.local;
 
-import org.slf4j.Logger;
-
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
+
+import org.slf4j.Logger;
+
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -42,7 +44,7 @@ public abstract class RegistrationLocalHandler extends RegistrationHandler {
 
         // have to setup connection handler
         ChannelPipeline pipeline = channel.pipeline();
-        pipeline.addLast(CONNECTION_HANDLER, metaChannel.connection);
+        pipeline.addLast(CONNECTION_HANDLER, (ConnectionImpl) metaChannel.connection);
     }
 
     /**

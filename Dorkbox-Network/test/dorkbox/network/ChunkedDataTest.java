@@ -4,24 +4,18 @@ package dorkbox.network;
 
 import static org.junit.Assert.fail;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.util.Arrays;
-
-import org.junit.Test;
 
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.connection.idle.InputStreamSender;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
 @SuppressWarnings({"rawtypes"})
-public class IdleTest extends BaseTest {
+public class ChunkedDataTest extends BaseTest {
     private volatile boolean success = false;
 
     enum ConnectionType {
@@ -30,37 +24,7 @@ public class IdleTest extends BaseTest {
         UDT
     }
 
-    @Test
-    public void InputStreamSender() throws IOException, InitializationException, SecurityException {
-        final int largeDataSize = 12345;
-
-        System.err.println("-- TCP");
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
-        streamSpecificType(largeDataSize, connectionOptions, ConnectionType.TCP);
-
-
-        System.err.println("-- UDP");
-        connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.host = host;
-        streamSpecificType(largeDataSize, connectionOptions, ConnectionType.UDP);
-
-
-        System.err.println("-- UDT");
-        connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udtPort = udtPort;
-        connectionOptions.host = host;
-        streamSpecificType(largeDataSize, connectionOptions, ConnectionType.UDT);
-    }
-
-
-
     // have to test sending objects
-    @Test
     public void ObjectSender() throws InitializationException, SecurityException {
         final Data mainData = new Data();
         populateData(mainData);
@@ -101,7 +65,10 @@ public class IdleTest extends BaseTest {
 
             @Override
             public void connected (Connection connection) {
-                IdleBridge sendOnIdle = connection.sendOnIdle(mainData);
+                Data data = new Data();
+                populateData(data);
+
+                IdleBridge sendOnIdle = connection.sendOnIdle(data);
 
                 switch (type) {
                     case TCP: sendOnIdle.TCP(); break;
@@ -120,81 +87,11 @@ public class IdleTest extends BaseTest {
             @Override
             public void received(Connection connection, Data object) {
                 if (mainData.equals(object)) {
-                    IdleTest.this.success = true;
+                    ChunkedDataTest.this.success = true;
                 }
 
                 System.err.println("finished!");
                 stopEndPoints();
-            }
-        });
-
-        client.connect(5000);
-
-        waitForThreads();
-        if (!this.success) {
-            fail();
-        }
-    }
-
-
-
-    private void streamSpecificType(final int largeDataSize, ConnectionOptions connectionOptions, final ConnectionType type) throws InitializationException, SecurityException {
-        Server server = new Server(connectionOptions);
-        server.getSerialization().setRegistrationRequired(false);
-        addEndPoint(server);
-        server.setIdleTimeout(100);
-        server.bind(false);
-        server.listeners().add(new Listener<Connection, byte[]>() {
-            @Override
-            public void connected (Connection connection) {
-                ByteArrayOutputStream output = new ByteArrayOutputStream(largeDataSize);
-                for (int i = 0; i < largeDataSize; i++) {
-                    output.write(i);
-                }
-
-                ByteArrayInputStream input = new ByteArrayInputStream(output.toByteArray());
-
-                // Send data in 512 byte chunks.
-                IdleBridge sendOnIdle = connection.sendOnIdle(new InputStreamSender(input, 512) {
-                    @Override
-                    protected void start () {
-                        // Normally would send an object so the receiving side knows how to handle the chunks we are about to send.
-                        System.err.println("starting");
-                    }
-
-                    @Override
-                    protected byte[] onNext (byte[] bytes) {
-                        //System.out.println("sending " + bytes.length);
-                        return bytes; // Normally would wrap the byte[] with an object so the receiving side knows how to handle it.
-                    }
-                });
-
-                switch (type) {
-                    case TCP: sendOnIdle.TCP(); break;
-                    case UDP: sendOnIdle.UDP(); break;
-                    case UDT: sendOnIdle.UDT(); break;
-                }
-            }
-        });
-
-        // ----
-
-        Client client = new Client(connectionOptions);
-        client.getSerialization().setRegistrationRequired(false);
-        addEndPoint(client);
-        client.listeners().add(new Listener<Connection, byte[]>() {
-            int total;
-
-            @Override
-            public void received (Connection connection, byte[] object) {
-                int length = object.length;
-                //System.err.println("received " + length);
-                this.total += length;
-                if (this.total == largeDataSize) {
-                    IdleTest.this.success = true;
-                    System.err.println("finished!");
-                    stopEndPoints();
-                }
             }
         });
 

@@ -46,7 +46,7 @@ public class ClientSendTest extends BaseTest {
         client.listeners().add(new Listener<Connection, AMessage>() {
             @Override
             public void received (Connection connection, AMessage object) {
-                checkPassed.set(true);
+                ClientSendTest.this.checkPassed.set(true);
                 stopEndPoints();
             }
         });
@@ -55,7 +55,7 @@ public class ClientSendTest extends BaseTest {
 
         waitForThreads();
 
-        if (!checkPassed.get()) {
+        if (!this.checkPassed.get()) {
             fail("Client and server failed to send messages!");
         }
     }
