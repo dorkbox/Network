@@ -125,7 +125,7 @@ class PropertyStore extends SettingsStore {
     public synchronized ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(RegistrationWrapper.class);
 
-        return this.props.registeredServer.get(ByteArrayWrapper.noCopy(hostAddress));
+        return this.props.registeredServer.get(ByteArrayWrapper.wrap(hostAddress));
     }
 
     /**
@@ -135,7 +135,7 @@ class PropertyStore extends SettingsStore {
     public synchronized void addRegisteredServerKey(byte[] hostAddress, ECPublicKeyParameters publicKey) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(RegistrationWrapper.class);
 
-        this.props.registeredServer.put(ByteArrayWrapper.noCopy(hostAddress), publicKey);
+        this.props.registeredServer.put(ByteArrayWrapper.wrap(hostAddress), publicKey);
         this.storage.save();
     }
 
@@ -146,7 +146,7 @@ class PropertyStore extends SettingsStore {
     public synchronized boolean removeRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(RegistrationWrapper.class);
 
-        ECPublicKeyParameters remove = this.props.registeredServer.remove(ByteArrayWrapper.noCopy(hostAddress));
+        ECPublicKeyParameters remove = this.props.registeredServer.remove(ByteArrayWrapper.wrap(hostAddress));
         this.storage.save();
 
         return remove != null;
