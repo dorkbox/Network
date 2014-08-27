@@ -26,6 +26,7 @@ import dorkbox.network.connection.ping.PingFuture;
 import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.connection.ping.PingUtil;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
+import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 
 
@@ -261,7 +262,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             if (logger2.isDebugEnabled()) {
                 logger2.debug("writing TCP while closed: {}", message);
             }
-            return null;
+            // we have to return something, otherwise dependent code will throw a null pointer exception
+            return ChannelNull.get();
         }
 
     }
@@ -283,7 +285,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             if (logger2.isDebugEnabled()) {
                 logger2.debug("writing UDP while closed: {}", message);
             }
-            return null;
+            // we have to return something, otherwise dependent code will throw a null pointer exception
+            return ChannelNull.get();
         }
     }
 
@@ -304,7 +307,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             if (logger2.isDebugEnabled()) {
                 logger2.debug("writing UDT while closed: {}", message);
             }
-            return null;
+            // we have to return something, otherwise dependent code will throw a null pointer exception
+            return ChannelNull.get();
         }
     }
 
