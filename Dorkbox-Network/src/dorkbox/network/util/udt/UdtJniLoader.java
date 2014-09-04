@@ -1,7 +1,7 @@
 package dorkbox.network.util.udt;
 
 import java.io.File;
-import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,8 +21,11 @@ public class UdtJniLoader implements LibraryLoader {
             Class<?> exitClass = Class.forName("dorkbox.launcher.Exit");
 
             if (exitClass != null) {
-                Field nativeField = exitClass.getDeclaredField("isNative");
-                isNativeDeployed = nativeField.getBoolean(exitClass);
+                Method nativeMethod = exitClass.getMethod("isNative");
+                Object invoke = nativeMethod.invoke(null);
+                if (invoke != null) {
+                    isNativeDeployed = (boolean) invoke;
+                }
             }
         } catch (Throwable t) {
         }
