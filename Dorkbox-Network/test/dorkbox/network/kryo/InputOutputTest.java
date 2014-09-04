@@ -13,6 +13,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
 /** @author Nathan Sweet <misc@n4te.com> */
+@SuppressWarnings("resource")
 public class InputOutputTest extends KryoTestCase {
     public void testOutputStream () throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();

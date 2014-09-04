@@ -14,7 +14,6 @@ import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
-@SuppressWarnings({"rawtypes"})
 public class ChunkedDataTest extends BaseTest {
     private volatile boolean success = false;
 

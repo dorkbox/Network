@@ -78,8 +78,6 @@ public class RmiBridge {
     // the name of who created this object space.
     private final org.slf4j.Logger logger;
 
-    private final String name;
-
     private final Listener<Connection, InvokeMethod> invokeListener= new Listener<Connection, InvokeMethod>() {
             @Override
             public void received(final Connection connection, final InvokeMethod invokeMethod) {
@@ -140,9 +138,8 @@ public class RmiBridge {
      * <p>
      * For safety, this should ONLY be called by {@link EndPoint#getRmiBridge() }
      */
-    public RmiBridge(Logger logger, String name) {
+    public RmiBridge(Logger logger) {
         this.logger = logger;
-        this.name = "RMI - " + name + " (remote)";
         instances.addIfAbsent(this);
     }
 

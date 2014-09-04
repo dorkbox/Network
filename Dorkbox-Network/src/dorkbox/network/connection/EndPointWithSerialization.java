@@ -114,7 +114,7 @@ public class EndPointWithSerialization extends EndPoint {
                     throw new RuntimeException("Cannot create a remote object space after the remote endpoint has already connected!");
                 }
 
-                this.remoteObjectSpace = new RmiBridge(this.logger, this.name);
+                this.remoteObjectSpace = new RmiBridge(this.logger);
             }
         }
 

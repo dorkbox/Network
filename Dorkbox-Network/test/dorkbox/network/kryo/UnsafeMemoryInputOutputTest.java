@@ -14,6 +14,7 @@ import com.esotericsoftware.kryo.io.UnsafeMemoryOutput;
 import com.esotericsoftware.kryo.util.UnsafeUtil;
 
 /** @author Roman Levenstein <romixlev@gmail.com> */
+@SuppressWarnings("resource")
 public class UnsafeMemoryInputOutputTest extends KryoTestCase {
 
     public void testByteBufferOutputWithPreallocatedMemory () {

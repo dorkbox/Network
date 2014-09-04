@@ -12,6 +12,7 @@ import com.esotericsoftware.kryo.io.UnsafeInput;
 import com.esotericsoftware.kryo.io.UnsafeOutput;
 
 /** @author Nathan Sweet <misc@n4te.com> */
+@SuppressWarnings("resource")
 public class UnsafeInputOutputTest extends KryoTestCase {
     public void testOutputStream () throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
