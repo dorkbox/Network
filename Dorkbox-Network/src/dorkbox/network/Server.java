@@ -271,26 +271,25 @@ public class Server extends EndPointServer {
 
         // Note: The bootstraps will be accessed ONE AT A TIME, in this order!
 
-        ChannelFuture future;
+        ChannelFuture future = null;
 
         // LOCAL
+        Logger logger2 = this.logger;
         if (this.localBootstrap != null) {
             try {
                 future = this.localBootstrap.bind();
                 future.await();
             } catch (InterruptedException e) {
-                this.logger.error("Could not bind to LOCAL address on the server.", e.getCause());
-                stop();
-                throw new IllegalArgumentException();
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to LOCAL address on the server.", e);
+                throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
-                this.logger.error("Could not bind to LOCAL address on the server.", future.cause());
-                stop();
-                throw new IllegalArgumentException();
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to LOCAL address on the server.", future.cause());
+                throw new IllegalArgumentException(errorMessage);
             }
 
-            this.logger.info("Listening on LOCAL address: '{}'", this.localChannelName);
+            logger2.info("Listening on LOCAL address: '{}'", this.localChannelName);
             manageForShutdown(future);
         }
 
@@ -302,18 +301,16 @@ public class Server extends EndPointServer {
                 future = this.tcpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                this.logger.error("Could not bind to TCP port {} on the server.", this.tcpPort, e.getCause());
-                stop();
-                throw new IllegalArgumentException("Could not bind to TCP port");
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to TCP port " + this.tcpPort + " on the server.", e);
+                throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
-                this.logger.error("Could not bind to TCP port {} on the server.", this.tcpPort , future.cause());
-                stop();
-                throw new IllegalArgumentException("Could not bind to TCP port");
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to TCP port " + this.tcpPort + " on the server.", future.cause());
+                throw new IllegalArgumentException(errorMessage);
             }
 
-            this.logger.info("Listening on TCP port: {}", this.tcpPort);
+            logger2.info("Listening on TCP port: {}", this.tcpPort);
             manageForShutdown(future);
         }
 
@@ -324,18 +321,16 @@ public class Server extends EndPointServer {
                 future = this.udpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                this.logger.error("Could not bind to UDP port {} on the server.", this.udpPort, e.getCause());
-                stop();
-                throw new IllegalArgumentException("Could not bind to UDP port");
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDP port " + this.udpPort + " on the server.", e);
+                throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
-                this.logger.error("Could not bind to UDP port {} on the server.", this.udpPort, future.cause());
-                stop();
-                throw new IllegalArgumentException("Could not bind to UDP port");
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDP port " + this.udpPort + " on the server.", future.cause());
+                throw new IllegalArgumentException(errorMessage);
             }
 
-            this.logger.info("Listening on UDP port: {}", this.udpPort);
+            logger2.info("Listening on UDP port: {}", this.udpPort);
             manageForShutdown(future);
         }
 
@@ -346,18 +341,16 @@ public class Server extends EndPointServer {
                 future = this.udtBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                this.logger.error("Could not bind to UDT port {} on the server.", this.udtPort, e.getCause());
-                stop();
-                throw new IllegalArgumentException("Could not bind to UDT port");
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDT port " + this.udtPort + " on the server.", e);
+                throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
-                this.logger.error("Could not bind to UDT port {} on the server.", this.udtPort, future.cause());
-                stop();
-                throw new IllegalArgumentException("Could not bind to UDT port");
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDT port " + this.udtPort + " on the server.", future.cause());
+                throw new IllegalArgumentException(errorMessage);
             }
 
-            this.logger.info("Listening on UDT port: {}", this.udtPort);
+            logger2.info("Listening on UDT port: {}", this.udtPort);
             manageForShutdown(future);
         }
 

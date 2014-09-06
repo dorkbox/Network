@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.slf4j.Logger;
 
 import dorkbox.network.ConnectionOptions;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -119,7 +120,7 @@ public abstract class EndPoint {
 
     // the eventLoop groups are used to track and manage the event loops for startup/shutdown
     private List<EventLoopGroup> eventLoopGroups = new ArrayList<EventLoopGroup>(8);
-    private List<ChannelFuture> shutdownChannelList = new LinkedList<ChannelFuture>();
+    private List<ChannelFuture> shutdownChannelList = new ArrayList<ChannelFuture>();
 
     private final Semaphore blockUntilDone = new Semaphore(0);
     protected final Object shutdownInProgress = new Object();
@@ -274,14 +275,18 @@ public abstract class EndPoint {
      * Add a channel future to be tracked and managed for shutdown.
      */
     protected final void manageForShutdown(ChannelFuture future) {
-        this.shutdownChannelList.add(future);
+        synchronized (this.shutdownChannelList) {
+            this.shutdownChannelList.add(future);
+        }
     }
 
     /**
      * Add an eventloop group to be tracked & managed for shutdown
      */
     protected final void manageForShutdown(EventLoopGroup loopGroup) {
-        this.eventLoopGroups.add(loopGroup);
+        synchronized (this.eventLoopGroups) {
+            this.eventLoopGroups.add(loopGroup);
+        }
     }
 
     /**
@@ -294,8 +299,20 @@ public abstract class EndPoint {
         this.isConnected.set(false);
     }
 
+    protected final String stopWithErrorMessage(Logger logger2, String errorMessage, Throwable throwable) {
+        if (logger2.isDebugEnabled() && throwable != null) {
+            // extra info if debug is enabled
+            logger2.error(errorMessage, throwable.getCause());
+        } else {
+            logger2.error(errorMessage);
+        }
+
+        stop();
+        return errorMessage;
+    }
+
     /**
-     * Closes all associated resources/threads/connections
+     * Safely closes all associated resources/threads/connections
      */
     public final void stop() {
         // check to make sure we are in our OWN thread, otherwise, this thread will never exit -- because it will wait indefinitely
@@ -385,7 +402,6 @@ public abstract class EndPoint {
             for (ChannelFuture f : this.shutdownChannelList) {
                 Channel channel = f.channel();
                 channel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
-                channel.closeFuture().syncUninterruptibly();
             }
 
             // we have to clear the shutdown list.

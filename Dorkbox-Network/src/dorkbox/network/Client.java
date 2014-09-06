@@ -282,29 +282,16 @@ public class Client extends EndPointClient {
 
                     future = bootstrapWrapper.bootstrap.connect();
                     future.await();
-
                 } catch (Exception e) {
-                    if (logger2.isDebugEnabled()) {
-                        logger2.debug("Could not connect to the {} server on port {}.", bootstrapWrapper.type, bootstrapWrapper.port, e.getCause());
-                    } else {
-                        logger2.error("Could not connect to the {} server{}.", bootstrapWrapper.type, bootstrapWrapper.port);
-                    }
-
+                    String errorMessage = stopWithErrorMessage(logger2, "Could not connect to the " + bootstrapWrapper.type + " server on port: " + bootstrapWrapper.port, e);
                     this.registrationInProgress = false;
-                    stop();
-                    return;
+                    throw new IllegalArgumentException(errorMessage);
                 }
 
                 if (!future.isSuccess()) {
-                    if (logger2.isDebugEnabled()) {
-                        logger2.debug("Could not connect to the {} server.", bootstrapWrapper.type, future.cause());
-                    } else {
-                        logger2.error("Could not connect to the {} server.", bootstrapWrapper.type);
-                    }
-
+                    String errorMessage = stopWithErrorMessage(logger2, "Could not connect to the " + bootstrapWrapper.type + " server on port: " + bootstrapWrapper.port, future.cause());
                     this.registrationInProgress = false;
-                    stop();
-                    return;
+                    throw new IllegalArgumentException(errorMessage);
                 }
 
                 if (logger2.isTraceEnabled()) {

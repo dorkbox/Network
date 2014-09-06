@@ -158,6 +158,12 @@ Legal:
 
 
 
+  - Netty Dns Decoder - Apache 2.0 license
+    https://github.com/eclipse/vert.x
+    Copyright (c) 2013 The Netty Project
+
+
+
   - Objenesis - Apache 2.0 license
     http://http://code.google.com/p/objenesis/
     Copyright (c) 2003-2009, Joe Walnes, Henri Tremblay, Leonardo Mesquita

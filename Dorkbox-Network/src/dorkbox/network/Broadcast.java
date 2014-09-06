@@ -84,7 +84,7 @@ public class Broadcast {
      *
      * @return the list of found servers (if they responded)
      */
-    public static List<InetAddress> discoverHosts2(int udpPort, int discoverTimeoutMillis) {
+    public static List<InetAddress> discoverHosts(int udpPort, int discoverTimeoutMillis) {
         return discoverHost0(udpPort, discoverTimeoutMillis, true);
     }
 
