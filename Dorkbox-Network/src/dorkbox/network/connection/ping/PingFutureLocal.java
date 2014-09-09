@@ -6,6 +6,7 @@ import io.netty.util.concurrent.GenericFutureListener;
 public class PingFutureLocal extends PingFuture {
 
     public PingFutureLocal() {
+        super();
     }
 
     /**
@@ -20,7 +21,7 @@ public class PingFutureLocal extends PingFuture {
      * Tells this ping future, that it was successful
      */
     @Override
-    public void setSuccess(PingUtil pingUtil) {
+    public void setSuccess(PingMessage ping) {
     }
 
     /**

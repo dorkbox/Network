@@ -22,7 +22,7 @@ public class PingTest extends BaseTest {
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
     public void pingTCP() throws IOException, InitializationException, SecurityException {
-        response = -1;
+        this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
@@ -44,23 +44,33 @@ public class PingTest extends BaseTest {
             @Override
             public void connected(Connection connection) {
                 System.err.println("Testing TCP ping");
-            }
 
-            @Override
-            public void received(Connection connection, PingMessage ping) {
-                response = ping.time;
-                System.err.println("Ping return time: " + response);
-
-                if (count++ < 10) {
-                    connection.send().ping();
-                } else {
-                    stopEndPoints();
+                for (int i=0;i<10;i++) {
+                    int response2 = connection.send().ping().getResponse();
+                    System.err.println("Ping B roundtime: " + response2);
                 }
             }
+
+//            @Override
+//            public void received(Connection connection, PingMessage ping) {
+//                response = ping.time;
+//                System.err.println("Ping return time: " + response);
+//
+//                if (count++ < 10) {
+//                    connection.send().ping();
+//                } else {
+//                    stopEndPoints();
+//                }
+//            }
         });
         client.connect(5000);
 
-        client.ping();
+
+        for (int i=0;i<10;i++) {
+            int response2 = client.ping().getResponse();
+            System.err.println("Ping A roundtime: " + response2);
+        }
+
         // alternate way to register for the receipt of a one-off ping response
 //        PingFuture ping = connection.ping();
 //        ping.addListener(new ChannelFutureListener() {
@@ -80,7 +90,7 @@ public class PingTest extends BaseTest {
 
         waitForThreads();
 
-        if (response == -1) {
+        if (this.response == -1) {
             fail();
         }
     }
@@ -88,7 +98,7 @@ public class PingTest extends BaseTest {
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
     public void pingUDP() throws IOException, InitializationException, SecurityException {
-        response = -1;
+        this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
@@ -113,18 +123,6 @@ public class PingTest extends BaseTest {
             public void connected(Connection connection) {
                 System.err.println("Testing UDP ping");
             }
-
-            @Override
-            public void received(Connection connection, PingMessage ping) {
-                response = ping.time;
-                System.err.println("Ping return time: " + response);
-
-                if (count++ < 10) {
-                    connection.send().ping();
-                } else {
-                    stopEndPoints();
-                }
-            }
         });
         client.connect(5000);
 
@@ -148,7 +146,7 @@ public class PingTest extends BaseTest {
 
         waitForThreads();
 
-        if (response == -1) {
+        if (this.response == -1) {
             fail();
         }
     }
@@ -157,7 +155,7 @@ public class PingTest extends BaseTest {
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
     public void pingUDT() throws IOException, InitializationException, SecurityException {
-        response = -1;
+        this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
@@ -182,17 +180,17 @@ public class PingTest extends BaseTest {
                 System.err.println("Testing UDT ping");
             }
 
-            @Override
-            public void received(Connection connection, PingMessage ping) {
-                response = ping.time;
-                System.err.println("Ping return time: " + response);
-
-                if (count++ < 10) {
-                    connection.send().ping();
-                } else {
-                    stopEndPoints();
-                }
-            }
+//            @Override
+//            public void received(Connection connection, PingMessage ping) {
+//                PingTest.this.response = ping.time;
+//                System.err.println("Ping return time: " + PingTest.this.response);
+//
+//                if (this.count++ < 10) {
+//                    connection.send().ping();
+//                } else {
+//                    stopEndPoints();
+//                }
+//            }
         });
         client.connect(5000);
 
@@ -216,7 +214,7 @@ public class PingTest extends BaseTest {
 
         waitForThreads();
 
-        if (response == -1) {
+        if (this.response == -1) {
             fail();
         }
     }

@@ -20,10 +20,10 @@ import dorkbox.util.ClassHelper;
 // objects that are somehow equal to each other.
 public class ConnectionManager implements ListenerBridge, ISessionManager {
 
-    private volatile ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> listeners;
-    private volatile ConcurrentHashMapFactory<Connection, ConnectionManager> localManagers;
-
-    private volatile CopyOnWriteArrayList<Connection> connections = new CopyOnWriteArrayList<Connection>();
+    // these are final, because the REFERENCE to these will never change. They ARE NOT immutable objects (meaning their content can change)
+    private final ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> listeners;
+    private final ConcurrentHashMapFactory<Connection, ConnectionManager> localManagers;
+    private final CopyOnWriteArrayList<Connection> connections = new CopyOnWriteArrayList<Connection>();
 
     /** Used by the listener subsystem to determine types. */
     private final Class<?> baseClass;
@@ -38,7 +38,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         this.baseClass = baseClass;
 
         this.listeners = new ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>() {
-            private static final long serialVersionUID = 8404650379739727012L;
+            private static final long serialVersionUID = 1L;
 
             @Override
             public CopyOnWriteArrayList<Listener<Connection, Object>> createNewOject(Object... args) {
@@ -47,7 +47,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         };
 
         this.localManagers = new ConcurrentHashMapFactory<Connection, ConnectionManager>() {
-            private static final long serialVersionUID = -1656860453153611896L;
+            private static final long serialVersionUID = 1L;
 
             @Override
             public ConnectionManager createNewOject(Object... args) {
@@ -307,7 +307,6 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public void connectionConnected(Connection connection) {
-        // only TCP channels are passed in.
         // create a new connection!
         this.connections.add(connection);
 

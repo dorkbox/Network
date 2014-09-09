@@ -6,7 +6,4 @@ package dorkbox.network.connection.ping;
 public class PingMessage {
     public int           id;
     public boolean       isReply;
-
-    /** The ping round-trip time in milliseconds */
-    public transient int time;
 }

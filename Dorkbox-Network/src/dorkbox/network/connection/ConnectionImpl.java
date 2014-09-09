@@ -24,7 +24,6 @@ import dorkbox.network.connection.idle.IdleSender;
 import dorkbox.network.connection.ping.Ping;
 import dorkbox.network.connection.ping.PingFuture;
 import dorkbox.network.connection.ping.PingMessage;
-import dorkbox.network.connection.ping.PingUtil;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
@@ -42,15 +41,14 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
 
     private AtomicBoolean closeInProgress = new AtomicBoolean(false);
     private AtomicBoolean alreadyClosed = new AtomicBoolean(false);
-    private AtomicBoolean messageInProgress = new AtomicBoolean(false);
-
     private final Object closeInProgressLock = new Object();
+
     private final Object messageInProgressLock = new Object();
+    private AtomicBoolean messageInProgress = new AtomicBoolean(false);
 
     private ISessionManager sessionManager;
     private ChannelWrapper channelWrapper;
     private EndPointWithSerialization endPoint;
-    private final PingUtil pingUtil;
 
     private volatile PingFuture pingFuture = null;
 
@@ -63,8 +61,6 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
 
     public ConnectionImpl(String name) {
         this.name = name;
-
-        this.pingUtil = new PingUtil();
         this.logger = org.slf4j.LoggerFactory.getLogger(name);
     }
 
@@ -149,34 +145,31 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     }
 
     /**
-     * Updates the ping times for this connection.
+     * Updates the ping times for this connection (called when this connection gets a REPLY ping message).
      */
     public final void updatePingResponse(PingMessage ping) {
-        synchronized (this.pingUtil) {
-            this.pingUtil.updatePing(ping);
-
-            if (this.pingFuture != null) {
-                this.pingFuture.setSuccess(this.pingUtil);
-            }
+        if (this.pingFuture != null) {
+            this.pingFuture.setSuccess(ping);
         }
     }
 
     /**
-     * Sends a "ping" packet, trying UDP, then UDT, then TCP (in that order) to measure round trip time to the remote connection.
+     * Sends a "ping" packet, trying UDP, then UDT, then TCP (in that order) to measure <b>ROUND TRIP</b> time to the remote connection.
      *
      * @return Ping can have a listener attached, which will get called when the ping returns.
      */
     @Override
     public final Ping ping() {
-        synchronized (this.pingUtil) {
-            if (this.pingFuture != null) {
-                this.pingFuture.cancel();
-            }
-
-            this.pingFuture = this.channelWrapper.pingFuture();
+        PingFuture pingFuture2 = this.pingFuture;
+        if (pingFuture2 != null) {
+            pingFuture2.cancel();
         }
 
-        ping0(this.pingUtil.pingMessage());
+        this.pingFuture = this.channelWrapper.pingFuture();
+
+        PingMessage ping = new PingMessage();
+        ping.id = this.pingFuture.getId();
+        ping0(ping);
 
         return this.pingFuture;
     }
@@ -196,14 +189,12 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     }
 
     /**
-     * Returns the last calculated TCP return trip time, or -1 if {@link #updateReturnTripTime()} has never been called or the
-     * {@link PingMessage} response has not yet been received.
+     * Returns the last calculated TCP return trip time, or -1 if or the {@link PingMessage} response has not yet been received.
      */
     public final int getLastRoundTripTime() {
-        if (this.pingFuture != null) {
-            synchronized (this.pingUtil) {
-                return this.pingFuture.getResponse();
-            }
+        PingFuture pingFuture2 = this.pingFuture;
+        if (pingFuture2 != null) {
+            return pingFuture2.getResponse();
         } else {
             return -1;
         }
@@ -460,6 +451,13 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
 
             this.channelWrapper.close(this, this.sessionManager);
 
+            // close out the ping future
+            PingFuture pingFuture2 = this.pingFuture;
+            if (pingFuture2 != null) {
+                pingFuture2.cancel();
+            }
+            this.pingFuture = null;
+
             // want to wait for the "channelInactive" method to FINISH before allowing our current thread to continue!
             synchronized (this.closeInProgressLock) {
                 if (!this.alreadyClosed.get()) {
@@ -518,12 +516,14 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     @Override
     public final void add(Listener listener) {
         if (this.endPoint instanceof EndPointServer) {
-            // when we are a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections
-            // are notified of that listener.
-            // it is POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
+            // when we are a server, NORMALLY listeners are added at the GLOBAL level
+            // meaning --
+            //   I add one listener, and ALL connections are notified of that listener.
+            //
+            // HOWEVER, it is also POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
             // that listener is notified on that event (ie, admin type listeners)
 
-            // synchronized because this should be uncommon, and we want to make sure that when the manager
+            // synchronized because this should be VERY uncommon, and we want to make sure that when the manager
             // is empty, we can remove it from this connection.
             synchronized (this) {
                 if (this.localListenerManager == null) {
@@ -553,9 +553,11 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     @Override
     public final void remove(Listener listener) {
         if (this.endPoint instanceof EndPointServer) {
-            // when we are a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections
-            // are notified of that listener.
-            // it is POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
+            // when we are a server, NORMALLY listeners are added at the GLOBAL level
+            // meaning --
+            //   I add one listener, and ALL connections are notified of that listener.
+            //
+            // HOWEVER, it is also POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
             // that listener is notified on that event (ie, admin type listeners)
 
             // synchronized because this should be uncommon, and we want to make sure that when the manager
@@ -581,9 +583,11 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     @Override
     public final void removeAll() {
         if (this.endPoint instanceof EndPointServer) {
-            // when we are a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections
-            // are notified of that listener.
-            // it is POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
+            // when we are a server, NORMALLY listeners are added at the GLOBAL level
+            // meaning --
+            //   I add one listener, and ALL connections are notified of that listener.
+            //
+            // HOWEVER, it is also POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
             // that listener is notified on that event (ie, admin type listeners)
 
             // synchronized because this should be uncommon, and we want to make sure that when the manager
@@ -609,9 +613,11 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     @Override
     public final void removeAll(Class<?> classType) {
         if (this.endPoint instanceof EndPointServer) {
-            // when we are a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections
-            // are notified of that listener.
-            // it is POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
+            // when we are a server, NORMALLY listeners are added at the GLOBAL level
+            // meaning --
+            //   I add one listener, and ALL connections are notified of that listener.
+            //
+            // HOWEVER, it is also POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
             // that listener is notified on that event (ie, admin type listeners)
 
             // synchronized because this should be uncommon, and we want to make sure that when the manager

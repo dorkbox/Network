@@ -21,8 +21,9 @@ public class PingListener extends Listener<ConnectionImpl, PingMessage> {
             }
             connection.updatePingResponse(ping);
         } else {
+            // return the ping from whence it came
             if (logger2.isTraceEnabled()) {
-                logger2.trace( "Received a ping from {}", connection);
+                logger2.trace( "Received a ping request from {}. Sending a reply.", connection);
             }
             ping.isReply = true;
 

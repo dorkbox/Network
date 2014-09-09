@@ -31,11 +31,12 @@ public class RegistrationWrapper implements UdpServer {
     private final EndPoint endPoint;
 
     // keeps track of connections (TCP/UDT/UDP-client)
-    private ReentrantLock channelMapLock = new ReentrantLock();
+    private final ReentrantLock channelMapLock = new ReentrantLock();
     private IntMap<MetaChannel> channelMap = new IntMap<MetaChannel>();
 
     // keeps track of connections (UDP-server)
-    private volatile ConcurrentMap<InetSocketAddress, ConnectionImpl> udpRemoteMap;
+    // this is final, because the REFERENCE to these will never change. They ARE NOT immutable objects (meaning their content can change)
+    private final ConcurrentMap<InetSocketAddress, ConnectionImpl> udpRemoteMap;
 
     private KryoEncoder kryoTcpEncoder;
     private KryoEncoderCrypto kryoTcpCryptoEncoder;
@@ -75,6 +76,9 @@ public class RegistrationWrapper implements UdpServer {
     public IntMap<MetaChannel> getAndLockChannelMap() {
         // try to lock access
         this.channelMapLock.lock();
+
+        // guarantee that the contents of this map are visible across threads
+        synchronized (this.channelMap) {}
         return this.channelMap;
     }
 

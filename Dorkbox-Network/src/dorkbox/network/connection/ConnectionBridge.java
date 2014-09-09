@@ -29,7 +29,7 @@ public interface ConnectionBridge {
     public ConnectionPoint UDT(Object message);
 
     /**
-     * Sends a "ping" packet, trying UDP, then UDT, then TCP (in that order) to measure round trip time to the remote connection.
+     * Sends a "ping" packet, trying UDP, then UDT, then TCP (in that order) to measure <b>ROUND TRIP</b> time to the remote connection.
      *
      * @return Ping can have a listener attached, which will get called when the ping returns.
      */

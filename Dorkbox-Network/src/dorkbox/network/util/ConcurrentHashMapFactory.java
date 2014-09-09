@@ -13,6 +13,9 @@ public abstract class ConcurrentHashMapFactory<K, V> extends ConcurrentHashMap<K
     public abstract V createNewOject(Object... args);
 
 
+    /** Thread safe method to get the value in the map. If the value doesn't exist,
+     * it will create a new one (and put the new one in the map)
+     */
     public final V getOrCreate(K key, Object... args) {
         V orig = get(key);
 
