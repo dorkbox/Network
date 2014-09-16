@@ -10,9 +10,10 @@ import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
 import dorkbox.network.util.store.SettingsStore;
-import dorkbox.util.Storage;
 import dorkbox.util.bytes.ByteArrayWrapper;
 import dorkbox.util.properties.PropertiesProvider;
+import dorkbox.util.storage.Storage;
+import dorkbox.util.storage.StorageWrap;
 
 /**
  * The property store is the DEFAULT type of store for the network stack.
@@ -29,17 +30,58 @@ class PropertyStore extends SettingsStore {
 
         private Props() {
         }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + (this.serverPrivateKey == null ? 0 : this.serverPrivateKey.getD().hashCode());
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            Props other = (Props) obj;
+            if (this.serverPrivateKey == null) {
+                if (other.serverPrivateKey != null) {
+                    return false;
+                }
+            } else if (!this.serverPrivateKey.getD().equals(other.serverPrivateKey.getD())) {
+                return false;
+            } else if (!this.serverPrivateKey.getParameters().getCurve().equals(other.serverPrivateKey.getParameters().getCurve())) {
+                return false;
+            } else if (!this.serverPrivateKey.getParameters().getG().equals(other.serverPrivateKey.getParameters().getG())) {
+                return false;
+            } else if (!this.serverPrivateKey.getParameters().getH().equals(other.serverPrivateKey.getParameters().getH())) {
+                return false;
+            } else if (!this.serverPrivateKey.getParameters().getN().equals(other.serverPrivateKey.getParameters().getN())) {
+                return false;
+            }
+            return true;
+        }
     }
 
 
     // the name of the file that contains the saved properties
     private static final String SETTINGS_FILE_NAME = "settings.db";
 
-    private final Storage storage;
+    private String name;
+    private final StorageWrap storage;
     private Props props = new Props();
 
+
     // Method of preference for creating/getting this connection store. Private since only the ConnectionStoreProxy calls this
-    public PropertyStore() {
+    public PropertyStore(String name) {
+        this.name = name;
         File propertiesFile;
 
         if (PropertiesProvider.basePath.isEmpty()) {
@@ -52,7 +94,8 @@ class PropertyStore extends SettingsStore {
         propertiesFile = propertiesFile.getAbsoluteFile();
 
         // loads the saved data into the props
-        this.storage = Storage.load(propertiesFile, this.props);
+        this.storage = Storage.open(propertiesFile);
+        this.storage.load(name, this.props);
     }
 
     /**
@@ -74,7 +117,7 @@ class PropertyStore extends SettingsStore {
 
         this.props.serverPrivateKey = serverPrivateKey;
 
-        this.storage.save();
+        this.storage.save(this.name);
     }
 
     /**
@@ -95,7 +138,7 @@ class PropertyStore extends SettingsStore {
         checkAccess(EndPoint.class);
 
         this.props.serverPublicKey = serverPublicKey;
-        this.storage.save();
+        this.storage.save(this.name);
     }
 
     /**
@@ -111,7 +154,7 @@ class PropertyStore extends SettingsStore {
             this.props.salt = new byte[256];
             secureRandom.nextBytes(this.props.salt);
 
-            this.storage.save();
+            this.storage.save(this.name);
             return this.props.salt;
         }
 
@@ -136,7 +179,7 @@ class PropertyStore extends SettingsStore {
         checkAccess(RegistrationWrapper.class);
 
         this.props.registeredServer.put(ByteArrayWrapper.wrap(hostAddress), publicKey);
-        this.storage.save();
+        this.storage.save(this.name);
     }
 
     /**
@@ -147,8 +190,15 @@ class PropertyStore extends SettingsStore {
         checkAccess(RegistrationWrapper.class);
 
         ECPublicKeyParameters remove = this.props.registeredServer.remove(ByteArrayWrapper.wrap(hostAddress));
-        this.storage.save();
+        this.storage.save(this.name);
 
         return remove != null;
+    }
+
+
+    @Override
+    public void shutdown() {
+        Storage.close(this.storage);
+        super.shutdown();
     }
 }

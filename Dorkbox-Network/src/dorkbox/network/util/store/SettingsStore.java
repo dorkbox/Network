@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dorkbox.network.util.exceptions.SecurityException;
-import dorkbox.util.Storage;
+import dorkbox.util.storage.Storage;
 
 /**
  * This class provides a way for the network stack to use the server's database, instead of a property file (which it uses when stand-alone)

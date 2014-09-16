@@ -145,7 +145,7 @@ public abstract class EndPoint {
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
         if (options.settingsStore == null) {
-            this.propertyStore = new PropertyStore();
+            this.propertyStore = new PropertyStore(name);
         } else {
             this.propertyStore = options.settingsStore;
         }
