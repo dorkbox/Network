@@ -137,7 +137,7 @@ class PropertyStore extends SettingsStore {
         checkAccess(EndPoint.class);
 
         this.props.serverPublicKey = serverPublicKey;
-        this.storage.save(this.name);
+        this.storage.save(this.name, this.props);
     }
 
     /**
@@ -153,7 +153,7 @@ class PropertyStore extends SettingsStore {
             this.props.salt = new byte[256];
             secureRandom.nextBytes(this.props.salt);
 
-            this.storage.save(this.name);
+            this.storage.save(this.name, this.props);
             return this.props.salt;
         }
 
@@ -178,7 +178,7 @@ class PropertyStore extends SettingsStore {
         checkAccess(RegistrationWrapper.class);
 
         this.props.registeredServer.put(ByteArrayWrapper.wrap(hostAddress), publicKey);
-        this.storage.save(this.name);
+        this.storage.save(this.name, this.props);
     }
 
     /**
@@ -189,7 +189,7 @@ class PropertyStore extends SettingsStore {
         checkAccess(RegistrationWrapper.class);
 
         ECPublicKeyParameters remove = this.props.registeredServer.remove(ByteArrayWrapper.wrap(hostAddress));
-        this.storage.save(this.name);
+        this.storage.save(this.name, this.props);
 
         return remove != null;
     }
