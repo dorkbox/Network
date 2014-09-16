@@ -13,7 +13,6 @@ import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.bytes.ByteArrayWrapper;
 import dorkbox.util.properties.PropertiesProvider;
 import dorkbox.util.storage.Storage;
-import dorkbox.util.storage.StorageWrap;
 
 /**
  * The property store is the DEFAULT type of store for the network stack.
@@ -75,7 +74,7 @@ class PropertyStore extends SettingsStore {
     private static final String SETTINGS_FILE_NAME = "settings.db";
 
     private String name;
-    private final StorageWrap storage;
+    private final Storage storage;
     private Props props = new Props();
 
 
