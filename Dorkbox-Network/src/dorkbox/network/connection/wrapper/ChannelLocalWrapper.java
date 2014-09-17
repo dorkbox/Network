@@ -1,6 +1,7 @@
 package dorkbox.network.connection.wrapper;
 
 import io.netty.channel.Channel;
+import io.netty.channel.EventLoop;
 import io.netty.channel.local.LocalAddress;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -11,8 +12,6 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
-import dorkbox.network.connection.ping.PingFuture;
-import dorkbox.network.connection.ping.PingFutureLocal;
 import dorkbox.network.connection.registration.MetaChannel;
 
 public class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
@@ -84,8 +83,8 @@ public class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
     }
 
     @Override
-    public PingFuture pingFuture() {
-        return new PingFutureLocal();
+    public EventLoop getEventLoop() {
+        return this.channel.eventLoop();
     }
 
     @Override

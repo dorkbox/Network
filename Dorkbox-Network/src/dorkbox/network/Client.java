@@ -27,7 +27,6 @@ import dorkbox.network.connection.ConnectionBridgeFlushAlways;
 import dorkbox.network.connection.EndPointClient;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
-import dorkbox.network.connection.ping.Ping;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerClient;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientTCP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDP;
@@ -48,6 +47,8 @@ public class Client extends EndPointClient {
     private List<BootstrapWrapper> bootstraps = new LinkedList<BootstrapWrapper>();
 
     private volatile int connectionTimeout = 5000; // default
+
+    private volatile ConnectionBridgeFlushAlways connectionBridgeFlushAlways;
 
     /**
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme
@@ -318,7 +319,12 @@ public class Client extends EndPointClient {
      * of the normal eventloop patterns, and it is confusing to the user to have to manually flush the channel each time.
      */
     public ConnectionBridge send() {
-        return new ConnectionBridgeFlushAlways(this.connectionManager.getConnection0().send());
+        ConnectionBridgeFlushAlways connectionBridgeFlushAlways2 = this.connectionBridgeFlushAlways;
+        if (connectionBridgeFlushAlways2 == null) {
+            this.connectionBridgeFlushAlways = new ConnectionBridgeFlushAlways(this.connectionManager.getConnection0().send());
+        }
+
+        return this.connectionBridgeFlushAlways;
     }
 
     /**
@@ -333,13 +339,6 @@ public class Client extends EndPointClient {
      */
     public IdleBridge sendOnIdle(Object message) {
         return this.connectionManager.getConnection0().sendOnIdle(message);
-    }
-
-    /**
-     * Returns a future that will have the last calculated return trip time.
-     */
-    public Ping ping() {
-        return this.connectionManager.getConnection0().send().ping();
     }
 
     /**

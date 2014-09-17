@@ -1,7 +1,5 @@
-package dorkbox.network.connection.ping;
+package dorkbox.network.connection;
 
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
 
 public interface Ping {
     /**
@@ -14,7 +12,7 @@ public interface Ping {
      * notified when this future is done. If this future is already completed,
      * the specified listener is notified immediately.
      */
-    public void addListener(GenericFutureListener<? extends Future<? super Object>> listener);
+    public <C extends Connection> void addListener(PingListener<C> listener);
 
     /**
      * Removes the specified listener from this future. The specified listener
@@ -22,7 +20,7 @@ public interface Ping {
      * is not associated with this future, this method does nothing and returns
      * silently.
      */
-    public void removeListener(GenericFutureListener<? extends Future<? super Object>> listener);
+    public<C extends Connection> void removeListener(PingListener<C> listener);
 
     /**
      * Cancel this Ping.

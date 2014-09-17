@@ -2,7 +2,6 @@ package dorkbox.network.connection.wrapper;
 
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
-import io.netty.util.concurrent.Promise;
 
 import java.net.InetSocketAddress;
 
@@ -14,7 +13,6 @@ import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.UdpServer;
-import dorkbox.network.connection.ping.PingFuture;
 import dorkbox.network.connection.registration.MetaChannel;
 
 public class ChannelNetworkWrapper implements ChannelWrapper {
@@ -38,32 +36,32 @@ public class ChannelNetworkWrapper implements ChannelWrapper {
     public ChannelNetworkWrapper(MetaChannel metaChannel, UdpServer udpServer) {
 
         Channel tcpChannel = metaChannel.tcpChannel;
-        eventLoop = tcpChannel.eventLoop();
+        this.eventLoop = tcpChannel.eventLoop();
 
-        tcp = new ChannelNetwork(tcpChannel);
+        this.tcp = new ChannelNetwork(tcpChannel);
 
         if (metaChannel.udpChannel != null) {
             if (metaChannel.udpRemoteAddress != null) {
-                udp = new ChannelNetworkUdp(metaChannel.udpChannel, metaChannel.udpRemoteAddress, udpServer);
+                this.udp = new ChannelNetworkUdp(metaChannel.udpChannel, metaChannel.udpRemoteAddress, udpServer);
             } else {
-                udp = new ChannelNetwork(metaChannel.udpChannel);
+                this.udp = new ChannelNetwork(metaChannel.udpChannel);
             }
         } else {
-            udp = null;
+            this.udp = null;
         }
 
         if (metaChannel.udtChannel != null) {
-            udt = new ChannelNetwork(metaChannel.udtChannel);
+            this.udt = new ChannelNetwork(metaChannel.udtChannel);
         } else {
-            udt = null;
+            this.udt = null;
         }
 
 
-        remoteAddress = ((InetSocketAddress)tcpChannel.remoteAddress()).getAddress().getHostAddress();
-        remotePublicKeyChanged = metaChannel.changedRemoteKey;
+        this.remoteAddress = ((InetSocketAddress)tcpChannel.remoteAddress()).getAddress().getHostAddress();
+        this.remotePublicKeyChanged = metaChannel.changedRemoteKey;
 
         // AES key & IV (only for networked connections)
-        cryptoAesKeyAndIV = new ParametersWithIV(new KeyParameter(metaChannel.aesKey), metaChannel.aesIV);
+        this.cryptoAesKeyAndIV = new ParametersWithIV(new KeyParameter(metaChannel.aesKey), metaChannel.aesIV);
         // TODO: have to be able to get a NEW IV, so we can rotate keys!
     }
 
@@ -76,7 +74,7 @@ public class ChannelNetworkWrapper implements ChannelWrapper {
     }
 
     public final boolean remoteKeyChanged() {
-        return remotePublicKeyChanged;
+        return this.remotePublicKeyChanged;
     }
 
     /**
@@ -84,46 +82,45 @@ public class ChannelNetworkWrapper implements ChannelWrapper {
      */
     @Override
     public void flush() {
-        tcp.flush();
+        this.tcp.flush();
 
-        if (udp != null) {
-            udp.flush();
+        if (this.udp != null) {
+            this.udp.flush();
         }
 
-        if (udt != null) {
-            udt.flush();
+        if (this.udt != null) {
+            this.udt.flush();
         }
+    }
+
+    @Override
+    public EventLoop getEventLoop() {
+        return this.eventLoop;
     }
 
     @Override
     public ParametersWithIV cryptoParameters() {
-        return cryptoAesKeyAndIV;
+        return this.cryptoAesKeyAndIV;
     }
 
     @Override
     public ConnectionPoint tcp() {
-        return tcp;
+        return this.tcp;
     }
 
     @Override
     public ConnectionPoint udp() {
-        return udp;
+        return this.udp;
     }
 
     @Override
     public ConnectionPoint udt() {
-        return udt;
-    }
-
-    @Override
-    public PingFuture pingFuture() {
-        Promise<Integer> newPromise = eventLoop.newPromise();
-        return new PingFuture(newPromise);
+        return this.udt;
     }
 
     @Override
     public String getRemoteHost() {
-        return remoteAddress;
+        return this.remoteAddress;
     }
 
 
@@ -131,14 +128,14 @@ public class ChannelNetworkWrapper implements ChannelWrapper {
     public void close(final Connection connection, final ISessionManager sessionManager) {
         long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
-        tcp.close(maxShutdownWaitTimeInMilliSeconds);
+        this.tcp.close(maxShutdownWaitTimeInMilliSeconds);
 
-        if (udp != null) {
-            udp.close(maxShutdownWaitTimeInMilliSeconds);
+        if (this.udp != null) {
+            this.udp.close(maxShutdownWaitTimeInMilliSeconds);
         }
 
-        if (udt != null) {
-            udt.close(maxShutdownWaitTimeInMilliSeconds);
+        if (this.udt != null) {
+            this.udt.close(maxShutdownWaitTimeInMilliSeconds);
 
             // we need to yield the thread here, so that the socket has a chance to close
             Thread.yield();
@@ -152,7 +149,7 @@ public class ChannelNetworkWrapper implements ChannelWrapper {
 
     @Override
     public int id() {
-        return tcp.id();
+        return this.tcp.id();
     }
 
     @Override
@@ -168,11 +165,11 @@ public class ChannelNetworkWrapper implements ChannelWrapper {
         }
 
         ChannelNetworkWrapper other = (ChannelNetworkWrapper) obj;
-        if (remoteAddress == null) {
+        if (this.remoteAddress == null) {
             if (other.remoteAddress != null) {
                 return false;
             }
-        } else if (!remoteAddress.equals(other.remoteAddress)) {
+        } else if (!this.remoteAddress.equals(other.remoteAddress)) {
             return false;
         }
         return true;
@@ -180,6 +177,6 @@ public class ChannelNetworkWrapper implements ChannelWrapper {
 
     @Override
     public int hashCode() {
-        return remoteAddress.hashCode();
+        return this.remoteAddress.hashCode();
     }
 }

@@ -1,4 +1,4 @@
-package dorkbox.network.connection.ping;
+package dorkbox.network.connection;
 
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
@@ -7,11 +7,11 @@ import io.netty.util.concurrent.Promise;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class PingFuture implements Ping {
+class PingFuture implements Ping {
 
     private static AtomicInteger pingCounter = new AtomicInteger(0);
 
-    private final Promise<Integer> promise;
+    private final Promise<PingTuple<? extends Connection>> promise;
 
     private final int id;
     private final long sentTime;
@@ -19,14 +19,18 @@ public class PingFuture implements Ping {
     /**
      * Protected constructor for when we are completely overriding this class. (Used by the "local" connection for instant pings)
      */
-    protected PingFuture() {
+    PingFuture() {
         this(null);
     }
 
-    public PingFuture(Promise<Integer> promise) {
+    PingFuture(Promise<PingTuple<? extends Connection>> promise) {
         this.promise = promise;
         this.id = pingCounter.getAndIncrement();
         this.sentTime = System.currentTimeMillis();
+
+        if (this.id == Integer.MAX_VALUE) {
+            pingCounter.set(0);
+        }
     }
 
     /**
@@ -35,7 +39,10 @@ public class PingFuture implements Ping {
     @Override
     public int getResponse() {
         try {
-            return this.promise.syncUninterruptibly().get();
+            PingTuple<? extends Connection> entry = this.promise.syncUninterruptibly().get();
+            if (entry != null) {
+                return entry.responseTime;
+            }
         } catch (InterruptedException e) {
         } catch (ExecutionException e) {
         }
@@ -45,16 +52,22 @@ public class PingFuture implements Ping {
 
     /**
      * This is when the endpoint that ORIGINALLY sent the ping, finally receives a response.
+     * @param <C>
+     * @param connectionImpl
      */
-    public void setSuccess(PingMessage ping) {
+    public <C extends Connection> void setSuccess(C connection, PingMessage ping) {
         if (ping.id == this.id) {
             long longTime = System.currentTimeMillis() - this.sentTime;
             if (longTime < Integer.MAX_VALUE) {
-                this.promise.setSuccess((int)longTime);
+                this.promise.setSuccess(new PingTuple<C>(connection, (int) longTime));
             } else {
-                this.promise.setSuccess(Integer.MAX_VALUE);
+                this.promise.setSuccess(new PingTuple<C>(connection, Integer.MAX_VALUE));
             }
         }
+    }
+
+    public boolean isSuccess() {
+        return this.promise.isSuccess();
     }
 
     /**
@@ -63,8 +76,9 @@ public class PingFuture implements Ping {
      * the specified listener is notified immediately.
      */
     @Override
-    public void addListener(GenericFutureListener<? extends Future<? super Object>> listener) {
-        this.promise.addListener(listener);
+    @SuppressWarnings("unchecked")
+    public <C extends Connection> void addListener(PingListener<C> listener) {
+        this.promise.addListener((GenericFutureListener<? extends Future<? super PingTuple<? extends Connection>>>) listener);
     }
 
     /**
@@ -74,8 +88,9 @@ public class PingFuture implements Ping {
      * silently.
      */
     @Override
-    public void removeListener(GenericFutureListener<? extends Future<? super Object>> listener) {
-        this.promise.removeListener(listener);
+    @SuppressWarnings("unchecked")
+    public <C extends Connection> void removeListener(PingListener<C> listener) {
+        this.promise.removeListener((GenericFutureListener<? extends Future<? super PingTuple<? extends Connection>>>) listener);
     }
 
     /**

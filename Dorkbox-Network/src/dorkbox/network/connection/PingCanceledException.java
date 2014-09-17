@@ -1,4 +1,4 @@
-package dorkbox.network.connection.ping;
+package dorkbox.network.connection;
 
 public class PingCanceledException extends RuntimeException {
 

@@ -1,12 +1,13 @@
 package dorkbox.network.connection.wrapper;
 
 
+import io.netty.channel.EventLoop;
+
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.ISessionManager;
-import dorkbox.network.connection.ping.PingFuture;
 
 public interface ChannelWrapper {
 
@@ -24,7 +25,7 @@ public interface ChannelWrapper {
      */
     public void flush();
 
-    public PingFuture pingFuture();
+    public EventLoop getEventLoop();
 
     public ParametersWithIV cryptoParameters();
 

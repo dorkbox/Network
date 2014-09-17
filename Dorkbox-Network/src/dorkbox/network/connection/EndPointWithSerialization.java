@@ -14,8 +14,6 @@ import org.bouncycastle.crypto.params.IESWithCipherParameters;
 import com.esotericsoftware.kryo.factories.SerializerFactory;
 
 import dorkbox.network.ConnectionOptions;
-import dorkbox.network.connection.ping.PingListener;
-import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
@@ -79,7 +77,7 @@ public class EndPointWithSerialization extends EndPoint {
 
 
         // add the ping listener (internal use only!)
-        this.connectionManager.add(new PingListener(name));
+        this.connectionManager.add(new PingSystemListener(name));
 
         Runtime.getRuntime().removeShutdownHook(this.shutdownHook);
         this.shutdownHook = new Thread() {

@@ -2,8 +2,6 @@ package dorkbox.network.connection;
 
 import dorkbox.util.ClassHelper;
 
-// note that we specifically DO NOT implement equals/hashCode, because we cannot create two separate
-// listeners that are somehow equal to each other.
 public abstract class Listener<C extends Connection, M extends Object> {
 
     private final Class<?> objectType;
@@ -73,6 +71,24 @@ public abstract class Listener<C extends Connection, M extends Object> {
      */
     public void error(C connection, Throwable throwable) {
         throwable.printStackTrace();
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + (this.objectType == null ? 0 : this.objectType.hashCode());
+        return result;
+    }
+
+    // only possible way for it to be equal, is if it is the same object
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+
+        return false;
     }
 
     @Override

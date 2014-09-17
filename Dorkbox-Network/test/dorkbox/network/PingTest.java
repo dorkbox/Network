@@ -9,8 +9,8 @@ import java.io.IOException;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.ping.PingMessage;
+import dorkbox.network.connection.Ping;
+import dorkbox.network.connection.PingListener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
@@ -37,56 +37,104 @@ public class PingTest extends BaseTest {
         Client client = new Client(connectionOptions);
         addEndPoint(client);
 
-
-        client.listeners().add(new Listener<Connection, PingMessage>() {
-            int count = 0;
-
-            @Override
-            public void connected(Connection connection) {
-                System.err.println("Testing TCP ping");
-
-                for (int i=0;i<10;i++) {
-                    int response2 = connection.send().ping().getResponse();
-                    System.err.println("Ping B roundtime: " + response2);
-                }
-            }
-
-//            @Override
-//            public void received(Connection connection, PingMessage ping) {
-//                response = ping.time;
-//                System.err.println("Ping return time: " + response);
-//
-//                if (count++ < 10) {
-//                    connection.send().ping();
-//                } else {
-//                    stopEndPoints();
-//                }
-//            }
-        });
         client.connect(5000);
 
-
+        System.err.println("Testing TCP ping");
         for (int i=0;i<10;i++) {
-            int response2 = client.ping().getResponse();
-            System.err.println("Ping A roundtime: " + response2);
+            this.response = client.send().ping().getResponse();
+            System.err.println("Ping: " + this.response);
         }
 
-        // alternate way to register for the receipt of a one-off ping response
-//        PingFuture ping = connection.ping();
-//        ping.addListener(new ChannelFutureListener() {
-//            int count = 0;
-//                @Override
-//                public void operationComplete(ChannelFuture future) throws Exception {
-//                    response = ((PingFuture)future).getResponseUninterruptibly();
-//                    System.err.println("Ping return time: " + response);
-//
-//                    if (count++ < 10) {
-//                        connection.ping();
-//                    } else {
-//                        stopEndPoints();
-//                    }
-//                }
-//            });
+        stopEndPoints();
+        if (this.response == -1) {
+            fail();
+        }
+    }
+
+    @Test
+    public void pingTCP_testListeners1() throws IOException, InitializationException, SecurityException {
+        this.response = -1;
+
+        ConnectionOptions connectionOptions = new ConnectionOptions();
+        connectionOptions.tcpPort = tcpPort;
+        connectionOptions.host = host;
+
+        Server server = new Server(connectionOptions);
+        addEndPoint(server);
+        server.bind(false);
+
+        // ----
+
+        Client client = new Client(connectionOptions);
+        addEndPoint(client);
+
+        client.connect(5000);
+
+        System.err.println("Testing TCP ping with multi callback");
+
+        final PingListener<Connection> pingListener = new PingListener<Connection>() {
+            volatile int count = 0;
+
+            @Override
+            public void response(Connection connection, int pingResponseTime) {
+                System.err.println("Ping: " + pingResponseTime);
+
+                if (this.count++ < 10) {
+                    connection.send().ping().addListener(this);
+                } else {
+                    PingTest.this.response = pingResponseTime;
+                    stopEndPoints();
+                }
+            }
+        };
+
+        //  alternate way to register for the receipt of a one-off ping response
+        // doesn't matter how many times this is called. If there is a PING waiting, then it's overwritten
+        Ping ping = client.send().ping();
+        ping.addListener(pingListener);
+
+        waitForThreads();
+
+        if (this.response == -1) {
+            fail();
+        }
+    }
+
+    @Test
+    public void pingTCP_testListeners2() throws IOException, InitializationException, SecurityException {
+        this.response = -1;
+
+        ConnectionOptions connectionOptions = new ConnectionOptions();
+        connectionOptions.tcpPort = tcpPort;
+        connectionOptions.host = host;
+
+        Server server = new Server(connectionOptions);
+        addEndPoint(server);
+        server.bind(false);
+
+        // ----
+
+        Client client = new Client(connectionOptions);
+        addEndPoint(client);
+
+        client.connect(5000);
+
+        System.err.println("Testing TCP ping with single callback");
+
+        final PingListener<Connection> pingListener = new PingListener<Connection>() {
+            @Override
+            public void response(Connection connection, int pingResponseTime) {
+                System.err.println("Ping: " + pingResponseTime);
+                PingTest.this.response = pingResponseTime;
+                stopEndPoints();
+            }
+        };
+
+
+        //  alternate way to register for the receipt of a one-off ping response
+        // doesn't matter how many times this is called. If there is a PING waiting, then it's overwritten
+        Ping ping = client.send().ping();
+        ping.addListener(pingListener);
 
         waitForThreads();
 
@@ -115,36 +163,15 @@ public class PingTest extends BaseTest {
         Client client = new Client(connectionOptions);
         addEndPoint(client);
 
-
-        client.listeners().add(new Listener<Connection, PingMessage>() {
-            int count = 0;
-
-            @Override
-            public void connected(Connection connection) {
-                System.err.println("Testing UDP ping");
-            }
-        });
         client.connect(5000);
 
-        client.ping();
-        // alternate way to register for the receipt of a one-off ping response
-//        PingFuture ping = connection.ping();
-//        ping.addListener(new ChannelFutureListener() {
-//            int count = 0;
-//                @Override
-//                public void operationComplete(ChannelFuture future) throws Exception {
-//                    response = ((PingFuture)future).getResponseUninterruptibly();
-//                    System.err.println("Ping return time: " + response);
-//
-//                    if (count++ < 10) {
-//                        connection.ping();
-//                    } else {
-//                        stopEndPoints();
-//                    }
-//                }
-//            });
+        System.err.println("Testing UDP ping");
+        for (int i=0;i<10;i++) {
+            this.response = client.send().ping().getResponse();
+            System.err.println("Ping: " + this.response);
+        }
 
-        waitForThreads();
+        stopEndPoints();
 
         if (this.response == -1) {
             fail();
@@ -171,48 +198,15 @@ public class PingTest extends BaseTest {
         Client client = new Client(connectionOptions);
         addEndPoint(client);
 
-
-        client.listeners().add(new Listener<Connection, PingMessage>() {
-            int count = 0;
-
-            @Override
-            public void connected(Connection connection) {
-                System.err.println("Testing UDT ping");
-            }
-
-//            @Override
-//            public void received(Connection connection, PingMessage ping) {
-//                PingTest.this.response = ping.time;
-//                System.err.println("Ping return time: " + PingTest.this.response);
-//
-//                if (this.count++ < 10) {
-//                    connection.send().ping();
-//                } else {
-//                    stopEndPoints();
-//                }
-//            }
-        });
         client.connect(5000);
 
-        client.ping();
-        // alternate way to register for the receipt of a one-off ping response
-//        PingFuture ping = connection.ping();
-//        ping.addListener(new ChannelFutureListener() {
-//            int count = 0;
-//                @Override
-//                public void operationComplete(ChannelFuture future) throws Exception {
-//                    response = ((PingFuture)future).getResponseUninterruptibly();
-//                    System.err.println("Ping return time: " + response);
-//
-//                    if (count++ < 10) {
-//                        connection.ping();
-//                    } else {
-//                        stopEndPoints();
-//                    }
-//                }
-//            });
+        System.err.println("Testing UDT ping");
+        for (int i=0;i<10;i++) {
+            this.response = client.send().ping().getResponse();
+            System.err.println("Ping: " + this.response);
+        }
 
-        waitForThreads();
+        stopEndPoints();
 
         if (this.response == -1) {
             fail();

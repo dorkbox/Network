@@ -11,6 +11,7 @@ import io.netty.channel.udt.nio.NioUdtByteConnectorChannel;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.Promise;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -21,9 +22,6 @@ import org.slf4j.Logger;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleObjectSender;
 import dorkbox.network.connection.idle.IdleSender;
-import dorkbox.network.connection.ping.Ping;
-import dorkbox.network.connection.ping.PingFuture;
-import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
@@ -149,7 +147,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      */
     public final void updatePingResponse(PingMessage ping) {
         if (this.pingFuture != null) {
-            this.pingFuture.setSuccess(ping);
+            this.pingFuture.setSuccess(this, ping);
         }
     }
 
@@ -161,11 +159,12 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     @Override
     public final Ping ping() {
         PingFuture pingFuture2 = this.pingFuture;
-        if (pingFuture2 != null) {
+        if (pingFuture2 != null && !pingFuture2.isSuccess()) {
             pingFuture2.cancel();
         }
 
-        this.pingFuture = this.channelWrapper.pingFuture();
+        Promise<PingTuple<? extends Connection>> newPromise = this.channelWrapper.getEventLoop().newPromise();
+        this.pingFuture = new PingFuture(newPromise);
 
         PingMessage ping = new PingMessage();
         ping.id = this.pingFuture.getId();
@@ -178,7 +177,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * INTERNAL USE ONLY. Used to initiate a ping, and to return a ping.
      * Sends a ping message attempted in the following order: UDP, UDT, TCP
      */
-    public final void ping0(PingMessage ping) {
+    final void ping0(PingMessage ping) {
         if (this.channelWrapper.udp() != null) {
             UDP(ping).flush();
         } else if (this.channelWrapper.udt() != null) {
