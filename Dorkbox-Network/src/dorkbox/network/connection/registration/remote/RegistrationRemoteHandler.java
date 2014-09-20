@@ -226,6 +226,11 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
         // add the "connected"/"normal" handler now that we have established a "new" connection.
         // This will have state, etc. for this connection.
         ConnectionImpl connection = (ConnectionImpl) this.registrationWrapper.connection0(metaChannel);
+
+
+        // to have connection notified via the disruptor, we have to specify a custom ChannelHandlerInvoker.
+//        ChannelHandlerInvoker channelHandlerInvoker = new ChannelHandlerInvoker();
+
         tcpPipe.addLast(CONNECTION_HANDLER, connection);
 
         if (udpPipe != null) {

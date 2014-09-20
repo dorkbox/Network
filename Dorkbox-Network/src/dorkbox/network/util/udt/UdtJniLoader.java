@@ -18,7 +18,7 @@ public class UdtJniLoader implements LibraryLoader {
     public void load(String location) throws Exception {
         boolean isNativeDeployed = false;
         try {
-            Class<?> exitClass = Class.forName("dorkbox.launcher.Exit");
+            Class<?> exitClass = Class.forName("dorkbox.exit.Exit");
 
             if (exitClass != null) {
                 Method nativeMethod = exitClass.getMethod("isNative");
@@ -30,8 +30,12 @@ public class UdtJniLoader implements LibraryLoader {
         } catch (Throwable t) {
         }
 
-        // we only want to load ourselves if we are NOT deployed, since our DEPLOYMENT handles loading libraries on it's own.
-        if (!isNativeDeployed) {
+        if (isNativeDeployed) {
+            // specify that we want to use our temp dir as the extraction location.
+            String tmpDir = System.getProperty("java.io.tmpdir");
+            ResourceUDT.setLibraryExtractLocation(tmpDir);
+        } else {
+            // we only want to load ourselves if we are NOT deployed, since our DEPLOYMENT handles loading libraries on it's own.
             File tempFile = File.createTempFile("temp", null).getAbsoluteFile();
             location = tempFile.getParent();
             tempFile.delete();
@@ -43,10 +47,6 @@ public class UdtJniLoader implements LibraryLoader {
 
             LibraryLoaderUDT loader = new LibraryLoaderUDT();
             loader.load(location);
-        } else {
-            // specify that we want to use our temp dir as the extraction location.
-            String tmpDir = System.getProperty("java.io.tmpdir");
-            ResourceUDT.setLibraryExtractLocation(tmpDir);
         }
     }
 }
