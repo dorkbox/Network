@@ -142,6 +142,10 @@ public class RegistrationWrapper implements UdpServer {
     }
 
     public boolean validateRemoteServerAddress(InetSocketAddress tcpRemoteServer, ECPublicKeyParameters publicKey) throws SecurityException {
+        if (this.endPoint.disableRemoteKeyValidation) {
+            return true;
+        }
+
         InetAddress address = tcpRemoteServer.getAddress();
         byte[] hostAddress = address.getAddress();
 

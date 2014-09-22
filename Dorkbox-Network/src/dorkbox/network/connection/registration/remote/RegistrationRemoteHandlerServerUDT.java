@@ -7,6 +7,8 @@ import io.netty.util.ReferenceCountUtil;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -35,7 +37,7 @@ public class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandle
      */
     @Override
     public void channelActive(ChannelHandlerContext context) throws Exception {
-        if (logger.isDebugEnabled()) {
+        if (this.logger.isDebugEnabled()) {
            super.channelActive(context);
         }
 
@@ -51,6 +53,9 @@ public class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandle
 
         // only TCP will come across here for the server. (UDP here is called by the UDP handler/wrapper)
 
+        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
+        Logger logger2 = this.logger;
+
         if (message instanceof Registration) {
             // find out and make sure that UDP and TCP are talking to the same server
             InetAddress udtRemoteAddress = ((InetSocketAddress) channel.remoteAddress()).getAddress();
@@ -58,7 +63,7 @@ public class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandle
             boolean matches = false;
             MetaChannel metaChannel = null;
             try {
-                IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
+                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                 Entries<MetaChannel> entries = channelMap.entries();
                 while (entries.hasNext()) {
                     metaChannel = entries.next().value;
@@ -71,8 +76,10 @@ public class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandle
                         if (checkEqual(tcpRemoteAddress, udtRemoteAddress)) {
                             matches = true;
                         } else {
-                            logger.error(name, "Mismatch UDT and TCP client addresses! UDP: {}  TCP: {}", udtRemoteAddress, tcpRemoteAddress);
-                            shutdown(registrationWrapper, channel);
+                            if (logger2.isErrorEnabled()) {
+                                logger2.error(this.name, "Mismatch UDT and TCP client addresses! UDP: {}  TCP: {}", udtRemoteAddress, tcpRemoteAddress);
+                            }
+                            shutdown(registrationWrapper2, channel);
                             ReferenceCountUtil.release(message);
                             return;
                         }
@@ -80,7 +87,7 @@ public class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandle
                 }
 
             } finally {
-                registrationWrapper.releaseChannelMap();
+                registrationWrapper2.releaseChannelMap();
             }
 
             if (matches && metaChannel != null) {
@@ -104,20 +111,26 @@ public class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandle
                 // since we are done here, we need to REMOVE this handler
                 channel.pipeline().remove(this);
 
-                logger.trace("Register UDT connection from {}", udtRemoteAddress);
+                if (logger2.isTraceEnabled()) {
+                    logger2.trace("Register UDT connection from {}", udtRemoteAddress);
+                }
                 ReferenceCountUtil.release(message);
                 return;
             }
 
             // if we get here, there was a failure!
-            logger.error("Error trying to register UDT without udt specified! UDT: {}", udtRemoteAddress);
-            shutdown(registrationWrapper, channel);
+            if (logger2.isErrorEnabled()) {
+                logger2.error("Error trying to register UDT without udt specified! UDT: {}", udtRemoteAddress);
+            }
+            shutdown(registrationWrapper2, channel);
             ReferenceCountUtil.release(message);
             return;
         }
         else {
-            logger.error("UDT attempting to spoof client! Unencrypted packet other than registration received.");
-            shutdown(registrationWrapper, channel);
+            if (logger2.isErrorEnabled()) {
+                logger2.error("UDT attempting to spoof client! Unencrypted packet other than registration received.");
+            }
+            shutdown(registrationWrapper2, channel);
             ReferenceCountUtil.release(message);
             return;
         }

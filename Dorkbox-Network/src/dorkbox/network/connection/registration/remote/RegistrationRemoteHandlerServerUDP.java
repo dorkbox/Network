@@ -138,19 +138,22 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
     public final void receivedUDP(ChannelHandlerContext context, Channel channel, ByteBuf data, InetSocketAddress udpRemoteAddress) throws Exception {
         // registration is the ONLY thing NOT encrypted
         Logger logger2 = this.logger;
-        if (this.serializationManager.isEncrypted(data)) {
+        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
+        SerializationManager serializationManager2 = this.serializationManager;
+
+        if (serializationManager2.isEncrypted(data)) {
             // we need to FORWARD this message "down the pipeline".
 
-            ConnectionImpl connection = this.registrationWrapper.getServerUDP(udpRemoteAddress);
+            ConnectionImpl connection = registrationWrapper2.getServerUDP(udpRemoteAddress);
             if (connection != null) {
                 // try to read data! (IT SHOULD ALWAYS BE ENCRYPTED HERE!)
                 Object object;
 
                 try {
-                    object = this.serializationManager.readWithCryptoUdp(connection, data, data.writerIndex());
+                    object = serializationManager2.readWithCryptoUdp(connection, data, data.writerIndex());
                 } catch (NetException e) {
                     logger2.error("UDP unable to deserialize buffer", e);
-                    shutdown(this.registrationWrapper, channel);
+                    shutdown(registrationWrapper2, channel);
                     return;
                 }
 
@@ -167,10 +170,10 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
             Object object;
 
             try {
-                object = this.serializationManager.read(data, data.writerIndex());
+                object = serializationManager2.read(data, data.writerIndex());
             } catch (NetException e) {
                 logger2.error("UDP unable to deserialize buffer", e);
-                shutdown(this.registrationWrapper, channel);
+                shutdown(registrationWrapper2, channel);
                 return;
             }
 
@@ -181,7 +184,7 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
                 try {
                     // find out and make sure that UDP and TCP are talking to the same server
                     InetAddress udpRemoteServer = udpRemoteAddress.getAddress();
-                    IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                    IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                     Entries<MetaChannel> entries = channelMap.entries();
 
                     while (entries.hasNext()) {
@@ -197,13 +200,13 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
                                 break;
                             } else {
                                 logger2.error("Mismatch UDP and TCP client addresses! UDP: {}  TCP: {}", udpRemoteServer, tcpRemoteAddress);
-                                shutdown(this.registrationWrapper, channel);
+                                shutdown(registrationWrapper2, channel);
                                 return;
                             }
                         }
                     }
                 } finally {
-                    this.registrationWrapper.releaseChannelMap();
+                    registrationWrapper2.releaseChannelMap();
                 }
 
 
@@ -233,7 +236,7 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
 
                 // if we get here, there was a failure!
                 logger2.error("Error trying to register UDP without udp specified! UDP: {}", udpRemoteAddress);
-                shutdown(this.registrationWrapper, channel);
+                shutdown(registrationWrapper2, channel);
                 return;
             }
             else {

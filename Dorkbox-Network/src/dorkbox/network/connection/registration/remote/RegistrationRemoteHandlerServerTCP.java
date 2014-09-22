@@ -117,29 +117,30 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
 
         // only TCP will come across here for the server. (UDP here is called by the UDP handler/wrapper)
 
+        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
         if (message instanceof Registration) {
             Registration registration = (Registration) message;
 
             MetaChannel metaChannel = null;
             try {
-                IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                 metaChannel = channelMap.get(channel.hashCode());
             } finally {
-                this.registrationWrapper.releaseChannelMap();
+                registrationWrapper2.releaseChannelMap();
             }
 
             // make sure this connection was properly registered in the map. (IT SHOULD BE)
             Logger logger2 = this.logger;
             if (metaChannel != null) {
                 metaChannel.updateTcpRoundTripTime();
-                SecureRandom secureRandom = this.registrationWrapper.getSecureRandom();
+                SecureRandom secureRandom = registrationWrapper2.getSecureRandom();
 
                 // first time we've seen data from this new TCP connection
                 if (metaChannel.connectionID == null) {
                     // whoa! Didn't send valid public key info!
                     if (registration.publicKey == null) {
                         logger2.error("Null ECC public key during client handshake. This shouldn't happen!");
-                        shutdown(this.registrationWrapper, channel);
+                        shutdown(registrationWrapper2, channel);
 
                         ReferenceCountUtil.release(message);
                         return;
@@ -149,11 +150,11 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                     // against that ip-address::key pair, so we can better protect against MITM/spoof attacks.
                     InetSocketAddress tcpRemoteClient = (InetSocketAddress) channel.remoteAddress();
 
-                    boolean valid = this.registrationWrapper.validateRemoteServerAddress(tcpRemoteClient, registration.publicKey);
+                    boolean valid = registrationWrapper2.validateRemoteServerAddress(tcpRemoteClient, registration.publicKey);
 
                     if (!valid) {
                         //whoa! abort since something messed up! (log happens inside of validate method)
-                        if (this.logger.isInfoEnabled()) {
+                        if (logger2.isInfoEnabled()) {
                             logger2.info("Invalid ECC public key for IP {} during handshake with client. Toggling extra flag in channel to indicate this.", tcpRemoteClient.getAddress().getHostAddress());
                         }
                         metaChannel.changedRemoteKey = true;
@@ -164,7 +165,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                     // if I'm unlucky, keep from confusing connections!
 
                     try {
-                        IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                        IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                         while (channelMap.containsKey(connectionID)) {
                             connectionID = MathUtils.randomInt();
                         }
@@ -173,7 +174,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                         channelMap.put(connectionID, metaChannel);
 
                     } finally {
-                        this.registrationWrapper.releaseChannelMap();
+                        registrationWrapper2.releaseChannelMap();
                     }
 
                     Registration register = new Registration();
@@ -214,13 +215,13 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
 
                     IESEngine encrypt = getEccEngine();
 
-                    register.publicKey = this.registrationWrapper.getPublicKey();
+                    register.publicKey = registrationWrapper2.getPublicKey();
                     register.eccParameters = Crypto.ECC.generateSharedParameters(secureRandom);
 
                     // now we have to ENCRYPT the AES key!
                     register.eccParameters = Crypto.ECC.generateSharedParameters(secureRandom);
                     register.aesIV = metaChannel.aesIV;
-                    register.aesKey = Crypto.ECC.encrypt(encrypt, this.registrationWrapper.getPrivateKey(), metaChannel.publicKey, register.eccParameters, metaChannel.aesKey);
+                    register.aesKey = Crypto.ECC.encrypt(encrypt, registrationWrapper2.getPrivateKey(), metaChannel.publicKey, register.eccParameters, metaChannel.aesKey);
 
 
                     // now encrypt payload via AES
@@ -251,7 +252,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
 
                             if (payload.length == 0) {
                                 logger2.error("Invalid decryption of payload. Aborting.");
-                                shutdown(this.registrationWrapper, channel);
+                                shutdown(registrationWrapper2, channel);
 
                                 ReferenceCountUtil.release(message);
                                 return;
@@ -261,7 +262,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
 
                             if (ecdhPubKey == null) {
                                 logger2.error("Invalid decode of ecdh public key. Aborting.");
-                                shutdown(this.registrationWrapper, channel);
+                                shutdown(registrationWrapper2, channel);
 
                                 ReferenceCountUtil.release(message);
                                 return;
@@ -325,7 +326,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
             logger2.error("Error registering TCP channel! MetaChannel is null!");
         }
 
-        shutdown(this.registrationWrapper, channel);
+        shutdown(registrationWrapper2, channel);
         ReferenceCountUtil.release(message);
     }
 }

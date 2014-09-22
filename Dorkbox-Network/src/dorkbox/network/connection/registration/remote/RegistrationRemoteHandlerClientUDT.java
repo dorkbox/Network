@@ -59,8 +59,9 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
         if (udtRemoteAddress != null) {
             InetAddress udtRemoteServer = udtRemoteAddress.getAddress();
 
+            RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
             try {
-                IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                 Entries<MetaChannel> entries = channelMap.entries();
                 while (entries.hasNext()) {
                     MetaChannel metaChannel = entries.next().value;
@@ -77,7 +78,7 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
                 }
 
             } finally {
-                this.registrationWrapper.releaseChannelMap();
+                registrationWrapper2.releaseChannelMap();
             }
 
             if (!success) {
@@ -104,13 +105,15 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
         // if we also have a UDP channel, we will receive the "connected" message on UDP (otherwise it will be on TCP)
         MetaChannel metaChannel = null;
 
+        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
         try {
-            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+            IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
             metaChannel = channelMap.get(channel.hashCode());
         } finally {
-            this.registrationWrapper.releaseChannelMap();
+            registrationWrapper2.releaseChannelMap();
         }
 
+        Logger logger2 = this.logger;
         if (metaChannel != null) {
             if (message instanceof Registration) {
                 Registration registration = (Registration) message;
@@ -120,8 +123,8 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
 
                 OptimizeUtils optimizeUtils = OptimizeUtils.get();
                 if (!optimizeUtils.canReadInt(payload)) {
-                    this.logger.error("Invalid decryption of connection ID. Aborting.");
-                    shutdown(this.registrationWrapper, channel);
+                    logger2.error("Invalid decryption of connection ID. Aborting.");
+                    shutdown(registrationWrapper2, channel);
 
                     ReferenceCountUtil.release(message);
                     return;
@@ -131,17 +134,17 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
 
                 MetaChannel metaChannel2 = null;
                 try {
-                    IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                    IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                     metaChannel2 = channelMap.get(connectionID);
                 } finally {
-                    this.registrationWrapper.releaseChannelMap();
+                    registrationWrapper2.releaseChannelMap();
                 }
 
                 if (metaChannel2 != null) {
                     // hooray! we are successful
 
                     // notify the client that we are ready to continue registering other session protocols (bootstraps)
-                    boolean isDoneWithRegistration = this.registrationWrapper.continueRegistration0();
+                    boolean isDoneWithRegistration = registrationWrapper2.continueRegistration0();
 
                     // tell the server we are done, and to setup crypto on it's side
                     if (isDoneWithRegistration) {
@@ -164,8 +167,8 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
 
         // if we get here, there was an error!
 
-        this.logger.error("Error registering UDT with remote server!");
-        shutdown(this.registrationWrapper, channel);
+        logger2.error("Error registering UDT with remote server!");
+        shutdown(registrationWrapper2, channel);
         ReferenceCountUtil.release(message);
     }
 }

@@ -135,6 +135,7 @@ public abstract class EndPoint {
 
     final SecureRandom secureRandom;
     SettingsStore propertyStore;
+    boolean disableRemoteKeyValidation;
 
 
     public EndPoint(String name, ConnectionOptions options) throws InitializationException, SecurityException {
@@ -211,6 +212,19 @@ public abstract class EndPoint {
         Runtime.getRuntime().addShutdownHook(this.shutdownHook);
     }
 
+    public void disableRemoteKeyValidation() {
+        Logger logger2 = this.logger;
+
+        if (isConnected()) {
+            logger2.error("Cannot disable the remote key validation after this endpoint is connected!");
+        } else {
+            if (logger2.isInfoEnabled()) {
+                logger2.info("WARNING: Disabling remote key validation is a security risk!!");
+            }
+            this.disableRemoteKeyValidation = true;
+        }
+    }
+
     /**
      * Returns the property store used by this endpoint. The property store can store via properties,
      * a database, etc, or can be a "null" property store, which does nothing
@@ -265,9 +279,9 @@ public abstract class EndPoint {
     /**
      * Return the connection status of this endpoint.
      * <p>
-     * Once a server has connected to ANY client, it will always return true.
+     * Once a server has connected to ANY client, it will always return true until server.close() is called
      */
-    public boolean isConnected() {
+    public final boolean isConnected() {
         return this.isConnected.get();
     }
 
@@ -328,8 +342,9 @@ public abstract class EndPoint {
             inEventThread = false;
 
             // we need to test to see if our current thread is in ANY of the event group threads. If it IS, then we risk deadlocking!
-            synchronized (this.eventLoopGroups) {
-                for (EventLoopGroup loopGroup : this.eventLoopGroups) {
+            List<EventLoopGroup> eventLoopGroups2 = this.eventLoopGroups;
+            synchronized (eventLoopGroups2) {
+                for (EventLoopGroup loopGroup : eventLoopGroups2) {
                     if (!inEventThread) {
                         inEventThread = checkInEventGroup(currentThread, loopGroup);
                         break;
@@ -380,8 +395,9 @@ public abstract class EndPoint {
 
             // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
             long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
+            RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
             try {
-                IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                 Entries<MetaChannel> entries = channelMap.entries();
                 while (entries.hasNext()) {
                     MetaChannel metaChannel = entries.next().value;
@@ -391,7 +407,7 @@ public abstract class EndPoint {
                 channelMap.clear();
 
             } finally {
-                this.registrationWrapper.releaseChannelMap();
+                registrationWrapper2.releaseChannelMap();
             }
 
             // shutdown the database store

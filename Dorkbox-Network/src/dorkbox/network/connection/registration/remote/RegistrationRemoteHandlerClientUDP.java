@@ -69,8 +69,9 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
             InetAddress udpRemoteServer = udpRemoteAddress.getAddress();
 
 
+            RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
             try {
-                IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                 Entries<MetaChannel> entries = channelMap.entries();
                 while (entries.hasNext()) {
                     MetaChannel metaChannel = entries.next().value;
@@ -86,7 +87,7 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
                     }
                 }
             } finally {
-                this.registrationWrapper.releaseChannelMap();
+                registrationWrapper2.releaseChannelMap();
             }
 
             if (!success) {
@@ -112,11 +113,12 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
         // if we also have a UDP channel, we will receive the "connected" message on UDP (otherwise it will be on TCP)
 
         MetaChannel metaChannel = null;
+        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
         try {
-            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+            IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
             metaChannel = channelMap.get(channel.hashCode());
         } finally {
-            this.registrationWrapper.releaseChannelMap();
+            registrationWrapper2.releaseChannelMap();
         }
 
         if (metaChannel != null) {
@@ -129,7 +131,7 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
                 OptimizeUtils optimizeUtils = OptimizeUtils.get();
                 if (!optimizeUtils.canReadInt(payload)) {
                     this.logger.error("Invalid decryption of connection ID. Aborting.");
-                    shutdown(this.registrationWrapper, channel);
+                    shutdown(registrationWrapper2, channel);
 
                     ReferenceCountUtil.release(message);
                     return;
@@ -139,17 +141,17 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
 
                 MetaChannel metaChannel2 = null;
                 try {
-                    IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                    IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                     metaChannel2 = channelMap.get(connectionID);
                 } finally {
-                    this.registrationWrapper.releaseChannelMap();
+                    registrationWrapper2.releaseChannelMap();
                 }
 
                 if (metaChannel2 != null) {
                     // hooray! we are successful
 
                     // notify the client that we are ready to continue registering other session protocols (bootstraps)
-                    boolean isDoneWithRegistration = this.registrationWrapper.continueRegistration0();
+                    boolean isDoneWithRegistration = registrationWrapper2.continueRegistration0();
 
                     // tell the server we are done, and to setup crypto on it's side
                     if (isDoneWithRegistration) {
@@ -173,7 +175,7 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
         // if we get here, there was an error!
 
         this.logger.error("Error registering UDP with remote server!");
-        shutdown(this.registrationWrapper, channel);
+        shutdown(registrationWrapper2, channel);
 
         ReferenceCountUtil.release(message);
     }

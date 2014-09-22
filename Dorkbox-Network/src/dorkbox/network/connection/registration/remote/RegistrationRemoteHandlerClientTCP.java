@@ -142,14 +142,16 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
     public void channelRead(ChannelHandlerContext context, Object message) throws Exception {
         Channel channel = context.channel();
 
+        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
+        Logger logger2 = this.logger;
         if (message instanceof Registration) {
             // make sure this connection was properly registered in the map. (IT SHOULD BE)
             MetaChannel metaChannel = null;
             try {
-                IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                 metaChannel = channelMap.get(channel.hashCode());
             } finally {
-                this.registrationWrapper.releaseChannelMap();
+                registrationWrapper2.releaseChannelMap();
             }
 
             if (metaChannel != null) {
@@ -162,16 +164,16 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
                     // against that ip-address::key pair, so we can better protect against MITM/spoof attacks.
                     InetSocketAddress tcpRemoteServer = (InetSocketAddress) channel.remoteAddress();
 
-                    boolean valid = this.registrationWrapper.validateRemoteServerAddress(tcpRemoteServer, registration.publicKey);
+                    boolean valid = registrationWrapper2.validateRemoteServerAddress(tcpRemoteServer, registration.publicKey);
 
                     if (!valid) {
                         //whoa! abort since something messed up! (log happens inside of validate method)
                         String hostAddress = tcpRemoteServer.getAddress().getHostAddress();
-                        this.logger.error("Invalid ECC public key for server IP {} during handshake. WARNING. The server has changed!", hostAddress);
-                        this.logger.error("Fix by adding the argument   -D{} {}   when starting the client.", DELETE_IP, hostAddress);
+                        logger2.error("Invalid ECC public key for server IP {} during handshake. WARNING. The server has changed!", hostAddress);
+                        logger2.error("Fix by adding the argument   -D{} {}   when starting the client.", DELETE_IP, hostAddress);
                         metaChannel.changedRemoteKey = true;
 
-                        shutdown(this.registrationWrapper, channel);
+                        shutdown(registrationWrapper2, channel);
 
                         ReferenceCountUtil.release(message);
                         return;
@@ -180,12 +182,12 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
                     // setup crypto state
                     IESEngine decrypt = getEccEngine();
 
-                    byte[] aesKeyBytes = Crypto.ECC.decrypt(decrypt, this.registrationWrapper.getPrivateKey(), registration.publicKey, registration.eccParameters,
+                    byte[] aesKeyBytes = Crypto.ECC.decrypt(decrypt, registrationWrapper2.getPrivateKey(), registration.publicKey, registration.eccParameters,
                                                             registration.aesKey);
 
                     if (aesKeyBytes.length != 32) {
-                        this.logger.error("Invalid decryption of aesKey. Aborting.");
-                        shutdown(this.registrationWrapper, channel);
+                        logger2.error("Invalid decryption of aesKey. Aborting.");
+                        shutdown(registrationWrapper2, channel);
 
                         ReferenceCountUtil.release(message);
                         return;
@@ -195,8 +197,8 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
                     byte[] payload = Crypto.AES.decrypt(getAesEngine(), aesKeyBytes, registration.aesIV, registration.payload);
 
                     if (payload.length == 0) {
-                        this.logger.error("Invalid decryption of payload. Aborting.");
-                        shutdown(this.registrationWrapper, channel);
+                        logger2.error("Invalid decryption of payload. Aborting.");
+                        shutdown(registrationWrapper2, channel);
 
                         ReferenceCountUtil.release(message);
                         return;
@@ -204,8 +206,8 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
 
                     OptimizeUtils optimizeUtils = OptimizeUtils.get();
                     if (!optimizeUtils.canReadInt(payload)) {
-                        this.logger.error("Invalid decryption of connection ID. Aborting.");
-                        shutdown(this.registrationWrapper, channel);
+                        logger2.error("Invalid decryption of connection ID. Aborting.");
+                        shutdown(registrationWrapper2, channel);
 
                         ReferenceCountUtil.release(message);
                         return;
@@ -222,8 +224,8 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
                     ECPublicKeyParameters ecdhPubKey = EccPublicKeySerializer.read(new Input(ecdhPubKeyBytes));
 
                     if (ecdhPubKey == null) {
-                        this.logger.error("Invalid decode of ecdh public key. Aborting.");
-                        shutdown(this.registrationWrapper, channel);
+                        logger2.error("Invalid decode of ecdh public key. Aborting.");
+                        shutdown(registrationWrapper2, channel);
 
                         ReferenceCountUtil.release(message);
                         return;
@@ -235,10 +237,10 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
 
                     // register the channel!
                     try {
-                        IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
+                        IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                         channelMap.put(metaChannel.connectionID, metaChannel);
                     } finally {
-                        this.registrationWrapper.releaseChannelMap();
+                        registrationWrapper2.releaseChannelMap();
                     }
 
                     metaChannel.publicKey = registration.publicKey;
@@ -262,8 +264,8 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
 
                        // abort if something messed up!
                     if (metaChannel.aesKey.length != 32) {
-                        this.logger.error("Fatal error trying to use AES key (wrong key length).");
-                        shutdown(this.registrationWrapper, channel);
+                        logger2.error("Fatal error trying to use AES key (wrong key length).");
+                        shutdown(registrationWrapper2, channel);
 
                         ReferenceCountUtil.release(message);
                         return;
@@ -294,7 +296,7 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
                             metaChannel.ecdhKey = null;
 
                             // notify the client that we are ready to continue registering other session protocols (bootstraps)
-                            boolean isDoneWithRegistration = this.registrationWrapper.continueRegistration0();
+                            boolean isDoneWithRegistration = registrationWrapper2.continueRegistration0();
 
                             // tell the server we are done, and to setup crypto on it's side
                             if (isDoneWithRegistration) {
@@ -334,8 +336,8 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
             }
         }
         else {
-            this.logger.error("Error registering TCP with remote server!");
-            shutdown(this.registrationWrapper, channel);
+            logger2.error("Error registering TCP with remote server!");
+            shutdown(registrationWrapper2, channel);
         }
 
         ReferenceCountUtil.release(message);
