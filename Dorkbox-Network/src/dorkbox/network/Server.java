@@ -169,6 +169,7 @@ public class Server extends EndPointServer {
 
             this.tcpBootstrap.group(boss, worker)
                              .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
+                             .option(ChannelOption.SO_REUSEADDR, true)
                              .childHandler(new RegistrationRemoteHandlerServerTCP(this.name,
                                                                                   this.registrationWrapper,
                                                                                   this.serializationManager));
