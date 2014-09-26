@@ -3,7 +3,6 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.fail;
-import hive.common.Listener;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -14,6 +13,7 @@ import org.junit.Test;
 
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.InputStreamSender;
 import dorkbox.network.util.SerializationManager;

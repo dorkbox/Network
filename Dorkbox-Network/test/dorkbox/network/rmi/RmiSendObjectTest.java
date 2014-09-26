@@ -7,12 +7,12 @@ import java.io.IOException;
 
 import org.junit.Test;
 
+import dorkbox.network.BaseTest;
 import dorkbox.network.Client;
 import dorkbox.network.ConnectionOptions;
-import dorkbox.network.BaseTest;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ListenerRaw;
+import dorkbox.network.connection.Listener;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
@@ -48,15 +48,15 @@ public class RmiSendObjectTest extends BaseTest {
         serverTestObject.otherObject = new OtherObjectImpl();
 
         // Both objects must be registered with the ObjectSpace.
-        serverRMI = server.getRmiBridge();
-        serverRMI.register(42, serverTestObject);
-        serverRMI.register(777, serverTestObject.getOtherObject());
+        this.serverRMI = server.getRmiBridge();
+        this.serverRMI.register(42, serverTestObject);
+        this.serverRMI.register(777, serverTestObject.getOtherObject());
 
-        server.listeners().add(new ListenerRaw<Connection, OtherObjectImpl>() {
+        server.listeners().add(new Listener<OtherObjectImpl>() {
             @Override
             public void connected(final Connection connection) {
                 // Allow the connection to access objects in the ObjectSpace.
-                serverRMI.addConnection(connection);
+                RmiSendObjectTest.this.serverRMI.addConnection(connection);
             }
 
             @Override
@@ -74,7 +74,7 @@ public class RmiSendObjectTest extends BaseTest {
         register(client.getSerialization());
 
         addEndPoint(client);
-        client.listeners().add(new ListenerRaw<Connection, Object>() {
+        client.listeners().add(new Listener<Object>() {
             @Override
             public void connected(final Connection connection) {
                 new Thread(new Runnable() {
@@ -126,7 +126,7 @@ public class RmiSendObjectTest extends BaseTest {
 
         @Override
         public OtherObject getOtherObject() {
-            return otherObject;
+            return this.otherObject;
         }
     }
 

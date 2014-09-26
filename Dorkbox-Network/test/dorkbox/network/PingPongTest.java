@@ -3,7 +3,6 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.fail;
-import hive.common.Listener;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -14,6 +13,7 @@ import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.Listener;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;

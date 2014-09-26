@@ -4,7 +4,6 @@ package dorkbox.network.rmi;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import hive.common.Listener;
 
 import java.io.IOException;
 
@@ -15,6 +14,7 @@ import dorkbox.network.Client;
 import dorkbox.network.ConnectionOptions;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.Listener;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
