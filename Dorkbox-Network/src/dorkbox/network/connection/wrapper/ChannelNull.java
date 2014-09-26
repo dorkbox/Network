@@ -1,8 +1,9 @@
 package dorkbox.network.connection.wrapper;
 
 import dorkbox.network.connection.ConnectionPoint;
+import dorkbox.network.connection.ConnectionPointWriter;
 
-public class ChannelNull implements ConnectionPoint {
+public class ChannelNull implements ConnectionPointWriter {
 
     private static final ConnectionPoint INSTANCE = new ChannelNull();
     public static ConnectionPoint get() {

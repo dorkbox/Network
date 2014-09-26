@@ -8,8 +8,8 @@ import java.net.InetSocketAddress;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
+import dorkbox.network.connection.ConnectionPointWriter;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.UdpServer;
@@ -104,17 +104,17 @@ public class ChannelNetworkWrapper implements ChannelWrapper {
     }
 
     @Override
-    public ConnectionPoint tcp() {
+    public ConnectionPointWriter tcp() {
         return this.tcp;
     }
 
     @Override
-    public ConnectionPoint udp() {
+    public ConnectionPointWriter udp() {
         return this.udp;
     }
 
     @Override
-    public ConnectionPoint udt() {
+    public ConnectionPointWriter udt() {
         return this.udt;
     }
 

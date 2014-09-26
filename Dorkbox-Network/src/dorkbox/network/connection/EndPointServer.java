@@ -1,6 +1,7 @@
 package dorkbox.network.connection;
 
 import dorkbox.network.ConnectionOptions;
+import dorkbox.network.connection.bridge.ConnectionBridgeServer;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 

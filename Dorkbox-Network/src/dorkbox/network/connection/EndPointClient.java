@@ -3,6 +3,8 @@ package dorkbox.network.connection;
 import org.slf4j.Logger;
 
 import dorkbox.network.ConnectionOptions;
+import dorkbox.network.connection.bridge.ConnectionBridge;
+import dorkbox.network.connection.bridge.ConnectionBridgeFlushAlways;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
@@ -15,6 +17,9 @@ public class EndPointClient extends EndPointWithSerialization {
     protected volatile boolean registrationInProgress = false;
 
     protected volatile boolean registrationComplete = false;
+
+    private volatile ConnectionBridgeFlushAlways connectionBridgeFlushAlways;
+
 
     public EndPointClient(String name, ConnectionOptions options) throws InitializationException, SecurityException {
         super(name, options);
@@ -67,5 +72,22 @@ public class EndPointClient extends EndPointWithSerialization {
     void abortRegistration() {
         this.registrationInProgress = false;
         stop();
+    }
+
+    /**
+     * Expose methods to send objects to a destination.
+     * <p>
+     * This returns a bridge that will flush after EVERY send! This is because sending data can occur on the client, outside
+     * of the normal eventloop patterns, and it is confusing to the user to have to manually flush the channel each time.
+     */
+    @Override
+    public ConnectionBridge send() {
+        ConnectionBridgeFlushAlways connectionBridgeFlushAlways2 = this.connectionBridgeFlushAlways;
+        if (connectionBridgeFlushAlways2 == null) {
+            ConnectionBridge clientBridge = this.connectionManager.getConnection0().send();
+            this.connectionBridgeFlushAlways = new ConnectionBridgeFlushAlways(clientBridge);
+        }
+
+        return this.connectionBridgeFlushAlways;
     }
 }

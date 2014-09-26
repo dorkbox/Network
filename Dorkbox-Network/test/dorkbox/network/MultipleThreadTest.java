@@ -3,6 +3,7 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.assertEquals;
+import hive.common.Listener;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -14,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerRaw;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
@@ -45,7 +46,7 @@ public class MultipleThreadTest extends BaseTest {
         server.getSerialization().register(DataClass.class);
         addEndPoint(server);
         server.bind(false);
-        server.listeners().add(new Listener<Connection, DataClass>() {
+        server.listeners().add(new Listener<DataClass>() {
             @Override
             public void connected(final Connection connection) {
                 System.err.println("Client connected to server.");
@@ -94,7 +95,7 @@ public class MultipleThreadTest extends BaseTest {
             client.getSerialization().register(String[].class);
             client.getSerialization().register(DataClass.class);
             addEndPoint(client);
-            client.listeners().add(new Listener<Connection, DataClass>() {
+            client.listeners().add(new ListenerRaw<Connection, DataClass>() {
                 AtomicInteger received = new AtomicInteger(1);
 
                 @Override

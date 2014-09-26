@@ -22,7 +22,7 @@ public interface ListenerBridge  {
      * the connection is notified on that event (ie, admin type listeners)
      */
     @SuppressWarnings("rawtypes")
-    public void add(Listener listener);
+    public void add(ListenerRaw listener);
 
     /**
      * Removes a listener from this connection/endpoint to NO LONGER be notified
@@ -37,7 +37,7 @@ public interface ListenerBridge  {
      * the connection is removed
      */
     @SuppressWarnings("rawtypes")
-    public void remove(Listener listener);
+    public void remove(ListenerRaw listener);
 
     /**
      * Removes all registered listeners from this connection/endpoint to NO

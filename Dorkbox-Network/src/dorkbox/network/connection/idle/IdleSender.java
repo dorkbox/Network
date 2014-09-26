@@ -2,10 +2,10 @@
 package dorkbox.network.connection.idle;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerRaw;
 
 
-abstract public class IdleSender<C extends Connection, M> extends Listener<C, M> implements IdleBridge {
+abstract public class IdleSender<C extends Connection, M> extends ListenerRaw<C, M> implements IdleBridge {
     volatile boolean started;
     IdleListener<C, M> idleListener;
 

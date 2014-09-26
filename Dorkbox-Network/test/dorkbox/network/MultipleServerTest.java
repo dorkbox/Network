@@ -2,6 +2,7 @@
 package dorkbox.network;
 
 import static org.junit.Assert.fail;
+import hive.common.Listener;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -9,7 +10,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
@@ -30,13 +30,13 @@ public class MultipleServerTest extends BaseTest {
         addEndPoint(server1);
 
         server1.bind(false);
-        server1.listeners().add(new Listener<Connection, String>() {
+        server1.listeners().add(new Listener<String>() {
             @Override
             public void received (Connection connection, String object) {
                 if (!object.equals("client1")) {
                     fail();
                 }
-                if (received.incrementAndGet() == 2) {
+                if (MultipleServerTest.this.received.incrementAndGet() == 2) {
                     stopEndPoints();
                 }
             }
@@ -52,13 +52,13 @@ public class MultipleServerTest extends BaseTest {
         server2.getSerialization().register(String[].class);
         addEndPoint(server2);
         server2.bind(false);
-        server2.listeners().add(new Listener<Connection, String>() {
+        server2.listeners().add(new Listener<String>() {
             @Override
             public void received (Connection connection, String object) {
                 if (!object.equals("client2")) {
                     fail();
                 }
-                if (received.incrementAndGet() == 2) {
+                if (MultipleServerTest.this.received.incrementAndGet() == 2) {
                     stopEndPoints();
                 }
             }
@@ -71,7 +71,7 @@ public class MultipleServerTest extends BaseTest {
         Client client1 = new Client(connectionOptions1);
         client1.getSerialization().register(String[].class);
         addEndPoint(client1);
-        client1.listeners().add(new Listener<Connection, String>() {
+        client1.listeners().add(new Listener<String>() {
             @Override
             public void connected (Connection connection) {
                 connection.send().TCP("client1");
@@ -85,7 +85,7 @@ public class MultipleServerTest extends BaseTest {
         Client client2 = new Client(connectionOptions2);
         client2.getSerialization().register(String[].class);
         addEndPoint(client2);
-        client2.listeners().add(new Listener<Connection, String>() {
+        client2.listeners().add(new Listener<String>() {
             @Override
             public void connected (Connection connection) {
                 connection.send().TCP("client2");

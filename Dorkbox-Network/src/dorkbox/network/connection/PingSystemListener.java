@@ -1,7 +1,7 @@
 package dorkbox.network.connection;
 
 
-class PingSystemListener extends Listener<ConnectionImpl, PingMessage> {
+class PingSystemListener extends ListenerRaw<ConnectionImpl, PingMessage> {
 
     PingSystemListener(String name) {
     }

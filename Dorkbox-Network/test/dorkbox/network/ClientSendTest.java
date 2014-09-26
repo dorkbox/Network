@@ -3,6 +3,7 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.fail;
+import hive.common.Listener;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -10,7 +11,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
@@ -30,7 +30,7 @@ public class ClientSendTest extends BaseTest {
         server.bind(false);
         register(server.getSerialization());
 
-        server.listeners().add(new Listener<Connection, AMessage>() {
+        server.listeners().add(new Listener<AMessage>() {
             @Override
             public void received (Connection connection, AMessage object) {
                 System.err.println("Server received message from client. Bouncing back.");
@@ -43,7 +43,7 @@ public class ClientSendTest extends BaseTest {
         register(client.getSerialization());
         client.connect(5000);
 
-        client.listeners().add(new Listener<Connection, AMessage>() {
+        client.listeners().add(new Listener<AMessage>() {
             @Override
             public void received (Connection connection, AMessage object) {
                 ClientSendTest.this.checkPassed.set(true);

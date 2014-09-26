@@ -2,6 +2,7 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.fail;
+import hive.common.Listener;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -10,7 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
@@ -21,7 +21,7 @@ public class PingPongLocalTest extends BaseTest {
 
     @Test
     public void pingPongLocal() throws IOException, InitializationException, SecurityException {
-        fail = "Data not received.";
+        this.fail = "Data not received.";
 
         final Data dataLOCAL = new Data();
         populateData(dataLOCAL);
@@ -30,18 +30,18 @@ public class PingPongLocalTest extends BaseTest {
         addEndPoint(server);
         register(server.getSerialization());
         server.bind(false);
-        server.listeners().add(new Listener<Connection, Data>() {
+        server.listeners().add(new Listener<Data>() {
             @Override
             public void error(Connection connection, Throwable throwable) {
-                fail = "Error during processing. " + throwable;
+                PingPongLocalTest.this.fail = "Error during processing. " + throwable;
             }
 
             @Override
             public void received(Connection connection, Data data) {
                 connection.id();
                 if (!data.equals(dataLOCAL)) {
-                    fail = "data is not equal on server.";
-                    throw new RuntimeException("Fail! " + fail);
+                    PingPongLocalTest.this.fail = "data is not equal on server.";
+                    throw new RuntimeException("Fail! " + PingPongLocalTest.this.fail);
                 }
                 connection.send().TCP(data);
             }
@@ -52,33 +52,33 @@ public class PingPongLocalTest extends BaseTest {
         Client client = new Client();
         addEndPoint(client);
         register(client.getSerialization());
-        client.listeners().add(new Listener<Connection, Data>() {
+        client.listeners().add(new Listener<Data>() {
             AtomicInteger check = new AtomicInteger(0);
 
             @Override
             public void connected(Connection connection) {
-                fail = null;
+                PingPongLocalTest.this.fail = null;
                 connection.send().TCP(dataLOCAL);
                 // connection.sendUDP(dataUDP); // TCP and UDP are the same for a local channel.
             }
 
             @Override
             public void error(Connection connection, Throwable throwable) {
-                fail = "Error during processing. " + throwable;
-                System.err.println(fail);
+                PingPongLocalTest.this.fail = "Error during processing. " + throwable;
+                System.err.println(PingPongLocalTest.this.fail);
             }
 
             @Override
             public void received(Connection connection, Data data) {
                 if (!data.equals(dataLOCAL)) {
-                    fail = "data is not equal on client.";
-                    throw new RuntimeException("Fail! " + fail);
+                    PingPongLocalTest.this.fail = "data is not equal on client.";
+                    throw new RuntimeException("Fail! " + PingPongLocalTest.this.fail);
                 }
 
-                if (check.getAndIncrement() <= tries) {
+                if (this.check.getAndIncrement() <= PingPongLocalTest.this.tries) {
                     connection.send().TCP(data);
                 } else {
-                    System.err.println("Ran LOCAL " + tries + " times");
+                    System.err.println("Ran LOCAL " + PingPongLocalTest.this.tries + " times");
                     stopEndPoints();
                 }
             }
@@ -88,8 +88,8 @@ public class PingPongLocalTest extends BaseTest {
 
         waitForThreads();
 
-        if (fail != null) {
-            fail(fail);
+        if (this.fail != null) {
+            fail(this.fail);
         }
     }
 
@@ -187,24 +187,24 @@ public class PingPongLocalTest extends BaseTest {
         public int hashCode() {
             final int prime = 31;
             int result = 1;
-            result = prime * result + Arrays.hashCode(Booleans);
-            result = prime * result + Arrays.hashCode(Bytes);
-            result = prime * result + Arrays.hashCode(Chars);
-            result = prime * result + Arrays.hashCode(Doubles);
-            result = prime * result + Arrays.hashCode(Floats);
-            result = prime * result + Arrays.hashCode(Ints);
-            result = prime * result + Arrays.hashCode(Longs);
-            result = prime * result + Arrays.hashCode(Shorts);
-            result = prime * result + Arrays.hashCode(booleans);
-            result = prime * result + Arrays.hashCode(bytes);
-            result = prime * result + Arrays.hashCode(chars);
-            result = prime * result + Arrays.hashCode(doubles);
-            result = prime * result + Arrays.hashCode(floats);
-            result = prime * result + Arrays.hashCode(ints);
-            result = prime * result + Arrays.hashCode(longs);
-            result = prime * result + Arrays.hashCode(shorts);
-            result = prime * result + (string == null ? 0 : string.hashCode());
-            result = prime * result + Arrays.hashCode(strings);
+            result = prime * result + Arrays.hashCode(this.Booleans);
+            result = prime * result + Arrays.hashCode(this.Bytes);
+            result = prime * result + Arrays.hashCode(this.Chars);
+            result = prime * result + Arrays.hashCode(this.Doubles);
+            result = prime * result + Arrays.hashCode(this.Floats);
+            result = prime * result + Arrays.hashCode(this.Ints);
+            result = prime * result + Arrays.hashCode(this.Longs);
+            result = prime * result + Arrays.hashCode(this.Shorts);
+            result = prime * result + Arrays.hashCode(this.booleans);
+            result = prime * result + Arrays.hashCode(this.bytes);
+            result = prime * result + Arrays.hashCode(this.chars);
+            result = prime * result + Arrays.hashCode(this.doubles);
+            result = prime * result + Arrays.hashCode(this.floats);
+            result = prime * result + Arrays.hashCode(this.ints);
+            result = prime * result + Arrays.hashCode(this.longs);
+            result = prime * result + Arrays.hashCode(this.shorts);
+            result = prime * result + (this.string == null ? 0 : this.string.hashCode());
+            result = prime * result + Arrays.hashCode(this.strings);
             return result;
         }
 
@@ -220,62 +220,62 @@ public class PingPongLocalTest extends BaseTest {
                 return false;
             }
             Data other = (Data) obj;
-            if (!Arrays.equals(Booleans, other.Booleans)) {
+            if (!Arrays.equals(this.Booleans, other.Booleans)) {
                 return false;
             }
-            if (!Arrays.equals(Bytes, other.Bytes)) {
+            if (!Arrays.equals(this.Bytes, other.Bytes)) {
                 return false;
             }
-            if (!Arrays.equals(Chars, other.Chars)) {
+            if (!Arrays.equals(this.Chars, other.Chars)) {
                 return false;
             }
-            if (!Arrays.equals(Doubles, other.Doubles)) {
+            if (!Arrays.equals(this.Doubles, other.Doubles)) {
                 return false;
             }
-            if (!Arrays.equals(Floats, other.Floats)) {
+            if (!Arrays.equals(this.Floats, other.Floats)) {
                 return false;
             }
-            if (!Arrays.equals(Ints, other.Ints)) {
+            if (!Arrays.equals(this.Ints, other.Ints)) {
                 return false;
             }
-            if (!Arrays.equals(Longs, other.Longs)) {
+            if (!Arrays.equals(this.Longs, other.Longs)) {
                 return false;
             }
-            if (!Arrays.equals(Shorts, other.Shorts)) {
+            if (!Arrays.equals(this.Shorts, other.Shorts)) {
                 return false;
             }
-            if (!Arrays.equals(booleans, other.booleans)) {
+            if (!Arrays.equals(this.booleans, other.booleans)) {
                 return false;
             }
-            if (!Arrays.equals(bytes, other.bytes)) {
+            if (!Arrays.equals(this.bytes, other.bytes)) {
                 return false;
             }
-            if (!Arrays.equals(chars, other.chars)) {
+            if (!Arrays.equals(this.chars, other.chars)) {
                 return false;
             }
-            if (!Arrays.equals(doubles, other.doubles)) {
+            if (!Arrays.equals(this.doubles, other.doubles)) {
                 return false;
             }
-            if (!Arrays.equals(floats, other.floats)) {
+            if (!Arrays.equals(this.floats, other.floats)) {
                 return false;
             }
-            if (!Arrays.equals(ints, other.ints)) {
+            if (!Arrays.equals(this.ints, other.ints)) {
                 return false;
             }
-            if (!Arrays.equals(longs, other.longs)) {
+            if (!Arrays.equals(this.longs, other.longs)) {
                 return false;
             }
-            if (!Arrays.equals(shorts, other.shorts)) {
+            if (!Arrays.equals(this.shorts, other.shorts)) {
                 return false;
             }
-            if (string == null) {
+            if (this.string == null) {
                 if (other.string != null) {
                     return false;
                 }
-            } else if (!string.equals(other.string)) {
+            } else if (!this.string.equals(other.string)) {
                 return false;
             }
-            if (!Arrays.equals(strings, other.strings)) {
+            if (!Arrays.equals(this.strings, other.strings)) {
                 return false;
             }
             return true;

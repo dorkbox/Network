@@ -8,13 +8,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
+import dorkbox.network.connection.ConnectionPointWriter;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.registration.MetaChannel;
 
-public class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
+public class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
 
     private final Channel channel;
     private String remoteAddress;
@@ -68,17 +68,17 @@ public class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
     }
 
     @Override
-    public ConnectionPoint tcp() {
+    public ConnectionPointWriter tcp() {
         return this;
     }
 
     @Override
-    public ConnectionPoint udp() {
+    public ConnectionPointWriter udp() {
         return this;
     }
 
     @Override
-    public ConnectionPoint udt() {
+    public ConnectionPointWriter udt() {
         return this;
     }
 

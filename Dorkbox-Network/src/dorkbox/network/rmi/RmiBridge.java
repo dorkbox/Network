@@ -29,7 +29,7 @@ import com.esotericsoftware.kryo.util.IntMap;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerRaw;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.util.primativeCollections.ObjectIntMap;
 
@@ -78,7 +78,7 @@ public class RmiBridge {
     // the name of who created this object space.
     private final org.slf4j.Logger logger;
 
-    private final Listener<Connection, InvokeMethod> invokeListener= new Listener<Connection, InvokeMethod>() {
+    private final ListenerRaw<Connection, InvokeMethod> invokeListener= new ListenerRaw<Connection, InvokeMethod>() {
             @Override
             public void received(final Connection connection, final InvokeMethod invokeMethod) {
                 boolean found = false;

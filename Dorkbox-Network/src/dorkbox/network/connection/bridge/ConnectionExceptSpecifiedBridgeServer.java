@@ -1,4 +1,6 @@
-package dorkbox.network.connection;
+package dorkbox.network.connection.bridge;
+
+import dorkbox.network.connection.Connection;
 
 
 public interface ConnectionExceptSpecifiedBridgeServer {

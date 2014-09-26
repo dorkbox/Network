@@ -3,6 +3,7 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.fail;
+import hive.common.Listener;
 
 import java.io.IOException;
 import java.security.SecureRandom;
@@ -11,7 +12,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
@@ -37,7 +37,7 @@ public class LargeBufferTest extends BaseTest {
         server.bind(false);
         register(server.getSerialization());
 
-        server.listeners().add(new Listener<Connection, LargeMessage>() {
+        server.listeners().add(new Listener<LargeMessage>() {
             AtomicInteger received = new AtomicInteger();
             AtomicInteger receivedBytes = new AtomicInteger();
 
@@ -62,7 +62,7 @@ public class LargeBufferTest extends BaseTest {
         register(client.getSerialization());
         client.connect(5000);
 
-        client.listeners().add(new Listener<Connection, LargeMessage>() {
+        client.listeners().add(new Listener<LargeMessage>() {
             AtomicInteger received = new AtomicInteger();
             AtomicInteger receivedBytes = new AtomicInteger();
 

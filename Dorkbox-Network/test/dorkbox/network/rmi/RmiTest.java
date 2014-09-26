@@ -4,17 +4,17 @@ package dorkbox.network.rmi;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import hive.common.Listener;
 
 import java.io.IOException;
 
 import org.junit.Test;
 
+import dorkbox.network.BaseTest;
 import dorkbox.network.Client;
 import dorkbox.network.ConnectionOptions;
-import dorkbox.network.BaseTest;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
@@ -38,10 +38,10 @@ public class RmiTest extends BaseTest {
         addEndPoint(server);
         server.bind(false);
 
-        server.listeners().add(new Listener<Connection, MessageWithTestObject>() {
+        server.listeners().add(new Listener<MessageWithTestObject>() {
             @Override
             public void received (Connection connection, MessageWithTestObject m) {
-                assertEquals(SERVER_ID, m.testObject.other());
+                assertEquals(SERVER_ID, m.testObject.id());
                 System.err.println("Client Finished!");
 
                 runTest(connection, REMOTE_ID_ON_CLIENT, CLIENT_ID);
@@ -54,7 +54,7 @@ public class RmiTest extends BaseTest {
         register(client.getSerialization());
 
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, MessageWithTestObject>() {
+        client.listeners().add(new Listener<MessageWithTestObject>() {
             @Override
             public void connected (final Connection connection) {
                 RmiTest.runTest(connection, REMOTE_ID_ON_SERVER, SERVER_ID);
@@ -62,7 +62,7 @@ public class RmiTest extends BaseTest {
 
             @Override
             public void received (Connection connection, MessageWithTestObject m) {
-                assertEquals(CLIENT_ID, m.testObject.other());
+                assertEquals(CLIENT_ID, m.testObject.id());
                 System.err.println("Server Finished!");
 
                 stopEndPoints(2000);
@@ -96,7 +96,7 @@ public class RmiTest extends BaseTest {
                 // (return values and exceptions are returned, call is synchronous)
                 test.moo();
                 test.moo("Cow");
-                assertEquals(otherID, test.other());
+                assertEquals(otherID, test.id());
 
                 // Test that RMI correctly waits for the remotely invoked method to exit
                 remoteObject.setResponseTimeout(5000);
@@ -118,7 +118,7 @@ public class RmiTest extends BaseTest {
 
                 remoteObject.setTransmitReturnValue(false);
                 test.moo("Baa");
-                test.other();
+                test.id();
                 caught = false;
                 try {
                     test.throwException();
@@ -131,16 +131,16 @@ public class RmiTest extends BaseTest {
                 remoteObject.setNonBlocking(true);
                 remoteObject.setTransmitReturnValue(false);
                 test.moo("Meow");
-                assertEquals(0, test.other());
+                assertEquals(0, test.id());
 
                 // Non-blocking call that returns the return value
                 remoteObject.setTransmitReturnValue(true);
                 test.moo("Foo");
 
-                assertEquals(0, test.other());
+                assertEquals(0, test.id());
                 assertEquals(otherID, remoteObject.waitForLastResponse());
 
-                assertEquals(0, test.other());
+                assertEquals(0, test.id());
                 byte responseID = remoteObject.getLastResponseID();
                 assertEquals(otherID, remoteObject.waitForResponse(responseID));
 
@@ -184,15 +184,15 @@ public class RmiTest extends BaseTest {
 
         public void moo (String value, long delay);
 
-        public int other ();
+        public int id ();
     }
 
     static public class TestObjectImpl implements TestObject {
         public long value = System.currentTimeMillis();
-        private final int other;
+        private final int id;
 
-        public TestObjectImpl (int other) {
-            this.other = other;
+        public TestObjectImpl (int id) {
+            this.id = id;
         }
 
         @Override
@@ -222,8 +222,8 @@ public class RmiTest extends BaseTest {
         }
 
         @Override
-        public int other () {
-            return other;
+        public int id () {
+            return this.id;
         }
     }
 

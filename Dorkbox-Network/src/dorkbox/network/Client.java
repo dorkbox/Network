@@ -22,8 +22,6 @@ import java.util.List;
 import org.slf4j.Logger;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionBridge;
-import dorkbox.network.connection.ConnectionBridgeFlushAlways;
 import dorkbox.network.connection.EndPointClient;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
@@ -47,8 +45,6 @@ public class Client extends EndPointClient {
     private List<BootstrapWrapper> bootstraps = new LinkedList<BootstrapWrapper>();
 
     private volatile int connectionTimeout = 5000; // default
-
-    private volatile ConnectionBridgeFlushAlways connectionBridgeFlushAlways;
 
     /**
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme
@@ -309,22 +305,6 @@ public class Client extends EndPointClient {
 
             this.registrationInProgress = false;
         }
-    }
-
-
-    /**
-     * Expose methods to send objects to a destination.
-     * <p>
-     * This returns a bridge that will flush after EVERY send! This is because sending data can occur on the client, outside
-     * of the normal eventloop patterns, and it is confusing to the user to have to manually flush the channel each time.
-     */
-    public ConnectionBridge send() {
-        ConnectionBridgeFlushAlways connectionBridgeFlushAlways2 = this.connectionBridgeFlushAlways;
-        if (connectionBridgeFlushAlways2 == null) {
-            this.connectionBridgeFlushAlways = new ConnectionBridgeFlushAlways(this.connectionManager.getConnection0().send());
-        }
-
-        return this.connectionBridgeFlushAlways;
     }
 
     /**

@@ -3,13 +3,13 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.fail;
+import hive.common.Listener;
 
 import java.io.IOException;
 
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
@@ -39,7 +39,7 @@ public class DiscoverHostTest extends BaseTest {
 
         Client client = new Client(connectionOptions);
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, Object>() {
+        client.listeners().add(new Listener<Object>() {
             @Override
             public void connected(Connection connection) {
                 DiscoverHostTest.this.connected = true;

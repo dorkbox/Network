@@ -3,6 +3,7 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.assertEquals;
+import hive.common.Listener;
 
 import java.io.IOException;
 import java.util.Timer;
@@ -12,7 +13,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
@@ -30,9 +30,9 @@ public class ReconnectTest extends BaseTest {
         final Server server = new Server(connectionOptions);
         addEndPoint(server);
         server.bind(false);
-        server.listeners().add(new Listener<Connection, Object>() {
+        server.listeners().add(new Listener<Object>() {
             @Override
-            public void connected (final Connection connection) {
+            public void connected(final Connection connection) {
                 timer.schedule(new TimerTask() {
                     @Override
                     public void run () {
@@ -48,7 +48,7 @@ public class ReconnectTest extends BaseTest {
         final AtomicInteger reconnectCount = new AtomicInteger();
         final Client client = new Client(connectionOptions);
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, Object>() {
+        client.listeners().add(new Listener<Object>() {
             @Override
             public void disconnected (Connection connection) {
                 if (reconnectCount.getAndIncrement() == 2) {

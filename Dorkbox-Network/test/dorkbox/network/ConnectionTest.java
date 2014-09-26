@@ -2,6 +2,8 @@
 package dorkbox.network;
 
 
+import hive.common.Listener;
+
 import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -9,7 +11,6 @@ import java.util.TimerTask;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
@@ -119,12 +120,12 @@ public class ConnectionTest extends BaseTest {
 
         addEndPoint(server);
         server.bind(false);
-        server.listeners().add(new Listener<Connection, Object>() {
+        server.listeners().add(new Listener<Object>() {
             Timer timer = new Timer();
 
             @Override
             public void connected (final Connection connection) {
-                timer.schedule(new TimerTask() {
+                this.timer.schedule(new TimerTask() {
                     @Override
                     public void run () {
                         System.out.println("Disconnecting after 1 second.");
@@ -146,9 +147,9 @@ public class ConnectionTest extends BaseTest {
         }
         addEndPoint(client);
 
-        client.listeners().add(new Listener<Connection, Object>() {
+        client.listeners().add(new Listener<Object>() {
             @Override
-            public void disconnected (Connection connection) {
+            public void disconnected(Connection connection) {
                 stopEndPoints();
             }
         });

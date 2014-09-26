@@ -3,6 +3,7 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.fail;
+import hive.common.Listener;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -13,7 +14,6 @@ import org.junit.Test;
 
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.InputStreamSender;
 import dorkbox.network.util.SerializationManager;
@@ -97,7 +97,7 @@ public class IdleTest extends BaseTest {
         addEndPoint(server);
         server.setIdleTimeout(100);
         server.bind(false);
-        server.listeners().add(new Listener<Connection, Data>() {
+        server.listeners().add(new Listener<Data>() {
 
             @Override
             public void connected (Connection connection) {
@@ -116,7 +116,7 @@ public class IdleTest extends BaseTest {
         Client client = new Client(connectionOptions);
         register(client.getSerialization());
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, Data>() {
+        client.listeners().add(new Listener<Data>() {
             @Override
             public void received(Connection connection, Data object) {
                 if (mainData.equals(object)) {
@@ -144,7 +144,7 @@ public class IdleTest extends BaseTest {
         addEndPoint(server);
         server.setIdleTimeout(100);
         server.bind(false);
-        server.listeners().add(new Listener<Connection, byte[]>() {
+        server.listeners().add(new Listener<byte[]>() {
             @Override
             public void connected (Connection connection) {
                 ByteArrayOutputStream output = new ByteArrayOutputStream(largeDataSize);
@@ -182,7 +182,7 @@ public class IdleTest extends BaseTest {
         Client client = new Client(connectionOptions);
         client.getSerialization().setRegistrationRequired(false);
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, byte[]>() {
+        client.listeners().add(new Listener<byte[]>() {
             int total;
 
             @Override

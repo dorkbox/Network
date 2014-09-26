@@ -3,6 +3,7 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.assertEquals;
+import hive.common.Listener;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -10,7 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
@@ -20,8 +20,8 @@ public class ReuseTest extends BaseTest {
 
     @Test
     public void socketReuse() throws IOException, InitializationException, SecurityException {
-        serverCount = new AtomicInteger(0);
-        clientCount = new AtomicInteger(0);
+        this.serverCount = new AtomicInteger(0);
+        this.clientCount = new AtomicInteger(0);
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
@@ -30,7 +30,7 @@ public class ReuseTest extends BaseTest {
 
         Server server = new Server(connectionOptions);
         addEndPoint(server);
-        server.listeners().add(new Listener<Connection, String>() {
+        server.listeners().add(new Listener<String>() {
             @Override
             public void connected (Connection connection) {
                 connection.send().TCP("-- TCP from server");
@@ -39,7 +39,7 @@ public class ReuseTest extends BaseTest {
 
             @Override
             public void received (Connection connection, String object) {
-                int incrementAndGet = serverCount.incrementAndGet();
+                int incrementAndGet = ReuseTest.this.serverCount.incrementAndGet();
                 System.err.println("<S " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
@@ -48,7 +48,7 @@ public class ReuseTest extends BaseTest {
 
         Client client = new Client(connectionOptions);
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, String>() {
+        client.listeners().add(new Listener<String>() {
             @Override
             public void connected (Connection connection) {
                 connection.send().TCP("-- TCP from client");
@@ -57,7 +57,7 @@ public class ReuseTest extends BaseTest {
 
             @Override
             public void received (Connection connection, String object) {
-                int incrementAndGet = clientCount.incrementAndGet();
+                int incrementAndGet = ReuseTest.this.clientCount.incrementAndGet();
                 System.err.println("<C " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
@@ -68,7 +68,7 @@ public class ReuseTest extends BaseTest {
             client.connect(5000);
 
             int target = i*2;
-            while (serverCount.get() != target || clientCount.get() != target) {
+            while (this.serverCount.get() != target || this.clientCount.get() != target) {
                 System.err.println("Waiting...");
                 try {
                     Thread.sleep(100);
@@ -79,7 +79,7 @@ public class ReuseTest extends BaseTest {
             client.close();
         }
 
-        assertEquals(count * 2 * 2, clientCount.get() + serverCount.get());
+        assertEquals(count * 2 * 2, this.clientCount.get() + this.serverCount.get());
 
         stopEndPoints();
         waitForThreads(10);
@@ -87,12 +87,12 @@ public class ReuseTest extends BaseTest {
 
     @Test
     public void localReuse() throws IOException, InitializationException, SecurityException {
-        serverCount = new AtomicInteger(0);
-        clientCount = new AtomicInteger(0);
+        this.serverCount = new AtomicInteger(0);
+        this.clientCount = new AtomicInteger(0);
 
         Server server = new Server();
         addEndPoint(server);
-        server.listeners().add(new Listener<Connection, String>() {
+        server.listeners().add(new Listener<String>() {
             @Override
             public void connected (Connection connection) {
                 connection.send().TCP("-- LOCAL from server");
@@ -100,7 +100,7 @@ public class ReuseTest extends BaseTest {
 
             @Override
             public void received (Connection connection, String object) {
-                int incrementAndGet = serverCount.incrementAndGet();
+                int incrementAndGet = ReuseTest.this.serverCount.incrementAndGet();
                 System.err.println("<S " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
@@ -109,7 +109,7 @@ public class ReuseTest extends BaseTest {
 
         Client client = new Client();
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, String>() {
+        client.listeners().add(new Listener<String>() {
             @Override
             public void connected (Connection connection) {
                 connection.send().TCP("-- LOCAL from client");
@@ -117,7 +117,7 @@ public class ReuseTest extends BaseTest {
 
             @Override
             public void received (Connection connection, String object) {
-                int incrementAndGet = clientCount.incrementAndGet();
+                int incrementAndGet = ReuseTest.this.clientCount.incrementAndGet();
                 System.err.println("<C " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
@@ -128,7 +128,7 @@ public class ReuseTest extends BaseTest {
             client.connect(5000);
 
             int target = i;
-            while (serverCount.get() != target || clientCount.get() != target) {
+            while (this.serverCount.get() != target || this.clientCount.get() != target) {
                 System.err.println("Waiting...");
                 try {
                     Thread.sleep(100);
@@ -139,7 +139,7 @@ public class ReuseTest extends BaseTest {
             client.close();
         }
 
-        assertEquals(count * 2, clientCount.get() + serverCount.get());
+        assertEquals(count * 2, this.clientCount.get() + this.serverCount.get());
 
         stopEndPoints();
         waitForThreads(10);

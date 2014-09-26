@@ -83,7 +83,7 @@ public class RegistrationWrapper implements UdpServer {
     }
 
     public void releaseChannelMap() {
-        // try to unlocal access
+        // try to unlock access
         this.channelMapLock.unlock();
     }
 

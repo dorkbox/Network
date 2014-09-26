@@ -3,6 +3,7 @@ package dorkbox.network.connection;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
+import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
 

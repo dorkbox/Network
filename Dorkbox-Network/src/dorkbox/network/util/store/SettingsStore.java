@@ -14,6 +14,7 @@ import dorkbox.util.storage.Storage;
  * <p>
  * A static "create" method, with any number of parameters, is required to create this class (which is done via reflection)
  */
+@SuppressWarnings("deprecation")
 public abstract class SettingsStore {
 
     /**

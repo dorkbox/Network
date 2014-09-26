@@ -12,7 +12,7 @@ import dorkbox.network.ConnectionOptions;
 import dorkbox.network.BaseTest;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerRaw;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
@@ -52,7 +52,7 @@ public class RmiSendObjectTest extends BaseTest {
         serverRMI.register(42, serverTestObject);
         serverRMI.register(777, serverTestObject.getOtherObject());
 
-        server.listeners().add(new Listener<Connection, OtherObjectImpl>() {
+        server.listeners().add(new ListenerRaw<Connection, OtherObjectImpl>() {
             @Override
             public void connected(final Connection connection) {
                 // Allow the connection to access objects in the ObjectSpace.
@@ -74,7 +74,7 @@ public class RmiSendObjectTest extends BaseTest {
         register(client.getSerialization());
 
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, Object>() {
+        client.listeners().add(new ListenerRaw<Connection, Object>() {
             @Override
             public void connected(final Connection connection) {
                 new Thread(new Runnable() {

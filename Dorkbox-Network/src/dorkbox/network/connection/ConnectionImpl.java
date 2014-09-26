@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.slf4j.Logger;
 
+import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleObjectSender;
 import dorkbox.network.connection.idle.IdleSender;
@@ -245,7 +246,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             if (logger2.isTraceEnabled()) {
                 logger2.trace("Sending TCP {}", message);
             }
-            ConnectionPoint tcp = this.channelWrapper.tcp();
+            ConnectionPointWriter tcp = this.channelWrapper.tcp();
             tcp.write(message);
             return tcp;
         } else {
@@ -268,7 +269,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             if (logger2.isTraceEnabled()) {
                 logger2.trace("Sending UDP {}", message);
             }
-            ConnectionPoint udp = this.channelWrapper.udp();
+            ConnectionPointWriter udp = this.channelWrapper.udp();
             udp.write(message);
             return udp;
         } else {
@@ -290,7 +291,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             if (logger2.isTraceEnabled()) {
                 logger2.trace("Sending UDT {}", message);
             }
-            ConnectionPoint udt = this.channelWrapper.udt();
+            ConnectionPointWriter udt = this.channelWrapper.udt();
             udt.write(message);
             return udt;
         } else {
@@ -513,7 +514,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      */
     @SuppressWarnings("rawtypes")
     @Override
-    public final void add(Listener listener) {
+    public final void add(ListenerRaw listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -550,7 +551,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      */
     @SuppressWarnings("rawtypes")
     @Override
-    public final void remove(Listener listener) {
+    public final void remove(ListenerRaw listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --

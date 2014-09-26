@@ -60,7 +60,7 @@ public class ChunkedDataTest extends BaseTest {
         addEndPoint(server);
         server.setIdleTimeout(100);
         server.bind(false);
-        server.listeners().add(new Listener<Connection, Data>() {
+        server.listeners().add(new Listener<Data>() {
 
             @Override
             public void connected (Connection connection) {
@@ -82,7 +82,7 @@ public class ChunkedDataTest extends BaseTest {
         Client client = new Client(connectionOptions);
         register(client.getSerialization());
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, Data>() {
+        client.listeners().add(new Listener<Data>() {
             @Override
             public void received(Connection connection, Data object) {
                 if (mainData.equals(object)) {

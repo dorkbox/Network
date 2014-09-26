@@ -1,4 +1,7 @@
-package dorkbox.network.connection;
+package dorkbox.network.connection.bridge;
+
+import dorkbox.network.connection.ConnectionPoint;
+import dorkbox.network.connection.Ping;
 
 
 public class ConnectionBridgeFlushAlways implements ConnectionBridge {

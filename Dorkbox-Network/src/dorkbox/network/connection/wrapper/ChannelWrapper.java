@@ -5,15 +5,15 @@ import io.netty.channel.EventLoop;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
+import dorkbox.network.connection.ConnectionPointWriter;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.ISessionManager;
 
 public interface ChannelWrapper {
 
-    public ConnectionPoint tcp();
-    public ConnectionPoint udp();
-    public ConnectionPoint udt();
+    public ConnectionPointWriter tcp();
+    public ConnectionPointWriter udp();
+    public ConnectionPointWriter udt();
 
     /**
      * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.

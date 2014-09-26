@@ -3,6 +3,7 @@ package dorkbox.network;
 
 
 import static org.junit.Assert.fail;
+import hive.common.Listener;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -13,7 +14,6 @@ import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
@@ -34,7 +34,7 @@ public class UnregisteredClassTest extends BaseTest {
         connectionOptions.udpPort = udpPort;
         connectionOptions.host = host;
 
-        System.err.println("Running test " + tries + " times, please wait for it to finish.");
+        System.err.println("Running test " + this.tries + " times, please wait for it to finish.");
 
         final Data dataTCP = new Data();
         populateData(dataTCP, true);
@@ -45,28 +45,28 @@ public class UnregisteredClassTest extends BaseTest {
         server.getSerialization().setRegistrationRequired(false);
         addEndPoint(server);
         server.bind(false);
-        server.listeners().add(new Listener<Connection, Data>() {
+        server.listeners().add(new Listener<Data>() {
             @Override
             public void error(Connection connection, Throwable throwable) {
-                fail = "Error during processing. " + throwable;
+                UnregisteredClassTest.this.fail = "Error during processing. " + throwable;
             }
 
             @Override
             public void received (Connection connection, Data data) {
                 if (data.isTCP) {
                     if (!data.equals(dataTCP)) {
-                        fail = "TCP data is not equal on server.";
-                        throw new RuntimeException("Fail! " + fail);
+                        UnregisteredClassTest.this.fail = "TCP data is not equal on server.";
+                        throw new RuntimeException("Fail! " + UnregisteredClassTest.this.fail);
                     }
                     connection.send().TCP(data);
-                    receivedTCP.incrementAndGet();
+                    UnregisteredClassTest.this.receivedTCP.incrementAndGet();
                 } else {
                     if (!data.equals(dataUDP)) {
-                        fail = "UDP data is not equal on server.";
-                        throw new RuntimeException("Fail! " + fail);
+                        UnregisteredClassTest.this.fail = "UDP data is not equal on server.";
+                        throw new RuntimeException("Fail! " + UnregisteredClassTest.this.fail);
                     }
                     connection.send().UDP(data);
-                    receivedUDP.incrementAndGet();
+                    UnregisteredClassTest.this.receivedUDP.incrementAndGet();
                 }
             }
         });
@@ -76,7 +76,7 @@ public class UnregisteredClassTest extends BaseTest {
         Client client = new Client(connectionOptions);
         client.getSerialization().setRegistrationRequired(false);
         addEndPoint(client);
-        client.listeners().add(new Listener<Connection, Data>() {
+        client.listeners().add(new Listener<Data>() {
             AtomicInteger checkTCP = new AtomicInteger(0);
             AtomicInteger checkUDP = new AtomicInteger(0);
             AtomicBoolean doneTCP = new AtomicBoolean(false);
@@ -84,47 +84,47 @@ public class UnregisteredClassTest extends BaseTest {
 
             @Override
             public void connected (Connection connection) {
-                fail = null;
+                UnregisteredClassTest.this.fail = null;
                 connection.send().TCP(dataTCP);
                 connection.send().UDP(dataUDP); // UDP ping pong stops if a UDP packet is lost.
             }
 
             @Override
             public void error(Connection connection, Throwable throwable) {
-                fail = "Error during processing. " + throwable;
-                System.err.println(fail);
+                UnregisteredClassTest.this.fail = "Error during processing. " + throwable;
+                System.err.println(UnregisteredClassTest.this.fail);
             }
 
             @Override
             public void received (Connection connection, Data data) {
                 if (data.isTCP) {
                     if (!data.equals(dataTCP)) {
-                        fail = "TCP data is not equal on client.";
-                        throw new RuntimeException("Fail! " + fail);
+                        UnregisteredClassTest.this.fail = "TCP data is not equal on client.";
+                        throw new RuntimeException("Fail! " + UnregisteredClassTest.this.fail);
                     }
-                    if (checkTCP.getAndIncrement() <= tries) {
+                    if (this.checkTCP.getAndIncrement() <= UnregisteredClassTest.this.tries) {
                         connection.send().TCP(data);
-                        receivedTCP.incrementAndGet();
+                        UnregisteredClassTest.this.receivedTCP.incrementAndGet();
                     } else {
                         System.err.println("TCP done.");
-                        doneTCP.set(true);
+                        this.doneTCP.set(true);
                     }
                 } else {
                     if (!data.equals(dataUDP)) {
-                        fail = "UDP data is not equal on client.";
-                        throw new RuntimeException("Fail! " + fail);
+                        UnregisteredClassTest.this.fail = "UDP data is not equal on client.";
+                        throw new RuntimeException("Fail! " + UnregisteredClassTest.this.fail);
                     }
-                    if (checkUDP.getAndIncrement() <= tries) {
+                    if (this.checkUDP.getAndIncrement() <= UnregisteredClassTest.this.tries) {
                         connection.send().UDP(data);
-                        receivedUDP.incrementAndGet();
+                        UnregisteredClassTest.this.receivedUDP.incrementAndGet();
                     } else {
                         System.err.println("UDP done.");
-                        doneUDP.set(true);
+                        this.doneUDP.set(true);
                     }
                 }
 
-                if (doneTCP.get() && doneUDP.get()) {
-                    System.err.println("Ran TCP & UDP " + tries + " times each");
+                if (this.doneTCP.get() && this.doneUDP.get()) {
+                    System.err.println("Ran TCP & UDP " + UnregisteredClassTest.this.tries + " times each");
                     stopEndPoints();
                 }
             }
@@ -133,14 +133,14 @@ public class UnregisteredClassTest extends BaseTest {
         client.connect(5000);
         waitForThreads();
 
-        if (fail != null) {
-            fail(fail);
+        if (this.fail != null) {
+            fail(this.fail);
         }
 
         EndPoint.udpMaxSize = origSize;
     }
 
-    private void populateData (Data data, boolean isTCP) {
+    private void populateData(Data data, boolean isTCP) {
         data.isTCP = isTCP;
 
         StringBuilder buffer = new StringBuilder();
@@ -196,25 +196,25 @@ public class UnregisteredClassTest extends BaseTest {
         public int hashCode () {
             final int prime = 31;
             int result = 1;
-            result = prime * result + Arrays.hashCode(Booleans);
-            result = prime * result + Arrays.hashCode(Bytes);
-            result = prime * result + Arrays.hashCode(Chars);
-            result = prime * result + Arrays.hashCode(Doubles);
-            result = prime * result + Arrays.hashCode(Floats);
-            result = prime * result + Arrays.hashCode(Ints);
-            result = prime * result + Arrays.hashCode(Longs);
-            result = prime * result + Arrays.hashCode(Shorts);
-            result = prime * result + Arrays.hashCode(booleans);
-            result = prime * result + Arrays.hashCode(bytes);
-            result = prime * result + Arrays.hashCode(chars);
-            result = prime * result + Arrays.hashCode(doubles);
-            result = prime * result + Arrays.hashCode(floats);
-            result = prime * result + Arrays.hashCode(ints);
-            result = prime * result + (isTCP ? 1231 : 1237);
-            result = prime * result + Arrays.hashCode(longs);
-            result = prime * result + Arrays.hashCode(shorts);
-            result = prime * result + (string == null ? 0 : string.hashCode());
-            result = prime * result + Arrays.hashCode(strings);
+            result = prime * result + Arrays.hashCode(this.Booleans);
+            result = prime * result + Arrays.hashCode(this.Bytes);
+            result = prime * result + Arrays.hashCode(this.Chars);
+            result = prime * result + Arrays.hashCode(this.Doubles);
+            result = prime * result + Arrays.hashCode(this.Floats);
+            result = prime * result + Arrays.hashCode(this.Ints);
+            result = prime * result + Arrays.hashCode(this.Longs);
+            result = prime * result + Arrays.hashCode(this.Shorts);
+            result = prime * result + Arrays.hashCode(this.booleans);
+            result = prime * result + Arrays.hashCode(this.bytes);
+            result = prime * result + Arrays.hashCode(this.chars);
+            result = prime * result + Arrays.hashCode(this.doubles);
+            result = prime * result + Arrays.hashCode(this.floats);
+            result = prime * result + Arrays.hashCode(this.ints);
+            result = prime * result + (this.isTCP ? 1231 : 1237);
+            result = prime * result + Arrays.hashCode(this.longs);
+            result = prime * result + Arrays.hashCode(this.shorts);
+            result = prime * result + (this.string == null ? 0 : this.string.hashCode());
+            result = prime * result + Arrays.hashCode(this.strings);
             return result;
         }
 
@@ -230,65 +230,65 @@ public class UnregisteredClassTest extends BaseTest {
                 return false;
             }
             Data other = (Data)obj;
-            if (!Arrays.equals(Booleans, other.Booleans)) {
+            if (!Arrays.equals(this.Booleans, other.Booleans)) {
                 return false;
             }
-            if (!Arrays.equals(Bytes, other.Bytes)) {
+            if (!Arrays.equals(this.Bytes, other.Bytes)) {
                 return false;
             }
-            if (!Arrays.equals(Chars, other.Chars)) {
+            if (!Arrays.equals(this.Chars, other.Chars)) {
                 return false;
             }
-            if (!Arrays.equals(Doubles, other.Doubles)) {
+            if (!Arrays.equals(this.Doubles, other.Doubles)) {
                 return false;
             }
-            if (!Arrays.equals(Floats, other.Floats)) {
+            if (!Arrays.equals(this.Floats, other.Floats)) {
                 return false;
             }
-            if (!Arrays.equals(Ints, other.Ints)) {
+            if (!Arrays.equals(this.Ints, other.Ints)) {
                 return false;
             }
-            if (!Arrays.equals(Longs, other.Longs)) {
+            if (!Arrays.equals(this.Longs, other.Longs)) {
                 return false;
             }
-            if (!Arrays.equals(Shorts, other.Shorts)) {
+            if (!Arrays.equals(this.Shorts, other.Shorts)) {
                 return false;
             }
-            if (!Arrays.equals(booleans, other.booleans)) {
+            if (!Arrays.equals(this.booleans, other.booleans)) {
                 return false;
             }
-            if (!Arrays.equals(bytes, other.bytes)) {
+            if (!Arrays.equals(this.bytes, other.bytes)) {
                 return false;
             }
-            if (!Arrays.equals(chars, other.chars)) {
+            if (!Arrays.equals(this.chars, other.chars)) {
                 return false;
             }
-            if (!Arrays.equals(doubles, other.doubles)) {
+            if (!Arrays.equals(this.doubles, other.doubles)) {
                 return false;
             }
-            if (!Arrays.equals(floats, other.floats)) {
+            if (!Arrays.equals(this.floats, other.floats)) {
                 return false;
             }
-            if (!Arrays.equals(ints, other.ints)) {
+            if (!Arrays.equals(this.ints, other.ints)) {
                 return false;
             }
-            if (isTCP != other.isTCP) {
+            if (this.isTCP != other.isTCP) {
                 return false;
             }
-            if (!Arrays.equals(longs, other.longs)) {
+            if (!Arrays.equals(this.longs, other.longs)) {
                 return false;
             }
-            if (!Arrays.equals(shorts, other.shorts)) {
+            if (!Arrays.equals(this.shorts, other.shorts)) {
                 return false;
             }
-            if (string == null) {
+            if (this.string == null) {
                 if (other.string != null) {
                     return false;
                 }
-            } else if (!string.equals(other.string)) {
+            } else if (!this.string.equals(other.string)) {
                 return false;
             }
-            if (!Arrays.equals(strings, other.strings)) {
+            if (!Arrays.equals(this.strings, other.strings)) {
                 return false;
             }
             return true;

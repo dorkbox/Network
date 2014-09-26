@@ -21,7 +21,7 @@ import dorkbox.util.ClassHelper;
 public class ConnectionManager implements ListenerBridge, ISessionManager {
 
     // these are final, because the REFERENCE to these will never change. They ARE NOT immutable objects (meaning their content can change)
-    private final ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> listeners;
+    private final ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> listeners;
     private final ConcurrentHashMapFactory<Connection, ConnectionManager> localManagers;
     private final CopyOnWriteArrayList<Connection> connections = new CopyOnWriteArrayList<Connection>();
 
@@ -37,12 +37,12 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
 
         this.baseClass = baseClass;
 
-        this.listeners = new ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>() {
+        this.listeners = new ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>() {
             private static final long serialVersionUID = 1L;
 
             @Override
-            public CopyOnWriteArrayList<Listener<Connection, Object>> createNewOject(Object... args) {
-                return new CopyOnWriteArrayList<Listener<Connection, Object>>();
+            public CopyOnWriteArrayList<ListenerRaw<Connection, Object>> createNewOject(Object... args) {
+                return new CopyOnWriteArrayList<ListenerRaw<Connection, Object>>();
             }
         };
 
@@ -72,14 +72,14 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @SuppressWarnings("rawtypes")
     @Override
-    public final void add(Listener listener) {
+    public final void add(ListenerRaw listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
 
         // find the class that uses Listener.class.
         Class<?> clazz = listener.getClass();
-        while (clazz.getSuperclass() != Listener.class) {
+        while (clazz.getSuperclass() != ListenerRaw.class) {
             clazz = clazz.getSuperclass();
         }
 
@@ -101,17 +101,17 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         }
 
         // didn't successfully add the listener.
-        throw new RuntimeException("Unable to add incompatible connection types as a listener!");
+        throw new IllegalArgumentException("Unable to add incompatible connection type as a listener! : " + this.baseClass);
     }
 
     /**
      * INTERNAL USE ONLY
      */
     @SuppressWarnings({"unchecked","rawtypes"})
-    private final void addListener0(Listener listener) {
+    private final void addListener0(ListenerRaw listener) {
         Class<?> type = listener.getObjectType();
 
-        CopyOnWriteArrayList<Listener<Connection, Object>> list = this.listeners.getOrCreate(type);
+        CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list = this.listeners.getOrCreate(type);
         list.addIfAbsent(listener);
 
         Logger logger2 = this.logger;
@@ -134,14 +134,14 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @SuppressWarnings("rawtypes")
     @Override
-    public final void remove(Listener listener) {
+    public final void remove(ListenerRaw listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
 
         Class<?> type = listener.getObjectType();
 
-        CopyOnWriteArrayList<Listener<Connection, Object>> list = this.listeners.get(type);
+        CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list = this.listeners.get(type);
         if (list != null) {
             list.remove(listener);
         }
@@ -196,18 +196,18 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public final void notifyOnMessage(Connection connection, Object message) {
-        notifyOnMessage(connection, message, false);
+        notifyOnMessage0(connection, message, false);
     }
 
-    private final void notifyOnMessage(Connection connection, Object message, boolean foundListener) {
+    private final boolean notifyOnMessage0(Connection connection, Object message, boolean foundListener) {
         Class<?> objectType = message.getClass();
 
         // this is the GLOBAL version (unless it's the call from below, then it's the connection scoped version)
-        CopyOnWriteArrayList<Listener<Connection, Object>> list = this.listeners.get(objectType);
+        CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list = this.listeners.get(objectType);
         if (list != null) {
-            for (Listener<Connection, Object> listener : list) {
+            for (ListenerRaw<Connection, Object> listener : list) {
                 if (this.shutdown) {
-                    return;
+                    return true;
                 }
 
                 listener.received(connection, message);
@@ -239,26 +239,17 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
             }
 
             if (list != null) {
-                for (Listener<Connection, Object> listener : list) {
+                for (ListenerRaw<Connection, Object> listener : list) {
                     if (this.shutdown) {
-                        return;
+                        return true;
                     }
 
                     listener.received(connection, message);
                     foundListener = true;
                 }
-            } else if (!foundListener) {
-                Logger logger2 = this.logger;
-                if (logger2.isDebugEnabled()) {
-                    this.logger.debug("----------- LISTENER NOT REGISTERED FOR TYPE: {}", message.getClass().getSimpleName());
-                }
             }
         }
 
-        // only run a flush once
-        if (foundListener) {
-            connection.send().flush();
-        }
 
         // now have to account for additional connection listener managers (non-global).
         ConnectionManager localManager = this.localManagers.get(connection);
@@ -266,8 +257,19 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
             // if we found a listener during THIS method call, we need to let the NEXT method call know,
             // so it doesn't spit out error for not handling a message (since that message MIGHT have
             // been found in this method).
-            localManager.notifyOnMessage(connection, message, foundListener);
+            foundListener |= localManager.notifyOnMessage0(connection, message, foundListener);
         }
+
+        // only run a flush once
+        if (foundListener) {
+            connection.send().flush();
+        } else {
+            Logger logger2 = this.logger;
+            if (logger2.isDebugEnabled()) {
+                this.logger.debug("----------- LISTENER NOT REGISTERED FOR TYPE: {}", message.getClass().getSimpleName());
+            }
+        }
+        return foundListener;
     }
 
     /**
@@ -277,12 +279,12 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public final void notifyOnIdle(Connection connection) {
-        Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = this.listeners.entrySet();
-        CopyOnWriteArrayList<Listener<Connection,Object>> list;
-        for (Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> entry : entrySet) {
+        Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>> entrySet = this.listeners.entrySet();
+        CopyOnWriteArrayList<ListenerRaw<Connection,Object>> list;
+        for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> entry : entrySet) {
             list = entry.getValue();
             if (list != null) {
-                for (Listener<Connection,Object> listener : list) {
+                for (ListenerRaw<Connection,Object> listener : list) {
                     if (this.shutdown) {
                         return;
                     }
@@ -311,12 +313,12 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         this.connections.add(connection);
 
         try {
-            Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = this.listeners.entrySet();
-            CopyOnWriteArrayList<Listener<Connection,Object>> list;
-            for (Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> entry : entrySet) {
+            Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>> entrySet = this.listeners.entrySet();
+            CopyOnWriteArrayList<ListenerRaw<Connection,Object>> list;
+            for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> entry : entrySet) {
                 list = entry.getValue();
                 if (list != null) {
-                    for (Listener<Connection,Object> listener : list) {
+                    for (ListenerRaw<Connection,Object> listener : list) {
                         if (this.shutdown) {
                             return;
                         }
@@ -343,12 +345,12 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public void connectionDisconnected(Connection connection) {
-        Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = this.listeners.entrySet();
-        CopyOnWriteArrayList<Listener<Connection,Object>> list;
-        for (Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> entry : entrySet) {
+        Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>> entrySet = this.listeners.entrySet();
+        CopyOnWriteArrayList<ListenerRaw<Connection,Object>> list;
+        for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> entry : entrySet) {
             list = entry.getValue();
             if (list != null) {
-                for (Listener<Connection, Object> listener : list) {
+                for (ListenerRaw<Connection, Object> listener : list) {
                     if (this.shutdown) {
                         return;
                     }
@@ -378,12 +380,12 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public void connectionError(Connection connection, Throwable throwable) {
-        Set<Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>>> entrySet = this.listeners.entrySet();
-        CopyOnWriteArrayList<Listener<Connection,Object>> list;
-        for (Entry<Type, CopyOnWriteArrayList<Listener<Connection, Object>>> entry : entrySet) {
+        Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>> entrySet = this.listeners.entrySet();
+        CopyOnWriteArrayList<ListenerRaw<Connection,Object>> list;
+        for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> entry : entrySet) {
             list = entry.getValue();
             if (list != null) {
-                for (Listener<Connection, Object> listener : list) {
+                for (ListenerRaw<Connection, Object> listener : list) {
                     if (this.shutdown) {
                         return;
                     }

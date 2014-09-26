@@ -14,6 +14,7 @@ import org.bouncycastle.crypto.params.IESWithCipherParameters;
 import com.esotericsoftware.kryo.factories.SerializerFactory;
 
 import dorkbox.network.ConnectionOptions;
+import dorkbox.network.connection.bridge.ConnectionBridgeBase;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
@@ -33,7 +34,7 @@ import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
 import dorkbox.util.crypto.serialization.IesParametersSerializer;
 import dorkbox.util.crypto.serialization.IesWithCipherParametersSerializer;
 
-public class EndPointWithSerialization extends EndPoint {
+public abstract class EndPointWithSerialization extends EndPoint {
 
     protected final ConnectionManager connectionManager;
 
@@ -218,6 +219,12 @@ public class EndPointWithSerialization extends EndPoint {
     public <C extends Connection> Collection<C> getConnectionsAs() {
         return (Collection<C>) this.connectionManager.getConnections();
     }
+
+    /**
+     * Expose methods to send objects to a destination.
+     */
+    public abstract ConnectionBridgeBase send();
+
 
     /**
      * Closes all connections ONLY (keeps the server/client running)

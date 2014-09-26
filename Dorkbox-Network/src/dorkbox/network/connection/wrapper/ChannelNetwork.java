@@ -5,9 +5,9 @@ import io.netty.channel.ChannelFuture;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import dorkbox.network.connection.ConnectionPoint;
+import dorkbox.network.connection.ConnectionPointWriter;
 
-public class ChannelNetwork implements ConnectionPoint {
+public class ChannelNetwork implements ConnectionPointWriter {
 
     private volatile ChannelFuture lastWriteFuture;
     private final Channel channel;

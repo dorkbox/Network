@@ -1,8 +1,10 @@
-package dorkbox.network.connection;
+package dorkbox.network.connection.bridge;
+
+import dorkbox.network.connection.ConnectionPoint;
 
 
 
-public interface ConnectionBridge {
+public interface ConnectionBridgeBase {
     /**
      * Sends the message to other listeners INSIDE this endpoint. It does not
      * send it to a remote address.
@@ -26,16 +28,4 @@ public interface ConnectionBridge {
      * local channel).
      */
     public ConnectionPoint UDT(Object message);
-
-    /**
-     * Sends a "ping" packet, trying UDP, then UDT, then TCP (in that order) to measure <b>ROUND TRIP</b> time to the remote connection.
-     *
-     * @return Ping can have a listener attached, which will get called when the ping returns.
-     */
-    public Ping ping();
-
-    /**
-     * Flushes the contents of the TCP/UDP/UDT/etc pipes to the actual transport.
-     */
-    public void flush();
 }

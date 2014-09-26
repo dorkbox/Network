@@ -5,7 +5,7 @@ import dorkbox.network.connection.Connection;
 
 
 /** Provides access to various settings on a remote object.
- * @see RmiBridge#getRemoteObject(dorkbox.networking.connection.interfaces.IConnection.Connection, int, Class...)
+ * @see RmiBridge#getRemoteObject(dorkbox.Connection.connection.interfaces.IConnection.Connection, int, Class...)
  * @author Nathan Sweet <misc@n4te.com> */
 public interface RemoteObject {
     /** Sets the milliseconds to wait for a method to return value. Default is 3000. */
@@ -38,7 +38,7 @@ public interface RemoteObject {
 
     /** Waits for the response to the last method invocation to be received or the response timeout to be reached. Must not be
      * called from the connection's update thread.
-     * @see RmiBridge#getRemoteObject(dorkbox.networking.connection.interfaces.IConnection.Connection, int, Class...) */
+     * @see RmiBridge#getRemoteObject(dorkbox.Connection.connection.interfaces.IConnection.Connection, int, Class...) */
     public Object waitForLastResponse ();
 
     /** Gets the ID of response for the last method invocation. */
@@ -48,7 +48,7 @@ public interface RemoteObject {
      * from the connection's update thread. Response IDs use a six bit identifier, with one identifier reserved for "no response".
      * This means that this method should be called to get the result for a non-blocking call before an additional 63 non-blocking
      * calls are made, or risk undefined behavior due to identical IDs.
-     * @see RmiBridge#getRemoteObject(dorkbox.networking.connection.interfaces.IConnection.Connection, int, Class...) */
+     * @see RmiBridge#getRemoteObject(dorkbox.Connection.connection.interfaces.IConnection.Connection, int, Class...) */
     public Object waitForResponse (byte responseID);
 
     /** Causes this RemoteObject to stop listening to the connection for method invocation response messages. */

@@ -10,52 +10,52 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerRaw;
 
 /** Handles network communication when methods are invoked on a proxy. */
 class RemoteInvocationHandler implements InvocationHandler {
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(RemoteInvocationHandler.class);
-	private final Connection connection;
+    private final Connection connection;
 
-	final int objectID;
-	private int timeoutMillis = 3000;
+    final int objectID;
+    private int timeoutMillis = 3000;
 
-	private boolean nonBlocking = false;
+    private boolean nonBlocking = false;
     private boolean transmitReturnValue = true;
     private boolean transmitExceptions = true;
 
-	private Byte lastResponseID;
-	private byte nextResponseNum = 1;
+    private Byte lastResponseID;
+    private byte nextResponseNum = 1;
 
-    private Listener<Connection, InvokeMethodResult> responseListener;
+    private ListenerRaw<Connection, InvokeMethodResult> responseListener;
 
-	final ReentrantLock lock = new ReentrantLock();
+    final ReentrantLock lock = new ReentrantLock();
     final Condition responseCondition = lock.newCondition();
 
     final ConcurrentHashMap<Byte, InvokeMethodResult> responseTable = new ConcurrentHashMap<Byte, InvokeMethodResult>();
 
 
     public RemoteInvocationHandler(Connection connection, final int objectID) {
-		super();
-		this.connection = connection;
-		this.objectID = objectID;
+        super();
+        this.connection = connection;
+        this.objectID = objectID;
 
-		responseListener = new Listener<Connection, InvokeMethodResult>() {
+        responseListener = new ListenerRaw<Connection, InvokeMethodResult>() {
             @Override
             public void received (Connection connection, InvokeMethodResult invokeMethodResult) {
-				byte responseID = invokeMethodResult.responseID;
+                byte responseID = invokeMethodResult.responseID;
 
                 if (invokeMethodResult.objectID != objectID) {
 //				    System.err.println("FAILED: " + responseID);
 //				    logger.trace("{} FAILED to received data: {}  with id ({})", connection, invokeMethodResult.result, invokeMethodResult.responseID);
-				    return;
-				}
+                    return;
+                }
 
 //				System.err.println("Recieved: " + responseID);
 
 //				logger.trace("{} received data: {}  with id ({})", connection, invokeMethodResult.result, invokeMethodResult.responseID);
 
-			    responseTable.put(responseID, invokeMethodResult);
+                responseTable.put(responseID, invokeMethodResult);
 
 //			    System.err.println("L");
                 lock.lock();
@@ -65,18 +65,18 @@ class RemoteInvocationHandler implements InvocationHandler {
                     lock.unlock();
 //                    System.err.println("U");
                 }
-			}
+            }
 
-			@Override
+            @Override
             public void disconnected(Connection connection) {
-				close();
-			}
-		};
+                close();
+            }
+        };
 
-		connection.listeners().add(responseListener);
-	}
+        connection.listeners().add(responseListener);
+    }
 
-	@Override
+    @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
@@ -123,7 +123,7 @@ class RemoteInvocationHandler implements InvocationHandler {
 
 
     @Override
-	public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
+    public Object invoke(Object proxy, Method method, Object[] args) throws Exception {
         if (method.getDeclaringClass() == RemoteObject.class) {
             String name = method.getName();
             if (name.equals("close")) {
@@ -261,9 +261,9 @@ class RemoteInvocationHandler implements InvocationHandler {
         }
     }
 
-	private Object waitForResponse(byte responseID) {
+    private Object waitForResponse(byte responseID) {
 
-	    long endTime = System.currentTimeMillis() + timeoutMillis;
+        long endTime = System.currentTimeMillis() + timeoutMillis;
         long remaining = timeoutMillis;
 
         while (remaining > 0) {
@@ -297,6 +297,6 @@ class RemoteInvocationHandler implements InvocationHandler {
 
 
     void close() {
-		connection.listeners().remove(responseListener);
-	}
+        connection.listeners().remove(responseListener);
+    }
 }
