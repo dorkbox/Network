@@ -347,9 +347,11 @@ public class RmiBridge {
      * the object cast to the specified interface type. The returned object
      * still implements {@link RemoteObject}.
      */
-    @SuppressWarnings({"unchecked"})
+
     static public <T, C extends Connection> T getRemoteObject(final C connection, int objectID, Class<T> iface) {
-        return (T) getRemoteObject(connection, objectID, new Class<?>[] {iface});
+        @SuppressWarnings({"unchecked"})
+        T remoteObject = (T) getRemoteObject(connection, objectID, new Class<?>[] {iface});
+        return remoteObject;
     }
 
     /**
