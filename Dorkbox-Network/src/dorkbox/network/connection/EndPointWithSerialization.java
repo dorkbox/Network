@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
@@ -23,6 +24,7 @@ import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.util.EndpointTool;
 import dorkbox.network.util.KryoSerializationManager;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
@@ -228,6 +230,8 @@ public abstract class EndPointWithSerialization extends EndPoint {
 
     /**
      * Closes all connections ONLY (keeps the server/client running)
+     * <p>
+     * This is used, for example, when reconnecting to a server. The server should ALWAYS use STOP.
      */
     @Override
     public void close() {
@@ -241,7 +245,60 @@ public abstract class EndPointWithSerialization extends EndPoint {
      * Extra actions to perform when stopping this endpoint.
      */
     @Override
-    protected void stopExtraActions() {
+    final void stopExtraActions() {
         this.connectionManager.stop();
+    }
+
+    ConcurrentHashMap<Class<?>, EndpointTool> toolMap = new ConcurrentHashMap<Class<?>, EndpointTool>();
+
+    /**
+     * Registers a tool with the server, to be used by other services.
+     */
+    public void registerTool(EndpointTool toolClass) {
+        if (toolClass == null) {
+            throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
+        }
+
+        Class<?>[] interfaces = toolClass.getClass().getInterfaces();
+        int length = interfaces.length;
+        int index = -1;
+
+        if (length > 1) {
+            Class<?> clazz2;
+            Class<EndpointTool> cls = EndpointTool.class;
+
+            for (int i=0;i<length;i++) {
+                clazz2 = interfaces[i];
+                if (cls.isAssignableFrom(clazz2)) {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index == -1) {
+                throw new IllegalArgumentException("Unable to discover tool interface! WHOOPS!");
+            }
+        } else {
+            index = 0;
+        }
+
+        Class<?> clazz = interfaces[index];
+        EndpointTool put = this.toolMap.put(clazz, toolClass);
+        if (put != null) {
+            throw new IllegalArgumentException("Tool must be unique! Unable to add tool");
+        }
+    }
+
+    /**
+     * Only get the tools in the ModuleStart (ie: load) methods. If done in the constructor, the tool might not be available yet
+     */
+    public <T extends EndpointTool> T getTool(Class<?> toolClass) {
+        if (toolClass == null) {
+            throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
+        }
+
+        @SuppressWarnings("unchecked")
+        T tool = (T) this.toolMap.get(toolClass);
+        return tool;
     }
 }

@@ -304,7 +304,9 @@ public abstract class EndPoint {
     }
 
     /**
-     * Closes all connections ONLY (keeps the server/client running)
+     * Closes all connections ONLY (keeps the server/client running).
+     * <p>
+     * This is used, for example, when reconnecting to a server. The server should ALWAYS use STOP.
      */
     public void close() {
         // give a chance to other threads.
@@ -328,7 +330,7 @@ public abstract class EndPoint {
     /**
      * Safely closes all associated resources/threads/connections
      */
-    public final void stop() {
+    public void stop() {
         // check to make sure we are in our OWN thread, otherwise, this thread will never exit -- because it will wait indefinitely
         // for itself to finish (since it blocks itself).
         // This occurs when calling stop from within a listener callback.
@@ -442,7 +444,7 @@ public abstract class EndPoint {
     /**
      * Extra actions to perform when stopping this endpoint.
      */
-    protected void stopExtraActions() {
+    void stopExtraActions() {
     }
 
     public String getName() {
