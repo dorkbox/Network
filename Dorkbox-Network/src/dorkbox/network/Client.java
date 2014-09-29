@@ -333,7 +333,9 @@ public class Client extends EndPointClient {
     }
 
     /**
-     * Closes all connections ONLY (keeps the server/client running)
+     * Closes all connections ONLY (keeps the server/client running).
+     * <p>
+     * This is used, for example, when reconnecting to a server.
      */
     @Override
     public void close() {
