@@ -76,20 +76,20 @@ Legal:
 
 
   - ArraysAsListSerializer,
-    UnmodifiableCollectionsSerializer  - Apache 2.0 license
+    UnmodifiableCollectionsSerializer  - Apache 2.0 License
     https://github.com/magro/kryo-serializers
     Copyright 2010 Martin Grotzke
 
 
 
-  - ASM - Bytecode manipulation framework and utilities - New BSD license
+  - ASM - Bytecode manipulation framework and utilities - New BSD License
     http://asm.ow2.org/
     Copyright (c) 2012 France Télécom
     All rights reserved.
 
 
 
-  - BarchartUDT - BSD license
+  - BarchartUDT - BSD License
     https://github.com/barchart/barchart-udt
     Copyright Andrei Pozolotin and others at Barchart, Inc.
 
@@ -101,13 +101,13 @@ Legal:
 
 
 
-  - FieldAnnotationAwareSerializer  - Apache 2.0 license
+  - FieldAnnotationAwareSerializer  - Apache 2.0 License
     https://github.com/magro/kryo-serializers
     Copyright 2010 Martin Grotzke, Rafael Winterhalter
 
 
 
-  - JAVASSIST - Apache 2.0 license
+  - JAVASSIST - Apache 2.0 License
     http://www.csg.is.titech.ac.jp/~chiba/javassist/
     Copyright (C) 1999- Shigeru Chiba. All Rights Reserved.
     Contributor(s): Bill Burke, Jason T. Greene
@@ -115,7 +115,7 @@ Legal:
 
 
 
-  - JsonBeans, Kryo, Minlog (Minlog-SLF4J), ReflectASM  - New BSD license
+  - JsonBeans, Kryo, Minlog (Minlog-SLF4J), ReflectASM  - New BSD License
     http://code.google.com/p/jsonbeans/
     http://code.google.com/p/kryo/
     http://code.google.com/p/minlog/
@@ -125,19 +125,19 @@ Legal:
 
 
 
-  - kryo-serializers  - Apache 2.0 license
+  - kryo-serializers - Apache 2.0 License
     https://github.com/magro/kryo-serializers
     Copyright 2010 Martin Grotzke
 
 
 
-  - Logback - EPL v1.0
+  - Logback - Eclipse Public License v1.0
     http://logback.qos.ch/
     Copyright (C) 1999-2012, QOS.ch. All rights reserved.
 
 
 
-  - MathUtils, IntArray, IntMap - Apache 2.0 license
+  - MathUtils, IntArray, IntMap - Apache 2.0 License
     http://github.com/libgdx/libgdx/
     Copyright (c) 2013
     Mario Zechner <badlogicgames@gmail.com>
@@ -145,39 +145,39 @@ Legal:
 
 
 
-  - MersenneTwisterFast, v20 - BSD license
+  - MersenneTwisterFast, v20 - BSD License
     http://www.cs.gmu.edu/~sean/research/mersenne/MersenneTwisterFast.java
     Copyright (c) 2003 by Sean Luke.
     Portions copyright (c) 1993 by Michael Lecuyer.
 
 
 
-  - Netty - Apache 2.0 license
+  - Netty - Apache 2.0 License
     http://netty.io
     Copyright (c) 2013 The Netty Project
 
 
 
-  - Netty Dns Decoder - Apache 2.0 license
+  - Netty Dns Decoder - Apache 2.0 License
     https://github.com/eclipse/vert.x
     Copyright (c) 2013 The Netty Project
 
 
 
-  - Objenesis - Apache 2.0 license
+  - Objenesis - Apache 2.0 License
     http://http://code.google.com/p/objenesis/
     Copyright (c) 2003-2009, Joe Walnes, Henri Tremblay, Leonardo Mesquita
 
 
 
-  - SLF4J - MIT license.
+  - SLF4J - MIT License.
     http://www.slf4j.org/
     Copyright (c) 2004-2008 QOS.ch
     All rights reserved.
 
 
 
-  - UDT4 - BSD license
+  - UDT4 - BSD License
     http://udt.sourceforge.net/
     Copyright 2001 - 2009, The Board of Trustees of the University of Illinois.
     All rights reserved.
