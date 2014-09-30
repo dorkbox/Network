@@ -7,7 +7,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
-import dorkbox.util.primativeCollections.IntMap;
+import dorkbox.util.collections.IntMap;
 
 public class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
 

@@ -29,9 +29,9 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.util.MathUtils;
 import dorkbox.util.bytes.OptimizeUtils;
+import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.Crypto;
 import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
-import dorkbox.util.primativeCollections.IntMap;
 
 public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer {
 

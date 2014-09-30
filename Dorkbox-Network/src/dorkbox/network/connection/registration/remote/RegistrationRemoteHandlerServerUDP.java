@@ -25,9 +25,9 @@ import dorkbox.network.connection.wrapper.UdpWrapper;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtils;
+import dorkbox.util.collections.IntMap;
+import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
-import dorkbox.util.primativeCollections.IntMap;
-import dorkbox.util.primativeCollections.IntMap.Entries;
 
 @Sharable
 public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramPacket, UdpWrapper> {

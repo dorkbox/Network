@@ -31,7 +31,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ListenerRaw;
 import dorkbox.network.util.SerializationManager;
-import dorkbox.util.primativeCollections.ObjectIntMap;
+import dorkbox.util.collections.ObjectIntMap;
 
 /**
  * Allows methods on objects to be invoked remotely over TCP. Objects are

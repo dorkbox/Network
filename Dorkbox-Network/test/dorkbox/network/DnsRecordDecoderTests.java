@@ -1,4 +1,4 @@
-package dorkbox.network.dns;
+package dorkbox.network;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -19,6 +19,7 @@ import java.util.List;
 import org.junit.Test;
 
 import dorkbox.network.DnsClient;
+import dorkbox.network.dns.RecordDecoderFactory;
 import dorkbox.network.dns.record.MailExchangerRecord;
 import dorkbox.network.dns.record.ServiceRecord;
 import dorkbox.network.dns.record.StartOfAuthorityRecord;

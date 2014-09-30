@@ -28,8 +28,8 @@ import dorkbox.network.pipeline.KryoDecoderCrypto;
 import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
 import dorkbox.network.util.SerializationManager;
-import dorkbox.util.primativeCollections.IntMap;
-import dorkbox.util.primativeCollections.IntMap.Entries;
+import dorkbox.util.collections.IntMap;
+import dorkbox.util.collections.IntMap.Entries;
 
 public abstract class RegistrationRemoteHandler extends RegistrationHandler {
     private static final String IDLE_HANDLER_FULL = "idleHandlerFull";

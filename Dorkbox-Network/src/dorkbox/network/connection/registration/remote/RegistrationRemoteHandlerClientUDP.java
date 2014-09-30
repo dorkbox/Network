@@ -17,9 +17,9 @@ import dorkbox.network.pipeline.udp.KryoDecoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.util.bytes.OptimizeUtils;
+import dorkbox.util.collections.IntMap;
+import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
-import dorkbox.util.primativeCollections.IntMap;
-import dorkbox.util.primativeCollections.IntMap.Entries;
 
 public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient {
 

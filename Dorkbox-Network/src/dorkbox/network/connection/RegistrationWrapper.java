@@ -17,8 +17,8 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.Crypto;
-import dorkbox.util.primativeCollections.IntMap;
 
 /**
  * Just wraps common/needed methods of the client/server endpoint by the registration stage/handshake.

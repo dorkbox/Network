@@ -31,9 +31,9 @@ import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.network.util.udt.UdtEndpointProxy;
+import dorkbox.util.collections.IntMap;
+import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
-import dorkbox.util.primativeCollections.IntMap;
-import dorkbox.util.primativeCollections.IntMap.Entries;
 
 /** represents the base of a client/server end point */
 public abstract class EndPoint {
