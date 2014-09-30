@@ -131,15 +131,30 @@ public class DnsClient {
     }
 
     /**
-     * Submits a question to the DNS server
+     * Submits a question to the DNS server.
+     * <p>
+     * Note that PTR absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
+     * -- because of this, we will automatically fix this in case that clients are unaware of this requirement
+     *
      * @return always non-null, a list of answers from the server. Am empty list can also mean there was an error.
      */
     @SuppressWarnings("unchecked")
-    public synchronized List<Object> submitQuestion(final DnsQuestion question) {
+    public synchronized List<Object> submitQuestion(DnsQuestion question) {
         if (this.dnsServer == null) {
             this.logger.error("Cannot submit query. There was no connection to the DNS server.");
             return Collections.EMPTY_LIST;
         }
+
+        if (question.type() == DnsType.PTR) {
+            // PTR absolutely MUST end in ".in-addr.arpa"
+            String name = question.name();
+            String ptrSuffix = ".in-addr.arpa";
+
+            if (!name.endsWith(ptrSuffix)) {
+                question = new DnsQuestion(name + ".in-addr.arpa", DnsType.PTR, question.dnsClass());
+            }
+        }
+
 
         DnsQuery query = new DnsQuery(ThreadLocalRandom.current().nextInt(), this.dnsServer).addQuestion(question);
 

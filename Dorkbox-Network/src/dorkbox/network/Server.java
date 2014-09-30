@@ -2,10 +2,15 @@ package dorkbox.network;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollChannelOption;
+import io.netty.channel.epoll.EpollDatagramChannel;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -26,6 +31,7 @@ import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
+import dorkbox.util.OS;
 
 
 /**
@@ -140,6 +146,7 @@ public class Server extends EndPointServer {
 
                 this.localBootstrap.group(boss, worker)
                                    .channel(LocalServerChannel.class)
+                                   .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                                    .localAddress(new LocalAddress(this.localChannelName))
                                    .childHandler(new RegistrationLocalHandlerServer(this.name,
                                                                                     this.registrationWrapper));
@@ -159,15 +166,28 @@ public class Server extends EndPointServer {
                 worker = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
                 this.tcpBootstrap.channel(OioServerSocketChannel.class);
             } else {
-                boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-boss-TCP", nettyGroup));
-                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
-                this.tcpBootstrap.channel(NioServerSocketChannel.class);
+                if (OS.isLinux()) {
+                    // JNI network stack is MUCH faster (but only on linux)
+                    boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-boss-TCP", nettyGroup));
+                    worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
+
+                    this.tcpBootstrap.channel(EpollServerSocketChannel.class);
+                } else {
+                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-boss-TCP", nettyGroup));
+                    worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
+
+                    this.tcpBootstrap.channel(NioServerSocketChannel.class);
+                }
             }
+
+            // TODO: If we use netty for an HTTP server,
+            // Beside the usual ChannelOptions the Native Transport allows to enable TCP_CORK which may come in handy if you implement a HTTP Server.
 
             manageForShutdown(boss);
             manageForShutdown(worker);
 
             this.tcpBootstrap.group(boss, worker)
+                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                              .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
                              .option(ChannelOption.SO_REUSEADDR, true)
                              .childHandler(new RegistrationRemoteHandlerServerTCP(this.name,
@@ -196,13 +216,23 @@ public class Server extends EndPointServer {
                 worker = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
                 this.udpBootstrap.channel(OioDatagramChannel.class);
             } else {
-                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
-                this.udpBootstrap.channel(NioDatagramChannel.class);
+                if (OS.isLinux()) {
+                    // JNI network stack is MUCH faster (but only on linux)
+                    worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
+
+                    this.udpBootstrap.channel(EpollDatagramChannel.class)
+                                     .option(EpollChannelOption.SO_REUSEPORT, true);
+                } else {
+                    worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
+
+                    this.udpBootstrap.channel(NioDatagramChannel.class);
+                }
             }
 
             manageForShutdown(worker);
 
             this.udpBootstrap.group(worker)
+                        .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                          // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
                         .localAddress(this.udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
                         .handler(new RegistrationRemoteHandlerServerUDP(this.name, this.registrationWrapper, this.serializationManager));
@@ -233,6 +263,7 @@ public class Server extends EndPointServer {
             UdtEndpointProxy.setChannelFactory(this.udtBootstrap);
             this.udtBootstrap.group(boss, worker)
                              .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
+                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                              // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
                              .localAddress(this.udtPort)
                              .childHandler(new RegistrationRemoteHandlerServerUDT(this.name,

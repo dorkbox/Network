@@ -26,6 +26,7 @@ public class ClientSendTest extends BaseTest {
         connectionOptions.host = host;
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
         register(server.getSerialization());
@@ -39,6 +40,7 @@ public class ClientSendTest extends BaseTest {
         });
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         addEndPoint(client);
         register(client.getSerialization());
         client.connect(5000);

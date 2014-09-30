@@ -93,6 +93,7 @@ public class IdleTest extends BaseTest {
 
     private void sendObject(final Data mainData, ConnectionOptions connectionOptions, final ConnectionType type) throws InitializationException, SecurityException {
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         register(server.getSerialization());
         addEndPoint(server);
         server.setIdleTimeout(100);
@@ -114,6 +115,7 @@ public class IdleTest extends BaseTest {
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         register(client.getSerialization());
         addEndPoint(client);
         client.listeners().add(new Listener<Data>() {
@@ -140,6 +142,7 @@ public class IdleTest extends BaseTest {
 
     private void streamSpecificType(final int largeDataSize, ConnectionOptions connectionOptions, final ConnectionType type) throws InitializationException, SecurityException {
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         server.getSerialization().setRegistrationRequired(false);
         addEndPoint(server);
         server.setIdleTimeout(100);
@@ -180,6 +183,7 @@ public class IdleTest extends BaseTest {
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         client.getSerialization().setRegistrationRequired(false);
         addEndPoint(client);
         client.listeners().add(new Listener<byte[]>() {

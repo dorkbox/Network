@@ -15,12 +15,18 @@ public abstract class ListenerRaw<C extends Connection, M extends Object> {
     // for sub-classed listeners, we might have to specify which parameter to use.
     protected ListenerRaw(int lastParameterIndex) {
         if (lastParameterIndex > -1) {
-            Class<?> objectType = ClassHelper.getGenericParameterAsClassForSuperClass(getClass(), lastParameterIndex);
+            @SuppressWarnings("rawtypes")
+            Class<? extends ListenerRaw> class1 = getClass();
+
+            Class<?> objectType = ClassHelper.getGenericParameterAsClassForSuperClass(class1, lastParameterIndex);
 
             if (objectType != null) {
                 // SOMETIMES generics get confused on which parameter we actually mean (when sub-classing)
-                if (objectType.isAssignableFrom(Connection.class)) {
-                    objectType = ClassHelper.getGenericParameterAsClassForSuperClass(getClass(), lastParameterIndex+1);
+                if (objectType != Object.class && ClassHelper.hasInterface(Connection.class, objectType)) {
+                    Class<?> objectType2 = ClassHelper.getGenericParameterAsClassForSuperClass(class1, lastParameterIndex+1);
+                    if (objectType2 != null) {
+                        objectType = objectType2;
+                    }
                 }
 
                 this.objectType = objectType;

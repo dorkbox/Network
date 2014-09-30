@@ -118,6 +118,7 @@ public class ConnectionTest extends BaseTest {
             server = new Server();
         }
 
+        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
         server.listeners().add(new Listener<Object>() {
@@ -145,6 +146,7 @@ public class ConnectionTest extends BaseTest {
         } else {
             client = new Client();
         }
+        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.listeners().add(new Listener<Object>() {

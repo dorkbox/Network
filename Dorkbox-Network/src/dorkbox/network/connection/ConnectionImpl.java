@@ -4,6 +4,8 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.epoll.EpollDatagramChannel;
+import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -389,16 +391,22 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
         }
 
         Channel channel = context.channel();
+        Class<? extends Channel> channelClass = channel.getClass();
+
+        boolean isTCP = channelClass == NioSocketChannel.class || channelClass == EpollSocketChannel.class;
 
         if (this.logger.isInfoEnabled()) {
             String type;
-            if (channel instanceof NioSocketChannel) {
+
+            if (isTCP) {
                 type = "TCP";
-            } else if (channel instanceof NioDatagramChannel) {
+            } else if (channelClass == NioDatagramChannel.class) {
                 type = "UDP";
-            } else if (channel instanceof NioUdtByteConnectorChannel) {
+            } else if (channelClass == EpollDatagramChannel.class) {
+                type = "UDP";
+            } else if (channelClass == NioUdtByteConnectorChannel.class) {
                 type = "UDT";
-            } else if (channel instanceof LocalChannel) {
+            } else if (channelClass == LocalChannel.class) {
                 type = "LOCAL";
             } else {
                 type = "UNKNOWN";
@@ -408,7 +416,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
         }
 
         // our master channels are TCP/LOCAL (which are mutually exclusive). Only key disconnect events based on the status of them.
-        if (channel instanceof NioSocketChannel || channel instanceof LocalChannel) {
+        if (isTCP || channelClass == LocalChannel.class) {
             // this is because channelInactive can ONLY happen when netty shuts down the channel.
             //   and connection.close() can be called by the user.
             this.sessionManager.connectionDisconnected(this);

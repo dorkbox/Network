@@ -41,6 +41,8 @@ public class MultipleThreadTest extends BaseTest {
 
 
         final Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
+
         server.getSerialization().register(String[].class);
         server.getSerialization().register(DataClass.class);
         addEndPoint(server);
@@ -90,6 +92,8 @@ public class MultipleThreadTest extends BaseTest {
             final int index = i;
 
             Client client = new Client(connectionOptions);
+            client.disableRemoteKeyValidation();
+
             this.clients.add(client);
             client.getSerialization().register(String[].class);
             client.getSerialization().register(DataClass.class);

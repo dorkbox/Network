@@ -1,10 +1,13 @@
 package dorkbox.network;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -34,6 +37,7 @@ import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
+import dorkbox.util.OS;
 
 /**
  * The client is both SYNC and ASYNC, meaning that once the client is connected to the server, you can access it however you want.
@@ -123,11 +127,20 @@ public class Client extends EndPointClient {
                     boss = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
                     tcpBootstrap.channel(OioSocketChannel.class);
                 } else {
-                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
-                    tcpBootstrap.channel(NioSocketChannel.class);
+                    if (OS.isLinux()) {
+                        // JNI network stack is MUCH faster (but only on linux)
+                        boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
+
+                        tcpBootstrap.channel(EpollSocketChannel.class);
+                    } else {
+                        boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
+
+                        tcpBootstrap.channel(NioSocketChannel.class);
+                    }
                 }
 
                 tcpBootstrap.group(boss)
+                            .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .remoteAddress(options.host, options.tcpPort)
                             .handler(new RegistrationRemoteHandlerClientTCP(this.name,
                                                                             this.registrationWrapper,
@@ -153,11 +166,14 @@ public class Client extends EndPointClient {
                     boss = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-UDP", nettyGroup));
                     udpBootstrap.channel(OioDatagramChannel.class);
                 } else {
+                    // CANNOT USE EpollDatagramChannel on the client!
                     boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-UDP", nettyGroup));
+
                     udpBootstrap.channel(NioDatagramChannel.class);
                 }
 
                 udpBootstrap.group(boss)
+                            .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .localAddress(new InetSocketAddress(0))
                             .remoteAddress(new InetSocketAddress(options.host, options.udpPort))
                             .handler(new RegistrationRemoteHandlerClientUDP(this.name,
@@ -201,6 +217,7 @@ public class Client extends EndPointClient {
                     UdtEndpointProxy.setChannelFactory(udtBootstrap);
 
                     udtBootstrap.group(boss)
+                                .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                                 .remoteAddress(options.host, options.udtPort)
                                 .handler(new RegistrationRemoteHandlerClientUDT(this.name,
                                                                                 this.registrationWrapper,

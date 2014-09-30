@@ -3,6 +3,8 @@ package dorkbox.network.connection.registration.remote;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.epoll.EpollDatagramChannel;
+import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.udt.nio.NioUdtByteConnectorChannel;
@@ -97,15 +99,24 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
         // add the channel so we can access it later.
         // do NOT want to add UDP channels, since they are tracked differently.
 
+
+        // this whole bit is inside a if (logger.isDebugEnabled()) section.
         Channel channel = context.channel();
+        Class<? extends Channel> channelClass = channel.getClass();
+
+
         StringBuilder stringBuilder = new StringBuilder(76);
 
         stringBuilder.append("Connected to remote ");
-        if (channel instanceof NioSocketChannel) {
+        if (channelClass == NioSocketChannel.class) {
             stringBuilder.append("TCP");
-        } else if (channel instanceof NioDatagramChannel) {
+        } else if (channelClass == EpollSocketChannel.class) {
+            stringBuilder.append("TCP");
+        } else if (channelClass == NioDatagramChannel.class) {
             stringBuilder.append("UDP");
-        } else if (channel instanceof NioUdtByteConnectorChannel) {
+        } else if (channelClass == EpollDatagramChannel.class) {
+            stringBuilder.append("UDP");
+        } else if (channelClass == NioUdtByteConnectorChannel.class) {
             stringBuilder.append("UDT");
         }
         else {

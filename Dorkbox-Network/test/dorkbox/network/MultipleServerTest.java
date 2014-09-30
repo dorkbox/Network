@@ -26,6 +26,7 @@ public class MultipleServerTest extends BaseTest {
 
 
         Server server1 = new Server(connectionOptions1);
+        server1.disableRemoteKeyValidation();
         server1.getSerialization().register(String[].class);
         addEndPoint(server1);
 
@@ -49,6 +50,7 @@ public class MultipleServerTest extends BaseTest {
 
 
         Server server2 = new Server(connectionOptions2);
+        server2.disableRemoteKeyValidation();
         server2.getSerialization().register(String[].class);
         addEndPoint(server2);
         server2.bind(false);
@@ -68,7 +70,9 @@ public class MultipleServerTest extends BaseTest {
 
         connectionOptions1.localChannelName = null;
         connectionOptions1.host = host;
+
         Client client1 = new Client(connectionOptions1);
+        client1.disableRemoteKeyValidation();
         client1.getSerialization().register(String[].class);
         addEndPoint(client1);
         client1.listeners().add(new Listener<String>() {
@@ -82,7 +86,9 @@ public class MultipleServerTest extends BaseTest {
 
         connectionOptions2.localChannelName = null;
         connectionOptions2.host = host;
+
         Client client2 = new Client(connectionOptions2);
+        client2.disableRemoteKeyValidation();
         client2.getSerialization().register(String[].class);
         addEndPoint(client2);
         client2.listeners().add(new Listener<String>() {

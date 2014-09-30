@@ -49,6 +49,7 @@ public class PingPongTest extends BaseTest {
         populateData(dataUDT, TYPE.UDT);
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         addEndPoint(server);
         register(server.getSerialization());
         server.bind(false);
@@ -91,6 +92,7 @@ public class PingPongTest extends BaseTest {
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         addEndPoint(client);
         register(client.getSerialization());
         client.listeners().add(new Listener<Data>() {

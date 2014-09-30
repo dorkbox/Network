@@ -34,6 +34,7 @@ public class RmiTest extends BaseTest {
         connectionOptions.host = host;
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         register(server.getSerialization());
         addEndPoint(server);
         server.bind(false);
@@ -51,6 +52,7 @@ public class RmiTest extends BaseTest {
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         register(client.getSerialization());
 
         addEndPoint(client);

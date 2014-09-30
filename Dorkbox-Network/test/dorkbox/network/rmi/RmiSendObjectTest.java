@@ -31,6 +31,7 @@ public class RmiSendObjectTest extends BaseTest {
         connectionOptions.host = host;
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         SerializationManager serverSer = server.getSerialization();
         register(serverSer);
         addEndPoint(server);
@@ -71,6 +72,7 @@ public class RmiSendObjectTest extends BaseTest {
 
         // ----
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         register(client.getSerialization());
 
         addEndPoint(client);

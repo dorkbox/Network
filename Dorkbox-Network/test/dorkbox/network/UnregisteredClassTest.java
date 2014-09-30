@@ -42,6 +42,7 @@ public class UnregisteredClassTest extends BaseTest {
         populateData(dataUDP, false);
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         server.getSerialization().setRegistrationRequired(false);
         addEndPoint(server);
         server.bind(false);
@@ -74,6 +75,7 @@ public class UnregisteredClassTest extends BaseTest {
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         client.getSerialization().setRegistrationRequired(false);
         addEndPoint(client);
         client.listeners().add(new Listener<Data>() {

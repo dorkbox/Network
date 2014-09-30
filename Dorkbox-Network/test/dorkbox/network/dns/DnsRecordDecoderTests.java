@@ -11,7 +11,6 @@ import io.netty.handler.codec.dns.DnsQuestion;
 import io.netty.handler.codec.dns.DnsResource;
 import io.netty.handler.codec.dns.DnsResponse;
 import io.netty.handler.codec.dns.DnsResponseDecoder;
-import io.netty.handler.codec.dns.DnsType;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -28,8 +27,9 @@ public class DnsRecordDecoderTests {
 
     private static void submitDNS(final String server, final DnsQuestion question) {
         final InetSocketAddress dnsServer = new InetSocketAddress(server, 53);
+
         DnsClient dnsClient = new DnsClient(dnsServer);
-        dnsClient.submitQuestion(question);
+        List<Object> answers = dnsClient.submitQuestion(question);
         dnsClient.stop();
 
 
@@ -40,7 +40,6 @@ public class DnsRecordDecoderTests {
 //        bootstrap.group(group);
 //        bootstrap.channel(NioDatagramChannel.class);
 //        bootstrap.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
-//
 //
 //        bootstrap.handler(new ChannelInitializer<DatagramChannel>() {
 //            @Override
@@ -134,7 +133,7 @@ public class DnsRecordDecoderTests {
 
     @Test
     public void decode_A_Record() {
-        submitDNS("resolver1.opendns.com", new DnsQuestion("myip.opendns.com", DnsType.A)); //good
+        // submitDNS("resolver1.opendns.com", new DnsQuestion("myip.opendns.com", DnsType.A)); //good
 
         byte[] data = new byte[] {0,1,-127,-128,0,1,0,1,0,0,0,0,4,109,121,105,112,7,111,112,101,110,100,110,115,
                                   3,99,111,109,0,0,1,0,1,-64,12,0,1,0,1,0,0,0,0,0,4,127,0,0,1};
@@ -165,12 +164,13 @@ public class DnsRecordDecoderTests {
 
     @Test
     public void decode_PTR_Record() {
-        // i think that the encoder is bad? It doesn't seem like it encodes PTR queries correctly.
-//        submitDNS("192.168.42.1", new DnsQuestion("212.58.241.131", DnsType.valueOf(12, "PTR"))); //bad
+        // PTR absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
+        // our DNS client will FIX THIS, so that end-users do NOT have to know this!
+        // submitDNS("127.0.1.1", new DnsQuestion("204.228.150.3", DnsType.PTR));
 
-        byte[] data = new byte[] {0,1,-127,-125,0,1,0,0,0,1,0,0,3,50,49,50,2,53,56,3,50,52,49,3,49,51,49,0,0,12,0,1,0,0,6,0,1,0,0,7,7,
-                0,64,1,97,12,114,111,111,116,45,115,101,114,118,101,114,115,3,110,101,116,0,5,110,115,116,108,100,12,118,101,114,105,115,105,103,110,45,103,114,
-                115,3,99,111,109,0,120,12,-107,5,0,0,7,8,0,0,3,-124,0,9,58,-128,0,1,81,-128};
+        byte[] data = new byte[] {0,1,-127,-128,0,1,0,1,0,0,0,0,3,50,48,52,3,50,50,56,3,49,53,48,1,51,7,105,110,45,97,100,100,114,4,97,114,112,97,0,0,
+                12,0,1,-64,12,0,12,0,1,0,0,84,95,0,32,16,110,48,48,51,45,48,48,48,45,48,48,48,45,48,48,48,6,115,116,97,116,105,99,2,
+                103,101,3,99,111,109,0};
 
         EmbeddedChannel embedder = new EmbeddedChannel(new DnsResponseDecoder());
         ByteBuf packet = Unpooled.wrappedBuffer(data);
@@ -186,9 +186,9 @@ public class DnsRecordDecoderTests {
 
         for (DnsResource answer : answers) {
             Object record = RecordDecoderFactory.getFactory().decode(dnsResponse, answer);
-            if (record instanceof InetAddress) {
-                String hostAddress = ((InetAddress)record).getHostAddress();
-                assertEquals(hostAddress, "127.0.0.1");
+            if (record instanceof String) {
+                String hostAddress = (String)record;
+                assertEquals(hostAddress, "n003-000-000-000.static.ge.com");
                 return;
             }
         }

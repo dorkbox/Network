@@ -27,6 +27,7 @@ public class PingPongLocalTest extends BaseTest {
         populateData(dataLOCAL);
 
         Server server = new Server();
+        server.disableRemoteKeyValidation();
         addEndPoint(server);
         register(server.getSerialization());
         server.bind(false);
@@ -50,6 +51,7 @@ public class PingPongLocalTest extends BaseTest {
         // ----
 
         Client client = new Client();
+        client.disableRemoteKeyValidation();
         addEndPoint(client);
         register(client.getSerialization());
         client.listeners().add(new Listener<Data>() {

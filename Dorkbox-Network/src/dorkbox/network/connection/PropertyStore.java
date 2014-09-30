@@ -194,10 +194,8 @@ class PropertyStore extends SettingsStore {
         return remove != null;
     }
 
-
     @Override
     public void shutdown() {
         Storage.close(this.storage);
-        super.shutdown();
     }
 }

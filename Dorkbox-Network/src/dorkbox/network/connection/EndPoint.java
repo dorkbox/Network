@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
@@ -122,7 +122,7 @@ public abstract class EndPoint {
     private List<EventLoopGroup> eventLoopGroups = new ArrayList<EventLoopGroup>(8);
     private List<ChannelFuture> shutdownChannelList = new ArrayList<ChannelFuture>();
 
-    private final Semaphore blockUntilDone = new Semaphore(0);
+    private final CountDownLatch blockUntilDone = new CountDownLatch(1);
     protected final Object shutdownInProgress = new Object();
 
     protected AtomicBoolean isConnected = new AtomicBoolean(false);
@@ -338,22 +338,8 @@ public abstract class EndPoint {
         String threadName = currentThread.getName();
         boolean inEventThread = !threadName.equals(shutdownHookName) && !threadName.equals(stopTreadName);
 
-        // we must also account for the shutdown hook calling this!
-        // if we are in the shutdown hook, then we cannot possibly be in our event thread
-        if (inEventThread) {
-            inEventThread = false;
-
-            // we need to test to see if our current thread is in ANY of the event group threads. If it IS, then we risk deadlocking!
-            List<EventLoopGroup> eventLoopGroups2 = this.eventLoopGroups;
-            synchronized (eventLoopGroups2) {
-                for (EventLoopGroup loopGroup : eventLoopGroups2) {
-                    if (!inEventThread) {
-                        inEventThread = checkInEventGroup(currentThread, loopGroup);
-                        break;
-                    }
-                }
-            }
-        }
+        // used to check the event groups to see if we are running from one of them. NOW we force to
+        // ALWAYS shutdown inside a NEW thread
 
         if (!inEventThread) {
             stopInThread();
@@ -372,9 +358,6 @@ public abstract class EndPoint {
 
     // This actually does the "stopping", since there is some logic to making sure we don't deadlock, this is important
     private final void stopInThread() {
-        // tell the blocked "bind" method that it may continue (and exit)
-        this.blockUntilDone.release();
-
         // make sure we are not trying to stop during a startup procedure.
         // This will wait until we have finished starting up/shutting down.
         synchronized (this.shutdownInProgress) {
@@ -415,7 +398,6 @@ public abstract class EndPoint {
             // shutdown the database store
             this.propertyStore.shutdown();
 
-
             // now we stop all of our channels
             for (ChannelFuture f : this.shutdownChannelList) {
                 Channel channel = f.channel();
@@ -439,6 +421,9 @@ public abstract class EndPoint {
 
             // when the eventloop closes, the associated selectors are ALSO closed!
         }
+
+        // tell the blocked "bind" method that it may continue (and exit)
+        this.blockUntilDone.countDown();
     }
 
     /**
@@ -467,15 +452,17 @@ public abstract class EndPoint {
     }
 
     /**
-     * Blocks the current thread until the client has been stopped.
+     * Blocks the current thread until the endpoint has been stopped.
+     *
      * @param blockUntilTerminate if TRUE, then this endpoint will block until STOP is called, otherwise it will not block
      */
     public final void waitForStop(boolean blockUntilTerminate) {
         if (blockUntilTerminate) {
             // we now BLOCK until the stop method is called.
             try {
-                this.blockUntilDone.acquire();
+                this.blockUntilDone.await();
             } catch (InterruptedException e) {
+                this.logger.error("Thread interrupted while waiting for stop!");
             }
         }
     }

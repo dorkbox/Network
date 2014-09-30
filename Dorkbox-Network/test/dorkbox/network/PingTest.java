@@ -29,12 +29,14 @@ public class PingTest extends BaseTest {
         connectionOptions.host = host;
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);
@@ -60,12 +62,14 @@ public class PingTest extends BaseTest {
         connectionOptions.host = host;
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);
@@ -109,12 +113,14 @@ public class PingTest extends BaseTest {
         connectionOptions.host = host;
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);
@@ -155,12 +161,14 @@ public class PingTest extends BaseTest {
 
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);
@@ -190,12 +198,14 @@ public class PingTest extends BaseTest {
         connectionOptions.host = host;
 
         Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);
