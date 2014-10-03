@@ -5,7 +5,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
-import io.netty.util.internal.PlatformDependent;
 
 import java.security.AccessControlException;
 import java.security.SecureRandom;
@@ -85,11 +84,7 @@ public abstract class EndPoint {
     public static int udpMaxSize = 512;
 
 
-    public static final boolean isAndroid;
-
     static {
-        isAndroid = PlatformDependent.isAndroid();
-
         try {
             // doesn't work in eclipse.
             // Needed for NIO selectors on Android 2.2, and to force IPv4.

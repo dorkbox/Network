@@ -32,6 +32,7 @@ import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
+import dorkbox.util.Sys;
 
 
 /**
@@ -75,7 +76,7 @@ public class Server extends EndPointServer {
         super("Server", options);
 
         Logger logger2 = this.logger;
-        if (isAndroid && options.udtPort > 0) {
+        if (Sys.isAndroid && options.udtPort > 0) {
             // Android does not support UDT.
             if (logger2.isInfoEnabled()) {
                 logger2.info("Android does not support UDT.");
@@ -160,7 +161,7 @@ public class Server extends EndPointServer {
             EventLoopGroup boss;
             EventLoopGroup worker;
 
-            if (isAndroid) {
+            if (Sys.isAndroid) {
                 // android ONLY supports OIO (not NIO)
                 boss = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-boss-TCP", nettyGroup));
                 worker = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
@@ -201,8 +202,8 @@ public class Server extends EndPointServer {
             }
 
             // android screws up on this!!
-            this.tcpBootstrap.option(ChannelOption.TCP_NODELAY, !isAndroid);
-            this.tcpBootstrap.childOption(ChannelOption.TCP_NODELAY, !isAndroid);
+            this.tcpBootstrap.option(ChannelOption.TCP_NODELAY, !Sys.isAndroid);
+            this.tcpBootstrap.childOption(ChannelOption.TCP_NODELAY, !Sys.isAndroid);
 
             this.tcpBootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
         }
@@ -211,7 +212,7 @@ public class Server extends EndPointServer {
         if (this.udpBootstrap != null) {
             EventLoopGroup worker;
 
-            if (isAndroid) {
+            if (Sys.isAndroid) {
                 // android ONLY supports OIO (not NIO)
                 worker = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
                 this.udpBootstrap.channel(OioDatagramChannel.class);
