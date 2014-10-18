@@ -16,7 +16,7 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.pipeline.udp.KryoDecoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.util.SerializationManager;
-import dorkbox.util.bytes.OptimizeUtils;
+import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
@@ -128,7 +128,7 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
                 // now decrypt channelID using AES
                 byte[] payload = Crypto.AES.decrypt(getAesEngine(), metaChannel.aesKey, metaChannel.aesIV, registration.payload);
 
-                OptimizeUtils optimizeUtils = OptimizeUtils.get();
+                OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
                 if (!optimizeUtils.canReadInt(payload)) {
                     this.logger.error("Invalid decryption of connection ID. Aborting.");
                     shutdown(registrationWrapper2, channel);

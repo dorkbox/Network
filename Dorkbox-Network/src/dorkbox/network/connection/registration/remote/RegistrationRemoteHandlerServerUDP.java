@@ -24,7 +24,7 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.wrapper.UdpWrapper;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.NetException;
-import dorkbox.util.bytes.OptimizeUtils;
+import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
@@ -218,7 +218,7 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
                     Registration register = new Registration();
 
                     // save off the connectionID as a byte array, then encrypt it
-                    OptimizeUtils optimizeUtils = OptimizeUtils.get();
+                    OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
                     int intLength = optimizeUtils.intLength(metaChannel.connectionID, true);
                     byte[] idAsBytes = new byte[intLength];
                     optimizeUtils.writeInt(idAsBytes, metaChannel.connectionID, true);

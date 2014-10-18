@@ -27,7 +27,7 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.SecurityException;
-import dorkbox.util.bytes.OptimizeUtils;
+import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.Crypto;
 import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
@@ -204,7 +204,7 @@ public class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandle
                         return;
                     }
 
-                    OptimizeUtils optimizeUtils = OptimizeUtils.get();
+                    OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
                     if (!optimizeUtils.canReadInt(payload)) {
                         logger2.error("Invalid decryption of connection ID. Aborting.");
                         shutdown(registrationWrapper2, channel);

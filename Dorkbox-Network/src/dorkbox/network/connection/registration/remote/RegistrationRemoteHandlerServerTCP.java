@@ -28,7 +28,7 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.util.MathUtils;
-import dorkbox.util.bytes.OptimizeUtils;
+import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.Crypto;
 import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
@@ -182,7 +182,7 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                     // save off encryption handshake info
                     metaChannel.publicKey = registration.publicKey;
 
-                    OptimizeUtils optimizeUtils = OptimizeUtils.get();
+                    OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
                     // use ECC to create an AES key, which is used to encrypt the ECDH public key and the connectionID
 
                     /*
