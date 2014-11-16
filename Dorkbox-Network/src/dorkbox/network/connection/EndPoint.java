@@ -118,7 +118,10 @@ public abstract class EndPoint {
     private List<ChannelFuture> shutdownChannelList = new ArrayList<ChannelFuture>();
 
     private final CountDownLatch blockUntilDone = new CountDownLatch(1);
+    private final CountDownLatch blockWhileShutdown = new CountDownLatch(1);
+
     protected final Object shutdownInProgress = new Object();
+    protected AtomicBoolean stopCalled = new AtomicBoolean(false);
 
     protected AtomicBoolean isConnected = new AtomicBoolean(false);
 
@@ -324,8 +327,15 @@ public abstract class EndPoint {
 
     /**
      * Safely closes all associated resources/threads/connections
+     * <p>
+     * Override stopExtraActions() if you want to provide extra behavior to stopping the endpoint
      */
-    public void stop() {
+    public final void stop() {
+        // only permit us to "stop" once!
+        if (!this.stopCalled.compareAndSet(false, true)) {
+            return;
+        }
+
         // check to make sure we are in our OWN thread, otherwise, this thread will never exit -- because it will wait indefinitely
         // for itself to finish (since it blocks itself).
         // This occurs when calling stop from within a listener callback.
@@ -343,11 +353,19 @@ public abstract class EndPoint {
                 @Override
                 public void run() {
                     EndPoint.this.stopInThread();
+                    EndPoint.this.blockWhileShutdown.countDown();
                 }
             });
             thread.setDaemon(false);
             thread.setName(stopTreadName);
             thread.start();
+
+            // we want to wait for this to finish before we continue
+            try {
+                this.blockWhileShutdown.await();
+            } catch (InterruptedException e) {
+                this.logger.error("Thread interrupted while waiting for shutdown to finish!");
+            }
         }
     }
 
@@ -371,7 +389,7 @@ public abstract class EndPoint {
                 }
             }
 
-            stopExtraActions();
+            stopEndpointInternal();
 
             // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
             long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
@@ -415,6 +433,8 @@ public abstract class EndPoint {
             }
 
             // when the eventloop closes, the associated selectors are ALSO closed!
+
+            stopExtraActions();
         }
 
         // tell the blocked "bind" method that it may continue (and exit)
@@ -422,9 +442,15 @@ public abstract class EndPoint {
     }
 
     /**
-     * Extra actions to perform when stopping this endpoint.
+     * Extra INTERNAL actions to perform when stopping this endpoint.
      */
-    void stopExtraActions() {
+    void stopEndpointInternal() {
+    }
+
+    /**
+     * Extra EXTERNAL actions to perform when stopping this endpoint.
+     */
+    public void stopExtraActions() {
     }
 
     public String getName() {

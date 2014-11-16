@@ -245,7 +245,7 @@ public abstract class EndPointWithSerialization extends EndPoint {
      * Extra actions to perform when stopping this endpoint.
      */
     @Override
-    final void stopExtraActions() {
+    final void stopEndpointInternal() {
         this.connectionManager.stop();
     }
 
