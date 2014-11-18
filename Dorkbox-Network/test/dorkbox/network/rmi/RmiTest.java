@@ -5,8 +5,7 @@ package dorkbox.network.rmi;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.io.IOException;
-
+import org.junit.Assert;
 import org.junit.Test;
 
 import dorkbox.network.BaseTest;
@@ -28,37 +27,56 @@ public class RmiTest extends BaseTest {
     private static final int REMOTE_ID_ON_SERVER = 12;
 
     @Test
-    public void rmi() throws IOException, InitializationException, SecurityException {
+    public void rmi() throws InitializationException, SecurityException {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;
 
-        Server server = new Server(connectionOptions);
+        final Server server = new Server(connectionOptions);
         server.disableRemoteKeyValidation();
         register(server.getSerialization());
         addEndPoint(server);
         server.bind(false);
 
+        // have to have this happen BEFORE any connections are made.
+        server.getRmiBridge().register(REMOTE_ID_ON_SERVER, new TestObjectImpl(SERVER_ID));
+
         server.listeners().add(new Listener<MessageWithTestObject>() {
+
+            @Override
+            public void connected(Connection connection) {
+                server.getRmiBridge().addConnection(connection);
+            }
+
             @Override
             public void received (Connection connection, MessageWithTestObject m) {
                 assertEquals(SERVER_ID, m.testObject.id());
                 System.err.println("Client Finished!");
 
+                // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
                 runTest(connection, REMOTE_ID_ON_CLIENT, CLIENT_ID);
             }
         });
 
+
+
         // ----
 
-        Client client = new Client(connectionOptions);
+        final Client client = new Client(connectionOptions);
         client.disableRemoteKeyValidation();
         register(client.getSerialization());
 
         addEndPoint(client);
+
+        // have to have this happen BEFORE any connections are made.
+        client.getRmiBridge().register(REMOTE_ID_ON_CLIENT, new TestObjectImpl(CLIENT_ID));
+
         client.listeners().add(new Listener<MessageWithTestObject>() {
             @Override
             public void connected (final Connection connection) {
+                // Allow the connection to access objects in the ObjectSpace.
+                client.getRmiBridge().addConnection(connection);
+
                 RmiTest.runTest(connection, REMOTE_ID_ON_SERVER, SERVER_ID);
             }
 
@@ -72,16 +90,163 @@ public class RmiTest extends BaseTest {
         });
 
 
+        client.connect(5000);
+        waitForThreads(30);
+    }
+
+    @Test
+    public void rmiMany() throws InitializationException, SecurityException {
+        ConnectionOptions connectionOptions = new ConnectionOptions();
+        connectionOptions.tcpPort = tcpPort;
+        connectionOptions.host = host;
+
+        final Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
+        register(server.getSerialization());
+        addEndPoint(server);
+        server.bind(false);
+
         // have to have this happen BEFORE any connections are made.
-        RmiBridge clientRMI = client.getRmiBridge();
-        clientRMI.register(REMOTE_ID_ON_CLIENT, new TestObjectImpl(CLIENT_ID));
+        final TestObjectImpl serverTestObject = new TestObjectImpl(CLIENT_ID);
+        server.getRmiBridge().register(REMOTE_ID_ON_CLIENT, serverTestObject);
+
+        server.listeners().add(new Listener<MessageWithTestObject>() {
+
+            @Override
+            public void connected(Connection connection) {
+                server.getRmiBridge().addConnection(connection);
+            }
+
+            @Override
+            public void received (Connection connection, MessageWithTestObject m) {
+                assertEquals(256, serverTestObject.moos);
+                System.err.println("Client Finished!");
+                stopEndPoints(2000);
+            }
+        });
 
 
-        RmiBridge serverRMI = server.getRmiBridge();
-        serverRMI.register(REMOTE_ID_ON_SERVER, new TestObjectImpl(SERVER_ID));
+
+        // ----
+
+        final Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
+        register(client.getSerialization());
+
+        addEndPoint(client);
+
+        client.listeners().add(new Listener<MessageWithTestObject>() {
+            @Override
+            public void connected (final Connection connection) {
+                new Thread() {
+                    @Override
+                    public void run() {
+                        TestObject test = RmiBridge.getRemoteObject(connection, REMOTE_ID_ON_CLIENT, TestObject.class);
+                        test.id();
+                        // Timeout on purpose.
+                        try {
+                            ((RemoteObject)test).setResponseTimeout(200);
+                            test.slow();
+                            Assert.fail();
+                        } catch (TimeoutException ignored) {
+                        }
+                        try {
+                            Thread.sleep(300);
+                        } catch (InterruptedException ex) {
+                        }
+
+                        ((RemoteObject)test).setResponseTimeout(3000);
+                        for (int i = 0; i < 256; i++) {
+                            assertEquals(4321f, test.id(), .000001f);
+                        }
+
+                        for (int i = 0; i < 256; i++) {
+                            test.moo("" + i);
+                        }
+                        connection.send().TCP(new MessageWithTestObject()).flush();
+                    }
+                }.start();
+            }
+        });
+
 
         client.connect(5000);
+        waitForThreads(30);
+    }
 
+    @Test
+    public void rmiSlow() throws InitializationException, SecurityException {
+        ConnectionOptions connectionOptions = new ConnectionOptions();
+        connectionOptions.tcpPort = tcpPort;
+        connectionOptions.host = host;
+
+        final Server server = new Server(connectionOptions);
+        server.disableRemoteKeyValidation();
+        register(server.getSerialization());
+        addEndPoint(server);
+        server.bind(false);
+
+        // have to have this happen BEFORE any connections are made.
+        final TestObjectImpl serverTestObject = new TestObjectImpl(CLIENT_ID);
+        server.getRmiBridge().register(REMOTE_ID_ON_CLIENT, serverTestObject);
+
+        server.listeners().add(new Listener<MessageWithTestObject>() {
+
+            @Override
+            public void connected(Connection connection) {
+                server.getRmiBridge().addConnection(connection);
+            }
+
+            @Override
+            public void received (Connection connection, MessageWithTestObject m) {
+                System.err.println("Client Finished!");
+                stopEndPoints(2000);
+            }
+        });
+
+
+
+        // ----
+
+        final Client client = new Client(connectionOptions);
+        client.disableRemoteKeyValidation();
+        register(client.getSerialization());
+
+        addEndPoint(client);
+
+        client.listeners().add(new Listener<MessageWithTestObject>() {
+            @Override
+            public void connected (final Connection connection) {
+                new Thread() {
+                    @Override
+                    public void run() {
+                        TestObject test = RmiBridge.getRemoteObject(connection, REMOTE_ID_ON_CLIENT, TestObject.class);
+                        test.id();
+                        // Timeout on purpose.
+                        try {
+                            ((RemoteObject)test).setResponseTimeout(200);
+                            test.slow();
+                            Assert.fail();
+                        } catch (TimeoutException ignored) {
+                        }
+                        try {
+                            Thread.sleep(300);
+                        } catch (InterruptedException ex) {
+                        }
+
+                        ((RemoteObject)test).setResponseTimeout(3000);
+                        for (int i = 0; i < 256; i++) {
+                            assertEquals(CLIENT_ID, test.id(), .000001f);
+                        }
+
+                        connection.send().TCP(new MessageWithTestObject()).flush();
+                    }
+                }.start();
+            }
+        });
+
+
+        client.connect(5000);
         waitForThreads(30);
     }
 
@@ -96,6 +261,8 @@ public class RmiTest extends BaseTest {
 
                 // Default behavior. RMI is transparent, method calls behave like normal
                 // (return values and exceptions are returned, call is synchronous)
+                System.err.println("hashCode: " + test.hashCode());
+                System.err.println("toString: " + test);
                 test.moo();
                 test.moo("Cow");
                 assertEquals(otherID, test.id());
@@ -166,6 +333,7 @@ public class RmiTest extends BaseTest {
     }
 
     static public void register (SerializationManager kryoMT) {
+        kryoMT.register(Object.class); // Needed for Object#toString, hashCode, etc.
         kryoMT.register(TestObject.class);
         kryoMT.register(MessageWithTestObject.class);
         kryoMT.register(StackTraceElement.class);
@@ -177,23 +345,26 @@ public class RmiTest extends BaseTest {
         RmiBridge.registerClasses(kryoMT);
     }
 
-    static public interface TestObject {
+    public static interface TestObject {
         public void throwException();
 
-        public void moo ();
+        public void moo();
 
-        public void moo (String value);
+        public void moo(String value);
 
-        public void moo (String value, long delay);
+        public void moo(String value, long delay);
 
-        public int id ();
+        public int id();
+
+        public float slow ();
     }
 
-    static public class TestObjectImpl implements TestObject {
+    public static class TestObjectImpl implements TestObject {
         public long value = System.currentTimeMillis();
         private final int id;
+        public int moos;
 
-        public TestObjectImpl (int id) {
+        public TestObjectImpl(int id) {
             this.id = id;
         }
 
@@ -203,33 +374,44 @@ public class RmiTest extends BaseTest {
         }
 
         @Override
-        public void moo () {
+        public void moo() {
+            this.moos++;
             System.out.println("Moo!");
         }
 
         @Override
-        public void moo (String value) {
+        public void moo(String value) {
+            this.moos++;
             System.out.println("Moo: " + value);
         }
 
         @Override
-        public void moo (String value, long delay) {
+        public void moo(String value, long delay) {
+            this.moos++;
             System.out.println("Moo: " + value + " (" + delay + ")");
             try {
                 Thread.sleep(delay);
-            }
-            catch (InterruptedException e) {
+            } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
 
         @Override
-        public int id () {
+        public int id() {
             return this.id;
+        }
+
+        @Override
+        public float slow() {
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ex) {
+            }
+            return 666;
         }
     }
 
-    static public class MessageWithTestObject implements RmiMessages {
+    public static class MessageWithTestObject implements RmiMessages {
         public int number;
         public String text;
         public TestObject testObject;

@@ -5,8 +5,8 @@ import java.lang.reflect.Method;
 import com.esotericsoftware.kryo.Serializer;
 
 class CachedMethod {
-    Method       method;
-    
+    Method method;
+
     @SuppressWarnings("rawtypes")
     Serializer[] serializers;
 }

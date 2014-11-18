@@ -55,16 +55,16 @@ public class RmiBridge {
 
     private static final HashMap<Class<?>, CachedMethod[]> methodCache = new HashMap<Class<?>, CachedMethod[]>();
 
-    static final byte kReturnValMask = (byte) 0x80; // 1000 0000
-    static final byte kReturnExMask = (byte) 0x40;  // 0100 0000
-
+    static final int returnValMask = 1 << 7;
+    static final int returnExMask = 1 << 6;
+    static final int responseIdMask = 0xff & ~returnValMask & ~returnExMask;
 
     private static final int N_THREADS = 5;
     private static final int POOL_SIZE = 5;
 
     private static final Executor defaultExectutor = new ThreadPoolExecutor(N_THREADS, POOL_SIZE,
-                                                                              5, TimeUnit.SECONDS,
-                                                                              new LinkedBlockingQueue<Runnable>(N_THREADS * POOL_SIZE));
+                                                                            5, TimeUnit.SECONDS,
+                                                                            new LinkedBlockingQueue<Runnable>(N_THREADS * POOL_SIZE));
 
     // can be access by DIFFERENT threads.
     volatile IntMap<Object> idToObject = new IntMap<Object>();
@@ -290,9 +290,11 @@ public class RmiBridge {
             this.logger.debug(stringBuilder.toString());
         }
 
-        byte responseID = invokeMethod.responseID;
-        boolean transmitReturnVal = (responseID & kReturnValMask) == kReturnValMask;
-        boolean transmitExceptions = (responseID & kReturnExMask) == kReturnExMask;
+
+        byte responseData = invokeMethod.responseData;
+        boolean transmitReturnVal = (responseData & returnValMask) == returnValMask;
+        boolean transmitExceptions = (responseData & returnExMask) == returnExMask;
+        int responseID = responseData & responseIdMask;
 
         Object result = null;
         Method method = invokeMethod.method;
@@ -323,7 +325,8 @@ public class RmiBridge {
 
         InvokeMethodResult invokeMethodResult = new InvokeMethodResult();
         invokeMethodResult.objectID = invokeMethod.objectID;
-        invokeMethodResult.responseID = responseID;
+        invokeMethodResult.responseID = (byte) responseID;
+
 
         // Do not return non-primitives if transmitReturnVal is false
         if (!transmitReturnVal && !invokeMethod.method.getReturnType().isPrimitive()) {
@@ -404,9 +407,12 @@ public class RmiBridge {
         ArrayList<Method> allMethods = new ArrayList<Method>();
 
         Class<?> nextClass = type;
-        while (nextClass != null && nextClass != Object.class) {
+        while (nextClass != null) {
             Collections.addAll(allMethods, nextClass.getDeclaredMethods());
             nextClass = nextClass.getSuperclass();
+            if (nextClass == Object.class) {
+                break;
+            }
         }
 
         PriorityQueue<Method> methods = new PriorityQueue<Method>(Math.max(1, allMethods.size()),
@@ -529,7 +535,7 @@ public class RmiBridge {
      * Registers the classes needed to use ObjectSpaces. This should be called
      * before any connections are opened.
      */
-    public static <C extends Connection> void registerClasses(final SerializationManager smanager) {
+    public static void registerClasses(final SerializationManager smanager) {
         smanager.registerForRmiClasses(new RmiRegisterClassesCallback() {
             @Override
             public void registerForClasses(Kryo kryo) {
