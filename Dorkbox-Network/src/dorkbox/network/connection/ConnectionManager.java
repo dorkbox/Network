@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 
 import dorkbox.network.rmi.RmiMessages;
 import dorkbox.network.util.ConcurrentHashMapFactory;
+import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.ClassHelper;
 
 //note that we specifically DO NOT implement equals/hashCode, because we cannot create two separate
@@ -454,7 +455,7 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         if (this.connections.iterator().hasNext()) {
             return this.connections.iterator().next();
         } else {
-            throw new RuntimeException("Not connected to a remote computer. Unable to continue!");
+            throw new NetException("Not connected to a remote computer. Unable to continue!");
         }
     }
 

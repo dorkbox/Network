@@ -88,7 +88,7 @@ public interface SerializationManager {
      *            0-8 are used by default for primitive types and String, but
      *            these IDs can be repurposed.
      */
-    public Registration register (Class<?> type, Serializer<?> serializer, int id);
+    public Registration register(Class<?> type, Serializer<?> serializer, int id);
 
     /**
      * <b>primarily used by RMI</b> It is not common to call this method!
@@ -187,4 +187,9 @@ public interface SerializationManager {
      */
     public Registration getRegistration(Class<?> clazz);
 
+    /**
+     * Returns a single kryo instance used by this endpoint. This is VERY unsafe, and is currently ONLY used in RMI, for access to
+     * methods.
+     */
+    public Kryo getSingleInstanceUnsafe();
 }

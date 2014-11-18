@@ -317,6 +317,15 @@ public class KryoSerializationManager implements SerializationManager {
     }
 
     /**
+     * Returns a single kryo instance used by this endpoint. This is VERY unsafe, and is currently ONLY used in RMI, for access to
+     * methods.
+     */
+    @Override
+    public Kryo getSingleInstanceUnsafe() {
+        return this.kryos[0];
+    }
+
+    /**
      * Determines if this buffer is encrypted or not.
      */
     @Override

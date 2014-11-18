@@ -11,7 +11,7 @@ import dorkbox.network.util.exceptions.SecurityException;
 /**
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
-public class EndPointClient extends EndPointWithSerialization {
+public class EndPointClient extends EndPoint {
 
     protected final Object registrationLock = new Object();
     protected volatile boolean registrationInProgress = false;

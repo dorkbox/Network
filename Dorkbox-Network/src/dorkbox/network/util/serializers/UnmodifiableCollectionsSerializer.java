@@ -37,6 +37,8 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import dorkbox.network.util.exceptions.NetException;
+
 /**
  * A kryo {@link Serializer} for unmodifiable {@link Collection}s and {@link Map}s
  * created via {@link Collections}.
@@ -59,7 +61,7 @@ public class UnmodifiableCollectionsSerializer extends Serializer<Object> {
                 .getDeclaredField( "m" );
             SOURCE_MAP_FIELD.setAccessible( true );
         } catch ( final Exception e ) {
-            throw new RuntimeException( "Could not access source collection" +
+            throw new NetException("Could not access source collection" +
                     " field in java.util.Collections$UnmodifiableCollection.", e );
         }
     }

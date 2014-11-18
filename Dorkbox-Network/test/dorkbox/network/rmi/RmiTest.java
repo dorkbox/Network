@@ -59,7 +59,6 @@ public class RmiTest extends BaseTest {
         });
 
 
-
         // ----
 
         final Client client = new Client(connectionOptions);
@@ -88,7 +87,6 @@ public class RmiTest extends BaseTest {
                 stopEndPoints(2000);
             }
         });
-
 
         client.connect(5000);
         waitForThreads(30);
@@ -119,12 +117,11 @@ public class RmiTest extends BaseTest {
 
             @Override
             public void received (Connection connection, MessageWithTestObject m) {
-                assertEquals(256, serverTestObject.moos);
+                assertEquals(256 + 512 + 1024, serverTestObject.moos);
                 System.err.println("Client Finished!");
                 stopEndPoints(2000);
             }
         });
-
 
 
         // ----
@@ -142,33 +139,26 @@ public class RmiTest extends BaseTest {
                     @Override
                     public void run() {
                         TestObject test = RmiBridge.getRemoteObject(connection, REMOTE_ID_ON_CLIENT, TestObject.class);
-                        test.id();
-                        // Timeout on purpose.
-                        try {
-                            ((RemoteObject)test).setResponseTimeout(200);
-                            test.slow();
-                            Assert.fail();
-                        } catch (TimeoutException ignored) {
-                        }
-                        try {
-                            Thread.sleep(300);
-                        } catch (InterruptedException ex) {
-                        }
 
-                        ((RemoteObject)test).setResponseTimeout(3000);
                         for (int i = 0; i < 256; i++) {
-                            assertEquals(4321f, test.id(), .000001f);
+                            assertEquals(CLIENT_ID, test.id());
                         }
 
+                        for (int i = 0; i < 256; i++) {
+                            test.moo();
+                        }
                         for (int i = 0; i < 256; i++) {
                             test.moo("" + i);
                         }
+                        for (int i = 0; i < 256; i++) {
+                            test.moo("" + i, 0);
+                        }
+
                         connection.send().TCP(new MessageWithTestObject()).flush();
                     }
                 }.start();
             }
         });
-
 
         client.connect(5000);
         waitForThreads(30);
@@ -235,10 +225,6 @@ public class RmiTest extends BaseTest {
                         }
 
                         ((RemoteObject)test).setResponseTimeout(3000);
-                        for (int i = 0; i < 256; i++) {
-                            assertEquals(CLIENT_ID, test.id(), .000001f);
-                        }
-
                         connection.send().TCP(new MessageWithTestObject()).flush();
                     }
                 }.start();
@@ -381,13 +367,13 @@ public class RmiTest extends BaseTest {
 
         @Override
         public void moo(String value) {
-            this.moos++;
+            this.moos += 2;
             System.out.println("Moo: " + value);
         }
 
         @Override
         public void moo(String value, long delay) {
-            this.moos++;
+            this.moos += 4;
             System.out.println("Moo: " + value + " (" + delay + ")");
             try {
                 Thread.sleep(delay);

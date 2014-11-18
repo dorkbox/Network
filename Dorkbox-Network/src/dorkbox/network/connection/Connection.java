@@ -16,7 +16,7 @@ public interface Connection {
      * <p>
      * This happens BEFORE prep.
      */
-    public void init(EndPointWithSerialization endPoint, Bridge bridge);
+    public void init(EndPoint endPoint, Bridge bridge);
 
     /**
      * Prepare the channel wrapper, since it doesn't have access to certain fields during it's initialization.
@@ -44,6 +44,13 @@ public interface Connection {
      * @return the name used by the connection
      */
     public String getName();
+
+
+    /**
+     * @return the endpoint associated with this connection
+     */
+    public EndPoint getEndPoint();
+
 
     /**
      * @return the connection (TCP or LOCAL) id of this connection.

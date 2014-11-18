@@ -2,6 +2,7 @@ package dorkbox.network.util;
 
 import io.netty.buffer.ByteBuf;
 
+import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.factories.SerializerFactory;
@@ -82,5 +83,10 @@ public class NullSerializationManager implements SerializationManager {
 
     @Override
     public void setDefaultSerializer(SerializerFactory factory) {
+    }
+
+    @Override
+    public Kryo getSingleInstanceUnsafe() {
+        return null;
     }
 }

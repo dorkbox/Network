@@ -16,6 +16,7 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.pipeline.udp.KryoDecoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
@@ -91,7 +92,7 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
             }
 
             if (!success) {
-                throw new RuntimeException("UDP cannot connect to a remote server before TCP is established!");
+                throw new NetException("UDP cannot connect to a remote server before TCP is established!");
             }
 
             if (logger2.isTraceEnabled()) {
@@ -102,7 +103,7 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
             // client start the handshake with a registration packet
             channel.writeAndFlush(registration);
         } else {
-            throw new RuntimeException("UDP cannot connect to remote server! No remote address specified!");
+            throw new NetException("UDP cannot connect to remote server! No remote address specified!");
         }
     }
 

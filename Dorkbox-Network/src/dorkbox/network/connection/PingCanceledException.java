@@ -1,6 +1,8 @@
 package dorkbox.network.connection;
 
-public class PingCanceledException extends RuntimeException {
+import dorkbox.network.util.exceptions.NetException;
+
+public class PingCanceledException extends NetException {
 
     private static final long serialVersionUID = 9045461384091038605L;
 

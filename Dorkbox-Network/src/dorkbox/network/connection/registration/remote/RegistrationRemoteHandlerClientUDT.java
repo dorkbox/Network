@@ -13,6 +13,7 @@ import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
@@ -82,7 +83,7 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
             }
 
             if (!success) {
-                throw new RuntimeException("UDT cannot connect to a remote server before TCP is established!");
+                throw new NetException("UDT cannot connect to a remote server before TCP is established!");
             }
 
             if (logger2.isTraceEnabled()) {
@@ -93,7 +94,7 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
             // client start the handshake with a registration packet
             channel.writeAndFlush(registration);
         } else {
-            throw new RuntimeException("UDT cannot connect to remote server! No remote address specified!");
+            throw new NetException("UDT cannot connect to remote server! No remote address specified!");
         }
     }
 

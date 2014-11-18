@@ -1,7 +1,6 @@
 package dorkbox.network.rmi;
 
 import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
@@ -11,12 +10,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.PriorityQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 
@@ -26,11 +21,14 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.util.IntMap;
+import com.esotericsoftware.kryo.util.Util;
+import com.esotericsoftware.reflectasm.MethodAccess;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ListenerRaw;
 import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.collections.ObjectIntMap;
 
 /**
@@ -55,20 +53,15 @@ public class RmiBridge {
 
     private static final HashMap<Class<?>, CachedMethod[]> methodCache = new HashMap<Class<?>, CachedMethod[]>();
 
+
     static final int returnValMask = 1 << 7;
     static final int returnExMask = 1 << 6;
     static final int responseIdMask = 0xff & ~returnValMask & ~returnExMask;
 
-    private static final int N_THREADS = 5;
-    private static final int POOL_SIZE = 5;
-
-    private static final Executor defaultExectutor = new ThreadPoolExecutor(N_THREADS, POOL_SIZE,
-                                                                            5, TimeUnit.SECONDS,
-                                                                            new LinkedBlockingQueue<Runnable>(N_THREADS * POOL_SIZE));
+    private static boolean asm = true;
 
     // can be access by DIFFERENT threads.
     volatile IntMap<Object> idToObject = new IntMap<Object>();
-
     volatile ObjectIntMap<Object> objectToID = new ObjectIntMap<Object>();
 
     private CopyOnWriteArrayList<Connection> connections = new CopyOnWriteArrayList<Connection>();
@@ -78,7 +71,7 @@ public class RmiBridge {
     // the name of who created this object space.
     private final org.slf4j.Logger logger;
 
-    private final ListenerRaw<Connection, InvokeMethod> invokeListener= new ListenerRaw<Connection, InvokeMethod>() {
+    private final ListenerRaw<Connection, InvokeMethod> invokeListener = new ListenerRaw<Connection, InvokeMethod>() {
             @Override
             public void received(final Connection connection, final InvokeMethod invokeMethod) {
                 boolean found = false;
@@ -99,22 +92,17 @@ public class RmiBridge {
 
                 final Object target = RmiBridge.this.idToObject.get(invokeMethod.objectID);
                 if (target == null) {
-                    RmiBridge.this.logger.warn("Ignoring remote invocation request for unknown object ID: {}",
-                                invokeMethod.objectID);
+                    RmiBridge.this.logger.warn("Ignoring remote invocation request for unknown object ID: {}", invokeMethod.objectID);
                     return;
                 }
 
-                if (RmiBridge.this.executor == null) {
-                    defaultExectutor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            invoke(connection,
-                                   target,
-                                   invokeMethod);
-                        }
-                    });
+                Executor executor2 = RmiBridge.this.executor;
+                if (executor2 == null) {
+                    invoke(connection,
+                           target,
+                           invokeMethod);
                 } else {
-                    RmiBridge.this.executor.execute(new Runnable() {
+                    executor2.execute(new Runnable() {
                         @Override
                         public void run() {
                             invoke(connection,
@@ -155,6 +143,11 @@ public class RmiBridge {
         this.executor = executor;
     }
 
+    /** If true, an attempt will be made to use ReflectASM for invoking methods. Default is true. */
+    static public void setAsm(boolean asm) {
+        RmiBridge.asm = asm;
+    }
+
     /**
      * Registers an object to allow the remote end of the ObjectSpace's
      * connections to access it using the specified ID.
@@ -178,7 +171,7 @@ public class RmiBridge {
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
-            this.logger.trace("Object registered with ObjectSpace as {}:{}", objectID, object);
+            logger2.trace("Object registered with ObjectSpace as {}:{}", objectID, object);
         }
     }
 
@@ -247,7 +240,10 @@ public class RmiBridge {
         this.connections.addIfAbsent(connection);
         connection.listeners().add(this.invokeListener);
 
-        this.logger.trace("Added connection to ObjectSpace: {}", connection);
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("Added connection to ObjectSpace: {}", connection);
+        }
     }
 
     /**
@@ -262,7 +258,10 @@ public class RmiBridge {
         connection.listeners().remove(this.invokeListener);
         this.connections.remove(connection);
 
-        this.logger.trace("Removed connection from ObjectSpace: {}", connection);
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace("Removed connection from ObjectSpace: {}", connection);
+        }
     }
 
     /**
@@ -275,7 +274,8 @@ public class RmiBridge {
      *            The remote side of this connection requested the invocation.
      */
     protected void invoke(Connection connection, Object target, InvokeMethod invokeMethod) {
-        if (this.logger.isDebugEnabled()) {
+        Logger logger2 = this.logger;
+        if (logger2.isDebugEnabled()) {
             String argString = "";
             if (invokeMethod.args != null) {
                 argString = Arrays.deepToString(invokeMethod.args);
@@ -285,9 +285,9 @@ public class RmiBridge {
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.append(connection.toString()).append(" received: ").append(target.getClass().getSimpleName());
             stringBuilder.append(":").append(invokeMethod.objectID);
-            stringBuilder.append("#").append(invokeMethod.method.getName());
+            stringBuilder.append("#").append(invokeMethod.cachedMethod.method.getName());
             stringBuilder.append("(").append(argString).append(")");
-            this.logger.debug(stringBuilder.toString());
+            logger2.debug(stringBuilder.toString());
         }
 
 
@@ -297,26 +297,27 @@ public class RmiBridge {
         int responseID = responseData & responseIdMask;
 
         Object result = null;
-        Method method = invokeMethod.method;
+        CachedMethod cachedMethod = invokeMethod.cachedMethod;
+
         try {
-            result = method.invoke(target, invokeMethod.args);
-            // Catch exceptions caused by the Method#invoke
-        } catch (InvocationTargetException ex) {
+            result = cachedMethod.invoke(target, invokeMethod.args);
+        } catch (Exception ex) {
             if (transmitExceptions) {
+                Throwable cause = ex.getCause();
                 // added to prevent a stack overflow when references is false
                 // (because cause = "this").
                 // See:
                 // https://groups.google.com/forum/?fromgroups=#!topic/kryo-users/6PDs71M1e9Y
-                Throwable cause = ex.getCause();
-                cause.initCause(null);
+                if (cause == null) {
+                    cause = ex;
+                } else {
+                    cause.initCause(null);
+                }
                 result = cause;
             } else {
-                throw new RuntimeException("Error invoking method: " + method.getDeclaringClass().getName() + "."
-                        + method.getName(), ex);
+                throw new NetException("Error invoking method: " + cachedMethod.method.getDeclaringClass().getName() + "."
+                                       + cachedMethod.method.getName(), ex);
             }
-        } catch (Exception ex) {
-            throw new RuntimeException("Error invoking method: " + method.getDeclaringClass().getName() + "."
-                    + method.getName(), ex);
         }
 
         if (responseID == 0) {
@@ -329,7 +330,7 @@ public class RmiBridge {
 
 
         // Do not return non-primitives if transmitReturnVal is false
-        if (!transmitReturnVal && !invokeMethod.method.getReturnType().isPrimitive()) {
+        if (!transmitReturnVal && !invokeMethod.cachedMethod.method.getReturnType().isPrimitive()) {
             invokeMethodResult.result = null;
         } else {
             invokeMethodResult.result = result;
@@ -338,11 +339,7 @@ public class RmiBridge {
         // System.err.println("Sending: " + invokeMethod.responseID);
         connection.send().TCP(invokeMethodResult).flush();
 
-        // logger.error("{} sent data: {}  with id ({})", connection, result,
-        // invokeMethod.responseID);
-        // if (invokeMethod.responseID == -52) {
-        // System.err.println("ASDASD");
-        // }
+        // logger.error("{} sent data: {}  with id ({})", connection, result, invokeMethod.responseID);
     }
 
     /**
@@ -350,7 +347,6 @@ public class RmiBridge {
      * the object cast to the specified interface type. The returned object
      * still implements {@link RemoteObject}.
      */
-
     static public <T, C extends Connection> T getRemoteObject(final C connection, int objectID, Class<T> iface) {
         @SuppressWarnings({"unchecked"})
         T remoteObject = (T) getRemoteObject(connection, objectID, new Class<?>[] {iface});
@@ -399,7 +395,7 @@ public class RmiBridge {
     }
 
     static CachedMethod[] getMethods(Kryo kryo, Class<?> type) {
-        CachedMethod[] cachedMethods = methodCache.get(type);
+        CachedMethod[] cachedMethods = methodCache.get(type); // Maybe should cache per Kryo instance?
         if (cachedMethods != null) {
             return cachedMethods;
         }
@@ -415,32 +411,7 @@ public class RmiBridge {
             }
         }
 
-        PriorityQueue<Method> methods = new PriorityQueue<Method>(Math.max(1, allMethods.size()),
-          new Comparator<Method>() {
-              @Override
-              public int compare(Method o1, Method o2) {
-                  // Methods are sorted so they can be represented as an index.
-                  int diff = o1.getName().compareTo(o2.getName());
-                  if (diff != 0) {
-                      return diff;
-                  }
-                  Class<?>[] argTypes1 = o1.getParameterTypes();
-                  Class<?>[] argTypes2 = o2.getParameterTypes();
-                  if (argTypes1.length > argTypes2.length) {
-                      return 1;
-                  }
-                  if (argTypes1.length < argTypes2.length) {
-                      return -1;
-                  }
-                  for (int i = 0; i < argTypes1.length; i++) {
-                      diff = argTypes1[i].getName().compareTo(argTypes2[i].getName());
-                      if (diff != 0) {
-                          return diff;
-                      }
-                  }
-                  throw new RuntimeException("Two methods with same signature!"); // Impossible.
-              }
-          });
+        ArrayList<Method> methods = new ArrayList<Method>(Math.max(1, allMethods.size()));
         for (int i = 0, n = allMethods.size(); i < n; i++) {
             Method method = allMethods.get(i);
             int modifiers = method.getModifiers();
@@ -455,15 +426,63 @@ public class RmiBridge {
             }
             methods.add(method);
         }
+        Collections.sort(methods, new Comparator<Method>() {
+            @Override
+            public int compare(Method o1, Method o2) {
+                // Methods are sorted so they can be represented as an index.
+                int diff = o1.getName().compareTo(o2.getName());
+                if (diff != 0) {
+                    return diff;
+                }
+                Class<?>[] argTypes1 = o1.getParameterTypes();
+                Class<?>[] argTypes2 = o2.getParameterTypes();
+                if (argTypes1.length > argTypes2.length) {
+                    return 1;
+                }
+                if (argTypes1.length < argTypes2.length) {
+                    return -1;
+                }
+                for (int i = 0; i < argTypes1.length; i++) {
+                    diff = argTypes1[i].getName().compareTo(argTypes2[i].getName());
+                    if (diff != 0) {
+                        return diff;
+                    }
+                }
+                throw new RuntimeException("Two methods with same signature!"); // Impossible.
+            }
+        });
+
+        Object methodAccess = null;
+        if (asm && !Util.isAndroid && Modifier.isPublic(type.getModifiers())) {
+            methodAccess = MethodAccess.get(type);
+        }
+
 
         int n = methods.size();
         cachedMethods = new CachedMethod[n];
         for (int i = 0; i < n; i++) {
-            CachedMethod cachedMethod = new CachedMethod();
-            cachedMethod.method = methods.poll();
+            Method method = methods.get(i);
+            Class<?>[] parameterTypes = method.getParameterTypes();
+
+            CachedMethod cachedMethod = null;
+            if (methodAccess != null) {
+                try {
+                    AsmCachedMethod asmCachedMethod = new AsmCachedMethod();
+                    asmCachedMethod.methodAccessIndex = ((MethodAccess)methodAccess).getIndex(method.getName(), parameterTypes);
+                    asmCachedMethod.methodAccess = (MethodAccess)methodAccess;
+                    cachedMethod = asmCachedMethod;
+                } catch (RuntimeException ignored) {
+                }
+            }
+
+            if (cachedMethod == null) {
+                cachedMethod = new CachedMethod();
+            }
+            cachedMethod.method = method;
+            cachedMethod.methodClassID = kryo.getRegistration(method.getDeclaringClass()).getId();
+            cachedMethod.methodIndex = i;
 
             // Store the serializer for each final parameter.
-            Class<?>[] parameterTypes = cachedMethod.method.getParameterTypes();
             cachedMethod.serializers = new Serializer<?>[parameterTypes.length];
             for (int ii = 0, nn = parameterTypes.length; ii < nn; ii++) {
                 if (kryo.isFinal(parameterTypes[ii])) {

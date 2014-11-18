@@ -49,7 +49,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
 
     private ISessionManager sessionManager;
     private ChannelWrapper channelWrapper;
-    private EndPointWithSerialization endPoint;
+    private EndPoint endPoint;
 
     private volatile PingFuture pingFuture = null;
 
@@ -69,7 +69,7 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
      */
     @Override
-    public void init(EndPointWithSerialization endPoint, Bridge bridge) {
+    public void init(EndPoint endPoint, Bridge bridge) {
         this.endPoint = endPoint;
         if (bridge != null) {
             this.sessionManager = bridge.sessionManager;
@@ -127,6 +127,14 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     @Override
     public String getName() {
         return this.name;
+    }
+
+    /**
+     * @return the endpoint associated with this connection
+     */
+    @Override
+    public EndPoint getEndPoint() {
+        return this.endPoint;
     }
 
     /**

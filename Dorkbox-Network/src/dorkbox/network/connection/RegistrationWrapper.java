@@ -109,9 +109,7 @@ public class RegistrationWrapper implements UdpServer {
      * to the pipeline are finished.
      */
     public void connectionConnected0(Connection networkConnection) {
-        if (this.endPoint instanceof EndPointWithSerialization) {
-            ((EndPointWithSerialization)this.endPoint).connectionConnected0(networkConnection);
-        }
+        this.endPoint.connectionConnected0(networkConnection);
     }
 
     /**
@@ -122,11 +120,7 @@ public class RegistrationWrapper implements UdpServer {
      * @param metaChannel can be NULL (when getting the baseClass)
      */
     public Connection connection0(MetaChannel metaChannel) {
-        if (this.endPoint instanceof EndPointWithSerialization) {
-            return ((EndPointWithSerialization)this.endPoint).connection0(metaChannel);
-        }
-
-        return null;
+        return this.endPoint.connection0(metaChannel);
     }
 
     public SecureRandom getSecureRandom() {

@@ -9,7 +9,9 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ListenerRaw;
+import dorkbox.network.util.exceptions.NetException;
 
 /** Handles network communication when methods are invoked on a proxy. */
 class RemoteInvocationHandler implements InvocationHandler {
@@ -51,8 +53,6 @@ class RemoteInvocationHandler implements InvocationHandler {
                     return;
                 }
 
-//				System.err.println("Recieved: " + responseID);
-
 //				logger.trace("{} received data: {}  with id ({})", connection, invokeMethodResult.result, invokeMethodResult.responseID);
                 synchronized (this) {
                     if (RemoteInvocationHandler.this.pendingResponses[responseID]) {
@@ -60,13 +60,11 @@ class RemoteInvocationHandler implements InvocationHandler {
                     }
                 }
 
-//			    System.err.println("L");
                 RemoteInvocationHandler.this.lock.lock();
                 try {
                     RemoteInvocationHandler.this.responseCondition.signalAll();
                 } finally {
                     RemoteInvocationHandler.this.lock.unlock();
-//                    System.err.println("U");
                 }
             }
 
@@ -128,11 +126,25 @@ class RemoteInvocationHandler implements InvocationHandler {
 
         InvokeMethod invokeMethod = new InvokeMethod();
         invokeMethod.objectID = this.objectID;
-        invokeMethod.method = method;
         invokeMethod.args = args;
 
-        // The only time a invocation doesn't need a response is if it's async
-        // and no return values or exceptions are wanted back.
+        EndPoint endPoint = this.connection.getEndPoint();
+        CachedMethod[] cachedMethods = RmiBridge.getMethods(endPoint.getSerialization().getSingleInstanceUnsafe(), method.getDeclaringClass());
+        for (int i = 0, n = cachedMethods.length; i < n; i++) {
+            CachedMethod cachedMethod = cachedMethods[i];
+            if (cachedMethod.method.equals(method)) {
+                invokeMethod.cachedMethod = cachedMethod;
+                break;
+            }
+        }
+        if (invokeMethod.cachedMethod == null) {
+            String msg = "Method not found: " + method;
+            logger.error(msg);
+            return msg;
+        }
+
+
+        // An invocation doesn't need a response is if it's async and no return values or exceptions are wanted back.
         boolean needsResponse = this.transmitReturnValue || this.transmitExceptions || !this.nonBlocking;
         byte responseID = 0;
         if (needsResponse) {
@@ -225,7 +237,6 @@ class RemoteInvocationHandler implements InvocationHandler {
         long remaining = this.timeoutMillis;
 
         while (remaining > 0) {
-//            System.err.println("Waiting for: " + responseID);
             InvokeMethodResult invokeMethodResult;
             synchronized (this) {
                 invokeMethodResult = this.responseTable[responseID];
@@ -236,16 +247,14 @@ class RemoteInvocationHandler implements InvocationHandler {
                 return invokeMethodResult.result;
             }
             else {
-//                System.err.println("LL");
                 this.lock.lock();
                 try {
                     this.responseCondition.await(remaining, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    throw new RuntimeException(e);
+                    throw new NetException(e);
                 } finally {
                     this.lock.unlock();
-//                    System.err.println("UU");
                 }
             }
 

@@ -6,33 +6,58 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 
+import java.lang.annotation.Annotation;
 import java.security.AccessControlException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.bouncycastle.crypto.params.IESParameters;
+import org.bouncycastle.crypto.params.IESWithCipherParameters;
 import org.slf4j.Logger;
 
+import com.esotericsoftware.kryo.factories.SerializerFactory;
+
 import dorkbox.network.ConnectionOptions;
+import dorkbox.network.connection.bridge.ConnectionBridgeBase;
 import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.network.connection.registration.Registration;
+import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
+import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
+import dorkbox.network.connection.wrapper.ChannelWrapper;
+import dorkbox.network.pipeline.KryoEncoder;
+import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.util.EndpointTool;
+import dorkbox.network.util.KryoSerializationManager;
+import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.entropy.Entropy;
 import dorkbox.network.util.entropy.SimpleEntropy;
 import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.NetException;
 import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.network.util.serializers.FieldAnnotationAwareSerializer;
+import dorkbox.network.util.serializers.IgnoreSerialization;
 import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
+import dorkbox.util.crypto.serialization.EccPrivateKeySerializer;
+import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
+import dorkbox.util.crypto.serialization.IesParametersSerializer;
+import dorkbox.util.crypto.serialization.IesWithCipherParametersSerializer;
 
 /** represents the base of a client/server end point */
 public abstract class EndPoint {
@@ -108,6 +133,9 @@ public abstract class EndPoint {
     // make sure that the endpoint is closed on JVM shutdown (if it's still open at that point in time)
     protected Thread shutdownHook;
 
+    protected final ConnectionManager connectionManager;
+    protected final SerializationManager serializationManager;
+
     protected final RegistrationWrapper registrationWrapper;
 
     // The remote object space is used by RMI.
@@ -127,6 +155,8 @@ public abstract class EndPoint {
 
     /** in milliseconds. default is disabled! */
     private volatile int idleTimeout = 0;
+
+    private ConcurrentHashMap<Class<?>, EndpointTool> toolMap = new ConcurrentHashMap<Class<?>, EndpointTool>();
 
     final ECPrivateKeyParameters privateKey;
     final ECPublicKeyParameters publicKey;
@@ -203,11 +233,52 @@ public abstract class EndPoint {
         this.shutdownHook = new Thread() {
             @Override
             public void run() {
-                EndPoint.this.stop();
+                // connectionManager.shutdown accurately reflects the state of the app. Safe to use here
+                if (EndPoint.this.connectionManager != null && !EndPoint.this.connectionManager.shutdown) {
+                    EndPoint.this.stop();
+                }
             }
         };
         this.shutdownHook.setName(shutdownHookName);
         Runtime.getRuntime().addShutdownHook(this.shutdownHook);
+
+
+        // serialization stuff
+        if (options.serializationManager != null) {
+            this.serializationManager = options.serializationManager;
+        } else {
+            this.serializationManager = new KryoSerializationManager();
+        }
+
+        // we don't care about un-instantiated/constructed members, since the class type is the only interest.
+        this.connectionManager = new ConnectionManager(name, connection0(null).getClass());
+
+        // setup our TCP kryo encoders
+        this.registrationWrapper.setKryoTcpEncoder(new KryoEncoder(this.serializationManager));
+        this.registrationWrapper.setKryoTcpCryptoEncoder(new KryoEncoderCrypto(this.serializationManager));
+
+
+        this.serializationManager.setReferences(false);
+        this.serializationManager.setRegistrationRequired(true);
+
+        this.serializationManager.register(PingMessage.class);
+        this.serializationManager.register(byte[].class);
+        this.serializationManager.register(IESParameters.class, new IesParametersSerializer());
+        this.serializationManager.register(IESWithCipherParameters.class, new IesWithCipherParametersSerializer());
+        this.serializationManager.register(ECPublicKeyParameters.class, new EccPublicKeySerializer());
+        this.serializationManager.register(ECPrivateKeyParameters.class, new EccPrivateKeySerializer());
+        this.serializationManager.register(Registration.class);
+
+
+        // ignore fields that have the "IgnoreSerialization" annotation.
+        Set<Class<? extends Annotation>> marks = new HashSet<Class<? extends Annotation>>();
+        marks.add(IgnoreSerialization.class);
+        SerializerFactory disregardingFactory = new FieldAnnotationAwareSerializer.Factory(marks, true);
+        this.serializationManager.setDefaultSerializer(disregardingFactory);
+
+
+        // add the ping listener (internal use only!)
+        this.connectionManager.add(new PingSystemListener(name));
     }
 
     public void disableRemoteKeyValidation() {
@@ -301,6 +372,198 @@ public abstract class EndPoint {
         }
     }
 
+
+
+
+
+
+    /**
+     * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
+     */
+    public SerializationManager getSerialization() {
+        return this.serializationManager;
+    }
+
+    /**
+     * Creates the remote (RMI) object space for this endpoint.
+     * <p>
+     * This method is safe, and is recommended. Make sure to call it BEFORE a connection is established, as
+     * there is some housekeeping that is necessary BEFORE a connection is actually connected..
+     */
+    public RmiBridge getRmiBridge() {
+        synchronized (this) {
+            if (this.remoteObjectSpace == null) {
+                if (isConnected()) {
+                    throw new NetException("Cannot create a remote object space after the remote endpoint has already connected!");
+                }
+
+                this.remoteObjectSpace = new RmiBridge(this.logger);
+            }
+        }
+
+        return this.remoteObjectSpace;
+    }
+
+
+    /**
+     * This method allows the connections used by the client/server to be subclassed (custom implementations).
+     * <p>
+     * As this is for the network stack, the new connection type MUST subclass {@link Connection}
+     *
+     * @param bridge null when retrieving the subclass type (internal use only). Non-null when creating a new (and real) connection.
+     * @return a new network connection
+     */
+    public Connection newConnection(String name) {
+        return new ConnectionImpl(name);
+    }
+
+
+    /**
+     * Internal call by the pipeline when:
+     * - creating a new network connection
+     * - when determining the baseClass for listeners
+     *
+     * @param metaChannel can be NULL (when getting the baseClass)
+     */
+    protected final Connection connection0(MetaChannel metaChannel) {
+        Connection connection;
+
+        // setup the extras needed by the network connection.
+        // These properties are ASSGINED in the same thread that CREATED the object. Only the AES info needs to be
+        // volatile since it is the only thing that changes.
+        if (metaChannel != null) {
+            ChannelWrapper wrapper;
+
+            if (metaChannel.localChannel != null) {
+                wrapper = new ChannelLocalWrapper(metaChannel);
+            } else {
+                if (this instanceof EndPointServer) {
+                    wrapper = new ChannelNetworkWrapper(metaChannel, this.registrationWrapper);
+                } else {
+                    wrapper = new ChannelNetworkWrapper(metaChannel, null);
+                }
+            }
+
+            connection = newConnection(this.name);
+
+            // now initialize the connection channels with whatever extra info they might need.
+            connection.init(this, new Bridge(wrapper, this.connectionManager));
+
+            metaChannel.connection = connection;
+
+            // notify our remote object space that it is able to receive method calls.
+            synchronized (this) {
+                if (this.remoteObjectSpace != null) {
+                    this.remoteObjectSpace.addConnection(connection);
+                }
+            }
+        } else {
+            // getting the baseClass
+
+            // have to add the networkAssociate to a map of "connected" computers
+            connection = newConnection(this.name);
+        }
+
+        return connection;
+    }
+
+    /**
+     * Internal call by the pipeline to notify the "Connection" object that it has "connected", meaning that modifications
+     * to the pipeline are finished.
+     *
+     * Only the CLIENT injects in front of this)
+     */
+    void connectionConnected0(Connection connection) {
+        this.isConnected.set(true);
+
+        // prep the channel wrapper
+        connection.prep();
+
+        this.connectionManager.connectionConnected(connection);
+    }
+
+    /**
+     * Expose methods to modify the listeners (connect/disconnect/idle/receive events).
+     */
+    public final ListenerBridge listeners() {
+        return this.connectionManager;
+    }
+
+    /**
+     * Returns a non-modifiable list of active connections
+     */
+    public List<Connection> getConnections() {
+        return this.connectionManager.getConnections();
+    }
+
+    /**
+     * Returns a non-modifiable list of active connections
+     */
+    @SuppressWarnings("unchecked")
+    public <C extends Connection> Collection<C> getConnectionsAs() {
+        return (Collection<C>) this.connectionManager.getConnections();
+    }
+
+    /**
+     * Expose methods to send objects to a destination.
+     */
+    public abstract ConnectionBridgeBase send();
+
+    /**
+     * Registers a tool with the server, to be used by other services.
+     */
+    public void registerTool(EndpointTool toolClass) {
+        if (toolClass == null) {
+            throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
+        }
+
+        Class<?>[] interfaces = toolClass.getClass().getInterfaces();
+        int length = interfaces.length;
+        int index = -1;
+
+        if (length > 1) {
+            Class<?> clazz2;
+            Class<EndpointTool> cls = EndpointTool.class;
+
+            for (int i=0;i<length;i++) {
+                clazz2 = interfaces[i];
+                if (cls.isAssignableFrom(clazz2)) {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index == -1) {
+                throw new IllegalArgumentException("Unable to discover tool interface! WHOOPS!");
+            }
+        } else {
+            index = 0;
+        }
+
+        Class<?> clazz = interfaces[index];
+        EndpointTool put = this.toolMap.put(clazz, toolClass);
+        if (put != null) {
+            throw new IllegalArgumentException("Tool must be unique! Unable to add tool");
+        }
+    }
+
+    /**
+     * Only get the tools in the ModuleStart (ie: load) methods. If done in the constructor, the tool might not be available yet
+     */
+    public <T extends EndpointTool> T getTool(Class<?> toolClass) {
+        if (toolClass == null) {
+            throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
+        }
+
+        @SuppressWarnings("unchecked")
+        T tool = (T) this.toolMap.get(toolClass);
+        return tool;
+    }
+
+    public String getName() {
+        return this.name;
+    }
+
     /**
      * Closes all connections ONLY (keeps the server/client running).
      * <p>
@@ -309,6 +572,9 @@ public abstract class EndPoint {
     public void close() {
         // give a chance to other threads.
         Thread.yield();
+
+        // stop does the same as this + more
+        this.connectionManager.closeConnections();
 
         this.isConnected.set(false);
     }
@@ -389,7 +655,7 @@ public abstract class EndPoint {
                 }
             }
 
-            stopEndpointInternal();
+            this.connectionManager.stop();
 
             // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
             long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
@@ -442,19 +708,9 @@ public abstract class EndPoint {
     }
 
     /**
-     * Extra INTERNAL actions to perform when stopping this endpoint.
-     */
-    void stopEndpointInternal() {
-    }
-
-    /**
      * Extra EXTERNAL actions to perform when stopping this endpoint.
      */
     public void stopExtraActions() {
-    }
-
-    public String getName() {
-        return this.name;
     }
 
     /**

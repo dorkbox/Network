@@ -1,6 +1,7 @@
 package dorkbox.network.connection.idle;
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.util.exceptions.NetException;
 
 public class IdleObjectSender<C extends Connection, M> extends IdleSender<C,M> {
 
@@ -12,16 +13,16 @@ public class IdleObjectSender<C extends Connection, M> extends IdleSender<C,M> {
 
     @Override
     public void idle(C connection) {
-        if (!started) {
-            started = true;
+        if (!this.started) {
+            this.started = true;
             start();
         }
 
         connection.listeners().remove(this);
-        if (idleListener != null) {
-            idleListener.send(connection, message);
+        if (this.idleListener != null) {
+            this.idleListener.send(connection, this.message);
         } else {
-            throw new RuntimeException("Invlaid idle listener. Please specify .TCP(), .UDP(), or .UDT()");
+            throw new NetException("Invalid idle listener. Please specify .TCP(), .UDP(), or .UDT()");
         }
     }
 
