@@ -3,7 +3,6 @@ package dorkbox.network.kryo;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
@@ -15,7 +14,7 @@ import com.esotericsoftware.kryo.io.Output;
 /** @author Nathan Sweet <misc@n4te.com> */
 @SuppressWarnings("resource")
 public class InputOutputTest extends KryoTestCase {
-    public void testOutputStream () throws IOException {
+    public void testOutputStream () {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Output output = new Output(buffer, 2);
         output.writeBytes(new byte[] {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26});
@@ -33,7 +32,7 @@ public class InputOutputTest extends KryoTestCase {
         output.close();
     }
 
-    public void testInputStream () throws IOException {
+    public void testInputStream () {
         byte[] bytes = new byte[] { //
         11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, //
             31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, //
@@ -59,7 +58,7 @@ public class InputOutputTest extends KryoTestCase {
         input.close();
     }
 
-    public void testWriteBytes () throws IOException {
+    public void testWriteBytes () {
         Output buffer = new Output(512);
         buffer.writeBytes(new byte[] {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26});
         buffer.writeBytes(new byte[] {31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46});
@@ -81,7 +80,7 @@ public class InputOutputTest extends KryoTestCase {
         buffer.close();
     }
 
-    public void testStrings () throws IOException {
+    public void testStrings () {
         runStringTest(new Output(4096));
         runStringTest(new Output(897));
         runStringTest(new Output(new ByteArrayOutputStream()));
@@ -104,7 +103,7 @@ public class InputOutputTest extends KryoTestCase {
         read.close();
     }
 
-    public void runStringTest (int length) throws IOException {
+    public void runStringTest (int length) {
         Output write = new Output(1024, -1);
         StringBuilder buffer = new StringBuilder();
         for (int i = 0; i < length; i++) {
@@ -136,7 +135,7 @@ public class InputOutputTest extends KryoTestCase {
         }
     }
 
-    public void runStringTest (Output write) throws IOException {
+    public void runStringTest (Output write) {
         String value1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\rabcdefghijklmnopqrstuvwxyz\n1234567890\t\"!`?'.,;:()[]{}<>|/@\\^$-%+=#_&~*";
         String value2 = "abcdef\u00E1\u00E9\u00ED\u00F3\u00FA\u1234";
 
@@ -191,7 +190,7 @@ public class InputOutputTest extends KryoTestCase {
         }
     }
 
-    public void testCanReadInt () throws IOException {
+    public void testCanReadInt () {
         Output write = new Output(new ByteArrayOutputStream());
 
         Input read = new Input(write.toBytes());
@@ -205,12 +204,12 @@ public class InputOutputTest extends KryoTestCase {
         assertEquals(false, read.canReadInt());
     }
 
-    public void testInts () throws IOException {
+    public void testInts () {
         runIntTest(new Output(4096));
         runIntTest(new Output(new ByteArrayOutputStream()));
     }
 
-    private void runIntTest (Output write) throws IOException {
+    private void runIntTest (Output write) {
         write.writeInt(0);
         write.writeInt(63);
         write.writeInt(64);
@@ -354,12 +353,12 @@ public class InputOutputTest extends KryoTestCase {
         }
     }
 
-    public void testLongs () throws IOException {
+    public void testLongs () {
         runLongTest(new Output(4096));
         runLongTest(new Output(new ByteArrayOutputStream()));
     }
 
-    private void runLongTest (Output write) throws IOException {
+    private void runLongTest (Output write) {
         write.writeLong(0);
         write.writeLong(63);
         write.writeLong(64);
@@ -499,12 +498,12 @@ public class InputOutputTest extends KryoTestCase {
         }
     }
 
-    public void testShorts () throws IOException {
+    public void testShorts () {
         runShortTest(new Output(4096));
         runShortTest(new Output(new ByteArrayOutputStream()));
     }
 
-    private void runShortTest (Output write) throws IOException {
+    private void runShortTest (Output write) {
         write.writeShort(0);
         write.writeShort(63);
         write.writeShort(64);
@@ -539,12 +538,12 @@ public class InputOutputTest extends KryoTestCase {
         assertEquals(-32768, read.readShort());
     }
 
-    public void testFloats () throws IOException {
+    public void testFloats () {
         runFloatTest(new Output(4096));
         runFloatTest(new Output(new ByteArrayOutputStream()));
     }
 
-    private void runFloatTest (Output write) throws IOException {
+    private void runFloatTest (Output write) {
         write.writeFloat(0);
         write.writeFloat(63);
         write.writeFloat(64);
@@ -631,12 +630,12 @@ public class InputOutputTest extends KryoTestCase {
         assertEquals(read.readFloat(1000, true), -8192f);
     }
 
-    public void testDoubles () throws IOException {
+    public void testDoubles () {
         runDoubleTest(new Output(4096));
         runDoubleTest(new Output(new ByteArrayOutputStream()));
     }
 
-    private void runDoubleTest (Output write) throws IOException {
+    private void runDoubleTest (Output write) {
         write.writeDouble(0);
         write.writeDouble(63);
         write.writeDouble(64);
@@ -725,12 +724,12 @@ public class InputOutputTest extends KryoTestCase {
         assertEquals(1.23456d, read.readDouble());
     }
 
-    public void testBooleans () throws IOException {
+    public void testBooleans () {
         runBooleanTest(new Output(4096));
         runBooleanTest(new Output(new ByteArrayOutputStream()));
     }
 
-    private void runBooleanTest (Output write) throws IOException {
+    private void runBooleanTest (Output write) {
         for (int i = 0; i < 100; i++) {
             write.writeBoolean(true);
             write.writeBoolean(false);
@@ -743,12 +742,12 @@ public class InputOutputTest extends KryoTestCase {
         }
     }
 
-    public void testChars () throws IOException {
+    public void testChars () {
         runCharTest(new Output(4096));
         runCharTest(new Output(new ByteArrayOutputStream()));
     }
 
-    private void runCharTest (Output write) throws IOException {
+    private void runCharTest (Output write) {
         write.writeChar((char)0);
         write.writeChar((char)63);
         write.writeChar((char)64);

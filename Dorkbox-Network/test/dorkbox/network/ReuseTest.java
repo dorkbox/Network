@@ -4,7 +4,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
@@ -19,7 +18,7 @@ public class ReuseTest extends BaseTest {
     AtomicInteger clientCount;
 
     @Test
-    public void socketReuse() throws IOException, InitializationException, SecurityException {
+    public void socketReuse() throws InitializationException, SecurityException {
         this.serverCount = new AtomicInteger(0);
         this.clientCount = new AtomicInteger(0);
 
@@ -88,7 +87,7 @@ public class ReuseTest extends BaseTest {
     }
 
     @Test
-    public void localReuse() throws IOException, InitializationException, SecurityException {
+    public void localReuse() throws InitializationException, SecurityException {
         this.serverCount = new AtomicInteger(0);
         this.clientCount = new AtomicInteger(0);
 

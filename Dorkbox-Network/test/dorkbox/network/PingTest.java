@@ -4,8 +4,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
-
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
@@ -21,7 +19,7 @@ public class PingTest extends BaseTest {
 
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
-    public void pingTCP() throws IOException, InitializationException, SecurityException {
+    public void pingTCP() throws InitializationException, SecurityException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -54,7 +52,7 @@ public class PingTest extends BaseTest {
     }
 
     @Test
-    public void pingTCP_testListeners1() throws IOException, InitializationException, SecurityException {
+    public void pingTCP_testListeners1() throws InitializationException, SecurityException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -105,7 +103,7 @@ public class PingTest extends BaseTest {
     }
 
     @Test
-    public void pingTCP_testListeners2() throws IOException, InitializationException, SecurityException {
+    public void pingTCP_testListeners2() throws InitializationException, SecurityException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -151,7 +149,7 @@ public class PingTest extends BaseTest {
 
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
-    public void pingUDP() throws IOException, InitializationException, SecurityException {
+    public void pingUDP() throws InitializationException, SecurityException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -189,7 +187,7 @@ public class PingTest extends BaseTest {
 
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
-    public void pingUDT() throws IOException, InitializationException, SecurityException {
+    public void pingUDT() throws InitializationException, SecurityException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();

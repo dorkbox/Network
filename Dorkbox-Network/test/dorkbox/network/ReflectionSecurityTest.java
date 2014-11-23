@@ -8,7 +8,6 @@ import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.junit.Test;
 
-import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import dorkbox.network.util.store.SettingsStore;
 
@@ -88,7 +87,7 @@ public class ReflectionSecurityTest extends BaseTest {
     }
 
     @Test
-    public void correctInvocation() throws SecurityException, InitializationException {
+    public void correctInvocation() throws SecurityException {
         SettingsStore connectionStore = new ConnectionTestStore();
         connectionStore.getPrivateKey();
         // if it's NOT successful, the JVM will shutdown!

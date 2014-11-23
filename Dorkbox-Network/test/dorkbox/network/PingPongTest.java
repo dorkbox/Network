@@ -4,7 +4,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,7 +27,7 @@ public class PingPongTest extends BaseTest {
     }
 
     @Test
-    public void pingPong () throws IOException, InitializationException, SecurityException {
+    public void pingPong () throws InitializationException, SecurityException {
         // UDP data is kinda big. Make sure it fits into one packet.
         int origSize = EndPoint.udpMaxSize;
         EndPoint.udpMaxSize = 2048;

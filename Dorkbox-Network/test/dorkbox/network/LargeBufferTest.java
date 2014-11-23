@@ -4,7 +4,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -24,7 +23,7 @@ public class LargeBufferTest extends BaseTest {
     private volatile int clientCheck = -1;
 
     @Test
-    public void manyLargeMessages () throws IOException, InitializationException, SecurityException {
+    public void manyLargeMessages () throws InitializationException, SecurityException {
         final int messageCount = 1024;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();

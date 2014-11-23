@@ -23,14 +23,16 @@ public class RmiTest extends BaseTest {
     private static final int CLIENT_ID = 4321;
     private static final int SERVER_ID = 1234;
 
-    private static final int REMOTE_ID_ON_CLIENT = 42;
-    private static final int REMOTE_ID_ON_SERVER = 12;
+    private static final int CLIENT_REMOTE_ID = 42;
+    private static final int SERVER_REMOTE_ID = 12;
 
     @Test
     public void rmi() throws InitializationException, SecurityException {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
+        connectionOptions.udpPort = udpPort;
         connectionOptions.host = host;
+        connectionOptions.enableRmi = true;
 
         final Server server = new Server(connectionOptions);
         server.disableRemoteKeyValidation();
@@ -39,22 +41,16 @@ public class RmiTest extends BaseTest {
         server.bind(false);
 
         // have to have this happen BEFORE any connections are made.
-        server.getRmiBridge().register(REMOTE_ID_ON_SERVER, new TestObjectImpl(SERVER_ID));
+        server.rmi().register(SERVER_REMOTE_ID, new TestObjectImpl(SERVER_ID));
 
         server.listeners().add(new Listener<MessageWithTestObject>() {
-
-            @Override
-            public void connected(Connection connection) {
-                server.getRmiBridge().addConnection(connection);
-            }
-
             @Override
             public void received (Connection connection, MessageWithTestObject m) {
                 assertEquals(SERVER_ID, m.testObject.id());
                 System.err.println("Client Finished!");
 
                 // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
-                runTest(connection, REMOTE_ID_ON_CLIENT, CLIENT_ID);
+                runTest(connection, CLIENT_REMOTE_ID, CLIENT_ID);
             }
         });
 
@@ -68,15 +64,12 @@ public class RmiTest extends BaseTest {
         addEndPoint(client);
 
         // have to have this happen BEFORE any connections are made.
-        client.getRmiBridge().register(REMOTE_ID_ON_CLIENT, new TestObjectImpl(CLIENT_ID));
+        client.rmi().register(CLIENT_REMOTE_ID, new TestObjectImpl(CLIENT_ID));
 
         client.listeners().add(new Listener<MessageWithTestObject>() {
             @Override
             public void connected (final Connection connection) {
-                // Allow the connection to access objects in the ObjectSpace.
-                client.getRmiBridge().addConnection(connection);
-
-                RmiTest.runTest(connection, REMOTE_ID_ON_SERVER, SERVER_ID);
+                RmiTest.runTest(connection, SERVER_REMOTE_ID, SERVER_ID);
             }
 
             @Override
@@ -97,6 +90,7 @@ public class RmiTest extends BaseTest {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;
+        connectionOptions.enableRmi = true;
 
         final Server server = new Server(connectionOptions);
         server.disableRemoteKeyValidation();
@@ -106,15 +100,9 @@ public class RmiTest extends BaseTest {
 
         // have to have this happen BEFORE any connections are made.
         final TestObjectImpl serverTestObject = new TestObjectImpl(CLIENT_ID);
-        server.getRmiBridge().register(REMOTE_ID_ON_CLIENT, serverTestObject);
+        server.rmi().register(CLIENT_REMOTE_ID, serverTestObject);
 
         server.listeners().add(new Listener<MessageWithTestObject>() {
-
-            @Override
-            public void connected(Connection connection) {
-                server.getRmiBridge().addConnection(connection);
-            }
-
             @Override
             public void received (Connection connection, MessageWithTestObject m) {
                 assertEquals(256 + 512 + 1024, serverTestObject.moos);
@@ -138,7 +126,7 @@ public class RmiTest extends BaseTest {
                 new Thread() {
                     @Override
                     public void run() {
-                        TestObject test = RmiBridge.getRemoteObject(connection, REMOTE_ID_ON_CLIENT, TestObject.class);
+                        TestObject test = connection.getRemoteObject(CLIENT_REMOTE_ID, TestObject.class);
 
                         for (int i = 0; i < 256; i++) {
                             assertEquals(CLIENT_ID, test.id());
@@ -169,6 +157,7 @@ public class RmiTest extends BaseTest {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;
+        connectionOptions.enableRmi = true;
 
         final Server server = new Server(connectionOptions);
         server.disableRemoteKeyValidation();
@@ -178,15 +167,9 @@ public class RmiTest extends BaseTest {
 
         // have to have this happen BEFORE any connections are made.
         final TestObjectImpl serverTestObject = new TestObjectImpl(CLIENT_ID);
-        server.getRmiBridge().register(REMOTE_ID_ON_CLIENT, serverTestObject);
+        server.rmi().register(CLIENT_REMOTE_ID, serverTestObject);
 
         server.listeners().add(new Listener<MessageWithTestObject>() {
-
-            @Override
-            public void connected(Connection connection) {
-                server.getRmiBridge().addConnection(connection);
-            }
-
             @Override
             public void received (Connection connection, MessageWithTestObject m) {
                 System.err.println("Client Finished!");
@@ -206,11 +189,11 @@ public class RmiTest extends BaseTest {
 
         client.listeners().add(new Listener<MessageWithTestObject>() {
             @Override
-            public void connected (final Connection connection) {
+            public void connected(final Connection connection) {
                 new Thread() {
                     @Override
                     public void run() {
-                        TestObject test = RmiBridge.getRemoteObject(connection, REMOTE_ID_ON_CLIENT, TestObject.class);
+                        TestObject test = connection.getRemoteObject(CLIENT_REMOTE_ID, TestObject.class);
                         test.id();
                         // Timeout on purpose.
                         try {
@@ -242,7 +225,7 @@ public class RmiTest extends BaseTest {
             public void run () {
                 System.err.println("Starting test for: " + id);
 
-                TestObject test = RmiBridge.getRemoteObject(connection, id, TestObject.class);
+                TestObject test = connection.getRemoteObject(id, TestObject.class);
                 RemoteObject remoteObject = (RemoteObject)test;
 
                 // Default behavior. RMI is transparent, method calls behave like normal
@@ -252,6 +235,14 @@ public class RmiTest extends BaseTest {
                 test.moo();
                 test.moo("Cow");
                 assertEquals(otherID, test.id());
+
+
+                // UDP calls that ignore the return value
+                remoteObject.setUDP(true);
+                test.moo("Meow");
+                assertEquals(0, test.id());
+                remoteObject.setUDP(false);
+
 
                 // Test that RMI correctly waits for the remotely invoked method to exit
                 remoteObject.setResponseTimeout(5000);
@@ -312,7 +303,7 @@ public class RmiTest extends BaseTest {
                 MessageWithTestObject m = new MessageWithTestObject();
                 m.number = 678;
                 m.text = "sometext";
-                m.testObject = RmiBridge.getRemoteObject(connection, id, TestObject.class);
+                m.testObject = connection.getRemoteObject(id, TestObject.class);
                 connection.send().TCP(m).flush();
             }
         }.start();
@@ -327,8 +318,6 @@ public class RmiTest extends BaseTest {
 
         kryoMT.register(UnsupportedOperationException.class);
         kryoMT.setReferences(true); // Needed for UnsupportedOperationException, which has a circular reference in the cause field.
-
-        RmiBridge.registerClasses(kryoMT);
     }
 
     public static interface TestObject {

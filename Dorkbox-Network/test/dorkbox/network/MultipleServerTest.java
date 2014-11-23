@@ -3,7 +3,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
@@ -17,7 +16,7 @@ public class MultipleServerTest extends BaseTest {
     AtomicInteger received = new AtomicInteger();
 
     @Test
-    public void multipleServers() throws IOException, InitializationException, SecurityException {
+    public void multipleServers() throws InitializationException, SecurityException {
 
         ConnectionOptions connectionOptions1 = new ConnectionOptions();
         connectionOptions1.tcpPort = tcpPort;

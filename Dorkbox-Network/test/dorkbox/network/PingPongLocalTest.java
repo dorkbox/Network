@@ -3,7 +3,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -20,7 +19,7 @@ public class PingPongLocalTest extends BaseTest {
     int                     tries = 10000;
 
     @Test
-    public void pingPongLocal() throws IOException, InitializationException, SecurityException {
+    public void pingPongLocal() throws InitializationException, SecurityException {
         this.fail = "Data not received.";
 
         final Data dataLOCAL = new Data();

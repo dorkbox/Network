@@ -4,7 +4,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,7 +24,7 @@ public class UnregisteredClassTest extends BaseTest {
     private AtomicInteger receivedUDP = new AtomicInteger();
 
     @Test
-    public void unregisteredClasses() throws IOException, InitializationException, SecurityException {
+    public void unregisteredClasses() throws InitializationException, SecurityException {
         int origSize = EndPoint.udpMaxSize;
         EndPoint.udpMaxSize = 2048;
 

@@ -18,7 +18,6 @@ import java.util.List;
 
 import org.junit.Test;
 
-import dorkbox.network.DnsClient;
 import dorkbox.network.dns.RecordDecoderFactory;
 import dorkbox.network.dns.record.MailExchangerRecord;
 import dorkbox.network.dns.record.ServiceRecord;
@@ -26,6 +25,7 @@ import dorkbox.network.dns.record.StartOfAuthorityRecord;
 
 public class DnsRecordDecoderTests {
 
+    @SuppressWarnings("unused")
     private static void submitDNS(final String server, final DnsQuestion question) {
         final InetSocketAddress dnsServer = new InetSocketAddress(server, 53);
 

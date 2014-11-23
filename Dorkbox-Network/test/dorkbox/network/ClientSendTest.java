@@ -4,7 +4,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.Test;
@@ -20,7 +19,7 @@ public class ClientSendTest extends BaseTest {
     private AtomicBoolean checkPassed = new AtomicBoolean(false);
 
     @Test
-    public void sendDataFromClientClass () throws IOException, InitializationException, SecurityException {
+    public void sendDataFromClientClass () throws InitializationException, SecurityException {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;

@@ -4,7 +4,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,7 +18,7 @@ import dorkbox.network.util.exceptions.SecurityException;
 public class ReconnectTest extends BaseTest {
 
     @Test
-    public void reconnect() throws IOException, InitializationException, SecurityException {
+    public void reconnect() throws InitializationException, SecurityException {
         final Timer timer = new Timer();
 
         ConnectionOptions connectionOptions = new ConnectionOptions();

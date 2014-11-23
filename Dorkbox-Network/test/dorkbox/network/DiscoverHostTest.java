@@ -4,8 +4,6 @@ package dorkbox.network;
 
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
-
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
@@ -17,7 +15,7 @@ public class DiscoverHostTest extends BaseTest {
     volatile boolean connected = false;
 
     @Test
-    public void broadcast () throws IOException, InitializationException, SecurityException {
+    public void broadcast () throws InitializationException, SecurityException {
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;

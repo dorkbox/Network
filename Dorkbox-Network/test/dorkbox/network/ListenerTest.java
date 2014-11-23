@@ -6,7 +6,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -58,7 +57,7 @@ public class ListenerTest extends BaseTest {
 
     @SuppressWarnings("rawtypes")
     @Test
-    public void listener() throws IOException, SecurityException, InitializationException {
+    public void listener() throws SecurityException, InitializationException {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;

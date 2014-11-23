@@ -3,7 +3,6 @@ package dorkbox.network.kryo;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.util.Random;
 
 import com.esotericsoftware.kryo.io.Input;
@@ -14,7 +13,7 @@ import com.esotericsoftware.kryo.io.UnsafeOutput;
 /** @author Nathan Sweet <misc@n4te.com> */
 @SuppressWarnings("resource")
 public class UnsafeInputOutputTest extends KryoTestCase {
-    public void testOutputStream () throws IOException {
+    public void testOutputStream () {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         UnsafeOutput output = new UnsafeOutput(buffer, 2);
         output.writeBytes(new byte[] {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26});
@@ -32,7 +31,7 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         output.close();
     }
 
-    public void testInputStream () throws IOException {
+    public void testInputStream () {
         byte[] bytes = new byte[] { //
         11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, //
             31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, //
@@ -59,7 +58,7 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         input.close();
     }
 
-    public void testWriteBytes () throws IOException {
+    public void testWriteBytes ()  {
         UnsafeOutput buffer = new UnsafeOutput(512);
         buffer.writeBytes(new byte[] {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26});
         buffer.writeBytes(new byte[] {31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46});
@@ -81,7 +80,7 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         buffer.close();
     }
 
-    public void testStrings () throws IOException {
+    public void testStrings () {
         runStringTest(new UnsafeOutput(4096));
         runStringTest(new UnsafeOutput(897));
         runStringTest(new UnsafeOutput(new ByteArrayOutputStream()));
@@ -101,7 +100,7 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         runStringTest(1024 * 1024 * 2);
     }
 
-    public void runStringTest (int length) throws IOException {
+    public void runStringTest (int length) {
         UnsafeOutput write = new UnsafeOutput(1024, -1);
         StringBuilder buffer = new StringBuilder();
         for (int i = 0; i < length; i++) {
@@ -132,7 +131,7 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         }
     }
 
-    public void runStringTest (UnsafeOutput write) throws IOException {
+    public void runStringTest (UnsafeOutput write) {
         String value1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\rabcdefghijklmnopqrstuvwxyz\n1234567890\t\"!`?'.,;:()[]{}<>|/@\\^$-%+=#_&~*";
         String value2 = "abcdef\u00E1\u00E9\u00ED\u00F3\u00FA\u1234";
 
@@ -187,7 +186,7 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         }
     }
 
-    public void testCanReadInt () throws IOException {
+    public void testCanReadInt () {
         UnsafeOutput write = new UnsafeOutput(new ByteArrayOutputStream());
 
         Input read = new UnsafeInput(write.toBytes());
@@ -201,12 +200,12 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         assertEquals(false, read.canReadInt());
     }
 
-    public void testInts () throws IOException {
+    public void testInts () {
         runIntTest(new UnsafeOutput(4096));
         runIntTest(new UnsafeOutput(new ByteArrayOutputStream()));
     }
 
-    private void runIntTest (UnsafeOutput write) throws IOException {
+    private void runIntTest (UnsafeOutput write) {
         write.writeInt(0);
         write.writeInt(63);
         write.writeInt(64);
@@ -350,12 +349,12 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         }
     }
 
-    public void testLongs () throws IOException {
+    public void testLongs () {
         runLongTest(new UnsafeOutput(4096));
         runLongTest(new UnsafeOutput(new ByteArrayOutputStream()));
     }
 
-    private void runLongTest (UnsafeOutput write) throws IOException {
+    private void runLongTest (UnsafeOutput write) {
         write.writeLong(0);
         write.writeLong(63);
         write.writeLong(64);
@@ -495,12 +494,12 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         }
     }
 
-    public void testShorts () throws IOException {
+    public void testShorts () {
         runShortTest(new UnsafeOutput(4096));
         runShortTest(new UnsafeOutput(new ByteArrayOutputStream()));
     }
 
-    private void runShortTest (UnsafeOutput write) throws IOException {
+    private void runShortTest (UnsafeOutput write) {
         write.writeShort(0);
         write.writeShort(63);
         write.writeShort(64);
@@ -535,12 +534,12 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         assertEquals(-32768, read.readShort());
     }
 
-    public void testFloats () throws IOException {
+    public void testFloats () {
         runFloatTest(new UnsafeOutput(4096));
         runFloatTest(new UnsafeOutput(new ByteArrayOutputStream()));
     }
 
-    private void runFloatTest (UnsafeOutput write) throws IOException {
+    private void runFloatTest (UnsafeOutput write) {
         write.writeFloat(0);
         write.writeFloat(63);
         write.writeFloat(64);
@@ -627,12 +626,12 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         assertEquals(read.readFloat(1000, true), -8192f);
     }
 
-    public void testDoubles () throws IOException {
+    public void testDoubles () {
         runDoubleTest(new UnsafeOutput(4096));
         runDoubleTest(new UnsafeOutput(new ByteArrayOutputStream()));
     }
 
-    private void runDoubleTest (UnsafeOutput write) throws IOException {
+    private void runDoubleTest (UnsafeOutput write) {
         write.writeDouble(0);
         write.writeDouble(63);
         write.writeDouble(64);
@@ -721,12 +720,12 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         assertEquals(1.23456d, read.readDouble());
     }
 
-    public void testBooleans () throws IOException {
+    public void testBooleans () {
         runBooleanTest(new UnsafeOutput(4096));
         runBooleanTest(new UnsafeOutput(new ByteArrayOutputStream()));
     }
 
-    private void runBooleanTest (UnsafeOutput write) throws IOException {
+    private void runBooleanTest (UnsafeOutput write) {
         for (int i = 0; i < 100; i++) {
             write.writeBoolean(true);
             write.writeBoolean(false);
@@ -739,12 +738,12 @@ public class UnsafeInputOutputTest extends KryoTestCase {
         }
     }
 
-    public void testChars () throws IOException {
+    public void testChars () {
         runCharTest(new UnsafeOutput(4096));
         runCharTest(new UnsafeOutput(new ByteArrayOutputStream()));
     }
 
-    private void runCharTest (UnsafeOutput write) throws IOException {
+    private void runCharTest (UnsafeOutput write) {
         write.writeChar((char)0);
         write.writeChar((char)63);
         write.writeChar((char)64);
@@ -768,12 +767,12 @@ public class UnsafeInputOutputTest extends KryoTestCase {
     }
 
     // Check if writing varInts may produce more bytes than expected
-    public void testWriteTooManyBytes () throws IOException {
+    public void testWriteTooManyBytes () {
         ByteArrayOutputStream os = new ByteArrayOutputStream(1);
         runVarIntTest(new UnsafeOutput(os, 4), os);
     }
 
-    private void runVarIntTest (UnsafeOutput write, ByteArrayOutputStream os) throws IOException {
+    private void runVarIntTest (UnsafeOutput write, ByteArrayOutputStream os) {
         write.writeVarInt(0, true);
         write.writeVarInt(63, true);
         write.writeVarInt(64, true);

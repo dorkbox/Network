@@ -3,7 +3,6 @@ package dorkbox.network;
 
 
 
-import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -17,7 +16,7 @@ import dorkbox.network.util.exceptions.SecurityException;
 public class ConnectionTest extends BaseTest {
 
     @Test
-    public void connectLocal() throws IOException, InitializationException, SecurityException {
+    public void connectLocal() throws InitializationException, SecurityException {
         System.out.println("---- " + "Local");
         startServer(null);
         startClient(null);
@@ -26,7 +25,7 @@ public class ConnectionTest extends BaseTest {
     }
 
     @Test
-    public void connectTcp() throws IOException, InitializationException, SecurityException {
+    public void connectTcp() throws InitializationException, SecurityException {
         System.out.println("---- " + "TCP");
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -45,7 +44,7 @@ public class ConnectionTest extends BaseTest {
     }
 
     @Test
-    public void connectTcpUdp() throws IOException, InitializationException, SecurityException {
+    public void connectTcpUdp() throws InitializationException, SecurityException {
         System.out.println("---- " + "TCP UDP");
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -66,7 +65,7 @@ public class ConnectionTest extends BaseTest {
     }
 
     @Test
-    public void connectTcpUdt() throws IOException, InitializationException, SecurityException {
+    public void connectTcpUdt() throws InitializationException, SecurityException {
         System.out.println("---- " + "TCP UDT");
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -87,7 +86,7 @@ public class ConnectionTest extends BaseTest {
     }
 
     @Test
-    public void connectTcpUdpUdt() throws IOException, InitializationException, SecurityException {
+    public void connectTcpUdpUdt() throws InitializationException, SecurityException {
         System.out.println("---- " + "TCP UDP UDT");
 
         ConnectionOptions connectionOptions = new ConnectionOptions();

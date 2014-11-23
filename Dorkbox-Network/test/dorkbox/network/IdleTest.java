@@ -6,7 +6,6 @@ import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.util.Arrays;
 
 import org.junit.Test;
@@ -31,7 +30,7 @@ public class IdleTest extends BaseTest {
     }
 
     @Test
-    public void InputStreamSender() throws IOException, InitializationException, SecurityException {
+    public void InputStreamSender() throws InitializationException, SecurityException {
         final int largeDataSize = 12345;
 
         System.err.println("-- TCP");

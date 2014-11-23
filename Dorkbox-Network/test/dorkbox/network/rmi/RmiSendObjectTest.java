@@ -3,8 +3,6 @@ package dorkbox.network.rmi;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.IOException;
-
 import org.junit.Test;
 
 import dorkbox.network.BaseTest;
@@ -12,36 +10,38 @@ import dorkbox.network.Client;
 import dorkbox.network.ConnectionOptions;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 
 public class RmiSendObjectTest extends BaseTest {
-    private RmiBridge serverRMI;
+    private Rmi serverRMI;
 
     /**
      * In this test the server has two objects in an object space. The client
      * uses the first remote object to get the second remote object.
      */
     @Test
-    public void rmi() throws IOException, InitializationException, SecurityException {
+    public void rmi() throws InitializationException, SecurityException {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;
+        connectionOptions.enableRmi = true;
 
         Server server = new Server(connectionOptions);
         server.disableRemoteKeyValidation();
-        SerializationManager serverSer = server.getSerialization();
-        register(serverSer);
+        SerializationManager serverSerializationManager = server.getSerialization();
+        register(server, serverSerializationManager);
         addEndPoint(server);
         server.bind(false);
 
 
         // After all common registrations, register OtherObjectImpl only on the server using the remote object interface ID.
         // This causes OtherObjectImpl to be serialized as OtherObject.
-        int otherObjectID = serverSer.getRegistration(OtherObject.class).getId();
-        serverSer.register(OtherObjectImpl.class, new RemoteObjectSerializer<OtherObjectImpl>(), otherObjectID);
+        int otherObjectID = serverSerializationManager.getRegistration(OtherObject.class).getId();
+        serverSerializationManager.register(OtherObjectImpl.class, new RemoteObjectSerializer<OtherObjectImpl>(server), otherObjectID);
 
 
         // TestObjectImpl has a reference to an OtherObjectImpl.
@@ -49,17 +49,11 @@ public class RmiSendObjectTest extends BaseTest {
         serverTestObject.otherObject = new OtherObjectImpl();
 
         // Both objects must be registered with the ObjectSpace.
-        this.serverRMI = server.getRmiBridge();
+        this.serverRMI = server.rmi();
         this.serverRMI.register(42, serverTestObject);
         this.serverRMI.register(777, serverTestObject.getOtherObject());
 
         server.listeners().add(new Listener<OtherObjectImpl>() {
-            @Override
-            public void connected(final Connection connection) {
-                // Allow the connection to access objects in the ObjectSpace.
-                RmiSendObjectTest.this.serverRMI.addConnection(connection);
-            }
-
             @Override
             public void received (Connection connection, OtherObjectImpl object) {
                 // The test is complete when the client sends the OtherObject instance.
@@ -73,7 +67,7 @@ public class RmiSendObjectTest extends BaseTest {
         // ----
         Client client = new Client(connectionOptions);
         client.disableRemoteKeyValidation();
-        register(client.getSerialization());
+        register(client, client.getSerialization());
 
         addEndPoint(client);
         client.listeners().add(new Listener<Object>() {
@@ -82,7 +76,7 @@ public class RmiSendObjectTest extends BaseTest {
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
-                        TestObject test = RmiBridge.getRemoteObject(connection, 42, TestObject.class);
+                        TestObject test = connection.getRemoteObject(42, TestObject.class);
                         // Normal remote method call.
                         assertEquals(43.21f, test.other(), .0001f);
 
@@ -105,11 +99,11 @@ public class RmiSendObjectTest extends BaseTest {
         waitForThreads(20);
     }
 
-    /** Registers the same classes in the same order on both the client and server. */
-    static public void register(SerializationManager kryoMT) {
+    /** Registers the same classes in the same order on both the client and server.
+     * @param server */
+    static public void register(EndPoint endpoint, SerializationManager kryoMT) {
         kryoMT.register(TestObject.class);
-        kryoMT.register(OtherObject.class, new RemoteObjectSerializer<OtherObject>());
-        RmiBridge.registerClasses(kryoMT);
+        kryoMT.register(OtherObject.class, new RemoteObjectSerializer<OtherObject>(endpoint));
     }
 
     static public interface TestObject {
