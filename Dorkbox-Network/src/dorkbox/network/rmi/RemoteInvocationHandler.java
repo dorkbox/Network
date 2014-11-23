@@ -12,6 +12,8 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ListenerRaw;
 import dorkbox.network.util.exceptions.NetException;
+import dorkbox.util.objectPool.ObjectPool;
+import dorkbox.util.objectPool.ObjectPoolHolder;
 
 /** Handles network communication when methods are invoked on a proxy. */
 class RemoteInvocationHandler implements InvocationHandler {
@@ -26,6 +28,9 @@ class RemoteInvocationHandler implements InvocationHandler {
     private boolean transmitExceptions = true;
 
     private boolean remoteToString;
+    private boolean udp;
+    private boolean udt;
+
     private Byte lastResponseID;
     private byte nextResponseId = 1;
 
@@ -37,8 +42,11 @@ class RemoteInvocationHandler implements InvocationHandler {
     final InvokeMethodResult[] responseTable = new InvokeMethodResult[64];
     final boolean[] pendingResponses = new boolean[64];
 
-    public RemoteInvocationHandler(Connection connection, final int objectID) {
+    private final ObjectPool<InvokeMethod> invokeMethodPool;
+
+    public RemoteInvocationHandler(ObjectPool<InvokeMethod> invokeMethodPool, Connection connection, final int objectID) {
         super();
+        this.invokeMethodPool = invokeMethodPool;
         this.connection = connection;
         this.objectID = objectID;
 
@@ -97,6 +105,12 @@ class RemoteInvocationHandler implements InvocationHandler {
             } else if (name.equals("setTransmitExceptions")) {
                 this.transmitExceptions = (Boolean) args[0];
                 return null;
+            } else if (name.equals("setUDP")) {
+                this.udp = (Boolean)args[0];
+                return null;
+            } else if (name.equals("setUDT")) {
+                this.udt = (Boolean)args[0];
+                return null;
             } else if (name.equals("setRemoteToString")) {
                 this.remoteToString = (Boolean) args[0];
                 return null;
@@ -124,12 +138,15 @@ class RemoteInvocationHandler implements InvocationHandler {
             return "<proxy>";
         }
 
-        InvokeMethod invokeMethod = new InvokeMethod();
+        EndPoint endPoint = this.connection.getEndPoint();
+        RmiBridge rmi = (RmiBridge) endPoint.rmi();
+
+        ObjectPoolHolder<InvokeMethod> invokeMethodHolder = this.invokeMethodPool.take();
+        InvokeMethod invokeMethod = invokeMethodHolder.getValue();
         invokeMethod.objectID = this.objectID;
         invokeMethod.args = args;
 
-        EndPoint endPoint = this.connection.getEndPoint();
-        CachedMethod[] cachedMethods = RmiBridge.getMethods(endPoint.getSerialization().getSingleInstanceUnsafe(), method.getDeclaringClass());
+        CachedMethod[] cachedMethods = rmi.getMethods(endPoint.getSerialization().getSingleInstanceUnsafe(), method.getDeclaringClass());
         for (int i = 0, n = cachedMethods.length; i < n; i++) {
             CachedMethod cachedMethod = cachedMethods[i];
             if (cachedMethod.method.equals(method)) {
@@ -145,7 +162,7 @@ class RemoteInvocationHandler implements InvocationHandler {
 
 
         // An invocation doesn't need a response is if it's async and no return values or exceptions are wanted back.
-        boolean needsResponse = this.transmitReturnValue || this.transmitExceptions || !this.nonBlocking;
+        boolean needsResponse = !this.udp && (this.transmitReturnValue || this.transmitExceptions || !this.nonBlocking);
         byte responseID = 0;
         if (needsResponse) {
             synchronized (this) {
@@ -159,17 +176,23 @@ class RemoteInvocationHandler implements InvocationHandler {
             // Pack other data into the high bits.
             byte responseData = responseID;
             if (this.transmitReturnValue) {
-                responseData |= RmiBridge.returnValMask;
+                responseData |= RmiBridge.returnValueMask;
             }
             if (this.transmitExceptions) {
-                responseData |= RmiBridge.returnExMask;
+                responseData |= RmiBridge.returnExceptionMask;
             }
             invokeMethod.responseData = responseData;
         } else {
             invokeMethod.responseData = 0; // A response data of 0 means to not respond.
         }
 
-        this.connection.send().TCP(invokeMethod).flush();
+        if (this.udp) {
+            this.connection.send().UDP(invokeMethod).flush();
+        } else if (this.udt) {
+            this.connection.send().UDT(invokeMethod).flush();
+        } else {
+            this.connection.send().TCP(invokeMethod).flush();
+        }
 
         if (logger.isDebugEnabled()) {
             String argString = "";
@@ -182,8 +205,9 @@ class RemoteInvocationHandler implements InvocationHandler {
         }
 
         this.lastResponseID = (byte)(invokeMethod.responseData & RmiBridge.responseIdMask);
+        this.invokeMethodPool.release(invokeMethodHolder);
 
-        if (this.nonBlocking) {
+        if (this.nonBlocking || this.udp) {
             Class<?> returnType = method.getReturnType();
             if (returnType.isPrimitive()) {
                 if (returnType == int.class) {
@@ -232,7 +256,6 @@ class RemoteInvocationHandler implements InvocationHandler {
     }
 
     private Object waitForResponse(byte responseID) {
-
         long endTime = System.currentTimeMillis() + this.timeoutMillis;
         long remaining = this.timeoutMillis;
 

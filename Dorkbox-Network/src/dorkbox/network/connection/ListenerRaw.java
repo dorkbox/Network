@@ -53,6 +53,7 @@ public abstract class ListenerRaw<C extends Connection, M extends Object> {
      * This method should not block for long periods as other network activity will not be processed
      * until it returns.
      */
+    @SuppressWarnings("unused")
     public void connected(C connection) {
     }
 
@@ -61,6 +62,7 @@ public abstract class ListenerRaw<C extends Connection, M extends Object> {
      * <p>
      * Do not write data in this method! The channel can be closed, resulting in an error if you attempt to do so.
      */
+    @SuppressWarnings("unused")
     public void disconnected(C connection) {
     }
 
@@ -68,18 +70,21 @@ public abstract class ListenerRaw<C extends Connection, M extends Object> {
      * Called when an object has been received from the remote end of the connection.
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
+    @SuppressWarnings("unused")
     public void received(C connection, M message) {
     }
 
     /**
      * Called when the connection is idle for longer than the {@link EndPoint#setIdleTimeout(idle) idle threshold}.
      */
+    @SuppressWarnings("unused")
     public void idle(C connection) {
     }
 
     /**
      * Called when there is an error of some kind during the up/down stream process (to/from the socket or otherwise)
      */
+    @SuppressWarnings("unused")
     public void error(C connection, Throwable throwable) {
         throwable.printStackTrace();
     }

@@ -28,6 +28,8 @@ import dorkbox.network.connection.idle.IdleSender;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
+import dorkbox.network.rmi.RemoteObject;
+import dorkbox.network.rmi.TimeoutException;
 
 
 /**
@@ -341,6 +343,47 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
         IdleObjectSender sender = new IdleObjectSender(message);
         listeners().add(sender);
         return sender;
+    }
+
+    /**
+     * Identical to {@link #getRemoteObject(C, int, Class...)} except returns
+     * the object cast to the specified interface type. The returned object
+     * still implements {@link RemoteObject}.
+     */
+    @Override
+    public <T> T getRemoteObject(int objectID, Class<T> iface) {
+        @SuppressWarnings({"unchecked"})
+        T remoteObject = (T) this.endPoint.getRemoteObject(this, objectID, new Class<?>[] {iface});
+        return remoteObject;
+    }
+
+    /**
+     * Returns a proxy object that implements the specified interfaces. Methods
+     * invoked on the proxy object will be invoked remotely on the object with
+     * the specified ID in the ObjectSpace for the specified connection. If the
+     * remote end of the connection has not {@link #addConnection(Connection)
+     * added} the connection to the ObjectSpace, the remote method invocations
+     * will be ignored.
+     * <p>
+     * Methods that return a value will throw {@link TimeoutException} if the
+     * response is not received with the
+     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
+     * <p>
+     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
+     * (the default), then methods that return a value must not be called from
+     * the update thread for the connection. An exception will be thrown if this
+     * occurs. Methods with a void return value can be called on the update
+     * thread.
+     * <p>
+     * If a proxy returned from this method is part of an object graph sent over
+     * the network, the object graph on the receiving side will have the proxy
+     * object replaced with the registered object.
+     *
+     * @see RemoteObject
+     */
+    @Override
+    public RemoteObject getRemoteObject(int objectID, Class<?>... ifaces) {
+       return this.endPoint.getRemoteObject(this, objectID, ifaces);
     }
 
     /**

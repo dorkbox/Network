@@ -10,6 +10,10 @@ class AsmCachedMethod extends CachedMethod {
 
     @Override
     public Object invoke(Object target, Object[] args) throws IllegalAccessException, InvocationTargetException {
-        return this.methodAccess.invoke(target, this.methodAccessIndex, args);
+        try {
+            return this.methodAccess.invoke(target, this.methodAccessIndex, args);
+        } catch (Exception ex) {
+            throw new InvocationTargetException(ex);
+        }
     }
 }

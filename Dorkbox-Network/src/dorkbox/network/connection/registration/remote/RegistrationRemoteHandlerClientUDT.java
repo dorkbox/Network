@@ -145,7 +145,7 @@ public class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandle
                     // hooray! we are successful
 
                     // notify the client that we are ready to continue registering other session protocols (bootstraps)
-                    boolean isDoneWithRegistration = registrationWrapper2.continueRegistration0();
+                    boolean isDoneWithRegistration = registrationWrapper2.registerNextProtocol0();
 
                     // tell the server we are done, and to setup crypto on it's side
                     if (isDoneWithRegistration) {

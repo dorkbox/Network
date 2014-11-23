@@ -98,9 +98,6 @@ public class Broadcast {
         List<InetAddress> servers = new ArrayList<InetAddress>();
 
         Logger logger2 = logger;
-        if (logger2.isInfoEnabled()) {
-            logger2.info("Searching for host on port: {}", udpPort);
-        }
 
         Enumeration<NetworkInterface> networkInterfaces;
         try {
@@ -127,6 +124,10 @@ public class Broadcast {
 
 
                 try {
+                    if (logger2.isInfoEnabled()) {
+                        logger2.info("Searching for host on {} : {}", address, udpPort);
+                    }
+
                     NioEventLoopGroup group = new NioEventLoopGroup();
                     Bootstrap udpBootstrap = new Bootstrap()
                                 .group(group)

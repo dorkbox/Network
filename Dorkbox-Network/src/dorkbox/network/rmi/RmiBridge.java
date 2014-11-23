@@ -9,9 +9,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.slf4j.Logger;
 
@@ -30,9 +31,11 @@ import dorkbox.network.connection.ListenerRaw;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.collections.ObjectIntMap;
+import dorkbox.util.objectPool.ObjectPool;
+import dorkbox.util.objectPool.ObjectPoolFactory;
 
 /**
- * Allows methods on objects to be invoked remotely over TCP. Objects are
+ * Allows methods on objects to be invoked remotely over TCP, UDP, or UDT. Objects are
  * {@link #register(int, Object) registered} with an ID. The remote end of
  * connections that have been {@link #addConnection(Connection) added} are
  * allowed to {@link #getRemoteObject(Connection, int, Class) access} registered
@@ -46,89 +49,79 @@ import dorkbox.util.collections.ObjectIntMap;
  *
  * @author Nathan Sweet <misc@n4te.com>, Nathan Robinson
  */
-public class RmiBridge {
+public class RmiBridge implements Rmi {
     private static final String OBJECT_ID = "objectID";
 
-    static CopyOnWriteArrayList<RmiBridge> instances = new CopyOnWriteArrayList<RmiBridge>();
+    static final int returnValueMask = 1 << 7;
+    static final int returnExceptionMask = 1 << 6;
+    static final int responseIdMask = 0xFF & ~returnValueMask & ~returnExceptionMask;
 
-    private static final HashMap<Class<?>, CachedMethod[]> methodCache = new HashMap<Class<?>, CachedMethod[]>();
 
+    // the name of who created this RmiBridge
+    private final org.slf4j.Logger logger;
 
-    static final int returnValMask = 1 << 7;
-    static final int returnExMask = 1 << 6;
-    static final int responseIdMask = 0xff & ~returnValMask & ~returnExMask;
+    private HashMap<Class<?>, CachedMethod[]> methodCache = new HashMap<Class<?>, CachedMethod[]>();
 
-    private static boolean asm = true;
+    private final boolean asm;
 
-    // can be access by DIFFERENT threads.
-    volatile IntMap<Object> idToObject = new IntMap<Object>();
-    volatile ObjectIntMap<Object> objectToID = new ObjectIntMap<Object>();
-
-    private CopyOnWriteArrayList<Connection> connections = new CopyOnWriteArrayList<Connection>();
+    // can be accessed by DIFFERENT threads.
+    private ReentrantReadWriteLock objectLock = new ReentrantReadWriteLock();
+    private IntMap<Object> idToObject = new IntMap<Object>();
+    private ObjectIntMap<Object> objectToID = new ObjectIntMap<Object>();
 
     private Executor executor;
 
-    // the name of who created this object space.
-    private final org.slf4j.Logger logger;
+    // 4096 concurrent method invocations max
+    private final ObjectPool<InvokeMethod> invokeMethodPool = ObjectPoolFactory.create(new InvokeMethodPoolable(), 4096);
 
     private final ListenerRaw<Connection, InvokeMethod> invokeListener = new ListenerRaw<Connection, InvokeMethod>() {
-            @Override
-            public void received(final Connection connection, final InvokeMethod invokeMethod) {
-                boolean found = false;
+        @Override
+        public void received(final Connection connection, final InvokeMethod invokeMethod) {
+            ReadLock readLock = RmiBridge.this.objectLock.readLock();
+            readLock.lock();
 
-                Iterator<Connection> iterator = RmiBridge.this.connections.iterator();
-                while (iterator.hasNext()) {
-                    Connection c = iterator.next();
-                    if (c == connection) {
-                        found = true;
-                        break;
+            final Object target = RmiBridge.this.idToObject.get(invokeMethod.objectID);
+
+            readLock.unlock();
+
+
+            if (target == null) {
+                Logger logger2 = RmiBridge.this.logger;
+                if (logger2.isWarnEnabled()) {
+                    logger2.warn("Ignoring remote invocation request for unknown object ID: {}", invokeMethod.objectID);
+                }
+
+                return;
+            }
+
+            Executor executor2 = RmiBridge.this.executor;
+            if (executor2 == null) {
+                invoke(connection,
+                       target,
+                       invokeMethod);
+            } else {
+                executor2.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        invoke(connection,
+                               target,
+                               invokeMethod);
                     }
-                }
-
-                // The InvokeMethod message is not for a connection in this ObjectSpace.
-                if (!found) {
-                    return;
-                }
-
-                final Object target = RmiBridge.this.idToObject.get(invokeMethod.objectID);
-                if (target == null) {
-                    RmiBridge.this.logger.warn("Ignoring remote invocation request for unknown object ID: {}", invokeMethod.objectID);
-                    return;
-                }
-
-                Executor executor2 = RmiBridge.this.executor;
-                if (executor2 == null) {
-                    invoke(connection,
-                           target,
-                           invokeMethod);
-                } else {
-                    executor2.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            invoke(connection,
-                                   target,
-                                   invokeMethod);
-                        }
-                    });
-                }
+                });
             }
-
-            @Override
-            public void disconnected(Connection connection) {
-                removeConnection(connection);
-            }
-        };
+        }
+    };
 
     /**
-     * Creates an ObjectSpace with no connections. Connections must be
+     * Creates an RmiBridge with no connections. Connections must be
      * {@link #connectionConnected(Connection) added} to allow the remote end of
      * the connections to access objects in this ObjectSpace.
-     * <p>
-     * For safety, this should ONLY be called by {@link EndPoint#getRmiBridge() }
      */
-    public RmiBridge(Logger logger) {
+    public RmiBridge(Logger logger, SerializationManager serializationManager) {
         this.logger = logger;
-        instances.addIfAbsent(this);
+        this.asm = serializationManager.getSingleInstanceUnsafe().getAsmEnabled();
+
+        registerClasses(serializationManager);
     }
 
     /**
@@ -143,22 +136,12 @@ public class RmiBridge {
         this.executor = executor;
     }
 
-    /** If true, an attempt will be made to use ReflectASM for invoking methods. Default is true. */
-    static public void setAsm(boolean asm) {
-        RmiBridge.asm = asm;
-    }
-
     /**
-     * Registers an object to allow the remote end of the ObjectSpace's
-     * connections to access it using the specified ID.
-     * <p>
-     * If a connection is added to multiple ObjectSpaces, the same object ID
-     * should not be registered in more than one of those ObjectSpaces.
+     * Registers an object to allow the remote end of the RmiBridge connections to access it using the specified ID.
      *
-     * @param objectID
-     *            Must not be Integer.MAX_VALUE.
-     * @see #getRemoteObject(Connection, int, Class...)
+     * @param objectID Must not be Integer.MAX_VALUE.
      */
+    @Override
     public void register(int objectID, Object object) {
         if (objectID == Integer.MAX_VALUE) {
             throw new IllegalArgumentException("objectID cannot be Integer.MAX_VALUE.");
@@ -166,8 +149,14 @@ public class RmiBridge {
         if (object == null) {
             throw new IllegalArgumentException("object cannot be null.");
         }
+
+        WriteLock writeLock = RmiBridge.this.objectLock.writeLock();
+        writeLock.lock();
+
         this.idToObject.put(objectID, object);
         this.objectToID.put(object, objectID);
+
+        writeLock.unlock();
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
@@ -176,32 +165,19 @@ public class RmiBridge {
     }
 
     /**
-     * Causes this ObjectSpace to stop listening to the connections for method
-     * invocation messages.
+     * Removes an object. The remote end of the RmiBridge connection will no longer be able to access it.
      */
-    public void close() {
-        Iterator<Connection> iterator = this.connections.iterator();
-        while (iterator.hasNext()) {
-            Connection connection = iterator.next();
-            connection.listeners().remove(this.invokeListener);
-        }
-
-        instances.remove(this);
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("Closed ObjectSpace.");
-        }
-    }
-
-    /**
-     * Removes an object. The remote end of the ObjectSpace's connections will
-     * no longer be able to access it.
-     */
+    @Override
     public void remove(int objectID) {
+        WriteLock writeLock = RmiBridge.this.objectLock.writeLock();
+        writeLock.lock();
+
         Object object = this.idToObject.remove(objectID);
         if (object != null) {
             this.objectToID.remove(object, 0);
         }
+
+        writeLock.unlock();
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
@@ -210,11 +186,15 @@ public class RmiBridge {
     }
 
     /**
-     * Removes an object. The remote end of the ObjectSpace's connections will
-     * no longer be able to access it.
+     * Removes an object. The remote end of the RmiBridge connection will no longer be able to access it.
      */
+    @Override
     public void remove(Object object) {
+        WriteLock writeLock = RmiBridge.this.objectLock.writeLock();
+        writeLock.lock();
+
         if (!this.idToObject.containsValue(object, true)) {
+            writeLock.unlock();
             return;
         }
 
@@ -222,52 +202,27 @@ public class RmiBridge {
         this.idToObject.remove(objectID);
         this.objectToID.remove(object, 0);
 
+        writeLock.unlock();
+
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
             logger2.trace("Object {} removed from ObjectSpace: {}", objectID, object);
         }
     }
 
-    /**
-     * Allows the remote end of the specified connection to access objects
-     * registered in this ObjectSpace.
-     */
-    public void addConnection(Connection connection) {
-        if (connection == null) {
-            throw new IllegalArgumentException("connection cannot be null.");
-        }
-
-        this.connections.addIfAbsent(connection);
-        connection.listeners().add(this.invokeListener);
-
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("Added connection to ObjectSpace: {}", connection);
-        }
-    }
 
     /**
-     * Removes the specified connection, it will no longer be able to access
-     * objects registered in this ObjectSpace.
+     * @return the invocation listener
      */
-    public void removeConnection(Connection connection) {
-        if (connection == null) {
-            throw new IllegalArgumentException("connection cannot be null.");
-        }
-
-        connection.listeners().remove(this.invokeListener);
-        this.connections.remove(connection);
-
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("Removed connection from ObjectSpace: {}", connection);
-        }
+    @SuppressWarnings("rawtypes")
+    public ListenerRaw getListener() {
+        return this.invokeListener;
     }
 
     /**
      * Invokes the method on the object and, if necessary, sends the result back
      * to the connection that made the invocation request. This method is
-     * invoked on the update thread of the {@link EndPoint} for this ObjectSpace
+     * invoked on the update thread of the {@link EndPoint} for this RmiBridge
      * and unless an {@link #setExecutor(Executor) executor} has been set.
      *
      * @param connection
@@ -292,8 +247,8 @@ public class RmiBridge {
 
 
         byte responseData = invokeMethod.responseData;
-        boolean transmitReturnVal = (responseData & returnValMask) == returnValMask;
-        boolean transmitExceptions = (responseData & returnExMask) == returnExMask;
+        boolean transmitReturnVal = (responseData & returnValueMask) == returnValueMask;
+        boolean transmitExceptions = (responseData & returnExceptionMask) == returnExceptionMask;
         int responseID = responseData & responseIdMask;
 
         Object result = null;
@@ -343,17 +298,6 @@ public class RmiBridge {
     }
 
     /**
-     * Identical to {@link #getRemoteObject(C, int, Class...)} except returns
-     * the object cast to the specified interface type. The returned object
-     * still implements {@link RemoteObject}.
-     */
-    static public <T, C extends Connection> T getRemoteObject(final C connection, int objectID, Class<T> iface) {
-        @SuppressWarnings({"unchecked"})
-        T remoteObject = (T) getRemoteObject(connection, objectID, new Class<?>[] {iface});
-        return remoteObject;
-    }
-
-    /**
      * Returns a proxy object that implements the specified interfaces. Methods
      * invoked on the proxy object will be invoked remotely on the object with
      * the specified ID in the ObjectSpace for the specified connection. If the
@@ -377,7 +321,7 @@ public class RmiBridge {
      *
      * @see RemoteObject
      */
-    public static RemoteObject getRemoteObject(Connection connection, int objectID, Class<?>... ifaces) {
+    public RemoteObject getRemoteObject(Connection connection, int objectID, Class<?>... ifaces) {
         if (connection == null) {
             throw new IllegalArgumentException("connection cannot be null.");
         }
@@ -391,11 +335,11 @@ public class RmiBridge {
 
         return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(),
                                                      temp,
-                                                     new RemoteInvocationHandler(connection, objectID));
+                                                     new RemoteInvocationHandler(this.invokeMethodPool, connection, objectID));
     }
 
-    static CachedMethod[] getMethods(Kryo kryo, Class<?> type) {
-        CachedMethod[] cachedMethods = methodCache.get(type); // Maybe should cache per Kryo instance?
+    public CachedMethod[] getMethods(Kryo kryo, Class<?> type) {
+        CachedMethod[] cachedMethods = this.methodCache.get(type); // Maybe should cache per Kryo instance?
         if (cachedMethods != null) {
             return cachedMethods;
         }
@@ -453,7 +397,7 @@ public class RmiBridge {
         });
 
         Object methodAccess = null;
-        if (asm && !Util.isAndroid && Modifier.isPublic(type.getModifiers())) {
+        if (this.asm && !Util.isAndroid && Modifier.isPublic(type.getModifiers())) {
             methodAccess = MethodAccess.get(type);
         }
 
@@ -493,73 +437,47 @@ public class RmiBridge {
             cachedMethods[i] = cachedMethod;
         }
 
-        methodCache.put(type, cachedMethods);
+        this.methodCache.put(type, cachedMethods);
         return cachedMethods;
     }
 
     /**
-     * Returns the first object registered with the specified ID in any of the
-     * ObjectSpaces the specified connection belongs to.
+     * Returns the object registered with the specified ID.
      */
-    static Object getRegisteredObject(Connection connection, int objectID) {
-        CopyOnWriteArrayList<RmiBridge> instances = RmiBridge.instances;
-        for (RmiBridge objectSpace : instances) {
-            // Check if the connection is in this ObjectSpace.
-            Iterator<Connection> iterator = objectSpace.connections.iterator();
-            while (iterator.hasNext()) {
-                Connection c = iterator.next();
-                if (c != connection) {
-                    continue;
-                }
+    Object getRegisteredObject(int objectID) {
+        ReadLock readLock = this.objectLock.readLock();
+        readLock.lock();
 
-                // Find an object with the objectID.
-                Object object = objectSpace.idToObject.get(objectID);
-                if (object != null) {
-                    return object;
-                }
-            }
-        }
+        // Find an object with the objectID.
+        Object object = this.idToObject.get(objectID);
+        readLock.unlock();
 
-        return null;
+        return object;
     }
 
     /**
-     * Returns the first ID registered for the specified object with any of the
-     * ObjectSpaces the specified connection belongs to, or Integer.MAX_VALUE
-     * if not found.
+     * Returns the ID registered for the specified object, or Integer.MAX_VALUE if not found.
      */
-    public static int getRegisteredId(Connection connection, Object object) {
-        CopyOnWriteArrayList<RmiBridge> instances = RmiBridge.instances;
-        for (RmiBridge objectSpace : instances) {
-            // Check if the connection is in this ObjectSpace.
-            Iterator<Connection> iterator = objectSpace.connections.iterator();
-            while (iterator.hasNext()) {
-                Connection c = iterator.next();
-                if (c != connection) {
-                    continue;
-                }
+    public int getRegisteredId(Object object) {
+        // Find an ID with the object.
+        ReadLock readLock = this.objectLock.readLock();
 
-                // Find an ID with the object.
-                int id = objectSpace.objectToID.get(object, Integer.MAX_VALUE);
-                if (id != Integer.MAX_VALUE) {
-                    return id;
-                }
-            }
-        }
+        readLock.lock();
+        int id = this.objectToID.get(object, Integer.MAX_VALUE);
+        readLock.unlock();
 
-        return Integer.MAX_VALUE;
+        return id;
     }
 
     /**
-     * Registers the classes needed to use ObjectSpaces. This should be called
-     * before any connections are opened.
+     * Registers the classes needed to use RMI. This should be called before any connections are opened.
      */
-    public static void registerClasses(final SerializationManager smanager) {
-        smanager.registerForRmiClasses(new RmiRegisterClassesCallback() {
+    private void registerClasses(final SerializationManager manager) {
+        manager.registerForRmiClasses(new RmiRegisterClassesCallback() {
             @Override
             public void registerForClasses(Kryo kryo) {
                 kryo.register(Object[].class);
-                kryo.register(InvokeMethod.class);
+                kryo.register(InvokeMethod.class, new InvokeMethodSerializer(RmiBridge.this));
 
                 FieldSerializer<InvokeMethodResult> resultSerializer = new FieldSerializer<InvokeMethodResult>(kryo, InvokeMethodResult.class) {
                     @Override
@@ -590,7 +508,7 @@ public class RmiBridge {
                     public Object read(Kryo kryo, Input input, Class<Object> type) {
                         int objectID = input.readInt(true);
                         Connection connection = (Connection) kryo.getContext().get(Connection.connection);
-                        Object object = getRegisteredObject(connection, objectID);
+                        Object object = getRegisteredObject(objectID);
                         if (object == null) {
                             final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(RmiBridge.class);
                             logger.warn("Unknown object ID {} for connection: {}", objectID, connection);

@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 import dorkbox.network.Broadcast;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -76,8 +75,9 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
             // this is the response from a discoverHost query
             out.add(new DatagramPacket((ByteBuf) object, remoteAddress));
         } else {
-            ByteBuf buffer = Unpooled.buffer(EndPoint.udpMaxSize);
-
+            // this is regular registration stuff
+            ByteBuf buffer = context.alloc().buffer();
+            // writes data into buffer
             sendUDP(context, object, buffer, remoteAddress);
 
             if (buffer != null) {
@@ -121,6 +121,7 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
     }
 
 
+    @SuppressWarnings("unused")
     public final void sendUDP(ChannelHandlerContext context, Object object, ByteBuf buffer, InetSocketAddress udpRemoteAddress) {
 
         Connection networkConnection = this.registrationWrapper.getServerUDP(udpRemoteAddress);
@@ -135,7 +136,8 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
 
 
     // this will be invoked by the UdpRegistrationHandlerServer. Remember, TCP will be established first.
-    public final void receivedUDP(ChannelHandlerContext context, Channel channel, ByteBuf data, InetSocketAddress udpRemoteAddress) throws Exception {
+    @SuppressWarnings("unused")
+    private final void receivedUDP(ChannelHandlerContext context, Channel channel, ByteBuf data, InetSocketAddress udpRemoteAddress) throws Exception {
         // registration is the ONLY thing NOT encrypted
         Logger logger2 = this.logger;
         RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
@@ -171,7 +173,7 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
 
             try {
                 object = serializationManager2.read(data, data.writerIndex());
-            } catch (NetException e) {
+            } catch (Exception e) {
                 logger2.error("UDP unable to deserialize buffer", e);
                 shutdown(registrationWrapper2, channel);
                 return;
@@ -227,7 +229,6 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
                     register.payload = Crypto.AES.encrypt(RegistrationRemoteHandler.getAesEngine(), metaChannel.aesKey, metaChannel.aesIV, idAsBytes);
 
                     channel.writeAndFlush(new UdpWrapper(register, udpRemoteAddress));
-
                     if (logger2.isTraceEnabled()) {
                         logger2.trace("Register UDP connection from {}", udpRemoteAddress);
                     }

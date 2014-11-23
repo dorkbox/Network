@@ -1,5 +1,6 @@
 package dorkbox.network;
 
+import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.store.SettingsStore;
 
@@ -17,6 +18,17 @@ public class ConnectionOptions {
 
     public SerializationManager serializationManager = null;
     public SettingsStore settingsStore = null;
+
+    /**
+     * Enable remote method invocation (RMI) for this connection. This is additional overhead to using RMI.
+     * <p>
+     * Specifically, It costs at least 2 bytes more to use remote method invocation than just
+     * sending the parameters. If the method has a return value which is not
+     * {@link RemoteObject#setNonBlocking(boolean) ignored}, an extra byte is
+     * written. If the type of a parameter is not final (note primitives are final)
+     * then an extra byte is written for that parameter.
+     */
+    public boolean enableRmi = false;
 
 
     public ConnectionOptions() {

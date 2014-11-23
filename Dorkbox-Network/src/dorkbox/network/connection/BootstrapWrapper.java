@@ -1,13 +1,13 @@
-package dorkbox.network;
+package dorkbox.network.connection;
 
 import io.netty.bootstrap.Bootstrap;
 
-class BootstrapWrapper {
-    final String type;
-    final Bootstrap bootstrap;
-    final int port;
+public class BootstrapWrapper {
+    public final String type;
+    public final Bootstrap bootstrap;
+    public final int port;
 
-    BootstrapWrapper(String type, int port, Bootstrap bootstrap) {
+    public BootstrapWrapper(String type, int port, Bootstrap bootstrap) {
         this.type = type;
         this.port = port;
         this.bootstrap = bootstrap;

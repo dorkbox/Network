@@ -63,7 +63,7 @@ public class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
             channel.pipeline().remove(this);
 
             // Event though a local channel is XOR with everything else, we still have to make the client clean up it's state.
-            registrationWrapper.continueRegistration0();
+            registrationWrapper.registerNextProtocol0();
 
             Connection connection = metaChannel.connection;
             registrationWrapper.connectionConnected0(connection);

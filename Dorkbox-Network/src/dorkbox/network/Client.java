@@ -2,7 +2,6 @@ package dorkbox.network;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
@@ -19,11 +18,10 @@ import io.netty.channel.socket.oio.OioSocketChannel;
 import io.netty.util.internal.PlatformDependent;
 
 import java.net.InetSocketAddress;
-import java.util.LinkedList;
-import java.util.List;
 
 import org.slf4j.Logger;
 
+import dorkbox.network.connection.BootstrapWrapper;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointClient;
 import dorkbox.network.connection.idle.IdleBridge;
@@ -40,15 +38,9 @@ import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 
 /**
- * The client is both SYNC and ASYNC, meaning that once the client is connected to the server, you can access it however you want.
- * <p>
- * Another way to put this: The client (like the server) can respond to EVENTS (ie, listeners), but you can also use it DIRECTLY, for
- * example, send data to the server on keyboard input. This is because the client will BLOCK the calling thread until it's ready.
+ * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's ASYNC.
  */
 public class Client extends EndPointClient {
-    private List<BootstrapWrapper> bootstraps = new LinkedList<BootstrapWrapper>();
-
-    private volatile int connectionTimeout = 5000; // default
 
     /**
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme
@@ -90,7 +82,6 @@ public class Client extends EndPointClient {
             options.udtPort = -1;
         }
 
-
 //      tcpBootstrap.setOption(SO_SNDBUF, 1048576);
 //      tcpBootstrap.setOption(SO_RCVBUF, 1048576);
 
@@ -130,11 +121,9 @@ public class Client extends EndPointClient {
                     if (OS.isLinux()) {
                         // JNI network stack is MUCH faster (but only on linux)
                         boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
-
                         tcpBootstrap.channel(EpollSocketChannel.class);
                     } else {
                         boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
-
                         tcpBootstrap.channel(NioSocketChannel.class);
                     }
                 }
@@ -168,7 +157,6 @@ public class Client extends EndPointClient {
                 } else {
                     // CANNOT USE EpollDatagramChannel on the client!
                     boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-UDP", nettyGroup));
-
                     udpBootstrap.channel(NioDatagramChannel.class);
                 }
 
@@ -258,6 +246,8 @@ public class Client extends EndPointClient {
 
     /**
      * will attempt to connect to the server, and will the specified timeout.
+     * <p>
+     * will BLOCK until completed
      *
      * @param connectionTimeout wait for x milliseconds. 0 will wait indefinitely
      */
@@ -269,58 +259,18 @@ public class Client extends EndPointClient {
         synchronized (this.shutdownInProgress) {
         }
 
-        // have to BLOCK here, because we don't want sendTCP() called before registration is complete
+        // have to start the registration process
+        this.connectingBootstrap.set(0);
+        registerNextProtocol();
+
+        // have to BLOCK
+        // don't want the client to run before registration is complete
         synchronized (this.registrationLock) {
-            this.registrationInProgress = true;
-
-            // we will only do a local channel when NOT doing TCP/UDP channels. This is EXCLUSIVE. (XOR)
-            int size = this.bootstraps.size();
-            for (int i=0;i<size;i++) {
-                if (!this.registrationInProgress) {
-                    break;
-                }
-
-                this.registrationComplete = i == size-1;
-                BootstrapWrapper bootstrapWrapper = this.bootstraps.get(i);
-                ChannelFuture future;
-
-                if (connectionTimeout != 0) {
-                    // must be before connect
-                    bootstrapWrapper.bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectionTimeout);
-                }
-
-                Logger logger2 = this.logger;
-                try {
-                    // UDP : When this is CONNECT on a udp socket will ONLY accept UDP traffic from the remote address (ip/port combo).
-                    //       If the reply isn't from the correct port, then the other end will receive a "Port Unreachable" exception.
-
-                    future = bootstrapWrapper.bootstrap.connect();
-                    future.await();
-                } catch (Exception e) {
-                    String errorMessage = stopWithErrorMessage(logger2, "Could not connect to the " + bootstrapWrapper.type + " server on port: " + bootstrapWrapper.port, e);
-                    this.registrationInProgress = false;
-                    throw new IllegalArgumentException(errorMessage);
-                }
-
-                if (!future.isSuccess()) {
-                    String errorMessage = stopWithErrorMessage(logger2, "Could not connect to the " + bootstrapWrapper.type + " server on port: " + bootstrapWrapper.port, future.cause());
-                    this.registrationInProgress = false;
-                    throw new IllegalArgumentException(errorMessage);
-                }
-
-                if (logger2.isTraceEnabled()) {
-                    logger2.trace("Waiting for registration from server.");
-                }
-                manageForShutdown(future);
-
-                // WAIT for the next one to complete.
-                try {
-                    this.registrationLock.wait(connectionTimeout);
-                } catch (InterruptedException e) {
-                }
+            try {
+                this.registrationLock.wait(connectionTimeout);
+            } catch (InterruptedException e) {
+                this.logger.error("Registration thread interrupted!");
             }
-
-            this.registrationInProgress = false;
         }
     }
 
@@ -356,18 +306,8 @@ public class Client extends EndPointClient {
      */
     @Override
     public void close() {
-        // in case a different thread is blocked waiting for registration.
         synchronized (this.registrationLock) {
-            if (this.registrationInProgress) {
-                try {
-                    this.registrationLock.wait();
-                } catch (InterruptedException e) {
-                }
-            }
-
-            // inside the sync block, because we DON'T want to allow a connect WHILE close is happening! Since connect is also
-            // in the sync bloc, we prevent it from happening.
-            super.close();
+            this.registrationLock.notify();
         }
     }
 }

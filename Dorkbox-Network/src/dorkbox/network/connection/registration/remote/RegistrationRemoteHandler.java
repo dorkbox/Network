@@ -316,6 +316,7 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
      * The server will override this.
      * Only called if we have a UDP channel when we finalize the setup of the TCP connection
      */
+    @SuppressWarnings("unused")
     protected void setupServerUdpConnection(MetaChannel metaChannel) {
     }
 

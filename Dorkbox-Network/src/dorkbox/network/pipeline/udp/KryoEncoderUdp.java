@@ -31,7 +31,8 @@ public class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
     }
 
     // the crypto writer will override this
-    protected void writeObject(SerializationManager kryoWrapper, ChannelHandlerContext ctx, Object msg, ByteBuf buffer) {
+    @SuppressWarnings("unused")
+    protected void writeObject(SerializationManager kryoWrapper, ChannelHandlerContext context, Object msg, ByteBuf buffer) {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         kryoWrapper.write(buffer, msg);
     }
@@ -43,7 +44,7 @@ public class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
                 ByteBuf outBuffer = Unpooled.buffer(maxSize);
 
                 // no size info, since this is UDP, it is not segmented
-                writeObject(kryoWrapper, ctx, msg, outBuffer);
+                writeObject(this.kryoWrapper, ctx, msg, outBuffer);
 
 
                 // have to check to see if we are too big for UDP!

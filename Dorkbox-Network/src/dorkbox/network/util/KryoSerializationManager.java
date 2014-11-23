@@ -659,6 +659,7 @@ public class KryoSerializationManager implements SerializationManager {
     }
 
 
+    @SuppressWarnings("unused")
     private static void compress(ByteBuf inputBuffer, ByteBuf outputBuffer, int length, Deflater compress) {
 
         byte[] in = new byte[inputBuffer.readableBytes()];

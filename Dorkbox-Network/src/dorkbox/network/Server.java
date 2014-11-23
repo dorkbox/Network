@@ -7,8 +7,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.EpollChannelOption;
-import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.local.LocalAddress;
@@ -217,26 +215,26 @@ public class Server extends EndPointServer {
                 worker = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
                 this.udpBootstrap.channel(OioDatagramChannel.class);
             } else {
-                if (OS.isLinux()) {
-                    // JNI network stack is MUCH faster (but only on linux)
-                    worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
-
-                    this.udpBootstrap.channel(EpollDatagramChannel.class)
-                                     .option(EpollChannelOption.SO_REUSEPORT, true);
-                } else {
+//                if (OS.isLinux()) {
+//                    // JNI network stack is MUCH faster (but only on linux)
+//                    worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
+//
+//                    this.udpBootstrap.channel(EpollDatagramChannel.class)
+//                                     .option(EpollChannelOption.SO_REUSEPORT, true);
+//                } else {
                     worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
 
                     this.udpBootstrap.channel(NioDatagramChannel.class);
-                }
+//                }
             }
 
             manageForShutdown(worker);
 
             this.udpBootstrap.group(worker)
-                        .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                         // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                        .localAddress(this.udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
-                        .handler(new RegistrationRemoteHandlerServerUDP(this.name, this.registrationWrapper, this.serializationManager));
+                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                             // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
+                             .localAddress(this.udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
+                             .handler(new RegistrationRemoteHandlerServerUDP(this.name, this.registrationWrapper, this.serializationManager));
 
 
             // Enable to READ from MULTICAST data (ie, 192.168.1.0)

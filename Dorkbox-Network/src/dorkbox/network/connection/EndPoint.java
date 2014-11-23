@@ -7,6 +7,8 @@ import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 
 import java.lang.annotation.Annotation;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.security.AccessControlException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -37,7 +39,10 @@ import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
+import dorkbox.network.rmi.RemoteObject;
+import dorkbox.network.rmi.Rmi;
 import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.rmi.TimeoutException;
 import dorkbox.network.util.EndpointTool;
 import dorkbox.network.util.KryoSerializationManager;
 import dorkbox.network.util.SerializationManager;
@@ -51,6 +56,7 @@ import dorkbox.network.util.serializers.IgnoreSerialization;
 import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.network.util.udt.UdtEndpointProxy;
+import dorkbox.util.Sys;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
@@ -139,7 +145,7 @@ public abstract class EndPoint {
     protected final RegistrationWrapper registrationWrapper;
 
     // The remote object space is used by RMI.
-    protected RmiBridge remoteObjectSpace = null;
+    private final RmiBridge rmiBridge;
 
     // the eventLoop groups are used to track and manage the event loops for startup/shutdown
     private List<EventLoopGroup> eventLoopGroups = new ArrayList<EventLoopGroup>(8);
@@ -171,6 +177,17 @@ public abstract class EndPoint {
         this.logger = org.slf4j.LoggerFactory.getLogger(name);
 
         this.registrationWrapper = new RegistrationWrapper(this, this.logger);
+
+        // make sure that 'localhost' is REALLY our specific IP address
+        if (options.host != null && (options.host.equals("localhost") || options.host.startsWith("127."))) {
+            try {
+                InetAddress localHostLanAddress = Sys.getLocalHostLanAddress();
+                options.host = localHostLanAddress.getHostAddress();
+                this.logger.info("Network localhost request, using real IP instead: {}", options.host);
+            } catch (UnknownHostException e) {
+                this.logger.error("Unable to get the actual 'localhost' IP address", e);
+            }
+        }
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
         if (options.settingsStore == null) {
@@ -278,7 +295,18 @@ public abstract class EndPoint {
 
 
         // add the ping listener (internal use only!)
-        this.connectionManager.add(new PingSystemListener(name));
+        this.connectionManager.add(new PingSystemListener());
+
+        /*
+         * Creates the remote method invocation (RMI) bridge for this endpoint.
+         * <p>
+         * there is some housekeeping that is necessary BEFORE a connection is actually connected..
+         */
+        if (options.enableRmi) {
+            this.rmiBridge = new RmiBridge(this.logger, this.serializationManager);
+        } else {
+            this.rmiBridge = null;
+        }
     }
 
     public void disableRemoteKeyValidation() {
@@ -323,7 +351,7 @@ public abstract class EndPoint {
      * Internal call by the pipeline to notify the client to continue registering the different session protocols.
      * The server does not use this.
      */
-    protected boolean continueRegistration0() {
+    protected boolean registerNextProtocol0() {
         return true;
     }
 
@@ -385,25 +413,15 @@ public abstract class EndPoint {
     }
 
     /**
-     * Creates the remote (RMI) object space for this endpoint.
-     * <p>
-     * This method is safe, and is recommended. Make sure to call it BEFORE a connection is established, as
-     * there is some housekeeping that is necessary BEFORE a connection is actually connected..
+     * Gets the remote method invocation (RMI) bridge for this endpoint.
      */
-    public RmiBridge getRmiBridge() {
-        synchronized (this) {
-            if (this.remoteObjectSpace == null) {
-                if (isConnected()) {
-                    throw new NetException("Cannot create a remote object space after the remote endpoint has already connected!");
-                }
-
-                this.remoteObjectSpace = new RmiBridge(this.logger);
-            }
+    public Rmi rmi() {
+        if (this.rmiBridge == null) {
+            throw new NetException("Cannot use a remote object space that has NOT been created first! Configure the ConnectionOptions!");
         }
 
-        return this.remoteObjectSpace;
+        return this.rmiBridge;
     }
-
 
     /**
      * This method allows the connections used by the client/server to be subclassed (custom implementations).
@@ -416,7 +434,6 @@ public abstract class EndPoint {
     public Connection newConnection(String name) {
         return new ConnectionImpl(name);
     }
-
 
     /**
      * Internal call by the pipeline when:
@@ -452,10 +469,8 @@ public abstract class EndPoint {
             metaChannel.connection = connection;
 
             // notify our remote object space that it is able to receive method calls.
-            synchronized (this) {
-                if (this.remoteObjectSpace != null) {
-                    this.remoteObjectSpace.addConnection(connection);
-                }
+            if (this.rmiBridge != null) {
+                connection.listeners().add(this.rmiBridge.getListener());
             }
         } else {
             // getting the baseClass
@@ -508,6 +523,34 @@ public abstract class EndPoint {
      * Expose methods to send objects to a destination.
      */
     public abstract ConnectionBridgeBase send();
+
+    /**
+     * Returns a proxy object that implements the specified interfaces. Methods
+     * invoked on the proxy object will be invoked remotely on the object with
+     * the specified ID in the ObjectSpace for the specified connection. If the
+     * remote end of the connection has not {@link #addConnection(Connection)
+     * added} the connection to the ObjectSpace, the remote method invocations
+     * will be ignored.
+     * <p>
+     * Methods that return a value will throw {@link TimeoutException} if the
+     * response is not received with the
+     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
+     * <p>
+     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
+     * (the default), then methods that return a value must not be called from
+     * the update thread for the connection. An exception will be thrown if this
+     * occurs. Methods with a void return value can be called on the update
+     * thread.
+     * <p>
+     * If a proxy returned from this method is part of an object graph sent over
+     * the network, the object graph on the receiving side will have the proxy
+     * object replaced with the registered object.
+     *
+     * @see RemoteObject
+     */
+    public RemoteObject getRemoteObject(Connection connection, int objectID, Class<?>[] ifaces) {
+        return this.rmiBridge.getRemoteObject(connection, objectID, ifaces);
+    }
 
     /**
      * Registers a tool with the server, to be used by other services.

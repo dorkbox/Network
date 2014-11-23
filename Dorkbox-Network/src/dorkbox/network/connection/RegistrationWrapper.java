@@ -100,8 +100,8 @@ public class RegistrationWrapper implements UdpServer {
      * The server does not use this.
      * @return true if we are done registering bootstraps
      */
-    public boolean continueRegistration0() {
-        return this.endPoint.continueRegistration0();
+    public boolean registerNextProtocol0() {
+        return this.endPoint.registerNextProtocol0();
     }
 
     /**

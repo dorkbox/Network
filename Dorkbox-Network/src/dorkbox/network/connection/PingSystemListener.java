@@ -3,7 +3,7 @@ package dorkbox.network.connection;
 
 class PingSystemListener extends ListenerRaw<ConnectionImpl, PingMessage> {
 
-    PingSystemListener(String name) {
+    PingSystemListener() {
     }
 
     @Override

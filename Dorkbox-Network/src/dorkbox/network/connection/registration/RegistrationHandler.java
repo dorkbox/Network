@@ -23,6 +23,7 @@ public abstract class RegistrationHandler extends ChannelInboundHandlerAdapter {
         this.registrationWrapper = registrationWrapper;
     }
 
+    @SuppressWarnings("unused")
     protected void initChannel(Channel channel) {
     }
 

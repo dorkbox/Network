@@ -6,9 +6,10 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
+import dorkbox.network.rmi.RemoteObject;
+import dorkbox.network.rmi.TimeoutException;
 
 public interface Connection {
-
     public static final String connection = "connection";
 
     /**
@@ -97,4 +98,37 @@ public interface Connection {
      * Closes the connection
      */
     public void close();
+
+    /**
+     * Identical to {@link #getRemoteObject(C, int, Class...)} except returns
+     * the object cast to the specified interface type. The returned object
+     * still implements {@link RemoteObject}.
+     */
+    public <T> T getRemoteObject(int objectID, Class<T> iface);
+
+    /**
+     * Returns a proxy object that implements the specified interfaces. Methods
+     * invoked on the proxy object will be invoked remotely on the object with
+     * the specified ID in the ObjectSpace for the specified connection. If the
+     * remote end of the connection has not {@link #addConnection(Connection)
+     * added} the connection to the ObjectSpace, the remote method invocations
+     * will be ignored.
+     * <p>
+     * Methods that return a value will throw {@link TimeoutException} if the
+     * response is not received with the
+     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
+     * <p>
+     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
+     * (the default), then methods that return a value must not be called from
+     * the update thread for the connection. An exception will be thrown if this
+     * occurs. Methods with a void return value can be called on the update
+     * thread.
+     * <p>
+     * If a proxy returned from this method is part of an object graph sent over
+     * the network, the object graph on the receiving side will have the proxy
+     * object replaced with the registered object.
+     *
+     * @see RemoteObject
+     */
+    public RemoteObject getRemoteObject(int objectID, Class<?>... ifaces);
 }

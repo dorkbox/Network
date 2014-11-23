@@ -21,11 +21,12 @@ public class KryoEncoder extends MessageToByteEncoder<Object> {
     public KryoEncoder(SerializationManager kryoWrapper) {
         super();
         this.kryoWrapper = kryoWrapper;
-        optimize = OptimizeUtilsByteBuf.get();
+        this.optimize = OptimizeUtilsByteBuf.get();
     }
 
     // the crypto writer will override this
-    protected void writeObject(SerializationManager kryoWrapper, ChannelHandlerContext ctx, Object msg, ByteBuf buffer) {
+    @SuppressWarnings("unused")
+    protected void writeObject(SerializationManager kryoWrapper, ChannelHandlerContext context, Object msg, ByteBuf buffer) {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         kryoWrapper.write(buffer, msg);
     }
@@ -42,7 +43,7 @@ public class KryoEncoder extends MessageToByteEncoder<Object> {
             out.writeInt(0);  // put an int in, which is the same size as reservedLengthIndex
 
             try {
-                writeObject(kryoWrapper, ctx, msg, out);
+                writeObject(this.kryoWrapper, ctx, msg, out);
 
                 // now set the frame (if it's TCP)!
                 int length = out.readableBytes() - startIndex - reservedLengthIndex; // (reservedLengthLength) 4 is the reserved space for the integer.
