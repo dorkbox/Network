@@ -4,10 +4,10 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.sun.xml.internal.ws.encoding.soap.SerializationException;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
+import dorkbox.network.util.exceptions.NetException;
 
 /**
  * Serializes an object registered with the RmiBridge so the receiving side
@@ -28,7 +28,7 @@ public class RemoteObjectSerializer<T> extends Serializer<T> {
     public void write(Kryo kryo, Output output, T object) {
         int id = this.rmi.getRegisteredId(object);
         if (id == Integer.MAX_VALUE) {
-            throw new SerializationException("Object not found in an ObjectSpace: " + object);
+            throw new NetException("Object not found in an ObjectSpace: " + object);
         }
 
         output.writeInt(id, true);

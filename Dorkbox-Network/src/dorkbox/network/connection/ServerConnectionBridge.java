@@ -4,7 +4,6 @@ import java.util.Collection;
 
 import dorkbox.network.connection.bridge.ConnectionBridgeServer;
 import dorkbox.network.connection.bridge.ConnectionExceptSpecifiedBridgeServer;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 public class ServerConnectionBridge implements ConnectionPoint, ConnectionBridgeServer, ConnectionExceptSpecifiedBridgeServer {
 
@@ -63,7 +62,7 @@ public class ServerConnectionBridge implements ConnectionPoint, ConnectionBridge
      */
     @Override
     public void waitForWriteToComplete() {
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException("Method not implemented");
     }
 
     /**
