@@ -11,8 +11,6 @@
 	<classpathentry kind="lib" path="/Dependencies/logging/logback-classic-1.0.13.jar" sourcepath="/Dependencies/logging/logback-classic-1.0.13-sources.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/logging/logback-core-1.0.13.jar" sourcepath="/Dependencies/logging/logback-core-1.0.13-sources.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/logging/minlog-1.2-to-slf4j.jar" sourcepath="/Dependencies/logging/minlog-1.2-to-slf4j-sources.zip"/>
-	<classpathentry kind="lib" path="/Dependencies/barchart-udt/barchart-udt-bundle-2.3.1.jar" sourcepath="/Dependencies/barchart-udt/barchart-udt-bundle-2.3.1-sources.zip"/>
-	<classpathentry kind="lib" path="/Dependencies/barchart-udt/barchart-udt-core-2.3.1.jar" sourcepath="/Dependencies/barchart-udt/barchart-udt-core-2.3.1-sources.zip"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/Dorkbox-Util"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/reflectasm.jar" sourcepath="/Dependencies/kryo/reflectasm-src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/BouncyCastleCrypto/bcpkix-jdk15on-151.jar" sourcepath="/Dependencies/BouncyCastleCrypto/bcpkix-jdk15on-151-src.zip"/>
@@ -26,5 +24,6 @@
 	<classpathentry combineaccessrules="false" kind="src" path="/JavaLauncher-Util"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/objenesis-2.1.jar" sourcepath="/Dependencies/kryo/objenesis-2.1-srcs.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/kryo3-debug.jar"/>
+	<classpathentry kind="lib" path="/Dependencies/barchart-udt/barchart-udt-bundle-2.3.1.1.jar" sourcepath="/Dependencies/barchart-udt/barchart-udt-core-2.3.1.1-sources.zip"/>
 	<classpathentry kind="output" path="classes"/>
 </classpath>
