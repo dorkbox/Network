@@ -11,51 +11,30 @@ import dorkbox.network.util.exceptions.InitializationException;
 
 public class Entropy {
 
-    private static volatile Object provider = null;
+    private static volatile EntropyProvider provider = null;
 
-    public static byte[] get() throws InitializationException {
+    /** Starts the process, and gets, the next amount of entropy bytes */
+    public static byte[] get(String messageForUser) throws InitializationException {
         synchronized (Entropy.class) {
-            boolean failed = false;
-            // use reflection to get the entropy bytes.
             try {
-                Method createMethod = null;
-                Method[] declaredMethods = provider.getClass().getDeclaredMethods();
-                for (Method m : declaredMethods) {
-                    if (m.getName().equals("get")) {
-                        createMethod = m;
-                        break;
-                    }
+                if (provider == null) {
+                    Entropy.init(SimpleEntropy.class);
                 }
 
-                if (createMethod != null) {
-                    createMethod.setAccessible(true);
-                    return (byte[]) createMethod.invoke(provider);
-                } else {
-                    failed = true;
-                }
-
+                return provider.get(messageForUser);
             } catch (Exception e) {
                 Logger logger = LoggerFactory.getLogger(Entropy.class);
-                String error = "Unable to create get entropy bytes for " + provider.getClass();
+                String error = "Unable to get entropy bytes for " + provider.getClass();
                 logger.error(error, e);
                 throw new InitializationException(error);
             }
-
-            if (failed) {
-                Logger logger = LoggerFactory.getLogger(Entropy.class);
-                String error = "Unable to create get entropy bytes for " + provider.getClass();
-                logger.error(error);
-                throw new InitializationException(error);
-            }
-
-            return null;
         }
     }
 
     /**
-     * Will only set the Entropy provider if it has not ALREADY beed set!
+     * Will only set the Entropy provider if it has not ALREADY been set!
      */
-    public static Object init(Class<?> providerClass, Object... args) throws InitializationException {
+    public static void init(Class<? extends EntropyProvider> providerClass, Object... args) throws InitializationException {
         synchronized (Entropy.class) {
             if (provider == null) {
                 Exception exception = null;
@@ -75,12 +54,11 @@ public class Entropy {
                         createMethod.setAccessible(true);
 
                         if (args.length == 0) {
-                            provider = createMethod.invoke(null);
-                            return provider;
+                            provider = (EntropyProvider) createMethod.invoke(null);
                         } else {
-                            provider = createMethod.invoke(null, args);
-                            return provider;
+                            provider = (EntropyProvider) createMethod.invoke(null, args);
                         }
+                        return;
                     }
                 } catch (Exception e) {
                     exception = e;
@@ -96,8 +74,6 @@ public class Entropy {
 
                 throw new InitializationException(error);
             }
-
-            return provider;
         }
     }
 }

@@ -47,7 +47,6 @@ import dorkbox.network.util.EndpointTool;
 import dorkbox.network.util.KryoSerializationManager;
 import dorkbox.network.util.SerializationManager;
 import dorkbox.network.util.entropy.Entropy;
-import dorkbox.network.util.entropy.SimpleEntropy;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.NetException;
 import dorkbox.network.util.exceptions.SecurityException;
@@ -208,14 +207,16 @@ public abstract class EndPoint {
 
             if (privateKey == null || publicKey == null) {
                 try {
-                    Object entropy = Entropy.init(SimpleEntropy.class);
-                    if (!(entropy instanceof SimpleEntropy)) {
-                        System.err.println("There are no ECC keys for the " + name + " yet. Please press keyboard keys (numbers/letters/etc) to generate entropy.");
-                        System.err.flush();
-                    }
+//                    EntropyProvider p = Entropy.getProvider();
+//                    if (!(entropy instanceof SimpleEntropy)) {
+//                        // have to do the prompt thing?
+//
+//                        System.err.println("There are no ECC keys for the " + name + " yet. Please press keyboard keys (numbers/letters/etc) to generate entropy.");
+//                        System.err.flush();
+//                    }
 
                     // seed our RNG based off of this and create our ECC keys
-                    byte[] seedBytes = Entropy.get();
+                    byte[] seedBytes = Entropy.get("There are no ECC keys for the " + name + " yet.");
                     SecureRandom secureRandom = new SecureRandom(seedBytes);
                     secureRandom.nextBytes(seedBytes);
 
