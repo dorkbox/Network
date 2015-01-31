@@ -21,6 +21,8 @@ import dorkbox.util.ClassHelper;
 // objects that are somehow equal to each other.
 public class ConnectionManager implements ListenerBridge, ISessionManager {
 
+    public static Listener<?> unRegisteredType_Listener = null;
+
     // these are final, because the REFERENCE to these will never change. They ARE NOT immutable objects (meaning their content can change)
     private final ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> listeners;
     private final ConcurrentHashMapFactory<Connection, ConnectionManager> localManagers;
@@ -264,13 +266,19 @@ public class ConnectionManager implements ListenerBridge, ISessionManager {
         // only run a flush once
         if (foundListener) {
             connection.send().flush();
+        } else if (unRegisteredType_Listener != null) {
+            unRegisteredType_Listener.received(connection, null);
         } else {
             Logger logger2 = this.logger;
-            if (logger2.isDebugEnabled()) {
-                this.logger.debug("----------- LISTENER NOT REGISTERED FOR TYPE: {}", message.getClass().getSimpleName());
+            if (logger2.isErrorEnabled()) {
+                this.logger.error("----------- LISTENER NOT REGISTERED FOR TYPE: {}", message.getClass().getSimpleName());
             }
         }
         return foundListener;
+    }
+
+    public static void setUnregisteredTypeListener(Listener<?> listener) {
+        unRegisteredType_Listener = listener;
     }
 
     /**
