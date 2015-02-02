@@ -10,8 +10,8 @@ import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
 import dorkbox.network.util.store.SettingsStore;
+import dorkbox.util.FileUtil;
 import dorkbox.util.bytes.ByteArrayWrapper;
-import dorkbox.util.properties.PropertiesProvider;
 import dorkbox.util.storage.Storage;
 
 /**
@@ -81,14 +81,10 @@ class PropertyStore extends SettingsStore {
     // Method of preference for creating/getting this connection store. Private since only the ConnectionStoreProxy calls this
     public PropertyStore(String name) {
         this.name = name;
-        File propertiesFile;
 
-        if (PropertiesProvider.basePath.isEmpty()) {
-            propertiesFile = new File(SETTINGS_FILE_NAME);
-        } else {
-            // sometimes we want to change the base path location
-            propertiesFile = new File(PropertiesProvider.basePath, SETTINGS_FILE_NAME);
-        }
+        // DEFAULT location! (if it's for testing, etc)
+        File propertiesFile = new File(SETTINGS_FILE_NAME);
+        propertiesFile = FileUtil.normalize(propertiesFile);
 
         propertiesFile = propertiesFile.getAbsoluteFile();
 
