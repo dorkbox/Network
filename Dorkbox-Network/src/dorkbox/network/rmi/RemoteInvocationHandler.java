@@ -1,19 +1,18 @@
 package dorkbox.network.rmi;
 
 
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.ListenerRaw;
+import dorkbox.network.util.exceptions.NetException;
+import dorkbox.util.objectPool.ObjectPool;
+
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
-
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.ListenerRaw;
-import dorkbox.network.util.exceptions.NetException;
-import dorkbox.util.objectPool.ObjectPool;
-import dorkbox.util.objectPool.ObjectPoolHolder;
 
 /** Handles network communication when methods are invoked on a proxy. */
 class RemoteInvocationHandler implements InvocationHandler {
@@ -141,8 +140,7 @@ class RemoteInvocationHandler implements InvocationHandler {
         EndPoint endPoint = this.connection.getEndPoint();
         RmiBridge rmi = (RmiBridge) endPoint.rmi();
 
-        ObjectPoolHolder<InvokeMethod> invokeMethodHolder = this.invokeMethodPool.take();
-        InvokeMethod invokeMethod = invokeMethodHolder.getValue();
+        InvokeMethod invokeMethod = this.invokeMethodPool.take();
         invokeMethod.objectID = this.objectID;
         invokeMethod.args = args;
 
@@ -205,7 +203,7 @@ class RemoteInvocationHandler implements InvocationHandler {
         }
 
         this.lastResponseID = (byte)(invokeMethod.responseData & RmiBridge.responseIdMask);
-        this.invokeMethodPool.release(invokeMethodHolder);
+        this.invokeMethodPool.release(invokeMethod);
 
         if (this.nonBlocking || this.udp) {
             Class<?> returnType = method.getReturnType();
