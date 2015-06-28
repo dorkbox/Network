@@ -1,27 +1,22 @@
 package dorkbox.network;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import dorkbox.network.dns.RecordDecoderFactory;
+import dorkbox.network.dns.record.MailExchangerRecord;
+import dorkbox.network.dns.record.ServiceRecord;
+import dorkbox.network.dns.record.StartOfAuthorityRecord;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.socket.DatagramPacket;
-import io.netty.handler.codec.dns.DnsQueryEncoder;
-import io.netty.handler.codec.dns.DnsQuestion;
-import io.netty.handler.codec.dns.DnsResource;
-import io.netty.handler.codec.dns.DnsResponse;
-import io.netty.handler.codec.dns.DnsResponseDecoder;
+import io.netty.handler.codec.dns.*;
+import org.junit.Test;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.List;
 
-import org.junit.Test;
-
-import dorkbox.network.dns.RecordDecoderFactory;
-import dorkbox.network.dns.record.MailExchangerRecord;
-import dorkbox.network.dns.record.ServiceRecord;
-import dorkbox.network.dns.record.StartOfAuthorityRecord;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 public class DnsRecordDecoderTests {
 
