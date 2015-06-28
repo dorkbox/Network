@@ -20,11 +20,10 @@
 			<attribute name="javadoc_location" value="jar:platform:/resource/Dependencies/netty/netty-all-4.1.0-javadoc.zip!/"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="lib" path="/Dependencies/asm/asm-5.0.3.jar" sourcepath="/Dependencies/asm/asm-5.0.3-src.zip"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/JavaLauncher-Util"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/objenesis-2.1.jar" sourcepath="/Dependencies/kryo/objenesis-2.1-srcs.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/kryo3-debug.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/barchart-udt/barchart-udt-bundle-2.3.1.1.jar" sourcepath="/Dependencies/barchart-udt/barchart-udt-core-2.3.1.1-sources.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/dorkbox/object_pool/ObjectPool_v1.1.jar" sourcepath="/Dependencies/dorkbox/object_pool/ObjectPool_v1.1_src.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/asm/asm-5.0.4.jar"/>
 	<classpathentry kind="output" path="classes"/>
 </classpath>
