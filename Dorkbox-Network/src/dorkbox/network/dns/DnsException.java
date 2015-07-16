@@ -13,7 +13,7 @@
  *
  * You may elect to redistribute this code under either of these licenses.
  */
-package dorkbox.network.dns.decoder;
+package dorkbox.network.dns;
 
 import io.netty.handler.codec.dns.DnsResponseCode;
 
@@ -21,7 +21,7 @@ import io.netty.handler.codec.dns.DnsResponseCode;
  * Exception which is used to notify the promise if the DNS query fails.
  */
 public final class DnsException extends Exception {
-    private static final long serialVersionUID = 1310161373613598975L;
+    private static final long serialVersionUID = 1;
 
     private DnsResponseCode errorCode;
 

@@ -1,25 +1,9 @@
-/*
- * Copyright (c) 2013 The Netty Project
- * ------------------------------------
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * and Apache License v2.0 which accompanies this distribution.
- *
- *     The Eclipse Public License is available at
- *     http://www.eclipse.org/legal/epl-v10.html
- *
- *     The Apache License v2.0 is available at
- *     http://www.opensource.org/licenses/apache2.0.php
- *
- * You may elect to redistribute this code under either of these licenses.
- */
 package dorkbox.network.dns.decoder;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.handler.codec.dns.DnsResource;
-import io.netty.handler.codec.dns.DnsResponse;
-import dorkbox.network.dns.RecordDecoderFactory;
 import dorkbox.network.dns.record.MailExchangerRecord;
+import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.dns.DnsRecord;
+import io.netty.resolver.dns.DnsNameResolverAccess;
 
 /**
  * Decodes MX (mail exchanger) resource records.
@@ -27,21 +11,13 @@ import dorkbox.network.dns.record.MailExchangerRecord;
 public class MailExchangerDecoder implements RecordDecoder<MailExchangerRecord> {
 
     /**
-     * Returns a decoded MX (mail exchanger) resource record, stored as an
-     * instance of {@link MailExchangerRecord}.
-     *
-     * @param response
-     *            the {@link io.vertx.core.dns.impl.netty.DnsResponse} received that contained the resource
-     *            record being decoded
-     * @param resource
-     *            the {@link DnsResource} being decoded
+     * Returns a decoded MX (mail exchanger) resource record
      */
     @Override
-    public MailExchangerRecord decode(DnsResponse response, DnsResource resource) {
-        ByteBuf packet = resource.content();
-        int priority = packet.readShort();
-        String name = RecordDecoderFactory.readName(packet);
+    public MailExchangerRecord decode(final DnsRecord record, final ByteBuf response) {
+        int priority = response.readUnsignedShort();
+
+        String name = DnsNameResolverAccess.decodeDomainName(response);
         return new MailExchangerRecord(priority, name);
     }
-
 }
