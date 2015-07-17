@@ -1,92 +1,93 @@
 /**
  * Copyright (C) 2009-2013 Barchart, Inc. <http://www.barchart.com/>
- *
+ * <p/>
  * All rights reserved. Licensed under the OSI BSD License.
- *
+ * <p/>
  * http://www.opensource.org/licenses/bsd-license.php
  */
 package com.barchart.udt.net;
+
+import com.barchart.udt.ErrorUDT;
+import com.barchart.udt.SocketUDT;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.IllegalBlockingModeException;
 
-import com.barchart.udt.ErrorUDT;
-import com.barchart.udt.SocketUDT;
-
 /**
  * {@link OutputStream} for UDT sockets.
  */
-public class NetOutputStreamUDT extends OutputStream {
+public
+class NetOutputStreamUDT extends OutputStream {
 
-	protected final SocketUDT socketUDT;
+    protected final SocketUDT socketUDT;
 
-	/**
-	 * 
-	 * @param socketUDT
-	 *            The UDT socket.
-	 */
-	public NetOutputStreamUDT(final SocketUDT socketUDT) {
+    /**
+     * @param socketUDT The UDT socket.
+     */
+    public
+    NetOutputStreamUDT(final SocketUDT socketUDT) {
 
-		if (!socketUDT.isBlocking()) {
-			throw new IllegalBlockingModeException();
-		}
+        if (!socketUDT.isBlocking()) {
+            throw new IllegalBlockingModeException();
+        }
 
-		this.socketUDT = socketUDT;
+        this.socketUDT = socketUDT;
 
-	}
+    }
 
-	@Override
-	public void write(final int b) throws IOException {
+    @Override
+    public
+    void write(final int b) throws IOException {
 
-		// Just cast it -- this is the same thing SocketOutputStream does.
-		final byte[] bytes = { (byte) b };
+        // Just cast it -- this is the same thing SocketOutputStream does.
+        final byte[] bytes = {(byte) b};
 
-		write(bytes);
+        write(bytes);
 
-	}
+    }
 
-	@Override
-	public void write(final byte[] bytes) throws IOException {
+    @Override
+    public
+    void write(final byte[] bytes) throws IOException {
 
-		write(bytes, 0, bytes.length);
+        write(bytes, 0, bytes.length);
 
-	}
+    }
 
-	@Override
-	public void write(final byte[] bytes, final int off, final int len)
-			throws IOException {
+    @Override
+    public
+    void write(final byte[] bytes, final int off, final int len) throws IOException {
 
-		int bytesRemaining = len;
+        int bytesRemaining = len;
 
-		while (bytesRemaining > 0) {
+        while (bytesRemaining > 0) {
 
-			final int count = socketUDT.send(bytes, off + len - bytesRemaining,
-					off + len);
+            final int count = socketUDT.send(bytes, off + len - bytesRemaining, off + len);
 
-			if (count > 0) {
-				bytesRemaining -= count;
-				continue;
-			}
+            if (count > 0) {
+                bytesRemaining -= count;
+                continue;
+            }
 
-			if (count == 0) {
-				throw new ExceptionSendUDT(socketUDT.id(),
-						ErrorUDT.USER_DEFINED_MESSAGE, "UDT send time out");
-			}
+            if (count == 0) {
+                throw new ExceptionSendUDT(socketUDT.id(), ErrorUDT.USER_DEFINED_MESSAGE, "UDT send time out");
+            }
 
-			throw new IllegalStateException(
-					"Socket has been chaged to non-blocking");
-		}
+            throw new IllegalStateException("Socket has been changed to non-blocking");
+        }
 
-	}
+    }
 
-	@Override
-	public void close() throws IOException {
-		socketUDT.close();
-	}
+    @Override
+    public
+    void close() throws IOException {
+        socketUDT.close();
+    }
 
-	@Override
-	public void flush() throws IOException {
-		socketUDT.flush();
-	}
+    @Override
+    public
+    void flush() throws IOException {
+        socketUDT.flush();
+    }
 }

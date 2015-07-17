@@ -27,7 +27,7 @@ import java.util.Set;
 
 /**
  * UDT native socket wrapper
- * <p>
+ * <p/>
  * note: current implementation supports IPv4 only (no IPv6)
  */
 public
@@ -77,20 +77,20 @@ class SocketUDT {
      * indication of inconsistent build.
      */
     @Native
-    public static final int SIGNATURE_JNI = 20130512; // VersionUDT.BUILDTIME;
+    public static final int SIGNATURE_JNI = 20150706; // VersionUDT.BUILDTIME;
 
     /**
      * infinite timeout:
-     * <p>
+     * <p/>
      * blocking send/receive
-     * <p>
+     * <p/>
      * epoll wait
      */
     public static final int TIMEOUT_INFINITE = -1;
 
     /**
      * zero timeout:
-     * <p>
+     * <p/>
      * epoll wait
      */
     public static long TIMEOUT_NONE = 0;
@@ -133,7 +133,7 @@ class SocketUDT {
                 Method nativeMethod = exitClass.getMethod("isNative");
                 Object invoke = nativeMethod.invoke(null);
                 if (invoke != null) {
-                    isNativeDeployed = (boolean) invoke;
+                    isNativeDeployed = (Boolean) invoke;
                 }
             }
         } catch (Throwable t) {
@@ -144,7 +144,13 @@ class SocketUDT {
             final Logger logger = LoggerFactory.getLogger(SocketUDT.class);
 
             String moduleDir = System.getProperty("user.dir");
-            final String libraryDir = FileUtil.normalizeAsFile(moduleDir + "../../../dorkbox/Dorkbox-Network/natives");
+            String libraryDir = FileUtil.getParentRelativeToDir(moduleDir, "dorkbox");
+            File file = new File(libraryDir);
+            if (file.getName()
+                    .equals("dorkbox")) {
+                file = file.getParentFile();
+            }
+            libraryDir = FileUtil.normalizeAsFile(file.getAbsolutePath() + "/dorkbox/dorkbox/Dorkbox-Network/natives");
 
 
             if (libraryDir == null || libraryDir.length() == 0) {
@@ -192,12 +198,15 @@ class SocketUDT {
         INIT_OK = true;
 
         log.debug("native library load & init OK");
+    }
 
+    public static
+    void init() {
     }
 
     /**
      * Cleans up global JNI references and the UDT library.
-     * <p>
+     * <p/>
      * The behavior of SocketUDT class after a call to cleanup is undefined, so
      * it should only ever be called once you are done and you are ready for the
      * class loader to unload the JNI library
@@ -211,7 +220,7 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_add_usock()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_add_usock()</a>
      */
     protected static native
     void epollAdd0( //
@@ -222,23 +231,22 @@ class SocketUDT {
 
     /**
      * @return epoll id
-     *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_create()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_create()</a>
      */
     protected static native
     int epollCreate0() throws ExceptionUDT;
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_release()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_release()</a>
      */
     protected static native
     void epollRelease0(final int epollID) throws ExceptionUDT;
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_remove_usock()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_remove_usock()</a>
      */
     protected static native
     void epollRemove0( //
@@ -258,9 +266,10 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_wait()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/epoll.htm">UDT::epoll_wait()</a>
      */
     protected static native
+    int epollWait0( //
     int epollWait0( //
                     final int epollID, //
                     final IntBuffer readBuffer, //
@@ -280,7 +289,7 @@ class SocketUDT {
      * Call this after loading native library.
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/startup.htm">UDT::startup()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/startup.htm">UDT::startup()</a>
      */
     protected static native
     void initClass0() throws ExceptionUDT;
@@ -289,9 +298,9 @@ class SocketUDT {
      * receive into a complete byte array
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recv()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recv()</a>
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recvmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recvmsg()</a>
      */
     protected static native
     int receive0(//
@@ -304,9 +313,9 @@ class SocketUDT {
      * receive into a portion of a byte array
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recv()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recv()</a>
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recvmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recvmsg()</a>
      */
     protected static native
     int receive1( //
@@ -321,9 +330,9 @@ class SocketUDT {
      * receive into a {@link java.nio.channels.DirectByteBuffer}
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recv()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recv()</a>
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recvmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/recv.htm">UDT::recvmsg()</a>
      */
     protected static native
     int receive2( //
@@ -338,7 +347,7 @@ class SocketUDT {
      * Receive file.
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sendfile.htm">UDT::recvfile</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sendfile.htm">UDT::recvfile</a>
      */
     protected static native
     long receiveFile0( //
@@ -354,21 +363,16 @@ class SocketUDT {
      * {@link java.nio.DirectIntBuffer} info exchange.Timeout is in
      * milliseconds.
      *
-     * @param millisTimeout
-     *
-     *            http://udt.sourceforge.net/udt4/doc/epoll.htm
-     *
-     *            "Finally, for epoll_wait, negative timeout value will make the
-     *            function to wait until an event happens. If the timeout value
-     *            is 0, then the function returns immediately with any sockets
-     *            associated an IO event. If timeout occurs before any event
-     *            happens, the function returns 0".
-     *
-     *
+     * @param millisTimeout http://udt.sourceforge.net/udt4/doc/epoll.htm
+     *                      <p/>
+     *                      "Finally, for epoll_wait, negative timeout value will make the
+     *                      function to wait until an event happens. If the timeout value
+     *                      is 0, then the function returns immediately with any sockets
+     *                      associated an IO event. If timeout occurs before any event
+     *                      happens, the function returns 0".
      * @return <code><0</code> : should not happen<br>
-     *         <code>=0</code> : timeout, no ready sockets<br>
-     *         <code>>0</code> : total number or reads, writes, exceptions<br>
-     *
+     * <code>=0</code> : timeout, no ready sockets<br>
+     * <code>>0</code> : total number or reads, writes, exceptions<br>
      * @see #epollWait0(int, IntBuffer, IntBuffer, IntBuffer, long)
      */
     public static
@@ -397,13 +401,13 @@ class SocketUDT {
 
     /**
      * send from a complete byte[] array;
-     *
+     * <p/>
      * wrapper for <em>UDT::send()</em>, <em>UDT::sendmsg()</em>
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/send.htm">UDT::send()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/send.htm">UDT::send()</a>
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
      */
     protected static native
     int send0( //
@@ -416,13 +420,13 @@ class SocketUDT {
 
     /**
      * send from a portion of a byte[] array;
-     *
+     * <p/>
      * wrapper for <em>UDT::send()</em>, <em>UDT::sendmsg()</em>
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/send.htm">UDT::send()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/send.htm">UDT::send()</a>
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
      */
     protected static native
     int send1( //
@@ -437,13 +441,13 @@ class SocketUDT {
 
     /**
      * send from {@link java.nio.DirectByteBuffer};
-     *
+     * <p/>
      * wrapper for <em>UDT::send()</em>, <em>UDT::sendmsg()</em>
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/send.htm">UDT::send()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/send.htm">UDT::send()</a>
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
      */
     protected static native
     int send2( //
@@ -460,7 +464,7 @@ class SocketUDT {
      * Send file.
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sendfile.htm">UDT::sendfile</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sendfile.htm">UDT::sendfile</a>
      */
     protected static native
     long sendFile0( //
@@ -475,7 +479,7 @@ class SocketUDT {
      * Call this before unloading native library.
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/cleanup.htm.htm">UDT::cleanup()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/cleanup.htm.htm">UDT::cleanup()</a>
      */
     protected static native
     void stopClass0() throws ExceptionUDT;
@@ -560,7 +564,7 @@ class SocketUDT {
 
     /**
      * native address family; read by JNI
-     * <p>
+     * <p/>
      * TODO add support for AF_INET6
      */
     @Native
@@ -581,8 +585,7 @@ class SocketUDT {
      * "Primary" socket. Default constructor; will apply
      * {@link #setDefaultMessageSendMode()}
      *
-     * @param type
-     *            UDT socket type
+     * @param type UDT socket type
      */
     public
     SocketUDT(final TypeUDT type) throws ExceptionUDT {
@@ -600,8 +603,7 @@ class SocketUDT {
      * "Secondary" socket. Made by {@link #accept0()}, will apply
      * {@link #setDefaultMessageSendMode()}
      *
-     * @param socketID
-     *            UDT socket descriptor;
+     * @param socketID UDT socket descriptor;
      */
     protected
     SocketUDT(final TypeUDT type, final int socketID) throws ExceptionUDT {
@@ -617,8 +619,8 @@ class SocketUDT {
 
     /**
      * @return null : no incoming connections (non-blocking mode only)<br>
-     *         non null : newly accepted SocketUDT (both blocking and
-     *         non-blocking)<br>
+     * non null : newly accepted SocketUDT (both blocking and
+     * non-blocking)<br>
      */
     public
     SocketUDT accept() throws ExceptionUDT {
@@ -627,7 +629,7 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/accept.htm">UDT::accept()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/accept.htm">UDT::accept()</a>
      */
     protected native
     SocketUDT accept0() throws ExceptionUDT;
@@ -641,7 +643,7 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/bind.htm">UDT::bind()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/bind.htm">UDT::bind()</a>
      */
     protected native
     void bind0(final InetSocketAddress localSocketAddress) throws ExceptionUDT;
@@ -650,7 +652,7 @@ class SocketUDT {
      * Clear error status on a socket, if any.
      *
      * @see <a href="http://udt.sourceforge.net/udt4/doc/t-error.htm">UDT Error
-     *      Handling</a>
+     * Handling</a>
      */
     public
     void clearError() {
@@ -659,7 +661,7 @@ class SocketUDT {
 
     /**
      * @see <a href="http://udt.sourceforge.net/udt4/doc/t-error.htm">UDT Error
-     *      Handling</a>
+     * Handling</a>
      */
     protected native
     void clearError0();
@@ -709,28 +711,28 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/close.htm">UDT::close()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/close.htm">UDT::close()</a>
      */
     protected native
     void flush0() throws ExceptionUDT;
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/close.htm">UDT::close()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/close.htm">UDT::close()</a>
      */
     protected native
     void close0() throws ExceptionUDT;
 
     /**
      * Connect to remote UDT socket.
-     * <p>
+     * <p/>
      * Can be blocking or non blocking call; depending on
      * {@link OptionUDT#Is_Receive_Synchronous}
-     * <p>
+     * <p/>
      * Timing: UDT uses hard coded connect timeout:
-     * <p>
+     * <p/>
      * normal socket: 3 seconds
-     * <p>
+     * <p/>
      * rendezvous socket: 30 seconds; when
      * {@link OptionUDT#Is_Randezvous_Connect_Enabled} is true
      *
@@ -745,7 +747,7 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/connect.htm">UDT::connect()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/connect.htm">UDT::connect()</a>
      */
     protected native
     void connect0(final InetSocketAddress remoteSocketAddress) throws ExceptionUDT;
@@ -765,7 +767,7 @@ class SocketUDT {
 
     /**
      * NOTE: catch all exceptions; else prevents GC
-     * <p>
+     * <p/>
      * NOTE: do not leak "this" references; else prevents GC
      */
     @Override
@@ -794,7 +796,7 @@ class SocketUDT {
      * Error code set by last operation on a socket.
      *
      * @see <a href="http://udt.sourceforge.net/udt4/doc/t-error.htm">UDT Error
-     *      Handling</a>
+     * Handling</a>
      */
     public
     int getErrorCode() {
@@ -803,7 +805,7 @@ class SocketUDT {
 
     /**
      * @see <a href="http://udt.sourceforge.net/udt4/doc/t-error.htm">UDT Error
-     *      Handling</a>
+     * Handling</a>
      */
     protected native
     int getErrorCode0();
@@ -812,7 +814,7 @@ class SocketUDT {
      * Native error message set by last operation on a socket.
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/t-error.htm">t-error.htm</a>
+     * href="http://udt.sourceforge.net/udt4/doc/t-error.htm">t-error.htm</a>
      */
     public
     String getErrorMessage() {
@@ -821,7 +823,7 @@ class SocketUDT {
 
     /**
      * @see <a href="http://udt.sourceforge.net/udt4/doc/t-error.htm">UDT Error
-     *      Handling</a>
+     * Handling</a>
      */
     protected native
     String getErrorMessage0();
@@ -836,8 +838,8 @@ class SocketUDT {
 
     /**
      * @return null : not bound<br>
-     *         not null : valid address; result of
-     *         {@link #bind(InetSocketAddress)}<br>
+     * not null : valid address; result of
+     * {@link #bind(InetSocketAddress)}<br>
      */
     public
     InetAddress getLocalInetAddress() {
@@ -857,7 +859,7 @@ class SocketUDT {
 
     /**
      * @return 0 : not bound<br>
-     *         >0 : valid port; result of {@link #bind(InetSocketAddress)}<br>
+     * >0 : valid port; result of {@link #bind(InetSocketAddress)}<br>
      */
     public
     int getLocalInetPort() {
@@ -877,8 +879,8 @@ class SocketUDT {
 
     /**
      * @return null: not bound; <br>
-     *         not null: local UDT socket address to which the the socket is
-     *         bound<br>
+     * not null: local UDT socket address to which the the socket is
+     * bound<br>
      * @see #hasLoadedLocalSocketAddress()
      */
     public
@@ -895,7 +897,7 @@ class SocketUDT {
      * default isOrdered value used by sendmsg mode
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
      */
     public
     boolean getMessageIsOdered() {
@@ -906,7 +908,7 @@ class SocketUDT {
      * default timeToLive value used by sendmsg mode
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
      */
     public
     int getMessageTimeTolLive() {
@@ -930,7 +932,7 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/opt.htm">UDT::getsockopt()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/opt.htm">UDT::getsockopt()</a>
      */
     protected native
     Object getOption0(final int code, final Class<?> klaz) throws ExceptionUDT;
@@ -952,8 +954,8 @@ class SocketUDT {
 
     /**
      * @return null : not connected<br>
-     *         not null : valid address; result of
-     *         {@link #connect(InetSocketAddress)}<br>
+     * not null : valid address; result of
+     * {@link #connect(InetSocketAddress)}<br>
      */
     public
     InetAddress getRemoteInetAddress() {
@@ -973,7 +975,7 @@ class SocketUDT {
 
     /**
      * @return 0 : not connected<br>
-     *         >0 : valid port ; result of {@link #connect(InetSocketAddress)}<br>
+     * >0 : valid port ; result of {@link #connect(InetSocketAddress)}<br>
      */
     public
     int getRemoteInetPort() {
@@ -993,8 +995,8 @@ class SocketUDT {
 
     /**
      * @return null : not connected; <br>
-     *         not null: remote UDT peer socket address to which this socket is
-     *         connected <br>
+     * not null: remote UDT peer socket address to which this socket is
+     * connected <br>
      * @see #hasLoadedRemoteSocketAddress()
      */
     public
@@ -1042,7 +1044,7 @@ class SocketUDT {
 
     /**
      * Get "any blocking operation" timeout setting.
-     *
+     * <p/>
      * Returns milliseconds; zero return means "infinite"; negative means
      * invalid
      *
@@ -1096,7 +1098,7 @@ class SocketUDT {
      * Load {@link #localSocketAddress} value.
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sockname.htm">UDT::sockname()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sockname.htm">UDT::sockname()</a>
      */
     protected native
     boolean hasLoadedLocalSocketAddress();
@@ -1105,7 +1107,7 @@ class SocketUDT {
      * Load {@link #remoteSocketAddress} value.
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/peername.htm">UDT::peername()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/peername.htm">UDT::peername()</a>
      */
     protected native
     boolean hasLoadedRemoteSocketAddress();
@@ -1134,9 +1136,8 @@ class SocketUDT {
      * Check if socket is in strict blocking mode. (JDK semantics)
      *
      * @return true : socket is valid and both send and receive are set to
-     *         blocking mode; false : at least one channel is set to
-     *         non-blocking mode or socket is invalid;
-     *
+     * blocking mode; false : at least one channel is set to
+     * non-blocking mode or socket is invalid;
      * @see #isNonBlocking()
      * @see #setBlocking(boolean)
      */
@@ -1158,7 +1159,7 @@ class SocketUDT {
      * Check if socket is bound. (JDK semantics)
      *
      * @return true : {@link #bind(InetSocketAddress)} was successful<br>
-     *         false : otherwise<br>
+     * false : otherwise<br>
      */
     public
     boolean isBound() {
@@ -1187,7 +1188,7 @@ class SocketUDT {
      * Check if {@link KindUDT#CONNECTOR} socket is connected. (JDK semantics)
      *
      * @return true : {@link #connect(InetSocketAddress)} was successful<br>
-     *         false : otherwise<br>
+     * false : otherwise<br>
      */
     public
     boolean isConnected() {
@@ -1203,8 +1204,8 @@ class SocketUDT {
      * Check if socket is in strict non-blocking mode.
      *
      * @return true : socket is valid and both send and receive are set to NON
-     *         blocking mode; false : at least one channel is set to blocking
-     *         mode or socket is invalid;
+     * blocking mode; false : at least one channel is set to blocking
+     * mode or socket is invalid;
      * @see #isBlocking()
      * @see #setBlocking(boolean)
      */
@@ -1255,9 +1256,7 @@ class SocketUDT {
     }
 
     /**
-     * @param queueSize
-     *            maximum number of queued clients
-     *
+     * @param queueSize maximum number of queued clients
      * @see #listen0(int)
      */
     public
@@ -1271,7 +1270,7 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/listen.htm">UDT::listen()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/listen.htm">UDT::listen()</a>
      */
     protected native
     void listen0(final int queueSize) throws ExceptionUDT;
@@ -1290,8 +1289,8 @@ class SocketUDT {
      * receive into byte[] array upto <code>array.length</code> bytes
      *
      * @return <code>-1</code> : nothing received (non-blocking only)<br>
-     *         <code>=0</code> : timeout expired (blocking only)<br>
-     *         <code>>0</code> : normal receive, byte count<br>
+     * <code>=0</code> : timeout expired (blocking only)<br>
+     * <code>>0</code> : normal receive, byte count<br>
      * @see #receive0(int, int, byte[])
      */
     public
@@ -1307,8 +1306,8 @@ class SocketUDT {
      * receive into byte[] array upto <code>size=limit-position</code> bytes
      *
      * @return <code>-1</code> : nothing received (non-blocking only)<br>
-     *         <code>=0</code> : timeout expired (blocking only)<br>
-     *         <code>>0</code> : normal receive, byte count<br>
+     * <code>=0</code> : timeout expired (blocking only)<br>
+     * <code>>0</code> : normal receive, byte count<br>
      * @see #receive1(int, int, byte[], int, int)
      */
     public
@@ -1325,8 +1324,8 @@ class SocketUDT {
      * {@link ByteBuffer#remaining()} bytes
      *
      * @return <code>-1</code> : nothing received (non-blocking only)<br>
-     *         <code>=0</code> : timeout expired (blocking only)<br>
-     *         <code>>0</code> : normal receive, byte count<br>
+     * <code>=0</code> : timeout expired (blocking only)<br>
+     * <code>>0</code> : normal receive, byte count<br>
      * @see #receive2(int, int, ByteBuffer, int, int)
      */
     public
@@ -1403,11 +1402,10 @@ class SocketUDT {
     /**
      * send from byte[] array upto <code>size=array.length</code> bytes
      *
-     * @param array
-     *            array to send
+     * @param array array to send
      * @return <code>-1</code> : no buffer space (non-blocking only) <br>
-     *         <code>=0</code> : timeout expired (blocking only) <br>
-     *         <code>>0</code> : normal send, actual sent byte count <br>
+     * <code>=0</code> : timeout expired (blocking only) <br>
+     * <code>>0</code> : normal send, actual sent byte count <br>
      * @see #send0(int, int, int, boolean, byte[])
      */
     public
@@ -1428,15 +1426,12 @@ class SocketUDT {
     /**
      * send from byte[] array upto <code>size=limit-position</code> bytes
      *
-     * @param array
-     *            array to send
-     * @param position
-     *            start of array portion to send
-     * @param limit
-     *            finish of array portion to send
+     * @param array    array to send
+     * @param position start of array portion to send
+     * @param limit    finish of array portion to send
      * @return <code>-1</code> : no buffer space (non-blocking only) <br>
-     *         <code>=0</code> : timeout expired (blocking only) <br>
-     *         <code>>0</code> : normal send, actual sent byte count <br>
+     * <code>=0</code> : timeout expired (blocking only) <br>
+     * <code>>0</code> : normal send, actual sent byte count <br>
      * @see #send1(int, int, int, boolean, byte[], int, int)
      */
     public
@@ -1464,11 +1459,10 @@ class SocketUDT {
      * send from {@link java.nio.DirectByteBuffer}, upto
      * {@link ByteBuffer#remaining()} bytes
      *
-     * @param buffer
-     *            buffer to send
+     * @param buffer buffer to send
      * @return <code>-1</code> : no buffer space (non-blocking only)<br>
-     *         <code>=0</code> : timeout expired (blocking only)<br>
-     *         <code>>0</code> : normal send, actual sent byte count<br>
+     * <code>=0</code> : timeout expired (blocking only)<br>
+     * <code>>0</code> : normal send, actual sent byte count<br>
      * @see #send2(int, int, int, boolean, ByteBuffer, int, int)
      */
     public
@@ -1551,9 +1545,8 @@ class SocketUDT {
     /**
      * Configure socket in strict blocking / strict non-blocking mode.
      *
-     * @param block
-     *            true : set both send and receive to blocking mode; false : set
-     *            both send and receive to non-blocking mode
+     * @param block true : set both send and receive to blocking mode; false : set
+     *              both send and receive to non-blocking mode
      * @see java.nio.channels.SocketChannel#configureBlocking(boolean)
      */
     public
@@ -1570,7 +1563,7 @@ class SocketUDT {
 
     /**
      * Apply default settings for message mode.
-     * <p>
+     * <p/>
      * IsOdered = true;<br>
      * TimeTolLive = INFINITE_TTL;<br>
      */
@@ -1584,7 +1577,7 @@ class SocketUDT {
      * default isOrdered value used by sendmsg mode
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
      */
     public
     void setMessageIsOdered(final boolean isOrdered) {
@@ -1595,7 +1588,7 @@ class SocketUDT {
      * default timeToLive value used by sendmsg mode
      *
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/sendmsg.htm">UDT::sendmsg()</a>
      */
     public
     void setMessageTimeTolLive(final int timeToLive) {
@@ -1621,7 +1614,7 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/opt.htm">UDT::setsockopt()</a>
+     * href="http://udt.sourceforge.net/udt4/doc/opt.htm">UDT::setsockopt()</a>
      */
     protected native
     void setOption0( //
@@ -1768,9 +1761,8 @@ class SocketUDT {
      * Load updated statistics values into {@link #monitor} object. Must call
      * this methos only on connected socket.
      *
-     * @param makeClear
-     *            true : reset all statistics with this call; false : keep
-     *            collecting statistics, load updated values.
+     * @param makeClear true : reset all statistics with this call; false : keep
+     *                  collecting statistics, load updated values.
      * @see #updateMonitor0(boolean)
      */
     public
@@ -1780,7 +1772,7 @@ class SocketUDT {
 
     /**
      * @see <a
-     *      href="http://udt.sourceforge.net/udt4/doc/trace.htm">UDT::perfmon</a>
+     * href="http://udt.sourceforge.net/udt4/doc/trace.htm">UDT::perfmon</a>
      */
     protected native
     void updateMonitor0(final boolean makeClear) throws ExceptionUDT;
