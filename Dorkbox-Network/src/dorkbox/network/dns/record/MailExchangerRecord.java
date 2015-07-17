@@ -20,7 +20,8 @@ package dorkbox.network.dns.record;
  * responsible for accepting e-mail and a preference value for prioritizing mail
  * servers if multiple servers exist.
  */
-public class MailExchangerRecord {
+public
+class MailExchangerRecord {
 
     private final int priority;
     private final String name;
@@ -28,13 +29,12 @@ public class MailExchangerRecord {
     /**
      * Constructs an MX (mail exchanger) record.
      *
-     * @param priority
-     *            the priority of the mail exchanger, lower is more preferred
-     * @param name
-     *            the e-mail address in the format admin.example.com, which
-     *            represents admin@example.com
+     * @param priority the priority of the mail exchanger, lower is more preferred
+     * @param name     the e-mail address in the format admin.example.com, which
+     *                 represents admin@example.com
      */
-    public MailExchangerRecord(int priority, String name) {
+    public
+    MailExchangerRecord(int priority, String name) {
         this.priority = priority;
         this.name = name;
     }
@@ -42,7 +42,8 @@ public class MailExchangerRecord {
     /**
      * Returns the priority of the mail exchanger, lower is more preferred.
      */
-    public int priority() {
+    public
+    int priority() {
         return this.priority;
     }
 
@@ -50,7 +51,8 @@ public class MailExchangerRecord {
      * Returns the mail exchanger (an e-mail address) in the format
      * admin.example.com, which represents admin@example.com.
      */
-    public String name() {
+    public
+    String name() {
         return this.name;
     }
 

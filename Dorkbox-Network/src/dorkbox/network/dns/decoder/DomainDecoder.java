@@ -5,12 +5,14 @@ import io.netty.handler.codec.dns.DnsRecord;
 import io.netty.resolver.dns.DnsNameResolverAccess;
 
 /**
- * Decodes any record that simply returns a domain name, such as NS (name * server) and CNAME (canonical name) resource records.
+ * Decodes domain names, such as NS (name * server) and CNAME (canonical name) resource records
  */
-public class DomainDecoder implements RecordDecoder<String> {
+public
+class DomainDecoder implements RecordDecoder<String> {
 
     @Override
-    public String decode(final DnsRecord record, final ByteBuf response) {
+    public
+    String decode(final DnsRecord record, final ByteBuf response) {
         return DnsNameResolverAccess.decodeDomainName(response);
     }
 }

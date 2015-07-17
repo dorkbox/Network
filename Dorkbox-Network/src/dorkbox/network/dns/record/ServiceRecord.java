@@ -20,7 +20,8 @@ package dorkbox.network.dns.record;
  * and port, of servers for specified services. For example, a service "http"
  * may be running on the server "example.com" on port 80.
  */
-public class ServiceRecord {
+public
+class ServiceRecord {
 
     private final int priority;
     private final int weight;
@@ -33,24 +34,20 @@ public class ServiceRecord {
     /**
      * Constructs an SRV (service) record.
      *
-     * @param fullPath
-     *            the name first read in the SRV record which contains the
-     *            service, the protocol, and the name of the server being
-     *            queried. The format is {@code _service._protocol.hostname}, or
-     *            for example {@code _http._tcp.example.com}
-     * @param priority
-     *            relative priority of this service, range 0-65535 (lower is
-     *            higher priority)
-     * @param weight
-     *            determines how often multiple services will be used in the
-     *            event they have the same priority (greater weight means
-     *            service is used more often)
-     * @param port
-     *            the port for the service
-     * @param target
-     *            the name of the host for the service
+     * @param fullPath the name first read in the SRV record which contains the
+     *                 service, the protocol, and the name of the server being
+     *                 queried. The format is {@code _service._protocol.hostname}, or
+     *                 for example {@code _http._tcp.example.com}
+     * @param priority relative priority of this service, range 0-65535 (lower is
+     *                 higher priority)
+     * @param weight   determines how often multiple services will be used in the
+     *                 event they have the same priority (greater weight means
+     *                 service is used more often)
+     * @param port     the port for the service
+     * @param target   the name of the host for the service
      */
-    public ServiceRecord(String fullPath, int priority, int weight, int port, String target) {
+    public
+    ServiceRecord(String fullPath, int priority, int weight, int port, String target) {
         String[] parts = fullPath.split("\\.", 3);
         this.service = parts[0];
         this.protocol = parts[1];
@@ -64,50 +61,56 @@ public class ServiceRecord {
     /**
      * Returns the priority for this service record.
      */
-    public int priority() {
+    public
+    int priority() {
         return this.priority;
     }
 
     /**
      * Returns the weight of this service record.
      */
-    public int weight() {
+    public
+    int weight() {
         return this.weight;
     }
 
     /**
      * Returns the port the service is running on.
      */
-    public int port() {
+    public
+    int port() {
         return this.port;
     }
 
     /**
      * Returns the name for the server being queried.
      */
-    public String name() {
+    public
+    String name() {
         return this.name;
     }
 
     /**
      * Returns the protocol for the service being queried (i.e. "_tcp").
      */
-    public String protocol() {
+    public
+    String protocol() {
         return this.protocol;
     }
 
     /**
      * Returns the service's name (i.e. "_http").
      */
-    public String service() {
+    public
+    String service() {
         return this.service;
     }
 
     /**
      * Returns the name of the host for the service.
      */
-    public String target() {
+    public
+    String target() {
         return this.target;
     }
-
 }

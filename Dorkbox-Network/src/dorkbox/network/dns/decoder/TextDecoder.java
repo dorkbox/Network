@@ -10,13 +10,12 @@ import java.util.List;
 /**
  * Decodes TXT (text) resource records.
  */
-public class TextDecoder implements RecordDecoder<List<String>> {
+public
+class TextDecoder implements RecordDecoder<List<String>> {
 
-    /**
-     * Returns a decoded TXT (text) resource record
-     */
     @Override
-    public List<String> decode(final DnsRecord record, final ByteBuf response) {
+    public
+    List<String> decode(final DnsRecord record, final ByteBuf response) {
         List<String> list = new ArrayList<String>();
 
         int index = response.readerIndex();
@@ -28,5 +27,4 @@ public class TextDecoder implements RecordDecoder<List<String>> {
 
         return list;
     }
-
 }
