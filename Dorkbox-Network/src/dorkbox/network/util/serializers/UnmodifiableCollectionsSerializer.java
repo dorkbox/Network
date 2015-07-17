@@ -16,28 +16,15 @@
  */
 package dorkbox.network.util.serializers;
 
-import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.SortedSet;
-import java.util.TreeMap;
-import java.util.TreeSet;
-
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-
 import dorkbox.network.util.exceptions.NetException;
+import dorkbox.util.SerializationManager;
+
+import java.lang.reflect.Field;
+import java.util.*;
 
 /**
  * A kryo {@link Serializer} for unmodifiable {@link Collection}s and {@link Map}s
@@ -53,12 +40,12 @@ public class UnmodifiableCollectionsSerializer extends Serializer<Object> {
     static {
         try {
             SOURCE_COLLECTION_FIELD = Class.forName("java.util.Collections$UnmodifiableCollection" )
-                .getDeclaredField( "c" );
+                .getDeclaredField("c");
             SOURCE_COLLECTION_FIELD.setAccessible( true );
 
 
             SOURCE_MAP_FIELD = Class.forName("java.util.Collections$UnmodifiableMap" )
-                .getDeclaredField( "m" );
+                .getDeclaredField("m");
             SOURCE_MAP_FIELD.setAccessible( true );
         } catch ( final Exception e ) {
             throw new NetException("Could not access source collection" +
@@ -179,7 +166,7 @@ public class UnmodifiableCollectionsSerializer extends Serializer<Object> {
      * for the several unmodifiable Collections that can be created via {@link Collections},
      * including {@link Map}s.
      *
-     * @param kryo the {@link Kryo} instance to set the serializer on.
+     * @param manager the {@link SerializationManager} instance to set the serializer on.
      *
      * @see Collections#unmodifiableCollection(Collection)
      * @see Collections#unmodifiableList(List)
@@ -188,11 +175,11 @@ public class UnmodifiableCollectionsSerializer extends Serializer<Object> {
      * @see Collections#unmodifiableMap(Map)
      * @see Collections#unmodifiableSortedMap(SortedMap)
      */
-    public static void registerSerializers( final Kryo kryo ) {
+    public static void registerSerializers( final SerializationManager manager ) {
         final UnmodifiableCollectionsSerializer serializer = new UnmodifiableCollectionsSerializer();
         UnmodifiableCollection.values();
         for ( final UnmodifiableCollection item : UnmodifiableCollection.values() ) {
-            kryo.register( item.type, serializer );
+            manager.register( item.type, serializer );
         }
     }
 
