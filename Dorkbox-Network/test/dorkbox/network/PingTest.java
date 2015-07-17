@@ -1,25 +1,27 @@
-
 package dorkbox.network;
 
-
-import static org.junit.Assert.fail;
-
-import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Ping;
 import dorkbox.network.connection.PingListener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
+import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.fail;
 
 
-public class PingTest extends BaseTest {
+public
+class PingTest extends BaseTest {
 
     private volatile int response = -1;
 
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
-    public void pingTCP() throws InitializationException, SecurityException {
+    public
+    void pingTCP() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -40,8 +42,10 @@ public class PingTest extends BaseTest {
         client.connect(5000);
 
         System.err.println("Testing TCP ping");
-        for (int i=0;i<10;i++) {
-            this.response = client.send().ping().getResponse();
+        for (int i = 0; i < 10; i++) {
+            this.response = client.send()
+                                  .ping()
+                                  .getResponse();
             System.err.println("Ping: " + this.response);
         }
 
@@ -52,7 +56,8 @@ public class PingTest extends BaseTest {
     }
 
     @Test
-    public void pingTCP_testListeners1() throws InitializationException, SecurityException {
+    public
+    void pingTCP_testListeners1() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -78,12 +83,16 @@ public class PingTest extends BaseTest {
             volatile int count = 0;
 
             @Override
-            public void response(Connection connection, int pingResponseTime) {
+            public
+            void response(Connection connection, int pingResponseTime) {
                 System.err.println("Ping: " + pingResponseTime);
 
                 if (this.count++ < 10) {
-                    connection.send().ping().addListener(this);
-                } else {
+                    connection.send()
+                              .ping()
+                              .addListener(this);
+                }
+                else {
                     PingTest.this.response = pingResponseTime;
                     stopEndPoints();
                 }
@@ -92,7 +101,8 @@ public class PingTest extends BaseTest {
 
         //  alternate way to register for the receipt of a one-off ping response
         // doesn't matter how many times this is called. If there is a PING waiting, then it's overwritten
-        Ping ping = client.send().ping();
+        Ping ping = client.send()
+                          .ping();
         ping.addListener(pingListener);
 
         waitForThreads();
@@ -103,7 +113,8 @@ public class PingTest extends BaseTest {
     }
 
     @Test
-    public void pingTCP_testListeners2() throws InitializationException, SecurityException {
+    public
+    void pingTCP_testListeners2() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -127,7 +138,8 @@ public class PingTest extends BaseTest {
 
         final PingListener<Connection> pingListener = new PingListener<Connection>() {
             @Override
-            public void response(Connection connection, int pingResponseTime) {
+            public
+            void response(Connection connection, int pingResponseTime) {
                 System.err.println("Ping: " + pingResponseTime);
                 PingTest.this.response = pingResponseTime;
                 stopEndPoints();
@@ -137,7 +149,8 @@ public class PingTest extends BaseTest {
 
         //  alternate way to register for the receipt of a one-off ping response
         // doesn't matter how many times this is called. If there is a PING waiting, then it's overwritten
-        Ping ping = client.send().ping();
+        Ping ping = client.send()
+                          .ping();
         ping.addListener(pingListener);
 
         waitForThreads();
@@ -149,7 +162,8 @@ public class PingTest extends BaseTest {
 
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
-    public void pingUDP() throws InitializationException, SecurityException {
+    public
+    void pingUDP() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -172,8 +186,10 @@ public class PingTest extends BaseTest {
         client.connect(5000);
 
         System.err.println("Testing UDP ping");
-        for (int i=0;i<10;i++) {
-            this.response = client.send().ping().getResponse();
+        for (int i = 0; i < 10; i++) {
+            this.response = client.send()
+                                  .ping()
+                                  .getResponse();
             System.err.println("Ping: " + this.response);
         }
 
@@ -187,7 +203,8 @@ public class PingTest extends BaseTest {
 
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
-    public void pingUDT() throws InitializationException, SecurityException {
+    public
+    void pingUDT() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -209,8 +226,10 @@ public class PingTest extends BaseTest {
         client.connect(5000);
 
         System.err.println("Testing UDT ping");
-        for (int i=0;i<10;i++) {
-            this.response = client.send().ping().getResponse();
+        for (int i = 0; i < 10; i++) {
+            this.response = client.send()
+                                  .ping()
+                                  .getResponse();
             System.err.println("Ping: " + this.response);
         }
 

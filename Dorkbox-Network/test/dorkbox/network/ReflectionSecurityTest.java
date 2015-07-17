@@ -1,23 +1,27 @@
-
 package dorkbox.network;
 
 
-import java.lang.reflect.Method;
-
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.network.util.store.SettingsStore;
+import dorkbox.util.SerializationManager;
+import dorkbox.util.storage.Storage;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.junit.Test;
 
-import dorkbox.network.util.exceptions.SecurityException;
-import dorkbox.network.util.store.SettingsStore;
+import java.io.IOException;
+import java.lang.reflect.Method;
 
 
 
-public class ReflectionSecurityTest extends BaseTest {
+public
+class ReflectionSecurityTest extends BaseTest {
     private static boolean RUN_TEST = false;
 
     @Test
-    public void directInvocation() {
+    public
+    void directInvocation() {
         if (!RUN_TEST) {
             System.out.println("  Not running test -- Skipping DirectInvocation test.");
             // since we exit the JVM on failure, we only run the test in special test-cases, not every time.
@@ -30,7 +34,8 @@ public class ReflectionSecurityTest extends BaseTest {
     }
 
     @Test
-    public void reflectionInvocationA() throws Exception {
+    public
+    void reflectionInvocationA() throws Exception {
         if (!RUN_TEST) {
             // since we exit the JVM on failure, we only run the test in special test-cases, not every time.
             System.out.println("  Not running test -- Skipping ReflectionInvocationA test.");
@@ -58,7 +63,8 @@ public class ReflectionSecurityTest extends BaseTest {
     }
 
     @Test
-    public void reflectionInvocationB() throws Exception {
+    public
+    void reflectionInvocationB() throws Exception {
         if (!RUN_TEST) {
             // since we exit the JVM on failure, we only run the test in special test-cases, not every time.
             System.out.println("  Not running test -- Skipping ReflectionInvocationB test.");
@@ -87,7 +93,8 @@ public class ReflectionSecurityTest extends BaseTest {
     }
 
     @Test
-    public void correctInvocation() throws SecurityException {
+    public
+    void correctInvocation() throws SecurityException {
         SettingsStore connectionStore = new ConnectionTestStore();
         connectionStore.getPrivateKey();
         // if it's NOT successful, the JVM will shutdown!
@@ -95,51 +102,68 @@ public class ReflectionSecurityTest extends BaseTest {
     }
 
 
-    public static class ConnectionTestStore extends SettingsStore {
+    public static
+    class ConnectionTestStore extends SettingsStore {
         @SuppressWarnings("unused")
-        private static SettingsStore create() throws SecurityException {
+        private static
+        SettingsStore create() throws SecurityException {
             return new ConnectionTestStore();
         }
 
         @Override
-        public ECPrivateKeyParameters getPrivateKey() throws SecurityException {
+        public
+        void init(final Class<? extends EndPoint> type, final SerializationManager serializationManager, final Storage storage)
+                        throws IOException {
+        }
+
+        @Override
+        public
+        ECPrivateKeyParameters getPrivateKey() throws SecurityException {
             return null;
         }
 
         @Override
-        public void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws SecurityException {
+        public
+        void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws SecurityException {
         }
 
         @Override
-        public ECPublicKeyParameters getPublicKey() throws SecurityException {
+        public
+        ECPublicKeyParameters getPublicKey() throws SecurityException {
             return null;
         }
 
         @Override
-        public void savePublicKey(ECPublicKeyParameters serverPublicKey) throws SecurityException {
+        public
+        void savePublicKey(ECPublicKeyParameters serverPublicKey) throws SecurityException {
         }
 
         @Override
-        public byte[] getSalt() {
+        public
+        byte[] getSalt() {
             return null;
         }
 
         @Override
-        public ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws SecurityException {
+        public
+        ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws SecurityException {
             return null;
         }
 
         @Override
-        public void addRegisteredServerKey(byte[] hostAddress, ECPublicKeyParameters publicKey) throws SecurityException {
+        public
+        void addRegisteredServerKey(byte[] hostAddress, ECPublicKeyParameters publicKey) throws SecurityException {
         }
 
         @Override
-        public boolean removeRegisteredServerKey(byte[] hostAddress) throws SecurityException {
+        public
+        boolean removeRegisteredServerKey(byte[] hostAddress) throws SecurityException {
             return true;
         }
 
         @Override
-        public void shutdown() {
+        public
+        void shutdown() {
         }
     }
 }

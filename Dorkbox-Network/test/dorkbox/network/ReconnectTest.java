@@ -1,24 +1,25 @@
-
 package dorkbox.network;
 
-
-import static org.junit.Assert.assertEquals;
-
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
+import org.junit.Test;
 
-public class ReconnectTest extends BaseTest {
+import java.io.IOException;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.Assert.assertEquals;
+
+public
+class ReconnectTest extends BaseTest {
 
     @Test
-    public void reconnect() throws InitializationException, SecurityException {
+    public
+    void reconnect() throws InitializationException, SecurityException, IOException {
         final Timer timer = new Timer();
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
@@ -30,18 +31,21 @@ public class ReconnectTest extends BaseTest {
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
-        server.listeners().add(new Listener<Object>() {
-            @Override
-            public void connected(final Connection connection) {
-                timer.schedule(new TimerTask() {
-                    @Override
-                    public void run () {
-                        System.out.println("Disconnecting after 2 seconds.");
-                        connection.close();
-                    }
-                }, 2000);
-            }
-        });
+        server.listeners()
+              .add(new Listener<Object>() {
+                  @Override
+                  public
+                  void connected(final Connection connection) {
+                      timer.schedule(new TimerTask() {
+                          @Override
+                          public
+                          void run() {
+                              System.out.println("Disconnecting after 2 seconds.");
+                              connection.close();
+                          }
+                      }, 2000);
+                  }
+              });
 
         // ----
 
@@ -49,22 +53,25 @@ public class ReconnectTest extends BaseTest {
         final Client client = new Client(connectionOptions);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
-        client.listeners().add(new Listener<Object>() {
-            @Override
-            public void disconnected (Connection connection) {
-                if (reconnectCount.getAndIncrement() == 2) {
-                    stopEndPoints();
-                    return;
-                }
-                new Thread() {
-                    @Override
-                    public void run () {
-                        System.out.println("Reconnecting: " + reconnectCount.get());
-                        client.reconnect();
-                    }
-                }.start();
-            }
-        });
+        client.listeners()
+              .add(new Listener<Object>() {
+                  @Override
+                  public
+                  void disconnected(Connection connection) {
+                      if (reconnectCount.getAndIncrement() == 2) {
+                          stopEndPoints();
+                          return;
+                      }
+                      new Thread() {
+                          @Override
+                          public
+                          void run() {
+                              System.out.println("Reconnecting: " + reconnectCount.get());
+                              client.reconnect();
+                          }
+                      }.start();
+                  }
+              });
         client.connect(5000);
 
         waitForThreads(10);

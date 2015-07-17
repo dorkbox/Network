@@ -1,27 +1,29 @@
-
 package dorkbox.network;
 
-
-import static org.junit.Assert.fail;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.util.Arrays;
-
-import org.junit.Test;
 
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.InputStreamSender;
-import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.ConnectionSerializationManager;
+import dorkbox.network.util.KryoConnectionSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
+import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Arrays;
+
+import static org.junit.Assert.fail;
 
 @SuppressWarnings({"rawtypes"})
-public class IdleTest extends BaseTest {
+public
+class IdleTest extends BaseTest {
     private volatile boolean success = false;
+
 
     enum ConnectionType {
         TCP,
@@ -30,13 +32,15 @@ public class IdleTest extends BaseTest {
     }
 
     @Test
-    public void InputStreamSender() throws InitializationException, SecurityException {
+    public
+    void InputStreamSender() throws InitializationException, SecurityException, IOException {
         final int largeDataSize = 12345;
 
         System.err.println("-- TCP");
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;
+        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT(false, false);
         streamSpecificType(largeDataSize, connectionOptions, ConnectionType.TCP);
 
 
@@ -45,6 +49,7 @@ public class IdleTest extends BaseTest {
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.udpPort = udpPort;
         connectionOptions.host = host;
+        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT(false, false);
         streamSpecificType(largeDataSize, connectionOptions, ConnectionType.UDP);
 
 
@@ -53,6 +58,7 @@ public class IdleTest extends BaseTest {
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.udtPort = udtPort;
         connectionOptions.host = host;
+        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT(false, false);
         streamSpecificType(largeDataSize, connectionOptions, ConnectionType.UDT);
     }
 
@@ -60,7 +66,8 @@ public class IdleTest extends BaseTest {
 
     // have to test sending objects
     @Test
-    public void ObjectSender() throws InitializationException, SecurityException {
+    public
+    void ObjectSender() throws InitializationException, SecurityException, IOException {
         final Data mainData = new Data();
         populateData(mainData);
 
@@ -69,6 +76,8 @@ public class IdleTest extends BaseTest {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;
+        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
+        register(connectionOptions.serializationManager);
         sendObject(mainData, connectionOptions, ConnectionType.TCP);
 
 
@@ -77,6 +86,8 @@ public class IdleTest extends BaseTest {
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.udpPort = udpPort;
         connectionOptions.host = host;
+        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
+        register(connectionOptions.serializationManager);
         sendObject(mainData, connectionOptions, ConnectionType.TCP);
 
 
@@ -85,49 +96,61 @@ public class IdleTest extends BaseTest {
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.udtPort = udtPort;
         connectionOptions.host = host;
+        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
+        register(connectionOptions.serializationManager);
         sendObject(mainData, connectionOptions, ConnectionType.TCP);
     }
 
 
 
-    private void sendObject(final Data mainData, ConnectionOptions connectionOptions, final ConnectionType type) throws InitializationException, SecurityException {
+    private
+    void sendObject(final Data mainData, ConnectionOptions connectionOptions, final ConnectionType type)
+                    throws InitializationException, SecurityException, IOException {
         Server server = new Server(connectionOptions);
         server.disableRemoteKeyValidation();
-        register(server.getSerialization());
         addEndPoint(server);
         server.setIdleTimeout(100);
         server.bind(false);
-        server.listeners().add(new Listener<Data>() {
+        server.listeners()
+              .add(new Listener<Data>() {
 
-            @Override
-            public void connected (Connection connection) {
-                IdleBridge sendOnIdle = connection.sendOnIdle(mainData);
+                  @Override
+                  public
+                  void connected(Connection connection) {
+                      IdleBridge sendOnIdle = connection.sendOnIdle(mainData);
 
-                switch (type) {
-                    case TCP: sendOnIdle.TCP(); break;
-                    case UDP: sendOnIdle.UDP(); break;
-                    case UDT: sendOnIdle.UDT(); break;
-                }
-            }
-        });
+                      switch (type) {
+                          case TCP:
+                              sendOnIdle.TCP();
+                              break;
+                          case UDP:
+                              sendOnIdle.UDP();
+                              break;
+                          case UDT:
+                              sendOnIdle.UDT();
+                              break;
+                      }
+                  }
+              });
 
         // ----
 
         Client client = new Client(connectionOptions);
         client.disableRemoteKeyValidation();
-        register(client.getSerialization());
         addEndPoint(client);
-        client.listeners().add(new Listener<Data>() {
-            @Override
-            public void received(Connection connection, Data object) {
-                if (mainData.equals(object)) {
-                    IdleTest.this.success = true;
-                }
+        client.listeners()
+              .add(new Listener<Data>() {
+                  @Override
+                  public
+                  void received(Connection connection, Data object) {
+                      if (mainData.equals(object)) {
+                          IdleTest.this.success = true;
+                      }
 
-                System.err.println("finished!");
-                stopEndPoints();
-            }
-        });
+                      System.err.println("finished!");
+                      stopEndPoints();
+                  }
+              });
 
         client.connect(5000);
 
@@ -139,67 +162,79 @@ public class IdleTest extends BaseTest {
 
 
 
-    private void streamSpecificType(final int largeDataSize, ConnectionOptions connectionOptions, final ConnectionType type) throws InitializationException, SecurityException {
+    private
+    void streamSpecificType(final int largeDataSize, ConnectionOptions connectionOptions, final ConnectionType type)
+                    throws InitializationException, SecurityException, IOException {
         Server server = new Server(connectionOptions);
         server.disableRemoteKeyValidation();
-        server.getSerialization().setRegistrationRequired(false);
         addEndPoint(server);
         server.setIdleTimeout(100);
         server.bind(false);
-        server.listeners().add(new Listener<byte[]>() {
-            @Override
-            public void connected (Connection connection) {
-                ByteArrayOutputStream output = new ByteArrayOutputStream(largeDataSize);
-                for (int i = 0; i < largeDataSize; i++) {
-                    output.write(i);
-                }
+        server.listeners()
+              .add(new Listener<byte[]>() {
+                  @Override
+                  public
+                  void connected(Connection connection) {
+                      ByteArrayOutputStream output = new ByteArrayOutputStream(largeDataSize);
+                      for (int i = 0; i < largeDataSize; i++) {
+                          output.write(i);
+                      }
 
-                ByteArrayInputStream input = new ByteArrayInputStream(output.toByteArray());
+                      ByteArrayInputStream input = new ByteArrayInputStream(output.toByteArray());
 
-                // Send data in 512 byte chunks.
-                IdleBridge sendOnIdle = connection.sendOnIdle(new InputStreamSender(input, 512) {
-                    @Override
-                    protected void start () {
-                        // Normally would send an object so the receiving side knows how to handle the chunks we are about to send.
-                        System.err.println("starting");
-                    }
+                      // Send data in 512 byte chunks.
+                      IdleBridge sendOnIdle = connection.sendOnIdle(new InputStreamSender(input, 512) {
+                          @Override
+                          protected
+                          void start() {
+                              // Normally would send an object so the receiving side knows how to handle the chunks we are about to send.
+                              System.err.println("starting");
+                          }
 
-                    @Override
-                    protected byte[] onNext (byte[] bytes) {
-                        //System.out.println("sending " + bytes.length);
-                        return bytes; // Normally would wrap the byte[] with an object so the receiving side knows how to handle it.
-                    }
-                });
+                          @Override
+                          protected
+                          byte[] onNext(byte[] bytes) {
+                              //System.out.println("sending " + bytes.length);
+                              return bytes; // Normally would wrap the byte[] with an object so the receiving side knows how to handle it.
+                          }
+                      });
 
-                switch (type) {
-                    case TCP: sendOnIdle.TCP(); break;
-                    case UDP: sendOnIdle.UDP(); break;
-                    case UDT: sendOnIdle.UDT(); break;
-                }
-            }
-        });
+                      switch (type) {
+                          case TCP:
+                              sendOnIdle.TCP();
+                              break;
+                          case UDP:
+                              sendOnIdle.UDP();
+                              break;
+                          case UDT:
+                              sendOnIdle.UDT();
+                              break;
+                      }
+                  }
+              });
 
         // ----
 
         Client client = new Client(connectionOptions);
         client.disableRemoteKeyValidation();
-        client.getSerialization().setRegistrationRequired(false);
         addEndPoint(client);
-        client.listeners().add(new Listener<byte[]>() {
-            int total;
+        client.listeners()
+              .add(new Listener<byte[]>() {
+                  int total;
 
-            @Override
-            public void received (Connection connection, byte[] object) {
-                int length = object.length;
-                //System.err.println("received " + length);
-                this.total += length;
-                if (this.total == largeDataSize) {
-                    IdleTest.this.success = true;
-                    System.err.println("finished!");
-                    stopEndPoints();
-                }
-            }
-        });
+                  @Override
+                  public
+                  void received(Connection connection, byte[] object) {
+                      int length = object.length;
+                      //System.err.println("received " + length);
+                      this.total += length;
+                      if (this.total == largeDataSize) {
+                          IdleTest.this.success = true;
+                          System.err.println("finished!");
+                          stopEndPoints();
+                      }
+                  }
+              });
 
         client.connect(5000);
 
@@ -210,7 +245,8 @@ public class IdleTest extends BaseTest {
     }
 
 
-    private void populateData(Data data) {
+    private
+    void populateData(Data data) {
         StringBuilder buffer = new StringBuilder();
         for (int i = 0; i < 3000; i++) {
             buffer.append('a');
@@ -220,7 +256,7 @@ public class IdleTest extends BaseTest {
         data.strings = new String[] {"abcdefghijklmnopqrstuvwxyz0123456789", "", null, "!@#$", "�����"};
         data.ints = new int[] {-1234567, 1234567, -1, 0, 1, Integer.MAX_VALUE, Integer.MIN_VALUE};
         data.shorts = new short[] {-12345, 12345, -1, 0, 1, Short.MAX_VALUE, Short.MIN_VALUE};
-        data.floats = new float[] {0, -0, 1, -1, 123456, -123456, 0.1f, 0.2f, -0.3f, (float)Math.PI, Float.MAX_VALUE, Float.MIN_VALUE};
+        data.floats = new float[] {0, -0, 1, -1, 123456, -123456, 0.1f, 0.2f, -0.3f, (float) Math.PI, Float.MAX_VALUE, Float.MIN_VALUE};
 
         data.doubles = new double[] {0, -0, 1, -1, 123456, -123456, 0.1d, 0.2d, -0.3d, Math.PI, Double.MAX_VALUE, Double.MIN_VALUE};
         data.longs = new long[] {0, -0, 1, -1, 123456, -123456, 99999999999l, -99999999999l, Long.MAX_VALUE, Long.MIN_VALUE};
@@ -230,7 +266,8 @@ public class IdleTest extends BaseTest {
         data.booleans = new boolean[] {true, false};
         data.Ints = new Integer[] {-1234567, 1234567, -1, 0, 1, Integer.MAX_VALUE, Integer.MIN_VALUE};
         data.Shorts = new Short[] {-12345, 12345, -1, 0, 1, Short.MAX_VALUE, Short.MIN_VALUE};
-        data.Floats = new Float[] {0f, -0f, 1f, -1f, 123456f, -123456f, 0.1f, 0.2f, -0.3f, (float)Math.PI, Float.MAX_VALUE, Float.MIN_VALUE};
+        data.Floats = new Float[] {0f, -0f, 1f, -1f, 123456f, -123456f, 0.1f, 0.2f, -0.3f, (float) Math.PI, Float.MAX_VALUE,
+                                   Float.MIN_VALUE};
         data.Doubles = new Double[] {0d, -0d, 1d, -1d, 123456d, -123456d, 0.1d, 0.2d, -0.3d, Math.PI, Double.MAX_VALUE, Double.MIN_VALUE};
         data.Longs = new Long[] {0l, -0l, 1l, -1l, 123456l, -123456l, 99999999999l, -99999999999l, Long.MAX_VALUE, Long.MIN_VALUE};
         data.Bytes = new Byte[] {-123, 123, -1, 0, 1, Byte.MAX_VALUE, Byte.MIN_VALUE};
@@ -238,7 +275,8 @@ public class IdleTest extends BaseTest {
         data.Booleans = new Boolean[] {true, false};
     }
 
-    private void register (SerializationManager kryoMT) {
+    private
+    void register(ConnectionSerializationManager kryoMT) {
         kryoMT.register(int[].class);
         kryoMT.register(short[].class);
         kryoMT.register(float[].class);
@@ -260,7 +298,8 @@ public class IdleTest extends BaseTest {
         kryoMT.register(TYPE.class);
     }
 
-    static public class Data {
+    static public
+    class Data {
         public String string;
         public String[] strings;
         public int[] ints;
@@ -282,7 +321,8 @@ public class IdleTest extends BaseTest {
 
 
         @Override
-        public int hashCode() {
+        public
+        int hashCode() {
             final int prime = 31;
             int result = 1;
             result = prime * result + Arrays.hashCode(this.Booleans);
@@ -307,7 +347,8 @@ public class IdleTest extends BaseTest {
         }
 
         @Override
-        public boolean equals(Object obj) {
+        public
+        boolean equals(Object obj) {
             if (this == obj) {
                 return true;
             }
@@ -370,7 +411,8 @@ public class IdleTest extends BaseTest {
                 if (other.string != null) {
                     return false;
                 }
-            } else if (!this.string.equals(other.string)) {
+            }
+            else if (!this.string.equals(other.string)) {
                 return false;
             }
             if (!Arrays.equals(this.strings, other.strings)) {
@@ -380,7 +422,8 @@ public class IdleTest extends BaseTest {
         }
 
         @Override
-        public String toString () {
+        public
+        String toString() {
             return "Data";
         }
     }

@@ -1,21 +1,23 @@
-
 package dorkbox.network;
 
-
-import static org.junit.Assert.fail;
-
-import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
+import org.junit.Test;
 
-public class DiscoverHostTest extends BaseTest {
+import java.io.IOException;
+
+import static org.junit.Assert.fail;
+
+public
+class DiscoverHostTest extends BaseTest {
     volatile boolean connected = false;
 
     @Test
-    public void broadcast () throws InitializationException, SecurityException {
+    public
+    void broadcast() throws InitializationException, SecurityException, IOException {
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
@@ -39,13 +41,15 @@ public class DiscoverHostTest extends BaseTest {
         Client client = new Client(connectionOptions);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
-        client.listeners().add(new Listener<Object>() {
-            @Override
-            public void connected(Connection connection) {
-                DiscoverHostTest.this.connected = true;
-                stopEndPoints();
-            }
-        });
+        client.listeners()
+              .add(new Listener<Object>() {
+                  @Override
+                  public
+                  void connected(Connection connection) {
+                      DiscoverHostTest.this.connected = true;
+                      stopEndPoints();
+                  }
+              });
         client.connect(2000);
 
         waitForThreads(2);

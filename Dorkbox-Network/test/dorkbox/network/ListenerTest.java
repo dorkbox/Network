@@ -1,24 +1,19 @@
-
 package dorkbox.network;
 
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import dorkbox.network.connection.*;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
+import org.junit.Test;
 
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.junit.Test;
+import static org.junit.Assert.*;
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.ListenerRaw;
-import dorkbox.network.util.exceptions.InitializationException;
-import dorkbox.network.util.exceptions.SecurityException;
-
-public class ListenerTest extends BaseTest {
+public
+class ListenerTest extends BaseTest {
 
     private final String origString = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; // lots of a's to encourage compression
     private final int limit = 20;
@@ -31,24 +26,30 @@ public class ListenerTest extends BaseTest {
     AtomicBoolean superClass2WorkedOK = new AtomicBoolean(false);
     AtomicBoolean disconnectWorkedOK = new AtomicBoolean(false);
 
+
     // quick and dirty test to also test connection sub-classing
     class TestConnectionA extends ConnectionImpl {
-        public TestConnectionA(String name) {
-            super(name);
+        public
+        TestConnectionA(Class<? extends EndPoint> type) {
+            super(type);
         }
 
-        public void check() {
+        public
+        void check() {
             ListenerTest.this.subClassWorkedOK.set(true);
         }
     }
 
+
     class TestConnectionB extends TestConnectionA {
-        public TestConnectionB(String name) {
-            super(name);
+        public
+        TestConnectionB(Class<? extends EndPoint> type) {
+            super(type);
         }
 
         @Override
-        public void check() {
+        public
+        void check() {
             ListenerTest.this.subClassWorkedOK.set(true);
         }
     }
@@ -57,15 +58,17 @@ public class ListenerTest extends BaseTest {
 
     @SuppressWarnings("rawtypes")
     @Test
-    public void listener() throws SecurityException, InitializationException {
+    public
+    void listener() throws SecurityException, InitializationException, IOException {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;
 
         Server server = new Server(connectionOptions) {
             @Override
-            public TestConnectionA newConnection(String name) {
-                return new TestConnectionA(name);
+            public
+            TestConnectionA newConnection(Class<? extends EndPoint> type) {
+                return new TestConnectionA(type);
             }
         };
 
@@ -73,60 +76,74 @@ public class ListenerTest extends BaseTest {
         addEndPoint(server);
         server.bind(false);
 
-        server.listeners().add(new ListenerRaw<TestConnectionA, String>() {
-            @Override
-            public void received (TestConnectionA connection, String string) {
-                connection.check();
+        server.listeners()
+              .add(new ListenerRaw<TestConnectionA, String>() {
+                  @Override
+                  public
+                  void received(TestConnectionA connection, String string) {
+                      connection.check();
 //                System.err.println("default check");
-                connection.send().TCP(string);
-            }
-        });
+                      connection.send()
+                                .TCP(string);
+                  }
+              });
 
-        server.listeners().add(new Listener<String>() {
-            @Override
-            public void received (Connection connection, String string) {
+        server.listeners()
+              .add(new Listener<String>() {
+                  @Override
+                  public
+                  void received(Connection connection, String string) {
 //                System.err.println("subclass check");
-                ListenerTest.this.subClassWorkedOK2.set(true);
-            }
-        });
+                      ListenerTest.this.subClassWorkedOK2.set(true);
+                  }
+              });
 
         // should be able to happen!
-        server.listeners().add(new Listener() {
-            @Override
-            public void received(Connection connection, Object string) {
+        server.listeners()
+              .add(new Listener() {
+                  @Override
+                  public
+                  void received(Connection connection, Object string) {
 //                System.err.println("generic class check");
-                ListenerTest.this.superClassWorkedOK.set(true);
-            }
-        });
+                      ListenerTest.this.superClassWorkedOK.set(true);
+                  }
+              });
 
 
         // should be able to happen!
-        server.listeners().add(new ListenerRaw() {
-            @Override
-            public void received(Connection connection, Object string) {
+        server.listeners()
+              .add(new ListenerRaw() {
+                  @Override
+                  public
+                  void received(Connection connection, Object string) {
 //                System.err.println("generic class check");
-                ListenerTest.this.superClass2WorkedOK.set(true);
-            }
-        });
+                      ListenerTest.this.superClass2WorkedOK.set(true);
+                  }
+              });
 
-        server.listeners().add(new Listener() {
-            @Override
-            public void disconnected(Connection connection) {
+        server.listeners()
+              .add(new Listener() {
+                  @Override
+                  public
+                  void disconnected(Connection connection) {
 //                System.err.println("disconnect check");
-                ListenerTest.this.disconnectWorkedOK.set(true);
-            }
-        });
+                      ListenerTest.this.disconnectWorkedOK.set(true);
+                  }
+              });
 
         // should not let this happen!
         try {
-            server.listeners().add(new ListenerRaw<TestConnectionB, String>() {
-                @Override
-                public void received (TestConnectionB connection, String string) {
-                    connection.check();
-                    System.err.println(string);
-                    connection.send().TCP(string);
-                }
-            });
+            server.listeners()
+                  .add(new ListenerRaw<TestConnectionB, String>() {
+                      @Override
+                      public
+                      void received(TestConnectionB connection, String string) {
+                          connection.check();
+                          System.err.println(string);
+                          connection.send()
+                                    .TCP(string);
+                      }
+                  });
             this.fail = "Should not be able to ADD listeners that are NOT the basetype or the interface";
         } catch (Exception e) {
             System.err.println("Successfully did NOT add listener that was not the base class");
@@ -139,25 +156,31 @@ public class ListenerTest extends BaseTest {
 
         client.disableRemoteKeyValidation();
         addEndPoint(client);
-        client.listeners().add(new Listener<String>() {
-            @Override
-            public void connected (Connection connection) {
-                connection.send().TCP(ListenerTest.this.origString); // 20 a's
-            }
+        client.listeners()
+              .add(new Listener<String>() {
+                  @Override
+                  public
+                  void connected(Connection connection) {
+                      connection.send()
+                                .TCP(ListenerTest.this.origString); // 20 a's
+                  }
 
-            @Override
-            public void received (Connection connection, String string) {
-                if (ListenerTest.this.count.get() < ListenerTest.this.limit) {
-                    ListenerTest.this.count.getAndIncrement();
-                    connection.send().TCP(string);
-                } else {
-                    if (!ListenerTest.this.origString.equals(string)) {
-                        ListenerTest.this.fail = "original string not equal to the string received";
-                    }
-                    stopEndPoints();
-                }
-            }
-        });
+                  @Override
+                  public
+                  void received(Connection connection, String string) {
+                      if (ListenerTest.this.count.get() < ListenerTest.this.limit) {
+                          ListenerTest.this.count.getAndIncrement();
+                          connection.send()
+                                    .TCP(string);
+                      }
+                      else {
+                          if (!ListenerTest.this.origString.equals(string)) {
+                              ListenerTest.this.fail = "original string not equal to the string received";
+                          }
+                          stopEndPoints();
+                      }
+                  }
+              });
 
 
         client.connect(5000);

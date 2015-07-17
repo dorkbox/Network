@@ -1,14 +1,5 @@
-
 package dorkbox.network;
 
-
-import static org.junit.Assert.fail;
-
-import java.util.ArrayList;
-import java.util.Timer;
-import java.util.TimerTask;
-
-import org.slf4j.LoggerFactory;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -21,8 +12,21 @@ import dorkbox.network.connection.EndPoint;
 import dorkbox.network.util.entropy.Entropy;
 import dorkbox.network.util.entropy.SimpleEntropy;
 import dorkbox.network.util.exceptions.InitializationException;
+import org.slf4j.LoggerFactory;
 
-public abstract class BaseTest {
+import java.util.ArrayList;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import static org.junit.Assert.fail;
+
+public abstract
+class BaseTest {
+
+    public static final String host = "localhost";
+    public static final int tcpPort = 54558;
+    public static final int udpPort = 54779;
+    public static final int udtPort = 54580;
 
     static {
         // we want our entropy generation to be simple (ie, no user interaction to generate)
@@ -33,20 +37,16 @@ public abstract class BaseTest {
         }
     }
 
-    static public String host = "localhost";
-    static public int tcpPort = 54558;
-    static public int udpPort = 54779;
-    static public int udtPort = 54580;
-
-    private ArrayList<EndPoint> endPoints = new ArrayList<EndPoint>();
-    private volatile Timer timer;
     boolean fail_check;
+    private final ArrayList<EndPoint> endPoints = new ArrayList<EndPoint>();
+    private volatile Timer timer;
 
-    public BaseTest () {
+    public
+    BaseTest() {
         System.out.println("---- " + getClass().getSimpleName());
 
         // assume SLF4J is bound to logback in the current environment
-        Logger rootLogger = (Logger)LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        Logger rootLogger = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
         LoggerContext context = rootLogger.getLoggerContext();
 
         JoranConfigurator jc = new JoranConfigurator();
@@ -90,51 +90,49 @@ public abstract class BaseTest {
         rootLogger.addAppender(consoleAppender);
     }
 
-    public void addEndPoint(final EndPoint endPoint) {
+    public
+    void addEndPoint(final EndPoint endPoint) {
         this.endPoints.add(endPoint);
     }
 
-    public void stopEndPoints() {
+    public
+    void stopEndPoints() {
         stopEndPoints(0);
     }
 
-    public void stopEndPoints(int stopAfterMillis) {
-        if (stopAfterMillis > 0) {
-            if (this.timer == null) {
-                this.timer = new Timer("UnitTest timeout timer");
-            }
+    public
+    void stopEndPoints(int stopAfterMillis) {
+        if (stopAfterMillis <= 0) {
+            stopAfterMillis = 1;
+        }
 
-            // don't automatically timeout when we are testing.
-            this.timer.schedule(new TimerTask() {
-                @Override
-                public void run () {
-                    synchronized (BaseTest.this.endPoints) {
-                        for (EndPoint endPoint : BaseTest.this.endPoints) {
-                            endPoint.stop();
-                        }
-                        BaseTest.this.endPoints.clear();
+        if (this.timer == null) {
+            this.timer = new Timer("UnitTest timeout timer");
+        }
+
+        // We have to ALWAYS run this in a new timer, BECAUSE if stopEndPoints() is called from a client/server thread, it will DEADLOCK
+        this.timer.schedule(new TimerTask() {
+            @Override
+            public
+            void run() {
+                synchronized (BaseTest.this.endPoints) {
+                    for (EndPoint endPoint : BaseTest.this.endPoints) {
+                        endPoint.stop();
+                        endPoint.waitForShutdown();
                     }
+                    BaseTest.this.endPoints.clear();
+                }
+                if (BaseTest.this.timer != null) {
                     BaseTest.this.timer.cancel();
                     BaseTest.this.timer.purge();
                     BaseTest.this.timer = null;
                 }
-            }, stopAfterMillis);
-        } else {
-            synchronized (BaseTest.this.endPoints) {
-                for (EndPoint endPoint : BaseTest.this.endPoints) {
-                    endPoint.stop();
-                }
-                BaseTest.this.endPoints.clear();
             }
-            if (BaseTest.this.timer != null) {
-                BaseTest.this.timer.cancel();
-                BaseTest.this.timer.purge();
-                BaseTest.this.timer = null;
-            }
-        }
+        }, stopAfterMillis);
     }
 
-    public void waitForThreads(int stopAfterSecondsOrMillis) {
+    public
+    void waitForThreads(int stopAfterSecondsOrMillis) {
         if (stopAfterSecondsOrMillis < 1000) {
             stopAfterSecondsOrMillis *= 1000;
         }
@@ -142,11 +140,13 @@ public abstract class BaseTest {
         waitForThreads0(stopAfterSecondsOrMillis);
     }
 
-    public void waitForThreads() {
+    public
+    void waitForThreads() {
         waitForThreads0(0);
     }
 
-    private void waitForThreads0(int stopAfterMillis) {
+    private
+    void waitForThreads0(int stopAfterMillis) {
         this.fail_check = false;
 
         TimerTask failTask = null;
@@ -156,11 +156,12 @@ public abstract class BaseTest {
 
             failTask = new TimerTask() {
                 @Override
-                public void run () {
+                public
+                void run() {
                     BaseTest.this.fail_check = true;
                 }
             };
-            this.timer.schedule(failTask, stopAfterMillis+10000L);
+            this.timer.schedule(failTask, stopAfterMillis + 10000L);
         }
 
         while (true) {
@@ -185,7 +186,7 @@ public abstract class BaseTest {
 
         // Give sockets a chance to close before starting the next test.
         try {
-            Thread.sleep(1000);
+            Thread.sleep(100);
         } catch (InterruptedException ignored) {
         }
     }

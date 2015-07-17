@@ -1,58 +1,66 @@
-
 package dorkbox.network;
 
 
-import static org.junit.Assert.fail;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import org.junit.Test;
-
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.ConnectionSerializationManager;
+import dorkbox.network.util.KryoConnectionSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
+import org.junit.Test;
 
-public class ClientSendTest extends BaseTest {
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.Assert.fail;
+
+public
+class ClientSendTest extends BaseTest {
 
     private AtomicBoolean checkPassed = new AtomicBoolean(false);
 
     @Test
-    public void sendDataFromClientClass () throws InitializationException, SecurityException {
+    public
+    void sendDataFromClientClass() throws InitializationException, SecurityException, IOException {
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.host = host;
+        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
+        register(connectionOptions.serializationManager);
 
         Server server = new Server(connectionOptions);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
-        register(server.getSerialization());
 
-        server.listeners().add(new Listener<AMessage>() {
-            @Override
-            public void received (Connection connection, AMessage object) {
-                System.err.println("Server received message from client. Bouncing back.");
-                connection.send().TCP(object);
-            }
-        });
+        server.listeners()
+              .add(new Listener<AMessage>() {
+                  @Override
+                  public
+                  void received(Connection connection, AMessage object) {
+                      System.err.println("Server received message from client. Bouncing back.");
+                      connection.send()
+                                .TCP(object);
+                  }
+              });
 
         Client client = new Client(connectionOptions);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
-        register(client.getSerialization());
         client.connect(5000);
 
-        client.listeners().add(new Listener<AMessage>() {
-            @Override
-            public void received (Connection connection, AMessage object) {
-                ClientSendTest.this.checkPassed.set(true);
-                stopEndPoints();
-            }
-        });
+        client.listeners()
+              .add(new Listener<AMessage>() {
+                  @Override
+                  public
+                  void received(Connection connection, AMessage object) {
+                      ClientSendTest.this.checkPassed.set(true);
+                      stopEndPoints();
+                  }
+              });
 
-        client.send().TCP(new AMessage());
+        client.send()
+              .TCP(new AMessage());
 
         waitForThreads();
 
@@ -61,12 +69,15 @@ public class ClientSendTest extends BaseTest {
         }
     }
 
-    private void register (SerializationManager kryoMT) {
+    private static
+    void register(ConnectionSerializationManager kryoMT) {
         kryoMT.register(AMessage.class);
     }
 
-    public static class AMessage {
-        public AMessage () {
+    public static
+    class AMessage {
+        public
+        AMessage() {
         }
     }
 }

@@ -2,18 +2,19 @@
 package dorkbox.network;
 
 
-import static org.junit.Assert.fail;
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.Listener;
+import dorkbox.network.util.ConnectionSerializationManager;
+import dorkbox.network.util.KryoConnectionSerializationManager;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
+import org.junit.Test;
 
+import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.junit.Test;
-
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
-import dorkbox.network.util.SerializationManager;
-import dorkbox.network.util.exceptions.InitializationException;
-import dorkbox.network.util.exceptions.SecurityException;
+import static org.junit.Assert.fail;
 
 public class LargeBufferTest extends BaseTest {
     private static final int OBJ_SIZE = 1024 * 10;
@@ -23,19 +24,20 @@ public class LargeBufferTest extends BaseTest {
     private volatile int clientCheck = -1;
 
     @Test
-    public void manyLargeMessages () throws InitializationException, SecurityException {
+    public void manyLargeMessages () throws InitializationException, SecurityException, IOException {
         final int messageCount = 1024;
 
         ConnectionOptions connectionOptions = new ConnectionOptions();
         connectionOptions.tcpPort = tcpPort;
         connectionOptions.udpPort = udpPort;
         connectionOptions.host = host;
+        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
+        register(connectionOptions.serializationManager);
 
         Server server = new Server(connectionOptions);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
-        register(server.getSerialization());
 
         server.listeners().add(new Listener<LargeMessage>() {
             AtomicInteger received = new AtomicInteger();
@@ -60,7 +62,6 @@ public class LargeBufferTest extends BaseTest {
         Client client = new Client(connectionOptions);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
-        register(client.getSerialization());
         client.connect(5000);
 
         client.listeners().add(new Listener<LargeMessage>() {
@@ -105,7 +106,7 @@ public class LargeBufferTest extends BaseTest {
         }
     }
 
-    private void register (SerializationManager kryoMT) {
+    private void register (ConnectionSerializationManager kryoMT) {
         kryoMT.register(byte[].class);
         kryoMT.register(LargeMessage.class);
     }

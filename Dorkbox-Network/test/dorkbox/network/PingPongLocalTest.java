@@ -1,25 +1,25 @@
 package dorkbox.network;
 
 
-import static org.junit.Assert.fail;
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.Listener;
+import dorkbox.network.util.ConnectionSerializationManager;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
+import org.junit.Test;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.junit.Test;
-
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
-import dorkbox.network.util.SerializationManager;
-import dorkbox.network.util.exceptions.InitializationException;
-import dorkbox.network.util.exceptions.SecurityException;
+import static org.junit.Assert.fail;
 
 public class PingPongLocalTest extends BaseTest {
     private volatile String fail;
     int                     tries = 10000;
 
     @Test
-    public void pingPongLocal() throws InitializationException, SecurityException {
+    public void pingPongLocal() throws InitializationException, SecurityException, IOException {
         this.fail = "Data not received.";
 
         final Data dataLOCAL = new Data();
@@ -126,7 +126,7 @@ public class PingPongLocalTest extends BaseTest {
         data.Booleans = new Boolean[] {true,false};
     }
 
-    private void register(SerializationManager kryoMT) {
+    private void register(ConnectionSerializationManager kryoMT) {
         kryoMT.register(int[].class);
         kryoMT.register(short[].class);
         kryoMT.register(float[].class);
