@@ -3,21 +3,26 @@ package dorkbox.network.connection.wrapper;
 import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.ConnectionPointWriter;
 
-public class ChannelNull implements ConnectionPointWriter {
+public
+class ChannelNull implements ConnectionPointWriter {
 
     private static final ConnectionPoint INSTANCE = new ChannelNull();
-    public static ConnectionPoint get() {
+
+    public static
+    ConnectionPoint get() {
         return INSTANCE;
     }
 
-    private ChannelNull() {
+    private
+    ChannelNull() {
     }
 
     /**
      * Write an object to the underlying channel
      */
     @Override
-    public void write(Object object) {
+    public
+    void write(Object object) {
     }
 
     /**
@@ -25,10 +30,12 @@ public class ChannelNull implements ConnectionPointWriter {
      * <b>DO NOT use this in the same thread as receiving messages! It will deadlock.</b>
      */
     @Override
-    public void waitForWriteToComplete() {
+    public
+    void waitForWriteToComplete() {
     }
 
     @Override
-    public void flush() {
+    public
+    void flush() {
     }
 }

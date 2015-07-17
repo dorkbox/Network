@@ -1,46 +1,47 @@
 package dorkbox.network.connection.wrapper;
 
 
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionPointWriter;
+import dorkbox.network.connection.ISessionManager;
 import io.netty.channel.EventLoop;
-
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
-import dorkbox.network.connection.ConnectionPointWriter;
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ISessionManager;
+public
+interface ChannelWrapper {
 
-public interface ChannelWrapper {
+    ConnectionPointWriter tcp();
 
-    public ConnectionPointWriter tcp();
-    public ConnectionPointWriter udp();
-    public ConnectionPointWriter udt();
+    ConnectionPointWriter udp();
+
+    ConnectionPointWriter udt();
 
     /**
      * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
      */
-    public void init();
+    void init();
 
     /**
      * Flushes the contents of the TCP/UDP/UDT/etc pipes to the actual transport.
      */
-    public void flush();
+    void flush();
 
-    public EventLoop getEventLoop();
+    EventLoop getEventLoop();
 
-    public ParametersWithIV cryptoParameters();
+    ParametersWithIV cryptoParameters();
 
     /**
      * @return the remote host (can be local, tcp, udp, udt)
      */
-    public String getRemoteHost();
+    String getRemoteHost();
 
-    public void close(final Connection connection, final ISessionManager sessionManager);
+    void close(final Connection connection, final ISessionManager sessionManager);
 
-    @Override
-    public String toString();
-
-    public int id();
+    int id();
 
     @Override
-    public boolean equals(Object obj);
+    boolean equals(Object obj);
+
+    @Override
+    String toString();
 }

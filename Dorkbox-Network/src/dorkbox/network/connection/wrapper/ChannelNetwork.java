@@ -1,21 +1,22 @@
 package dorkbox.network.connection.wrapper;
 
+import dorkbox.network.connection.ConnectionPointWriter;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import dorkbox.network.connection.ConnectionPointWriter;
+public
+class ChannelNetwork implements ConnectionPointWriter {
 
-public class ChannelNetwork implements ConnectionPointWriter {
+    private final Channel channel;
+    private final AtomicBoolean shouldFlush = new AtomicBoolean(false);
 
     private volatile ChannelFuture lastWriteFuture;
-    private final Channel channel;
-
-    private AtomicBoolean shouldFlush = new AtomicBoolean(false);
 
 
-    public ChannelNetwork(Channel channel) {
+    public
+    ChannelNetwork(Channel channel) {
         this.channel = channel;
     }
 
@@ -23,7 +24,8 @@ public class ChannelNetwork implements ConnectionPointWriter {
      * Write an object to the underlying channel
      */
     @Override
-    public void write(Object object) {
+    public
+    void write(Object object) {
         this.lastWriteFuture = this.channel.write(object);
         this.shouldFlush.set(true);
     }
@@ -33,20 +35,23 @@ public class ChannelNetwork implements ConnectionPointWriter {
      * <b>DO NOT use this in the same thread as receiving messages! It will deadlock.</b>
      */
     @Override
-    public void waitForWriteToComplete() {
+    public
+    void waitForWriteToComplete() {
         if (this.lastWriteFuture != null) {
             this.lastWriteFuture.awaitUninterruptibly();
         }
     }
 
     @Override
-    public void flush() {
+    public
+    void flush() {
         if (this.shouldFlush.compareAndSet(true, false)) {
             this.channel.flush();
         }
     }
 
-    public void close(long maxShutdownWaitTimeInMilliSeconds) {
+    public
+    void close(long maxShutdownWaitTimeInMilliSeconds) {
         // Wait until all messages are flushed before closing the channel.
         if (this.lastWriteFuture != null) {
             this.lastWriteFuture.awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
@@ -54,10 +59,12 @@ public class ChannelNetwork implements ConnectionPointWriter {
         }
 
         this.shouldFlush.set(false);
-        this.channel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+        this.channel.close()
+                    .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
     }
 
-    public int id() {
+    public
+    int id() {
         return this.channel.hashCode();
     }
 }
