@@ -270,7 +270,6 @@ class SocketUDT {
      */
     protected static native
     int epollWait0( //
-    int epollWait0( //
                     final int epollID, //
                     final IntBuffer readBuffer, //
                     final IntBuffer writeBuffer, //
