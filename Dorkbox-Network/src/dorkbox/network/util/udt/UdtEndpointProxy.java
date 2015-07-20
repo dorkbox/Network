@@ -1,3 +1,18 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.util.udt;
 
 import dorkbox.util.NamedThreadFactory;
@@ -18,19 +33,22 @@ public
 class UdtEndpointProxy {
     public static
     EventLoopGroup getServerBoss(int threadPoolSize, String name, ThreadGroup nettyGroup) {
-        return new NioEventLoopGroup(threadPoolSize, new NamedThreadFactory(name + "-local-boss-UDT", nettyGroup),
+        return new NioEventLoopGroup(threadPoolSize,
+                                     new NamedThreadFactory(name + "-local-boss-UDT", nettyGroup),
                                      io.netty.channel.udt.nio.NioUdtProvider.BYTE_PROVIDER);
     }
 
     public static
     EventLoopGroup getServerWorker(int threadPoolSize, String name, ThreadGroup nettyGroup) {
-        return new NioEventLoopGroup(threadPoolSize, new NamedThreadFactory(name + "-local-worker-UDT", nettyGroup),
+        return new NioEventLoopGroup(threadPoolSize,
+                                     new NamedThreadFactory(name + "-local-worker-UDT", nettyGroup),
                                      io.netty.channel.udt.nio.NioUdtProvider.BYTE_PROVIDER);
     }
 
     public static
     EventLoopGroup getClientWorker(int threadPoolSize, String name, ThreadGroup nettyGroup) {
-        return new NioEventLoopGroup(threadPoolSize, new NamedThreadFactory(name + "-remote-UDT", nettyGroup),
+        return new NioEventLoopGroup(threadPoolSize,
+                                     new NamedThreadFactory(name + "-remote-UDT", nettyGroup),
                                      io.netty.channel.udt.nio.NioUdtProvider.BYTE_PROVIDER);
     }
 

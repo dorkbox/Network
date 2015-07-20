@@ -1,16 +1,31 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection.registration;
 
+import dorkbox.network.connection.Connection;
 import io.netty.channel.Channel;
-
-import java.net.InetSocketAddress;
-
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
-import dorkbox.network.connection.Connection;
+import java.net.InetSocketAddress;
 
+// @formatter:off
+public
+class MetaChannel {
 
-public class MetaChannel {
     // how long between receiving data over TCP. This is used to determine how long to wait before notifying the APP,
     // so the registration message has time to arrive to the other endpoint.
     private volatile long nanoSecBetweenTCP = 0L;
@@ -42,7 +57,8 @@ public class MetaChannel {
     // If the server detects this, it has the option for additional security (two-factor auth, perhaps?)
     public boolean changedRemoteKey = false;
 
-    public void close() {
+    public
+    void close() {
         if (this.localChannel != null) {
             this.localChannel.close();
         }
@@ -61,33 +77,39 @@ public class MetaChannel {
         }
     }
 
-    public void close(long maxShutdownWaitTimeInMilliSeconds) {
+    public
+    void close(long maxShutdownWaitTimeInMilliSeconds) {
         if (this.localChannel != null) {
             this.localChannel.close();
         }
 
         if (this.tcpChannel != null) {
-            this.tcpChannel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+            this.tcpChannel.close()
+                           .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }
 
         if (this.udtChannel != null) {
-            this.udtChannel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+            this.udtChannel.close()
+                           .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }
 
         // only the CLIENT will have this.
         if (this.udpChannel != null && this.udpRemoteAddress == null) {
-            this.udpChannel.close().awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+            this.udpChannel.close()
+                           .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }
     }
 
     /**
      * Update the TCP round trip time. Make sure to REFRESH this every time you SEND TCP data!!
      */
-    public void updateTcpRoundTripTime() {
+    public
+    void updateTcpRoundTripTime() {
         this.nanoSecBetweenTCP = System.nanoTime() - this.nanoSecBetweenTCP;
     }
 
-    public long getNanoSecBetweenTCP() {
+    public
+    long getNanoSecBetweenTCP() {
         return this.nanoSecBetweenTCP;
     }
 }

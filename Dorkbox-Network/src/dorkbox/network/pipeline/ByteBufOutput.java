@@ -1,15 +1,48 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Copyright (c) 2008, Nathan Sweet
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ * - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
+ * disclaimer in the documentation and/or other materials provided with the distribution.
+ * - Neither the name of Esoteric Software nor the names of its contributors may be used to endorse or promote products derived
+ * from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+ * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+ * SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package dorkbox.network.pipeline;
 
+import com.esotericsoftware.kryo.KryoException;
+import com.esotericsoftware.kryo.io.Output;
 import io.netty.buffer.ByteBuf;
 
 import java.io.DataOutput;
 import java.io.OutputStream;
 
-import com.esotericsoftware.kryo.KryoException;
-import com.esotericsoftware.kryo.io.Output;
-
 /**
- * An {@link OutputStream} which writes data to a {@link ChannelBuffer}.
+ * An {@link OutputStream} which writes data to a {@link ByteBuf}.
  * <p>
  * A write operation against this stream will occur at the {@code writerIndex}
  * of its underlying buffer and the {@code writerIndex} will increase during
@@ -257,7 +290,7 @@ public class ByteBufOutput extends Output {
 
 	/** Writes the length and string, or null. Short strings are checked and if ASCII they are written more efficiently, else they
 	 * are written as UTF8. If a string is known to be ASCII, {@link #writeAscii(String)} may be used. The string can be read using
-	 * {@link Input#readString()} or {@link Input#readStringBuilder()}.
+	 * {@link ByteBufInput#readString()} or {@link ByteBufInput#readStringBuilder()}.
 	 * @param value May be null. */
     @Override
     public void writeString (String value) throws KryoException {
@@ -312,8 +345,8 @@ public class ByteBufOutput extends Output {
         }
 	}
 
-	/** Writes the length and CharSequence as UTF8, or null. The string can be read using {@link Input#readString()} or
-	 * {@link Input#readStringBuilder()}.
+	/** Writes the length and CharSequence as UTF8, or null. The string can be read using {@link ByteBufInput#readString()} or
+	 * {@link ByteBufInput#readStringBuilder()}.
 	 * @param value May be null. */
 	@Override
     public void writeString (CharSequence value) throws KryoException {
@@ -349,8 +382,8 @@ public class ByteBufOutput extends Output {
 
 	/** Writes a string that is known to contain only ASCII characters. Non-ASCII strings passed to this method will be corrupted.
 	 * Each byte is a 7 bit character with the remaining byte denoting if another character is available. This is slightly more
-	 * efficient than {@link #writeString(String)}. The string can be read using {@link Input#readString()} or
-	 * {@link Input#readStringBuilder()}.
+	 * efficient than {@link #writeString(String)}. The string can be read using {@link ByteBufInput#readString()} or
+	 * {@link ByteBufInput#readStringBuilder()}.
 	 * @param value May be null. */
     @Override
     public void writeAscii (String value) throws KryoException {

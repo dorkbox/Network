@@ -1,5 +1,22 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network;
 
+import dorkbox.network.pipeline.discovery.ClientDiscoverHostHandler;
+import dorkbox.network.pipeline.discovery.ClientDiscoverHostInitializer;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -9,44 +26,35 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import org.slf4j.Logger;
 
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.InterfaceAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
+import java.net.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import org.slf4j.Logger;
-
-import dorkbox.network.pipeline.discovery.ClientDiscoverHostHandler;
-import dorkbox.network.pipeline.discovery.ClientDiscoverHostInitializer;
-
-public class Broadcast {
-    public static final byte broadcastID = (byte)42;
-    public static final byte broadcastResponseID = (byte)57;
+@SuppressWarnings("unused")
+public final
+class Broadcast {
+    public static final byte broadcastID = (byte) 42;
+    public static final byte broadcastResponseID = (byte) 57;
 
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger("Broadcast Host Discovery");
 
     /**
      * Broadcasts a UDP message on the LAN to discover any running servers. The
      * address of the first server to respond is returned.
-     *
+     * <p/>
      * From KryoNet
      *
-     * @param udpPort
-     *            The UDP port of the server.
-     * @param discoverTimeoutMillis
-     *            The number of milliseconds to wait for a response.
-     *
+     * @param udpPort               The UDP port of the server.
+     * @param discoverTimeoutMillis The number of milliseconds to wait for a response.
      * @return the first server found, or null if no server responded.
      */
-    public static String discoverHost(int udpPort, int discoverTimeoutMillis) {
+    public static
+    String discoverHost(int udpPort, int discoverTimeoutMillis) {
         InetAddress discoverHost = discoverHostAddress(udpPort, discoverTimeoutMillis);
         if (discoverHost != null) {
             return discoverHost.getHostAddress();
@@ -58,18 +66,17 @@ public class Broadcast {
      * Broadcasts a UDP message on the LAN to discover any running servers. The
      * address of the first server to respond is returned.
      *
-     * @param udpPort
-     *            The UDP port of the server.
-     * @param discoverTimeoutMillis
-     *            The number of milliseconds to wait for a response.
-     *
+     * @param udpPort               The UDP port of the server.
+     * @param discoverTimeoutMillis The number of milliseconds to wait for a response.
      * @return the first server found, or null if no server responded.
      */
-    public static final InetAddress discoverHostAddress(int udpPort, int discoverTimeoutMillis) {
+    public static
+    InetAddress discoverHostAddress(int udpPort, int discoverTimeoutMillis) {
         List<InetAddress> servers = discoverHost0(udpPort, discoverTimeoutMillis, false);
         if (servers.isEmpty()) {
             return null;
-        } else {
+        }
+        else {
             return servers.get(0);
         }
     }
@@ -77,20 +84,18 @@ public class Broadcast {
     /**
      * Broadcasts a UDP message on the LAN to discover all running servers.
      *
-     * @param udpPort
-     *            The UDP port of the server.
-     * @param timeoutMillis
-     *            The number of milliseconds to wait for a response.
-     *
+     * @param udpPort               The UDP port of the server.
+     * @param discoverTimeoutMillis The number of milliseconds to wait for a response.
      * @return the list of found servers (if they responded)
      */
-    public static List<InetAddress> discoverHosts(int udpPort, int discoverTimeoutMillis) {
+    public static
+    List<InetAddress> discoverHosts(int udpPort, int discoverTimeoutMillis) {
         return discoverHost0(udpPort, discoverTimeoutMillis, true);
     }
 
 
-    private static final List<InetAddress> discoverHost0(int udpPort, int discoverTimeoutMillis, boolean fetchAllServers) {
-
+    private static
+    List<InetAddress> discoverHost0(int udpPort, int discoverTimeoutMillis, boolean fetchAllServers) {
         // fetch a buffer that contains the serialized object.
         ByteBuf buffer = Unpooled.buffer(1);
         buffer.writeByte(broadcastID);
@@ -129,12 +134,12 @@ public class Broadcast {
                     }
 
                     NioEventLoopGroup group = new NioEventLoopGroup();
-                    Bootstrap udpBootstrap = new Bootstrap()
-                                .group(group)
-                                .channel(NioDatagramChannel.class)
-                                .option(ChannelOption.SO_BROADCAST, true)
-                                .handler(new ClientDiscoverHostInitializer())
-                                .localAddress(new InetSocketAddress(address, 0)); // pick random address. Not listen for broadcast.
+                    Bootstrap udpBootstrap = new Bootstrap().group(group)
+                                                            .channel(NioDatagramChannel.class)
+                                                            .option(ChannelOption.SO_BROADCAST, true)
+                                                            .handler(new ClientDiscoverHostInitializer())
+                                                            .localAddress(new InetSocketAddress(address,
+                                                                                                0)); // pick random address. Not listen for broadcast.
 
                     // we don't care about RECEIVING a broadcast packet, we are only SENDING one.
                     ChannelFuture future;
@@ -158,20 +163,25 @@ public class Broadcast {
                         channel1.writeAndFlush(new DatagramPacket(buffer, new InetSocketAddress(broadcast, udpPort)));
 
                         // response is received.  If the channel is not closed within 5 seconds, move to the next one.
-                        if (!channel1.closeFuture().awaitUninterruptibly(discoverTimeoutMillis)) {
+                        if (!channel1.closeFuture()
+                                     .awaitUninterruptibly(discoverTimeoutMillis)) {
                             if (logger2.isInfoEnabled()) {
                                 logger2.info("Host discovery timed out.");
                             }
-                        } else {
-                            InetSocketAddress attachment = channel1.attr(ClientDiscoverHostHandler.STATE).get();
+                        }
+                        else {
+                            InetSocketAddress attachment = channel1.attr(ClientDiscoverHostHandler.STATE)
+                                                                   .get();
                             servers.add(attachment.getAddress());
                         }
 
 
                         // keep going if we want to fetch all servers. Break if we found one.
                         if (!(fetchAllServers || servers.isEmpty())) {
-                            channel1.close().await();
-                            group.shutdownGracefully().await();
+                            channel1.close()
+                                    .await();
+                            group.shutdownGracefully()
+                                 .await();
                             break scan;
                         }
                     }
@@ -190,12 +200,15 @@ public class Broadcast {
 
 
                             // response is received.  If the channel is not closed within 5 seconds, move to the next one.
-                            if (!channel1.closeFuture().awaitUninterruptibly(discoverTimeoutMillis)) {
+                            if (!channel1.closeFuture()
+                                         .awaitUninterruptibly(discoverTimeoutMillis)) {
                                 if (logger2.isInfoEnabled()) {
                                     logger2.info("Host discovery timed out.");
                                 }
-                            } else {
-                                InetSocketAddress attachment = channel1.attr(ClientDiscoverHostHandler.STATE).get();
+                            }
+                            else {
+                                InetSocketAddress attachment = channel1.attr(ClientDiscoverHostHandler.STATE)
+                                                                       .get();
                                 servers.add(attachment.getAddress());
                                 if (!fetchAllServers) {
                                     break;
@@ -205,7 +218,8 @@ public class Broadcast {
                         }
                     }
 
-                    channel1.close().sync();
+                    channel1.close()
+                            .sync();
                     group.shutdownGracefully(0, discoverTimeoutMillis, TimeUnit.MILLISECONDS);
 
                 } catch (Exception ignored) {
@@ -222,17 +236,27 @@ public class Broadcast {
 
         if (logger2.isInfoEnabled() && !servers.isEmpty()) {
             if (fetchAllServers) {
-                StringBuilder stringBuilder = new StringBuilder();
-                stringBuilder.append("Discovered servers: (").append(servers.size()).append(")");
+                StringBuilder stringBuilder = new StringBuilder(256);
+                stringBuilder.append("Discovered servers: (")
+                             .append(servers.size())
+                             .append(")");
                 for (InetAddress server : servers) {
-                    stringBuilder.append("/n").append(server).append(":").append(udpPort);
+                    stringBuilder.append("/n")
+                                 .append(server)
+                                 .append(":")
+                                 .append(udpPort);
                 }
                 logger2.info(stringBuilder.toString());
-            } else {
+            }
+            else {
                 logger2.info("Discovered server: {}:{}", servers.get(0), udpPort);
             }
         }
 
         return servers;
+    }
+
+    private
+    Broadcast() {
     }
 }

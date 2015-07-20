@@ -13,21 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.registration;
+package dorkbox.network.connection.ping;
 
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
-import org.bouncycastle.crypto.params.IESParameters;
+import dorkbox.util.exceptions.NetException;
 
-
-/**
- * Internal message to handle the TCP/UDP registration process
- */
 public
-class Registration {
-    public ECPublicKeyParameters publicKey;
-    public IESParameters eccParameters;
-    public byte[] aesKey;
-    public byte[] aesIV;
+class PingCanceledException extends NetException {
 
-    public byte[] payload;
+    private static final long serialVersionUID = 9045461384091038605L;
+
+    public
+    PingCanceledException() {
+        super("Ping request has been canceled.");
+    }
 }

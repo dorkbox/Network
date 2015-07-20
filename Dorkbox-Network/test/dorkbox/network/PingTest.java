@@ -4,8 +4,8 @@ package dorkbox.network;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Ping;
 import dorkbox.network.connection.PingListener;
-import dorkbox.network.util.exceptions.InitializationException;
-import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.SecurityException;
 import org.junit.Test;
 
 import java.io.IOException;

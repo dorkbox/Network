@@ -10,9 +10,9 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.ConsoleAppender;
 import com.esotericsoftware.minlog.Log;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.util.entropy.Entropy;
-import dorkbox.network.util.entropy.SimpleEntropy;
-import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.util.entropy.Entropy;
+import dorkbox.util.entropy.SimpleEntropy;
+import dorkbox.util.exceptions.InitializationException;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;

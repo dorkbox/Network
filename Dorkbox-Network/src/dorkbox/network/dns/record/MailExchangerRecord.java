@@ -1,24 +1,22 @@
 /*
- * Copyright (c) 2013 The Netty Project
- * ------------------------------------
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * and Apache License v2.0 which accompanies this distribution.
+ * Copyright 2013 The Netty Project
  *
- *     The Eclipse Public License is available at
- *     http://www.eclipse.org/legal/epl-v10.html
+ * The Netty Project licenses this file to you under the Apache License,
+ * version 2.0 (the "License"); you may not use this file except in compliance
+ * with the License. You may obtain a copy of the License at:
  *
- *     The Apache License v2.0 is available at
- *     http://www.opensource.org/licenses/apache2.0.php
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * You may elect to redistribute this code under either of these licenses.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  */
 package dorkbox.network.dns.record;
 
 /**
- * Represents an MX (mail exchanger) record, which contains a mail server
- * responsible for accepting e-mail and a preference value for prioritizing mail
- * servers if multiple servers exist.
+ * Represents an MX record.
  */
 public
 class MailExchangerRecord {
@@ -27,10 +25,8 @@ class MailExchangerRecord {
     private final String name;
 
     /**
-     * Constructs an MX (mail exchanger) record.
-     *
-     * @param priority the priority of the mail exchanger, lower is more preferred
-     * @param name     the e-mail address in the format admin.example.com, which
+     * @param priority lower is more preferred
+     * @param name     e-mail address in the format admin.example.com, which
      *                 represents admin@example.com
      */
     public
@@ -39,21 +35,17 @@ class MailExchangerRecord {
         this.name = name;
     }
 
-    /**
-     * Returns the priority of the mail exchanger, lower is more preferred.
-     */
     public
     int priority() {
         return this.priority;
     }
 
     /**
-     * Returns the mail exchanger (an e-mail address) in the format
+     * Returns the MX (an e-mail address) in the format
      * admin.example.com, which represents admin@example.com.
      */
     public
     String name() {
         return this.name;
     }
-
 }

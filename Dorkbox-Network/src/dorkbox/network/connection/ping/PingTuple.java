@@ -1,5 +1,7 @@
-package dorkbox.network.connection;
+package dorkbox.network.connection.ping;
 
+
+import dorkbox.network.connection.Connection;
 
 public class PingTuple<C extends Connection> {
     public C connection;

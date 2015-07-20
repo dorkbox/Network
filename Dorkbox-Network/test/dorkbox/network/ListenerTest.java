@@ -3,8 +3,8 @@ package dorkbox.network;
 
 import dorkbox.network.connection.*;
 import dorkbox.network.rmi.RmiBridge;
-import dorkbox.network.util.exceptions.InitializationException;
-import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.SecurityException;
 import org.junit.Test;
 import org.slf4j.Logger;
 

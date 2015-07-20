@@ -1,7 +1,23 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection;
 
 import dorkbox.network.Configuration;
 import dorkbox.network.connection.bridge.ConnectionBridgeBase;
+import dorkbox.network.connection.ping.PingSystemListener;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
@@ -11,9 +27,9 @@ import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.EndPointTool;
-import dorkbox.network.util.entropy.Entropy;
-import dorkbox.network.util.exceptions.InitializationException;
-import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.util.entropy.Entropy;
+import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.SecurityException;
 import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.Sys;

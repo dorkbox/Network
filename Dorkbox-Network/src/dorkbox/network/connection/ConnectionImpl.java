@@ -1,5 +1,34 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection;
 
+import dorkbox.network.connection.bridge.ConnectionBridge;
+import dorkbox.network.connection.idle.IdleBridge;
+import dorkbox.network.connection.idle.IdleObjectSender;
+import dorkbox.network.connection.idle.IdleSender;
+import dorkbox.network.connection.ping.PingFuture;
+import dorkbox.network.connection.ping.PingMessage;
+import dorkbox.network.connection.ping.PingTuple;
+import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
+import dorkbox.network.connection.wrapper.ChannelNull;
+import dorkbox.network.connection.wrapper.ChannelWrapper;
+import dorkbox.network.rmi.RemoteProxy;
+import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.rmi.RmiRegistration;
+import dorkbox.util.exceptions.NetException;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -14,6 +43,8 @@ import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Promise;
+import org.bouncycastle.crypto.params.ParametersWithIV;
+import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -24,25 +55,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.bouncycastle.crypto.params.ParametersWithIV;
-import org.slf4j.Logger;
-
-import dorkbox.network.connection.bridge.ConnectionBridge;
-import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.connection.idle.IdleObjectSender;
-import dorkbox.network.connection.idle.IdleSender;
-import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
-import dorkbox.network.connection.wrapper.ChannelNull;
-import dorkbox.network.connection.wrapper.ChannelWrapper;
-import dorkbox.network.rmi.RemoteProxy;
-import dorkbox.network.rmi.RmiBridge;
-import dorkbox.network.rmi.RmiRegistration;
-import dorkbox.network.util.exceptions.NetException;
-
 
 /**
  * The "network connection" is established once the registration is validated for TCP/UDP/UDT
  */
+@SuppressWarnings("unused")
 @Sharable
 public
 class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection, ListenerBridge, ConnectionBridge {
@@ -73,10 +90,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
 
     /**
-     * All of the parameters can be null, when metaChannel want's to get the base class type
-     * @param logger
-     * @param endPoint
-     * @param rmiBridge
+     * All of the parameters can be null, when metaChannel wants to get the base class type
      */
     public
     ConnectionImpl(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
@@ -100,6 +114,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             this.channelWrapper = null;
         }
 
+        //noinspection SimplifiableIfStatement
         if (this.channelWrapper instanceof ChannelNetworkWrapper) {
             this.remoteKeyChanged = ((ChannelNetworkWrapper) this.channelWrapper).remoteKeyChanged();
         }
@@ -213,7 +228,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
      * INTERNAL USE ONLY. Used to initiate a ping, and to return a ping.
      * Sends a ping message attempted in the following order: UDP, UDT, TCP
      */
-    final
+    public final
     void ping0(PingMessage ping) {
         if (this.channelWrapper.udp() != null) {
             UDP(ping).flush();

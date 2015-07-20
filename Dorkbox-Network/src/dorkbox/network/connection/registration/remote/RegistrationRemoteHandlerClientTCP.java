@@ -1,3 +1,18 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection.registration.remote;
 
 import com.esotericsoftware.kryo.io.Input;
@@ -6,7 +21,7 @@ import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.Crypto;
@@ -33,8 +48,8 @@ public
 class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient {
 
     private static final String DELETE_IP = "eleteIP"; // purposefully missing the "D", since that is a system parameter, which starts with "-D"
-    private final static ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(Crypto.ECC.p521_curve);
-    private ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
+    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(Crypto.ECC.p521_curve);
+    private final ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
 
     public
     RegistrationRemoteHandlerClientTCP(String name,
@@ -78,7 +93,7 @@ class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient
         // end command
     }
 
-    private final
+    private
     IESEngine getEccEngine() {
         IESEngine iesEngine = this.eccEngineLocal.get();
         if (iesEngine == null) {
@@ -161,6 +176,7 @@ class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient
                 registrationWrapper2.releaseChannelMap();
             }
 
+            //noinspection StatementWithEmptyBody
             if (metaChannel != null) {
                 metaChannel.updateTcpRoundTripTime();
 

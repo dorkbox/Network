@@ -1,23 +1,24 @@
 /*
- * Copyright (c) 2013 The Netty Project
- * ------------------------------------
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * and Apache License v2.0 which accompanies this distribution.
+ * Copyright 2013 The Netty Project
  *
- *     The Eclipse Public License is available at
- *     http://www.eclipse.org/legal/epl-v10.html
+ * The Netty Project licenses this file to you under the Apache License,
+ * version 2.0 (the "License"); you may not use this file except in compliance
+ * with the License. You may obtain a copy of the License at:
  *
- *     The Apache License v2.0 is available at
- *     http://www.opensource.org/licenses/apache2.0.php
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * You may elect to redistribute this code under either of these licenses.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  */
 package dorkbox.network.dns.record;
 
 /**
- * Represents an SRV (service) record, which contains the location, or hostname
- * and port, of servers for specified services. For example, a service "http"
+ * Represents an SRV record.
+ * <p/>
+ * This is the location (or hostname and port), of servers for specified services. For example, a service "http"
  * may be running on the server "example.com" on port 80.
  */
 public
@@ -32,8 +33,6 @@ class ServiceRecord {
     private final String target;
 
     /**
-     * Constructs an SRV (service) record.
-     *
      * @param fullPath the name first read in the SRV record which contains the
      *                 service, the protocol, and the name of the server being
      *                 queried. The format is {@code _service._protocol.hostname}, or
@@ -58,48 +57,33 @@ class ServiceRecord {
         this.target = target;
     }
 
-    /**
-     * Returns the priority for this service record.
-     */
     public
     int priority() {
         return this.priority;
     }
 
-    /**
-     * Returns the weight of this service record.
-     */
     public
     int weight() {
         return this.weight;
     }
 
-    /**
-     * Returns the port the service is running on.
-     */
     public
     int port() {
         return this.port;
     }
 
-    /**
-     * Returns the name for the server being queried.
-     */
     public
     String name() {
         return this.name;
     }
 
-    /**
-     * Returns the protocol for the service being queried (i.e. "_tcp").
-     */
     public
     String protocol() {
         return this.protocol;
     }
 
     /**
-     * Returns the service's name (i.e. "_http").
+     * @return the service's name (i.e. "_http").
      */
     public
     String service() {
@@ -107,7 +91,7 @@ class ServiceRecord {
     }
 
     /**
-     * Returns the name of the host for the service.
+     * @return he name of the host for the service.
      */
     public
     String target() {

@@ -1,14 +1,19 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection.registration.remote;
-
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPipeline;
-import io.netty.util.ReferenceCountUtil;
-
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-
-import org.slf4j.Logger;
 
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -16,15 +21,27 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.pipeline.udp.KryoDecoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.network.util.exceptions.NetException;
+import dorkbox.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
+import io.netty.util.ReferenceCountUtil;
+import org.slf4j.Logger;
 
-public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient {
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 
-    public RegistrationRemoteHandlerClientUDP(String name, RegistrationWrapper registrationWrapper, CryptoSerializationManager serializationManager) {
+public
+class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient {
+
+    public
+    RegistrationRemoteHandlerClientUDP(String name,
+                                       RegistrationWrapper registrationWrapper,
+                                       CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }
 
@@ -32,10 +49,12 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
      * STEP 1: Channel is first created
      */
     @Override
-    protected void initChannel(Channel channel) {
+    protected
+    void initChannel(Channel channel) {
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
-            logger2.trace("Channel registered: " + channel.getClass().getSimpleName());
+            logger2.trace("Channel registered: " + channel.getClass()
+                                                          .getSimpleName());
         }
 
         ChannelPipeline pipeline = channel.pipeline();
@@ -51,10 +70,11 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
      * STEP 2: Channel is now active. Start the registration process
      */
     @Override
-    public void channelActive(ChannelHandlerContext context) throws Exception {
+    public
+    void channelActive(ChannelHandlerContext context) throws Exception {
         Logger logger2 = this.logger;
         if (logger2.isDebugEnabled()) {
-           super.channelActive(context);
+            super.channelActive(context);
         }
 
         Channel channel = context.channel();
@@ -102,13 +122,15 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
             Registration registration = new Registration();
             // client start the handshake with a registration packet
             channel.writeAndFlush(registration);
-        } else {
+        }
+        else {
             throw new NetException("UDP cannot connect to remote server! No remote address specified!");
         }
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext context, Object message) throws Exception {
+    public
+    void channelRead(ChannelHandlerContext context, Object message) throws Exception {
         Channel channel = context.channel();
 
         // if we also have a UDP channel, we will receive the "connected" message on UDP (otherwise it will be on TCP)
@@ -164,7 +186,8 @@ public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandle
                     }
 
                     // since we are done here, we need to REMOVE this handler
-                    channel.pipeline().remove(this);
+                    channel.pipeline()
+                           .remove(this);
 
                     // if we are NOT done, then we will continue registering other protocols, so do nothing else here.
                     ReferenceCountUtil.release(message);

@@ -17,8 +17,8 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.network.util.exceptions.InitializationException;
-import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.SecurityException;
 
 public
 class RmiTest extends BaseTest {

@@ -1,9 +1,23 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection;
-
 
 import dorkbox.network.rmi.RmiMessages;
 import dorkbox.network.util.ConcurrentHashMapFactory;
-import dorkbox.network.util.exceptions.NetException;
+import dorkbox.util.exceptions.NetException;
 import dorkbox.util.ClassHelper;
 import org.slf4j.Logger;
 
@@ -42,7 +56,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
 
             @Override
             public
-            CopyOnWriteArrayList<ListenerRaw<Connection, Object>> createNewOject(Object... args) {
+            CopyOnWriteArrayList<ListenerRaw<Connection, Object>> createNewObject(Object... args) {
                 return new CopyOnWriteArrayList<ListenerRaw<Connection, Object>>();
             }
         };
@@ -52,7 +66,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
 
             @Override
             public
-            ConnectionManager createNewOject(Object... args) {
+            ConnectionManager createNewObject(Object... args) {
                 return new ConnectionManager(loggerName + "-" + args[0] + " Specific", ConnectionManager.this.baseClass);
             }
         };
@@ -90,6 +104,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
         Class<?> genericClass = ClassHelper.getGenericParameterAsClassForSuperClass(clazz, 0);
 
         // if we are null, it means that we have no generics specified for our listener!
+        //noinspection IfStatementWithIdenticalBranches
         if (genericClass == this.baseClass || genericClass == null) {
             // we are the base class, so we are fine.
             addListener0(listener);
@@ -293,11 +308,6 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
             }
         }
         return foundListener;
-    }
-
-    public static
-    void setUnregisteredTypeListener(Listener<?> listener) {
-        unRegisteredType_Listener = listener;
     }
 
     /**
@@ -531,6 +541,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
     void closeConnections() {
         // close the sessions
         Iterator<Connection> iterator = this.connections.iterator();
+        //noinspection WhileLoopReplaceableByForEach
         while (iterator.hasNext()) {
             Connection connection = iterator.next();
             // Close the connection.  Make sure the close operation ends because

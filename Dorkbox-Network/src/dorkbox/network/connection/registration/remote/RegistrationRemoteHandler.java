@@ -1,3 +1,18 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection.registration.remote;
 
 import dorkbox.network.connection.ConnectionImpl;
@@ -58,10 +73,11 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     }
 
     /**
-     * Check to verify if two InetAdresses are equal, by comparing the underlying byte arrays.
+     * Check to verify if two InetAddresses are equal, by comparing the underlying byte arrays.
      */
     public static
     boolean checkEqual(InetAddress serverA, InetAddress serverB) {
+        //noinspection SimplifiableIfStatement
         if (serverA == null || serverB == null) {
             return false;
         }
@@ -123,16 +139,10 @@ class RegistrationRemoteHandler extends RegistrationHandler {
         StringBuilder stringBuilder = new StringBuilder(76);
 
         stringBuilder.append("Connected to remote ");
-        if (channelClass == NioSocketChannel.class) {
+        if (channelClass == NioSocketChannel.class || channelClass == EpollSocketChannel.class) {
             stringBuilder.append("TCP");
         }
-        else if (channelClass == EpollSocketChannel.class) {
-            stringBuilder.append("TCP");
-        }
-        else if (channelClass == NioDatagramChannel.class) {
-            stringBuilder.append("UDP");
-        }
-        else if (channelClass == EpollDatagramChannel.class) {
+        else if (channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class) {
             stringBuilder.append("UDP");
         }
         else if (channelClass == NioUdtByteConnectorChannel.class) {

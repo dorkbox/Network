@@ -8,8 +8,8 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.InputStreamSender;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.network.util.exceptions.InitializationException;
-import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.SecurityException;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;

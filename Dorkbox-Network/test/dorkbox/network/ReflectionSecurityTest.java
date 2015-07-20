@@ -2,7 +2,7 @@ package dorkbox.network;
 
 
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.util.exceptions.SecurityException;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.SerializationManager;
 import dorkbox.util.storage.Storage;

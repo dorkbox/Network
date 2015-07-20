@@ -1,3 +1,18 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection;
 
 import com.esotericsoftware.kryo.*;
@@ -8,17 +23,19 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
+import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.rmi.*;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.network.util.exceptions.NetException;
-import dorkbox.network.util.serializers.FieldAnnotationAwareSerializer;
-import dorkbox.network.util.serializers.IgnoreSerialization;
-import dorkbox.network.util.serializers.UnmodifiableCollectionsSerializer;
+import dorkbox.util.serializers.ArraysAsListSerializer;
+import dorkbox.util.serializers.FieldAnnotationAwareSerializer;
+import dorkbox.util.serializers.IgnoreSerialization;
+import dorkbox.util.serializers.UnmodifiableCollectionsSerializer;
 import dorkbox.util.crypto.Crypto;
 import dorkbox.util.crypto.serialization.EccPrivateKeySerializer;
 import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
 import dorkbox.util.crypto.serialization.IesParametersSerializer;
 import dorkbox.util.crypto.serialization.IesWithCipherParametersSerializer;
+import dorkbox.util.exceptions.NetException;
 import dorkbox.util.objectPool.ObjectPool;
 import dorkbox.util.objectPool.ObjectPoolFactory;
 import dorkbox.util.objectPool.PoolableObject;
@@ -37,6 +54,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
@@ -117,6 +135,9 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
         serializationManager.register(ArrayList.class, new CollectionSerializer());
         serializationManager.register(StackTraceElement.class);
         serializationManager.register(StackTraceElement[].class);
+
+        // extra serializers
+        serializationManager.register(Arrays.asList("").getClass(), new ArraysAsListSerializer());
 
         UnmodifiableCollectionsSerializer.registerSerializers(serializationManager);
 
@@ -499,7 +520,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
             kryo.register(Class.class);
             kryo.register(RmiRegistration.class);
             kryo.register(Object[].class);
-            kryo.register(InvokeMethod.class, new InvokeMethodSerializer(null));
+            kryo.register(InvokeMethod.class, new InvokeMethodSerializer());
 
             FieldSerializer<InvokeMethodResult> resultSerializer = new FieldSerializer<InvokeMethodResult>(kryo, InvokeMethodResult.class) {
                 @Override

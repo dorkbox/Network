@@ -1,24 +1,39 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.pipeline;
 
+import com.esotericsoftware.kryo.KryoException;
+import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.util.exceptions.NetException;
+import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 
-import com.esotericsoftware.kryo.KryoException;
-
-import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.network.util.exceptions.NetException;
-import dorkbox.util.bytes.OptimizeUtilsByteBuf;
-
 @Sharable
-public class KryoEncoder extends MessageToByteEncoder<Object> {
+public
+class KryoEncoder extends MessageToByteEncoder<Object> {
     private static final int reservedLengthIndex = 4;
     private final CryptoSerializationManager kryoWrapper;
     private final OptimizeUtilsByteBuf optimize;
 
 
-    public KryoEncoder(CryptoSerializationManager kryoWrapper) {
+    public
+    KryoEncoder(CryptoSerializationManager kryoWrapper) {
         super();
         this.kryoWrapper = kryoWrapper;
         this.optimize = OptimizeUtilsByteBuf.get();
@@ -26,13 +41,15 @@ public class KryoEncoder extends MessageToByteEncoder<Object> {
 
     // the crypto writer will override this
     @SuppressWarnings("unused")
-    protected void writeObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext context, Object msg, ByteBuf buffer) {
+    protected
+    void writeObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext context, Object msg, ByteBuf buffer) {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         kryoWrapper.write(buffer, msg);
     }
 
     @Override
-    protected void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) throws Exception {
+    protected
+    void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) throws Exception {
         // we don't necessarily start at 0!!
         int startIndex = out.writerIndex();
 
@@ -46,14 +63,15 @@ public class KryoEncoder extends MessageToByteEncoder<Object> {
                 writeObject(this.kryoWrapper, ctx, msg, out);
 
                 // now set the frame (if it's TCP)!
-                int length = out.readableBytes() - startIndex - reservedLengthIndex; // (reservedLengthLength) 4 is the reserved space for the integer.
+                int length = out.readableBytes() - startIndex -
+                             reservedLengthIndex; // (reservedLengthLength) 4 is the reserved space for the integer.
 
                 // specify the header.
                 OptimizeUtilsByteBuf optimize = this.optimize;
                 int lengthOfTheLength = optimize.intLength(length, true);
 
                 // 4 was the position specified by the kryoEncoder. It was to make room for the integer. DOES NOT SUPPORT NEGATIVE NUMBERS!
-                int newIndex = startIndex+reservedLengthIndex-lengthOfTheLength;
+                int newIndex = startIndex + reservedLengthIndex - lengthOfTheLength;
                 int oldIndex = out.writerIndex();
 
                 out.writerIndex(newIndex);
@@ -62,7 +80,8 @@ public class KryoEncoder extends MessageToByteEncoder<Object> {
                 optimize.writeInt(out, length, true);
                 out.setIndex(newIndex, oldIndex);
             } catch (KryoException ex) {
-                ctx.fireExceptionCaught(new NetException("Unable to serialize object of type: " + msg.getClass().getName(), ex));
+                ctx.fireExceptionCaught(new NetException("Unable to serialize object of type: " + msg.getClass()
+                                                                                                     .getName(), ex));
             }
         }
     }

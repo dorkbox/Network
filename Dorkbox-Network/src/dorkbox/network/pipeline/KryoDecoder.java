@@ -1,3 +1,18 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.pipeline;
 
 import dorkbox.network.util.CryptoSerializationManager;
@@ -8,24 +23,28 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 
 import java.util.List;
 
-public class KryoDecoder extends ByteToMessageDecoder {
+public
+class KryoDecoder extends ByteToMessageDecoder {
     private final OptimizeUtilsByteBuf optimize;
     private final CryptoSerializationManager kryoWrapper;
 
-    public KryoDecoder(CryptoSerializationManager kryoWrapper) {
+    public
+    KryoDecoder(CryptoSerializationManager kryoWrapper) {
         super();
         this.kryoWrapper = kryoWrapper;
         this.optimize = OptimizeUtilsByteBuf.get();
     }
 
     @SuppressWarnings("unused")
-    protected Object readObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext context, ByteBuf in, int length) {
+    protected
+    Object readObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext context, ByteBuf in, int length) {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         return kryoWrapper.read(in, length);
     }
 
     @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+    protected
+    void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
         OptimizeUtilsByteBuf optimize = this.optimize;
 
         // Make sure if the length field was received,
@@ -77,7 +96,6 @@ public class KryoDecoder extends ByteToMessageDecoder {
             in.resetReaderIndex();
 
             // wait for the rest of the object to come in.
-            return;
         }
 
         // how many objects are on this buffer?
@@ -110,10 +128,12 @@ public class KryoDecoder extends ByteToMessageDecoder {
                         in.readerIndex(endOfObjectPosition);
                         readableBytes = in.readableBytes();
                         objectCount++;
-                    } else {
+                    }
+                    else {
                         break;
                     }
-                } else {
+                }
+                else {
                     break;
                 }
             }
@@ -126,14 +146,15 @@ public class KryoDecoder extends ByteToMessageDecoder {
 
             // NOW add each one of the NEW objects to the array!
 
-            for (int i=0;i<objectCount;i++) {
+            for (int i = 0; i < objectCount; i++) {
                 length = optimize.readInt(in, true); // object LENGTH
 
                 // however many we need to
                 out.add(readObject(this.kryoWrapper, ctx, in, length));
             }
             // the buffer reader index will be at the correct location, since the read object method advances it.
-        } else {
+        }
+        else {
             // exactly one!
             out.add(readObject(this.kryoWrapper, ctx, in, length));
         }

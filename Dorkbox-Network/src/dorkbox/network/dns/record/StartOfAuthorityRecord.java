@@ -1,23 +1,24 @@
 /*
- * Copyright (c) 2013 The Netty Project
- * ------------------------------------
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * and Apache License v2.0 which accompanies this distribution.
+ * Copyright 2013 The Netty Project
  *
- *     The Eclipse Public License is available at
- *     http://www.eclipse.org/legal/epl-v10.html
+ * The Netty Project licenses this file to you under the Apache License,
+ * version 2.0 (the "License"); you may not use this file except in compliance
+ * with the License. You may obtain a copy of the License at:
  *
- *     The Apache License v2.0 is available at
- *     http://www.opensource.org/licenses/apache2.0.php
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * You may elect to redistribute this code under either of these licenses.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  */
 package dorkbox.network.dns.record;
 
 /**
- * Represents an SOA (start of authority) record, which defines global
- * parameters for a zone (domain). There can only be one SOA record per zone.
+ * Represents an SOA record.
+ * <p/>
+ * There can only be one SOA record per zone.
  */
 public
 class StartOfAuthorityRecord {
@@ -31,10 +32,7 @@ class StartOfAuthorityRecord {
     private final long minimumTtl;
 
     /**
-     * Constructs an SOA (start of authority) record.
-     *
-     * @param primaryNameServer any name server that will respond authoritatively for the
-     *                          domain
+     * @param primaryNameServer any name server that will respond authoritatively for the domain
      * @param responsiblePerson e-mail address of person responsible for this zone
      * @param serial            a serial number that must be incremented when changes are
      *                          made. Recommended format is YYYYMMDDnn. For example, if the
@@ -60,7 +58,7 @@ class StartOfAuthorityRecord {
                            int retryTime,
                            int expireTime,
                            long minimumTtl) {
-        
+
         this.primaryNameServer = primaryNameServer;
         this.responsiblePerson = responsiblePerson;
         this.serial = serial;

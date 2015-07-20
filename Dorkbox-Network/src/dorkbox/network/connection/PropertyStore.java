@@ -1,11 +1,26 @@
+/*
+ * Copyright 2010 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection;
-
 
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.SerializationManager;
 import dorkbox.util.bytes.ByteArrayWrapper;
 import dorkbox.util.database.DB_Server;
 import dorkbox.util.database.DatabaseStorage;
+import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.storage.Storage;
 import dorkbox.util.storage.Store;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
@@ -70,7 +85,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    ECPrivateKeyParameters getPrivateKey() throws dorkbox.network.util.exceptions.SecurityException {
+    ECPrivateKeyParameters getPrivateKey() throws dorkbox.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
         return servers.get(DB_Server.IP_0_0_0_0)
@@ -82,7 +97,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws dorkbox.network.util.exceptions.SecurityException {
+    void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws SecurityException {
         checkAccess(EndPoint.class);
 
         servers.get(DB_Server.IP_0_0_0_0)
@@ -97,7 +112,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    ECPublicKeyParameters getPublicKey() throws dorkbox.network.util.exceptions.SecurityException {
+    ECPublicKeyParameters getPublicKey() throws SecurityException {
         checkAccess(EndPoint.class);
 
         return servers.get(DB_Server.IP_0_0_0_0)
@@ -109,7 +124,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    void savePublicKey(ECPublicKeyParameters serverPublicKey) throws dorkbox.network.util.exceptions.SecurityException {
+    void savePublicKey(ECPublicKeyParameters serverPublicKey) throws SecurityException {
         checkAccess(EndPoint.class);
 
         servers.get(DB_Server.IP_0_0_0_0)
@@ -152,7 +167,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
+    ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws SecurityException {
         checkAccess(RegistrationWrapper.class);
 
         final DB_Server db_server = this.servers.get(ByteArrayWrapper.wrap(hostAddress));
@@ -168,7 +183,7 @@ class PropertyStore extends SettingsStore {
     @Override
     public synchronized
     void addRegisteredServerKey(byte[] hostAddress, ECPublicKeyParameters publicKey)
-                    throws dorkbox.network.util.exceptions.SecurityException {
+                    throws SecurityException {
         checkAccess(RegistrationWrapper.class);
 
         final ByteArrayWrapper wrap = ByteArrayWrapper.wrap(hostAddress);
@@ -186,7 +201,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    boolean removeRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
+    boolean removeRegisteredServerKey(byte[] hostAddress) throws SecurityException {
         checkAccess(RegistrationWrapper.class);
 
         final ByteArrayWrapper wrap = ByteArrayWrapper.wrap(hostAddress);

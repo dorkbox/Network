@@ -1,8 +1,13 @@
-package dorkbox.network.connection;
+package dorkbox.network.connection.ping;
 
 
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.ListenerRaw;
+
+public
 class PingSystemListener extends ListenerRaw<ConnectionImpl, PingMessage> {
 
+    public
     PingSystemListener() {
     }
 
