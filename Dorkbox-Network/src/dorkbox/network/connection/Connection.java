@@ -15,13 +15,14 @@
  */
 package dorkbox.network.connection;
 
+import org.bouncycastle.crypto.params.ParametersWithIV;
+
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
 import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.rmi.TimeoutException;
 import dorkbox.util.exceptions.NetException;
-import org.bouncycastle.crypto.params.ParametersWithIV;
 
 @SuppressWarnings("unused")
 public
@@ -112,8 +113,8 @@ interface Connection {
      * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be
      * invoked remotely on the object with the specified ID in the ObjectSpace for the current connection.
      * <p/>
-     * This will request a registration ID from the remote endpoint, <b>and will block</b> until the registration
-     * ID has been returned.
+     * This will request a registration ID from the remote endpoint, <b>and will block</b> until the object
+     * has been returned.
      * <p/>
      * Methods that return a value will throw {@link TimeoutException} if the
      * response is not received with the
@@ -131,6 +132,31 @@ interface Connection {
      *
      * @see RemoteObject
      */
-    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Iface> remoteImplementationInterface,
-                                                         final Class<Impl> remoteImplementationClass) throws NetException;
+    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws NetException;
+
+
+    /**
+     * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be
+     * invoked remotely on the object with the specified ID in the ObjectSpace for the current connection.
+     * <p/>
+     * This will REUSE a registration ID from the remote endpoint, <b>and will block</b> until the object
+     * has been returned.
+     * <p/>
+     * Methods that return a value will throw {@link TimeoutException} if the
+     * response is not received with the
+     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
+     * <p/>
+     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
+     * (the default), then methods that return a value must not be called from
+     * the update thread for the connection. An exception will be thrown if this
+     * occurs. Methods with a void return value can be called on the update
+     * thread.
+     * <p/>
+     * If a proxy returned from this method is part of an object graph sent over
+     * the network, the object graph on the receiving side will have the proxy
+     * object replaced with the registered (non-proxy) object.
+     *
+     * @see RemoteObject
+     */
+    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws NetException;
 }

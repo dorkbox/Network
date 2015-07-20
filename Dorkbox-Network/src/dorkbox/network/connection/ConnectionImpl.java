@@ -25,6 +25,7 @@ import dorkbox.network.connection.ping.PingTuple;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
+import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.rmi.RemoteProxy;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.rmi.RmiRegistration;
@@ -50,10 +51,8 @@ import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.util.LinkedList;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -86,7 +85,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
 
     private final EndPoint endPoint;
-    public final RmiBridge rmiBridge;
+
+    private volatile ObjectRegistrationLatch objectRegistrationLatch;
+    private final Object remoteObjectLock = new Object();
+    private final RmiBridge rmiBridge;
 
 
     /**
@@ -779,33 +781,21 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     // RMI methods
     //
 
-    volatile RegistrationLatch registrationLatch;
-
-    class RegistrationLatch {
-        final CountDownLatch latch = new CountDownLatch(1);
-        Object remoteObject;
-        boolean hasError = false;
-    }
-
-
-    private final AtomicInteger rmiObjectIdCounter = new AtomicInteger(0);
-
 
     @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked"})
     @Override
-    public
-    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Iface> remoteImplementationInterface,
-                                                         final Class<Impl> remoteImplementationClass) throws NetException {
-
+    public final
+    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws NetException {
         // only one register can happen at a time
-        synchronized (rmiObjectIdCounter) {
-            registrationLatch = new RegistrationLatch();
+        synchronized (remoteObjectLock) {
+            objectRegistrationLatch = new ObjectRegistrationLatch();
 
             // since this synchronous, we want to wait for the response before we continue
+            // this means we are creating a NEW object on the server, bound access to only this connection
             TCP(new RmiRegistration(remoteImplementationClass.getName())).flush();
 
             try {
-                if (!registrationLatch.latch.await(2, TimeUnit.SECONDS)) {
+                if (!objectRegistrationLatch.latch.await(2, TimeUnit.SECONDS)) {
                     final String errorMessage = "Timed out getting registration ID for: " + remoteImplementationClass;
                     logger.error(errorMessage);
                     throw new NetException(errorMessage);
@@ -817,9 +807,45 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             }
 
             // local var to prevent double hit on volatile field
-            final RegistrationLatch latch = registrationLatch;
+            final ObjectRegistrationLatch latch = objectRegistrationLatch;
             if (latch.hasError) {
                 final String errorMessage = "Error getting registration ID for: " + remoteImplementationClass;
+                logger.error(errorMessage);
+                throw new NetException(errorMessage);
+            }
+
+            return (Iface) latch.remoteObject;
+        }
+    }
+
+    @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked"})
+    @Override
+    public final
+    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws NetException {
+        // only one register can happen at a time
+        synchronized (remoteObjectLock) {
+            objectRegistrationLatch = new ObjectRegistrationLatch();
+
+            // since this synchronous, we want to wait for the response before we continue
+            // this means that we are ACCESSING a remote object on the server, the server checks GLOBAL, then LOCAL for this object
+            TCP(new RmiRegistration(objectId)).flush();
+
+            try {
+                if (!objectRegistrationLatch.latch.await(2, TimeUnit.SECONDS)) {
+                    final String errorMessage = "Timed out getting registration for ID: " + objectId;
+                    logger.error(errorMessage);
+                    throw new NetException(errorMessage);
+                }
+            } catch (InterruptedException e) {
+                final String errorMessage = "Error getting registration for ID: " + objectId;
+                logger.error(errorMessage, e);
+                throw new NetException(errorMessage, e);
+            }
+
+            // local var to prevent double hit on volatile field
+            final ObjectRegistrationLatch latch = objectRegistrationLatch;
+            if (latch.hasError) {
+                final String errorMessage = "Error getting registration for ID: " + objectId;
                 logger.error(errorMessage);
                 throw new NetException(errorMessage);
             }
@@ -834,6 +860,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
         if (implementationClassName != null) {
             // THIS IS ON THE SERVER SIDE
+            //
             // create a new ID, and register the ID and new object (must create a new one) in the object maps
 
             Class<?> implementationClass;
@@ -848,7 +875,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
             try {
                 final Object remotePrimaryObject = implementationClass.newInstance();
-                rmiBridge.register(rmiObjectIdCounter.getAndIncrement(), remotePrimaryObject);
+                rmiBridge.register(rmiBridge.nextObjectId(), remotePrimaryObject);
 
                 LinkedList<ClassObject> remoteClasses = new LinkedList<ClassObject>();
                 remoteClasses.add(new ClassObject(implementationClass, remotePrimaryObject));
@@ -868,7 +895,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                                     field.setAccessible(prev);
                                     final Class<?> type = field.getType();
 
-                                    rmiBridge.register(rmiObjectIdCounter.getAndIncrement(), o);
+                                    rmiBridge.register(rmiBridge.nextObjectId(), o);
 
                                     remoteClasses.offerLast(new ClassObject(type, o));
                                 }
@@ -877,17 +904,29 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                     }
                 }
 
-//                connection.TCP(new RmiRegistration()).flush();
                 connection.TCP(new RmiRegistration(remotePrimaryObject)).flush();
             } catch (Exception e) {
                 logger.error("Error registering RMI class " + implementationClassName, e);
                 connection.TCP(new RmiRegistration()).flush();
             }
-        } else {
+        }
+        else if (remoteRegistration.remoteObjectId > RmiBridge.INVALID_RMI) {
+            // THIS IS ON THE SERVER SIDE
+            //
+            // Get a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
+            Object object = getRegisteredObject(remoteRegistration.remoteObjectId);
+
+            if (object != null) {
+                connection.TCP(new RmiRegistration(object)).flush();
+            } else {
+                connection.TCP(new RmiRegistration()).flush();
+            }
+        }
+        else {
             // THIS IS ON THE CLIENT SIDE
 
             // the next two use a local var, so that there isn't a double hit for volatile access
-            final RegistrationLatch latch = this.registrationLatch;
+            final ObjectRegistrationLatch latch = this.objectRegistrationLatch;
             latch.hasError = remoteRegistration.hasError;
 
             if (!remoteRegistration.hasError) {
@@ -895,24 +934,32 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             }
 
             // notify the original register that it may continue. We access the volatile field directly, so that it's members are updated
-            registrationLatch.latch.countDown();
+            objectRegistrationLatch.latch.countDown();
         }
     }
 
-
-    /**
-     * Returns the object registered with the specified ID.
-     */
     public
-    Object getRegisteredObject(final int objectID) {
-        return rmiBridge.getRegisteredObject(objectID);
+    <T> int getRegisteredId(final T object) {
+        // always check local before checking global, because less contention on the synchronization
+        int object1 = endPoint.globalRmiBridge.getRegisteredId(object);
+        if (object1 == Integer.MAX_VALUE) {
+            return rmiBridge.getRegisteredId(object);
+        } else {
+            return object1;
+        }
     }
 
-    /**
-     * Returns the ID registered for the specified object, or Integer.MAX_VALUE if not found.
-     */
     public
-    int getRegisteredId(final Object object) {
-        return rmiBridge.getRegisteredId(object);
+    RemoteObject getRemoteObject(final int objectID, final Class<?> type) {
+        return RmiBridge.getRemoteObject(this, objectID, type);
+    }
+
+    public
+    Object getRegisteredObject(final int objectID) {
+        if (RmiBridge.isGlobal(objectID)) {
+            return endPoint.globalRmiBridge.getRegisteredObject(objectID);
+        } else {
+            return rmiBridge.getRegisteredObject(objectID);
+        }
     }
 }

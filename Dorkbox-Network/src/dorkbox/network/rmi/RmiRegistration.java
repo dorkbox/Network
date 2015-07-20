@@ -24,6 +24,9 @@ class RmiRegistration {
     public String remoteImplementationClass;
     public boolean hasError;
 
+    // this is used to get specific, GLOBAL rmi objects (objects that are not bound to a single connection)
+    public int remoteObjectId;
+
     public
     RmiRegistration() {
         hasError = true;
@@ -38,6 +41,12 @@ class RmiRegistration {
     public
     RmiRegistration(final Object remoteObject) {
         this.remoteObject = remoteObject;
+        hasError = false;
+    }
+
+    public
+    RmiRegistration(final int remoteObjectId) {
+        this.remoteObjectId = remoteObjectId;
         hasError = false;
     }
 }

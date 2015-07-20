@@ -27,15 +27,15 @@ import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.EndPointTool;
-import dorkbox.util.entropy.Entropy;
-import dorkbox.util.exceptions.InitializationException;
-import dorkbox.util.exceptions.SecurityException;
 import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.Sys;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
+import dorkbox.util.entropy.Entropy;
+import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.SecurityException;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
@@ -137,7 +137,7 @@ class EndPoint {
     final ECPrivateKeyParameters privateKey;
     final ECPublicKeyParameters publicKey;
     final SecureRandom secureRandom;
-
+    final RmiBridge globalRmiBridge;
     private final CountDownLatch blockUntilDone = new CountDownLatch(1);
     private final Executor rmiExecutor;
     private final boolean rmiEnabled;
@@ -145,12 +145,16 @@ class EndPoint {
     private final List<EventLoopGroup> eventLoopGroups = new ArrayList<EventLoopGroup>(8);
     private final List<ChannelFuture> shutdownChannelList = new ArrayList<ChannelFuture>();
     private final ConcurrentHashMap<Class<?>, EndPointTool> toolMap = new ConcurrentHashMap<Class<?>, EndPointTool>();
+
     // make sure that the endpoint is closed on JVM shutdown (if it's still open at that point in time)
     protected Thread shutdownHook;
+
     protected AtomicBoolean stopCalled = new AtomicBoolean(false);
     protected AtomicBoolean isConnected = new AtomicBoolean(false);
+
     SettingsStore propertyStore;
     boolean disableRemoteKeyValidation;
+
     /**
      * in milliseconds. default is disabled!
      */
@@ -284,6 +288,10 @@ class EndPoint {
         if (this.rmiEnabled) {
             // these register the listener for registering a class implementation for RMI (internal use only)
             this.connectionManager.add(new RegisterRmiSystemListener());
+            this.globalRmiBridge = new RmiBridge(logger, options.rmiExecutor, true);
+        }
+        else {
+            this.globalRmiBridge = null;
         }
     }
 
@@ -426,7 +434,7 @@ class EndPoint {
 
         RmiBridge rmiBridge = null;
         if (metaChannel != null && rmiEnabled) {
-            rmiBridge = new RmiBridge(logger, rmiExecutor);
+            rmiBridge = new RmiBridge(logger, rmiExecutor, false);
         }
 
         // setup the extras needed by the network connection.
@@ -455,7 +463,8 @@ class EndPoint {
 
             if (rmiBridge != null) {
                 // notify our remote object space that it is able to receive method calls.
-                connection.listeners().add(rmiBridge.getListener());
+                connection.listeners()
+                          .add(rmiBridge.getListener());
             }
         }
         else {
@@ -811,5 +820,16 @@ class EndPoint {
     public
     String getName() {
         return this.type.getSimpleName();
+    }
+
+    /**
+     * Creates a "global" RMI object for use by multiple connections.
+     * @return the ID assigned to this RMI object
+     */
+    public
+    <T> int createGlobalObject(final T globalObject) {
+        int globalObjectId = globalRmiBridge.nextObjectId();
+        globalRmiBridge.register(globalObjectId, globalObject);
+        return globalObjectId;
     }
 }

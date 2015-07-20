@@ -26,19 +26,12 @@ import com.esotericsoftware.kryo.util.MapReferenceResolver;
 import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.rmi.*;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.serialization.ArraysAsListSerializer;
-import dorkbox.util.serialization.FieldAnnotationAwareSerializer;
-import dorkbox.util.serialization.IgnoreSerialization;
-import dorkbox.util.serialization.UnmodifiableCollectionsSerializer;
 import dorkbox.util.crypto.Crypto;
-import dorkbox.util.serialization.EccPrivateKeySerializer;
-import dorkbox.util.serialization.EccPublicKeySerializer;
-import dorkbox.util.serialization.IesParametersSerializer;
-import dorkbox.util.serialization.IesWithCipherParametersSerializer;
 import dorkbox.util.exceptions.NetException;
 import dorkbox.util.objectPool.ObjectPool;
 import dorkbox.util.objectPool.ObjectPoolFactory;
 import dorkbox.util.objectPool.PoolableObject;
+import dorkbox.util.serialization.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.handler.codec.compression.CompressionException;
@@ -137,6 +130,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
         serializationManager.register(StackTraceElement[].class);
 
         // extra serializers
+        //noinspection ArraysAsListWithZeroOrOneArgument
         serializationManager.register(Arrays.asList("").getClass(), new ArraysAsListSerializer());
 
         UnmodifiableCollectionsSerializer.registerSerializers(serializationManager);

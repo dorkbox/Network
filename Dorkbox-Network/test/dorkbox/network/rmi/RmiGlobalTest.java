@@ -1,40 +1,46 @@
 package dorkbox.network.rmi;
 
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.io.Serializable;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import org.junit.Test;
-
 import dorkbox.network.BaseTest;
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.io.Serializable;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public
-class RmiTest extends BaseTest {
+class RmiGlobalTest extends BaseTest {
+
+    private int CLIENT_GLOBAL_OBJECT_ID = 0;
+    private int SERVER_GLOBAL_OBJECT_ID = 0;
+
+    private TestObject globalRemoteServerObject = new TestObjectImpl();
+    private TestObject globalRemoteClientObject = new TestObjectImpl();
 
     private static
-    void runTest(final Connection connection, final int remoteObjectID) {
+    void runTest(final Connection connection, final Object remoteObject, final int remoteObjectID) {
         new Thread() {
             @Override
             public
             void run() {
-                TestObject test = connection.createRemoteObject(TestObjectImpl.class);
+                TestObject test = connection.getRemoteObject(remoteObjectID);
 
                 System.err.println("Starting test for: " + remoteObjectID);
 
                 //TestObject test = connection.getRemoteObject(id, TestObject.class);
+                assertEquals(remoteObject.hashCode(), test.hashCode());
                 RemoteObject remoteObject = (RemoteObject) test;
 
                 // Default behavior. RMI is transparent, method calls behave like normal
@@ -111,6 +117,7 @@ class RmiTest extends BaseTest {
                 remoteObject.setTransmitExceptions(false);
                 test.moo("Mooooooooo", 3000);
 
+
                 // should wait for a small time
                 remoteObject.setTransmitReturnValue(true);
                 remoteObject.setNonBlocking(false);
@@ -118,7 +125,8 @@ class RmiTest extends BaseTest {
                 System.out.println("You should see this 2 seconds before");
                 float slow = test.slow();
                 System.out.println("...This");
-                assertEquals(slow, 123, .0001D);
+                assertEquals(123f, slow, .0001D);
+
 
                 // Test sending a reference to a remote object.
                 MessageWithTestObject m = new MessageWithTestObject();
@@ -131,6 +139,8 @@ class RmiTest extends BaseTest {
             }
         }.start();
     }
+
+
 
     public static
     void register(CryptoSerializationManager kryoMT) {
@@ -161,6 +171,8 @@ class RmiTest extends BaseTest {
 
         register(server.getSerialization());
 
+        // register this object as a global object that the client will get
+        SERVER_GLOBAL_OBJECT_ID = server.createGlobalObject(globalRemoteServerObject);
 
         addEndPoint(server);
         server.bind(false);
@@ -170,7 +182,7 @@ class RmiTest extends BaseTest {
                   @Override
                   public
                   void connected(final Connection connection) {
-                      RmiTest.runTest(connection, 1);
+                      RmiGlobalTest.runTest(connection, globalRemoteClientObject, CLIENT_GLOBAL_OBJECT_ID);
                   }
 
                   @Override
@@ -178,7 +190,7 @@ class RmiTest extends BaseTest {
                   void received(Connection connection, MessageWithTestObject m) {
                       TestObject object = m.testObject;
                       final int id = object.id();
-                      assertEquals(2, id);
+                      assertEquals(1, id);
                       System.err.println("Client/Server Finished!");
 
                       stopEndPoints(2000);
@@ -193,6 +205,9 @@ class RmiTest extends BaseTest {
         client.setIdleTimeout(0);
         client.disableRemoteKeyValidation();
 
+        // register this object as a global object that the server will get
+        CLIENT_GLOBAL_OBJECT_ID = client.createGlobalObject(globalRemoteClientObject);
+
         addEndPoint(client);
 
         client.listeners()
@@ -206,7 +221,7 @@ class RmiTest extends BaseTest {
                       System.err.println("Server/Client Finished!");
 
                       // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
-                      runTest(connection, 2);
+                      runTest(connection, globalRemoteServerObject, SERVER_GLOBAL_OBJECT_ID);
                   }
               });
 
@@ -230,14 +245,26 @@ class RmiTest extends BaseTest {
     }
 
 
-    public static
-    class TestObjectImpl implements TestObject {
-        // has to start at 1, because UDP/UDT method invocations ignore return values
-        static final AtomicInteger ID_COUNTER = new AtomicInteger(1);
+    public static class ConnectionAware {
+        private
+        ConnectionImpl connection;
 
+        public
+        ConnectionImpl getConnection() {
+            return connection;
+        }
+
+        public
+        void setConnection(final ConnectionImpl connection) {
+            this.connection = connection;
+        }
+    }
+
+    public static
+    class TestObjectImpl extends ConnectionAware implements TestObject {
         public long value = System.currentTimeMillis();
         public int moos;
-        private final int id = ID_COUNTER.getAndIncrement();
+        private final int id = 1;
 
         public
         TestObjectImpl() {
@@ -291,28 +318,6 @@ class RmiTest extends BaseTest {
                 e.printStackTrace();
             }
             return 123f;
-        }
-
-        @Override
-        public
-        boolean equals(final Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-
-            final TestObjectImpl that = (TestObjectImpl) o;
-
-            return id == that.id;
-
-        }
-
-        @Override
-        public
-        int hashCode() {
-            return id;
         }
     }
 

@@ -9,9 +9,11 @@ import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
+import dorkbox.util.serialization.IgnoreSerialization;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -75,7 +77,7 @@ class RmiSendObjectTest extends BaseTest {
                           @Override
                           public
                           void run() {
-                              TestObject test = connection.createRemoteObject(TestObject.class, TestObjectImpl.class);
+                              TestObject test = connection.createRemoteObject(TestObjectImpl.class);
                               test.setOther(43.21f);
                               // Normal remote method call.
                               assertEquals(43.21f, test.other(), .0001f);
@@ -119,10 +121,16 @@ class RmiSendObjectTest extends BaseTest {
     }
 
 
+    private static final AtomicInteger idCounter = new AtomicInteger();
+
+
     public static
     class TestObjectImpl implements TestObject {
+        @IgnoreSerialization
+        private final int ID = idCounter.getAndIncrement();
+
         @RemoteProxy
-        private OtherObject otherObject = new OtherObjectImpl();
+        private final OtherObject otherObject = new OtherObjectImpl();
         private float aFloat;
 
 
@@ -143,11 +151,20 @@ class RmiSendObjectTest extends BaseTest {
         OtherObject getOtherObject() {
             return this.otherObject;
         }
+
+        @Override
+        public
+        int hashCode() {
+            return ID;
+        }
     }
 
 
     public static
     class OtherObjectImpl implements OtherObject {
+        @IgnoreSerialization
+        private final int ID = idCounter.getAndIncrement();
+
         private float aFloat;
 
         @Override
@@ -160,6 +177,12 @@ class RmiSendObjectTest extends BaseTest {
         public
         float value() {
             return aFloat;
+        }
+
+        @Override
+        public
+        int hashCode() {
+            return ID;
         }
     }
 }

@@ -34,22 +34,26 @@
  */
 package dorkbox.network.rmi;
 
-import com.esotericsoftware.kryo.util.IntMap;
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.ListenerRaw;
-import dorkbox.util.exceptions.NetException;
-import dorkbox.util.collections.ObjectIntMap;
-import dorkbox.util.objectPool.ObjectPool;
-import dorkbox.util.objectPool.ObjectPoolFactory;
-import org.slf4j.Logger;
-
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
+
+import org.slf4j.Logger;
+
+import com.esotericsoftware.kryo.util.IntMap;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.ListenerRaw;
+import dorkbox.util.collections.ObjectIntMap;
+import dorkbox.util.exceptions.NetException;
+import dorkbox.util.objectPool.ObjectPool;
+import dorkbox.util.objectPool.ObjectPoolFactory;
 
 /**
  * Allows methods on objects to be invoked remotely over TCP, UDP, or UDT. Objects are
@@ -70,9 +74,25 @@ class RmiBridge  {
     static final int returnExceptionMask = 1 << 6;
     static final int responseIdMask = 0xFF & ~returnValueMask & ~returnExceptionMask;
 
+    // global RMI objects -> ODD in range 1-16380 (max 2 bytes) throws error on outside of range
+    // connection local RMI -> EVEN in range 1-16380 (max 2 bytes)  throws error on outside of range
+    private static final int MAX_RMI_VALUE = 16380;
+    public static final int INVALID_RMI = 0;
+
+    /**
+     * @return true if the objectId is a "global" id (it's odd) otherwise, false (it's connection local)
+     */
+    public static
+    boolean isGlobal(final int objectId) {
+        return (objectId & 1) != 0;
+    }
+
 
     // the name of who created this RmiBridge
     private final org.slf4j.Logger logger;
+
+    // we start at 1, because 0 (INVALID_RMI) means we access connection only objects
+    private final AtomicInteger rmiObjectIdCounter;
 
     // can be accessed by DIFFERENT threads.
     private final ReentrantReadWriteLock objectLock = new ReentrantReadWriteLock();
@@ -82,24 +102,21 @@ class RmiBridge  {
     private final Executor executor;
 
     // 4096 concurrent method invocations max
-    private final ObjectPool<InvokeMethod> invokeMethodPool = ObjectPoolFactory.create(new InvokeMethodPoolable(), 4096);
+    private static final ObjectPool<InvokeMethod> invokeMethodPool = ObjectPoolFactory.create(new InvokeMethodPoolable(), 4096);
 
-    private final ListenerRaw<Connection, InvokeMethod> invokeListener = new ListenerRaw<Connection, InvokeMethod>() {
+    private final ListenerRaw<ConnectionImpl, InvokeMethod> invokeListener = new ListenerRaw<ConnectionImpl, InvokeMethod>() {
         @Override
         public
-        void received(final Connection connection, final InvokeMethod invokeMethod) {
-            ReadLock readLock = RmiBridge.this.objectLock.readLock();
-            readLock.lock();
+        void received(final ConnectionImpl connection, final InvokeMethod invokeMethod) {
+            int objectID = invokeMethod.objectID;
 
-            final Object target = RmiBridge.this.idToObject.get(invokeMethod.objectID);
-
-            readLock.unlock();
-
+            // have to make sure to get the correct object (global vs local)
+            final Object target = connection.getRegisteredObject(objectID);
 
             if (target == null) {
                 Logger logger2 = RmiBridge.this.logger;
                 if (logger2.isWarnEnabled()) {
-                    logger2.warn("Ignoring remote invocation request for unknown object ID: {}", invokeMethod.objectID);
+                    logger2.warn("Ignoring remote invocation request for unknown object ID: {}", objectID);
                 }
 
                 return;
@@ -129,11 +146,19 @@ class RmiBridge  {
      * @param executor Sets the executor used to invoke methods when an invocation is received
      *                 from a remote endpoint. By default, no executor is set and invocations
      *                 occur on the network thread, which should not be blocked for long, May be null.
+     * @param isGlobal specify if this RmiBridge is a "global" bridge, meaning connections will prefer
+     *                 objects from this bridge instead of the connection-local bridge.
      */
     public
-    RmiBridge(final org.slf4j.Logger logger, final Executor executor) {
+    RmiBridge(final org.slf4j.Logger logger, final Executor executor, final boolean isGlobal) {
         this.logger = logger;
         this.executor = executor;
+
+        if (isGlobal) {
+            rmiObjectIdCounter = new AtomicInteger(1);
+        } else {
+            rmiObjectIdCounter = new AtomicInteger(2);
+        }
     }
 
     /**
@@ -237,6 +262,20 @@ class RmiBridge  {
         // logger.error("{} sent data: {}  with id ({})", connection, result, invokeMethod.responseID);
     }
 
+    public
+    int nextObjectId() {
+        // always increment by 2
+        // global RMI objects -> ODD in range 1-16380 (max 2 bytes) throws error on outside of range
+        // connection local RMI -> EVEN in range 1-16380 (max 2 bytes)  throws error on outside of range
+        int value = rmiObjectIdCounter.getAndAdd(2);
+        if (value > MAX_RMI_VALUE) {
+            rmiObjectIdCounter.set(MAX_RMI_VALUE); // prevent wrapping by spammy callers
+            throw new NetException("RMI next value has exceeded maximum limits.");
+        }
+        return value;
+    }
+
+
     /**
      * Registers an object to allow the remote end of the RmiBridge connections to access it using the specified ID.
      *
@@ -336,7 +375,7 @@ class RmiBridge  {
      *
      * @see RemoteObject
      */
-    public
+    public static
     RemoteObject getRemoteObject(Connection connection, int objectID, Class<?> iface) {
         if (connection == null) {
             throw new IllegalArgumentException("connection cannot be null.");
@@ -351,10 +390,8 @@ class RmiBridge  {
 
         return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(),
                                                      temp,
-                                                     new RemoteInvocationHandler(this.invokeMethodPool, connection, objectID));
+                                                     new RemoteInvocationHandler(invokeMethodPool, connection, objectID));
     }
-
-
 
     /**
      * Returns the object registered with the specified ID.
@@ -375,7 +412,7 @@ class RmiBridge  {
      * Returns the ID registered for the specified object, or Integer.MAX_VALUE if not found.
      */
     public
-    int getRegisteredId(final Object object) {
+    <T> int getRegisteredId(final T object) {
         // Find an ID with the object.
         ReadLock readLock = this.objectLock.readLock();
 
@@ -385,4 +422,6 @@ class RmiBridge  {
 
         return id;
     }
+
+
 }

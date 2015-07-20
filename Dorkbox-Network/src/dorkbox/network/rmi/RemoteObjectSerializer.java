@@ -75,6 +75,6 @@ class RemoteObjectSerializer<T> extends Serializer<T> {
         KryoExtra kryoExtra = (KryoExtra) kryo;
         int objectID = input.readInt(true);
         final ConnectionImpl connection = kryoExtra.connection;
-        return (T) connection.rmiBridge.getRemoteObject(connection, objectID, type);
+        return (T) connection.getRemoteObject(objectID, type);
     }
 }
