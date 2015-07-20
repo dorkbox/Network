@@ -3,7 +3,9 @@ package dorkbox.network.rmi;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.ListenerRaw;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.objectPool.ObjectPool;
 
@@ -15,11 +17,12 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /** Handles network communication when methods are invoked on a proxy. */
+public
 class RemoteInvocationHandler implements InvocationHandler {
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(RemoteInvocationHandler.class);
     private final Connection connection;
 
-    final int objectID;
+    public final int objectID;
     private int timeoutMillis = 3000;
 
     private boolean nonBlocking = false;
@@ -137,14 +140,24 @@ class RemoteInvocationHandler implements InvocationHandler {
             return "<proxy>";
         }
 
+
         EndPoint endPoint = this.connection.getEndPoint();
-        RmiBridge rmi = (RmiBridge) endPoint.rmi();
 
         InvokeMethod invokeMethod = this.invokeMethodPool.take();
         invokeMethod.objectID = this.objectID;
         invokeMethod.args = args;
 
-        CachedMethod[] cachedMethods = rmi.getMethods(endPoint.getSerialization().getSingleInstanceUnsafe(), method.getDeclaringClass());
+        final CryptoSerializationManager serializationManager = endPoint.getSerialization();
+        // thread safe access.
+        final KryoExtra kryo = (KryoExtra) serializationManager.take();
+        if (kryo == null) {
+            String msg = "Interrupted during kryo pool.take()";
+            logger.error(msg);
+            return msg;
+        }
+
+        CachedMethod[] cachedMethods = kryo.getMethods(method.getDeclaringClass());
+        serializationManager.release(kryo);
         for (int i = 0, n = cachedMethods.length; i < n; i++) {
             CachedMethod cachedMethod = cachedMethods[i];
             if (cachedMethod.method.equals(method)) {

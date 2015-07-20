@@ -4,9 +4,8 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.util.exceptions.NetException;
 
 /**
@@ -18,15 +17,13 @@ import dorkbox.network.util.exceptions.NetException;
  */
 public class RemoteObjectSerializer<T> extends Serializer<T> {
 
-    private final RmiBridge rmi;
-
-    public RemoteObjectSerializer(EndPoint endpoint) {
-        this.rmi = (RmiBridge) endpoint.rmi();
+    public RemoteObjectSerializer() {
     }
 
     @Override
     public void write(Kryo kryo, Output output, T object) {
-        int id = this.rmi.getRegisteredId(object);
+        KryoExtra kryoExtra = (KryoExtra) kryo;
+        int id = kryoExtra.connection.getRegisteredId(object);
         if (id == Integer.MAX_VALUE) {
             throw new NetException("Object not found in an ObjectSpace: " + object);
         }
@@ -37,8 +34,9 @@ public class RemoteObjectSerializer<T> extends Serializer<T> {
     @SuppressWarnings({"rawtypes","unchecked"})
     @Override
     public T read(Kryo kryo, Input input, Class type) {
+        KryoExtra kryoExtra = (KryoExtra) kryo;
         int objectID = input.readInt(true);
-        Connection connection = (Connection) kryo.getContext().get(Connection.connection);
-        return (T) this.rmi.getRemoteObject(connection, objectID, type);
+        final ConnectionImpl connection = kryoExtra.connection;
+        return (T) connection.rmiBridge.getRemoteObject(connection, objectID, type);
     }
 }

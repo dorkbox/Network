@@ -16,7 +16,13 @@ import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Promise;
 
 import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
+import java.util.LinkedList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.slf4j.Logger;
@@ -28,30 +34,30 @@ import dorkbox.network.connection.idle.IdleSender;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
-import dorkbox.network.rmi.RemoteObject;
-import dorkbox.network.rmi.TimeoutException;
+import dorkbox.network.rmi.RemoteProxy;
+import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.rmi.RmiRegistration;
+import dorkbox.network.util.exceptions.NetException;
 
 
 /**
  * The "network connection" is established once the registration is validated for TCP/UDP/UDT
  */
 @Sharable
-public class ConnectionImpl extends ChannelInboundHandlerAdapter
-        implements Connection, ListenerBridge, ConnectionBridge {
+public
+class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection, ListenerBridge, ConnectionBridge {
 
     private final org.slf4j.Logger logger;
-    private final String name;
 
-    private AtomicBoolean closeInProgress = new AtomicBoolean(false);
-    private AtomicBoolean alreadyClosed = new AtomicBoolean(false);
+    private final AtomicBoolean closeInProgress = new AtomicBoolean(false);
+    private final AtomicBoolean alreadyClosed = new AtomicBoolean(false);
     private final Object closeInProgressLock = new Object();
 
     private final Object messageInProgressLock = new Object();
-    private AtomicBoolean messageInProgress = new AtomicBoolean(false);
+    private final AtomicBoolean messageInProgress = new AtomicBoolean(false);
 
     private ISessionManager sessionManager;
     private ChannelWrapper channelWrapper;
-    private EndPoint endPoint;
 
     private volatile PingFuture pingFuture = null;
 
@@ -62,28 +68,42 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     private boolean remoteKeyChanged;
 
 
-    public ConnectionImpl(String name) {
-        this.name = name;
-        this.logger = org.slf4j.LoggerFactory.getLogger(name);
+    private final EndPoint endPoint;
+    public final RmiBridge rmiBridge;
+
+
+    /**
+     * All of the parameters can be null, when metaChannel want's to get the base class type
+     * @param logger
+     * @param endPoint
+     * @param rmiBridge
+     */
+    public
+    ConnectionImpl(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+        this.logger = logger;
+        this.endPoint = endPoint;
+        this.rmiBridge = rmiBridge;
     }
 
     /**
      * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
      */
     @Override
-    public void init(EndPoint endPoint, Bridge bridge) {
-        this.endPoint = endPoint;
+    public
+    void init(final Bridge bridge) {
         if (bridge != null) {
             this.sessionManager = bridge.sessionManager;
             this.channelWrapper = bridge.channelWrapper;
-        } else {
+        }
+        else {
             this.sessionManager = null;
             this.channelWrapper = null;
         }
 
         if (this.channelWrapper instanceof ChannelNetworkWrapper) {
-            this.remoteKeyChanged = ((ChannelNetworkWrapper)this.channelWrapper).remoteKeyChanged();
-        } else {
+            this.remoteKeyChanged = ((ChannelNetworkWrapper) this.channelWrapper).remoteKeyChanged();
+        }
+        else {
             this.remoteKeyChanged = false;
         }
     }
@@ -92,7 +112,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Prepare the channel wrapper, since it doesn't have access to certain fields during it's construction.
      */
     @Override
-    public void prep() {
+    public
+    void prep() {
         if (this.channelWrapper != null) {
             this.channelWrapper.init();
         }
@@ -103,7 +124,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * @return the AES key/IV, etc associated with this connection
      */
     @Override
-    public final ParametersWithIV getCryptoParameters() {
+    public final
+    ParametersWithIV getCryptoParameters() {
         return this.channelWrapper.cryptoParameters();
     }
 
@@ -111,7 +133,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Has the remote ECC public key changed. This can be useful if specific actions are necessary when the key has changed.
      */
     @Override
-    public boolean hasRemoteKeyChanged() {
+    public
+    boolean hasRemoteKeyChanged() {
         return this.remoteKeyChanged;
     }
 
@@ -119,23 +142,18 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * @return the remote address, as a string.
      */
     @Override
-    public String getRemoteHost() {
+    public
+    String getRemoteHost() {
         return this.channelWrapper.getRemoteHost();
     }
 
-    /**
-     * @return the name used by the connection
-     */
-    @Override
-    public String getName() {
-        return this.name;
-    }
 
     /**
      * @return the endpoint associated with this connection
      */
     @Override
-    public EndPoint getEndPoint() {
+    public
+    EndPoint getEndPoint() {
         return this.endPoint;
     }
 
@@ -143,7 +161,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * @return the connection (TCP or LOCAL) id of this connection.
      */
     @Override
-    public int id() {
+    public
+    int id() {
         return this.channelWrapper.id();
     }
 
@@ -151,14 +170,16 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * @return the connection (TCP or LOCAL) id of this connection as a HEX string.
      */
     @Override
-    public String idAsHex() {
+    public
+    String idAsHex() {
         return Integer.toHexString(this.channelWrapper.id());
     }
 
     /**
      * Updates the ping times for this connection (called when this connection gets a REPLY ping message).
      */
-    public final void updatePingResponse(PingMessage ping) {
+    public final
+    void updatePingResponse(PingMessage ping) {
         if (this.pingFuture != null) {
             this.pingFuture.setSuccess(this, ping);
         }
@@ -170,13 +191,15 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * @return Ping can have a listener attached, which will get called when the ping returns.
      */
     @Override
-    public final Ping ping() {
+    public final
+    Ping ping() {
         PingFuture pingFuture2 = this.pingFuture;
         if (pingFuture2 != null && !pingFuture2.isSuccess()) {
             pingFuture2.cancel();
         }
 
-        Promise<PingTuple<? extends Connection>> newPromise = this.channelWrapper.getEventLoop().newPromise();
+        Promise<PingTuple<? extends Connection>> newPromise = this.channelWrapper.getEventLoop()
+                                                                                 .newPromise();
         this.pingFuture = new PingFuture(newPromise);
 
         PingMessage ping = new PingMessage();
@@ -190,12 +213,15 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * INTERNAL USE ONLY. Used to initiate a ping, and to return a ping.
      * Sends a ping message attempted in the following order: UDP, UDT, TCP
      */
-    final void ping0(PingMessage ping) {
+    final
+    void ping0(PingMessage ping) {
         if (this.channelWrapper.udp() != null) {
             UDP(ping).flush();
-        } else if (this.channelWrapper.udt() != null) {
+        }
+        else if (this.channelWrapper.udt() != null) {
             UDT(ping).flush();
-        } else {
+        }
+        else {
             TCP(ping).flush();
         }
     }
@@ -203,11 +229,13 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     /**
      * Returns the last calculated TCP return trip time, or -1 if or the {@link PingMessage} response has not yet been received.
      */
-    public final int getLastRoundTripTime() {
+    public final
+    int getLastRoundTripTime() {
         PingFuture pingFuture2 = this.pingFuture;
         if (pingFuture2 != null) {
             return pingFuture2.getResponse();
-        } else {
+        }
+        else {
             return -1;
         }
     }
@@ -216,7 +244,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * @return true if this connection is also configured to use UDP
      */
     @Override
-    public final boolean hasUDP() {
+    public final
+    boolean hasUDP() {
         return this.channelWrapper.udp() != null;
     }
 
@@ -224,7 +253,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * @return true if this connection is also configured to use UDT
      */
     @Override
-    public final boolean hasUDT() {
+    public final
+    boolean hasUDT() {
         return this.channelWrapper.udt() != null;
     }
 
@@ -232,7 +262,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Expose methods to send objects to a destination.
      */
     @Override
-    public final ConnectionBridge send() {
+    public final
+    ConnectionBridge send() {
         return this;
     }
 
@@ -240,7 +271,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Sends the object to other listeners INSIDE this endpoint. It does not send it to a remote address.
      */
     @Override
-    public final void self(Object message) {
+    public final
+    void self(Object message) {
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
             logger2.trace("Sending LOCAL {}", message);
@@ -252,7 +284,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Sends the object over the network using TCP. (LOCAL channels do not care if its TCP or UDP)
      */
     @Override
-    public final ConnectionPoint TCP(Object message) {
+    public final
+    ConnectionPoint TCP(Object message) {
         Logger logger2 = this.logger;
         if (!this.closeInProgress.get()) {
             if (logger2.isTraceEnabled()) {
@@ -261,7 +294,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             ConnectionPointWriter tcp = this.channelWrapper.tcp();
             tcp.write(message);
             return tcp;
-        } else {
+        }
+        else {
             if (logger2.isDebugEnabled()) {
                 logger2.debug("writing TCP while closed: {}", message);
             }
@@ -275,7 +309,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Sends the object over the network using UDP (or via LOCAL when it's a local channel).
      */
     @Override
-    public ConnectionPoint UDP(Object message) {
+    public
+    ConnectionPoint UDP(Object message) {
         Logger logger2 = this.logger;
         if (!this.closeInProgress.get()) {
             if (logger2.isTraceEnabled()) {
@@ -284,7 +319,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             ConnectionPointWriter udp = this.channelWrapper.udp();
             udp.write(message);
             return udp;
-        } else {
+        }
+        else {
             if (logger2.isDebugEnabled()) {
                 logger2.debug("writing UDP while closed: {}", message);
             }
@@ -297,7 +333,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Sends the object over the network using TCP. (LOCAL channels do not care if its TCP or UDP)
      */
     @Override
-    public final ConnectionPoint UDT(Object message) {
+    public final
+    ConnectionPoint UDT(Object message) {
         Logger logger2 = this.logger;
         if (!this.closeInProgress.get()) {
             if (logger2.isTraceEnabled()) {
@@ -306,7 +343,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             ConnectionPointWriter udt = this.channelWrapper.udt();
             udt.write(message);
             return udt;
-        } else {
+        }
+        else {
             if (logger2.isDebugEnabled()) {
                 logger2.debug("writing UDT while closed: {}", message);
             }
@@ -320,7 +358,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Flushes the contents of the TCP/UDP/UDT/etc pipes to the actual transport.
      */
     @Override
-    public final void flush() {
+    public final
+    void flush() {
         this.channelWrapper.flush();
     }
 
@@ -328,7 +367,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Expose methods to modify the connection listeners.
      */
     @Override
-    public final IdleBridge sendOnIdle(@SuppressWarnings("rawtypes") IdleSender sender) {
+    public final
+    IdleBridge sendOnIdle(@SuppressWarnings("rawtypes") IdleSender sender) {
         listeners().add(sender);
         return sender;
     }
@@ -338,59 +378,20 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Expose methods to modify the connection listeners.
      */
     @Override
-    public final IdleBridge sendOnIdle(Object message) {
-        @SuppressWarnings({"rawtypes","unchecked"})
+    public final
+    IdleBridge sendOnIdle(Object message) {
+        @SuppressWarnings({"rawtypes", "unchecked"})
         IdleObjectSender sender = new IdleObjectSender(message);
         listeners().add(sender);
         return sender;
     }
 
     /**
-     * Identical to {@link #getRemoteObject(C, int, Class...)} except returns
-     * the object cast to the specified interface type. The returned object
-     * still implements {@link RemoteObject}.
-     */
-    @Override
-    public <T> T getRemoteObject(int objectID, Class<T> iface) {
-        @SuppressWarnings({"unchecked"})
-        T remoteObject = (T) this.endPoint.getRemoteObject(this, objectID, new Class<?>[] {iface});
-        return remoteObject;
-    }
-
-    /**
-     * Returns a proxy object that implements the specified interfaces. Methods
-     * invoked on the proxy object will be invoked remotely on the object with
-     * the specified ID in the ObjectSpace for the specified connection. If the
-     * remote end of the connection has not {@link #addConnection(Connection)
-     * added} the connection to the ObjectSpace, the remote method invocations
-     * will be ignored.
-     * <p>
-     * Methods that return a value will throw {@link TimeoutException} if the
-     * response is not received with the
-     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
-     * <p>
-     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
-     * (the default), then methods that return a value must not be called from
-     * the update thread for the connection. An exception will be thrown if this
-     * occurs. Methods with a void return value can be called on the update
-     * thread.
-     * <p>
-     * If a proxy returned from this method is part of an object graph sent over
-     * the network, the object graph on the receiving side will have the proxy
-     * object replaced with the registered object.
-     *
-     * @see RemoteObject
-     */
-    @Override
-    public RemoteObject getRemoteObject(int objectID, Class<?>... ifaces) {
-       return this.endPoint.getRemoteObject(this, objectID, ifaces);
-    }
-
-    /**
      * Invoked when a {@link Channel} has been idle for a while.
      */
     @Override
-    public void userEventTriggered(ChannelHandlerContext context, Object event) throws Exception {
+    public
+    void userEventTriggered(ChannelHandlerContext context, Object event) throws Exception {
         //      if (e.getState() == IdleState.READER_IDLE) {
         //      e.getChannel().close();
         //  } else if (e.getState() == IdleState.WRITER_IDLE) {
@@ -406,12 +407,14 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext context, Object message) throws Exception {
+    public
+    void channelRead(ChannelHandlerContext context, Object message) throws Exception {
         channelRead(message);
         ReferenceCountUtil.release(message);
     }
 
-    public void channelRead(Object object) throws Exception {
+    public
+    void channelRead(Object object) throws Exception {
 
         // prevent close from occurring SMACK in the middle of a message in progress.
         // delay close until it's finished.
@@ -430,13 +433,14 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     }
 
     @Override
-    public void channelInactive(ChannelHandlerContext context) throws Exception {
+    public
+    void channelInactive(ChannelHandlerContext context) throws Exception {
         // if we are in the middle of a message, hold off.
         if (this.messageInProgress.get()) {
             synchronized (this.messageInProgressLock) {
                 try {
                     this.messageInProgressLock.wait();
-                } catch (InterruptedException e) {
+                } catch (InterruptedException ignored) {
                 }
             }
         }
@@ -451,19 +455,24 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
 
             if (isTCP) {
                 type = "TCP";
-            } else if (channelClass == NioDatagramChannel.class) {
+            }
+            else if (channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class) {
                 type = "UDP";
-            } else if (channelClass == EpollDatagramChannel.class) {
-                type = "UDP";
-            } else if (channelClass == NioUdtByteConnectorChannel.class) {
+            }
+            else if (channelClass == NioUdtByteConnectorChannel.class) {
                 type = "UDT";
-            } else if (channelClass == LocalChannel.class) {
+            }
+            else if (channelClass == LocalChannel.class) {
                 type = "LOCAL";
-            } else {
+            }
+            else {
                 type = "UNKNOWN";
             }
 
-            this.logger.info("Closed remote {} connection: {}", type, channel.remoteAddress().toString());
+            this.logger.info("Closed remote {} connection: {}",
+                             type,
+                             channel.remoteAddress()
+                                    .toString());
         }
 
         // our master channels are TCP/LOCAL (which are mutually exclusive). Only key disconnect events based on the status of them.
@@ -486,21 +495,22 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Closes the connection
      */
     @Override
-    public final void close() {
+    public final
+    void close() {
         // only close if we aren't already in the middle of closing.
         if (this.closeInProgress.compareAndSet(false, true)) {
-            int idleTimeout = this.endPoint.getIdleTimeout();
-            if (idleTimeout == 0) {
+            int idleTimeoutMs = this.endPoint.getIdleTimeout();
+            if (idleTimeoutMs == 0) {
                 // default is 2 second timeout, in milliseconds.
-                idleTimeout = 2000;
+                idleTimeoutMs = 2000;
             }
 
             // if we are in the middle of a message, hold off.
             synchronized (this.messageInProgressLock) {
                 if (this.messageInProgress.get()) {
                     try {
-                        this.messageInProgressLock.wait(idleTimeout);
-                    } catch (InterruptedException e) {
+                        this.messageInProgressLock.wait(idleTimeoutMs);
+                    } catch (InterruptedException ignored) {
                     }
                 }
             }
@@ -521,8 +531,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             synchronized (this.closeInProgressLock) {
                 if (!this.alreadyClosed.get()) {
                     try {
-                        this.closeInProgressLock.wait(idleTimeout);
-                    } catch (Exception e) {
+                        this.closeInProgressLock.wait(idleTimeoutMs);
+                    } catch (Exception ignored) {
                     }
                 }
             }
@@ -530,7 +540,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
+    public
+    void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
         if (!(cause instanceof IOException)) {
             Channel channel = context.channel();
 
@@ -553,27 +564,29 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * Expose methods to modify the connection listeners.
      */
     @Override
-    public final ListenerBridge listeners() {
+    public final
+    ListenerBridge listeners() {
         return this;
     }
 
     /**
      * Adds a listener to this connection/endpoint to be notified of
      * connect/disconnect/idle/receive(object) events.
-     * <p>
+     * <p/>
      * If the listener already exists, it is not added again.
-     * <p>
+     * <p/>
      * When called by a server, NORMALLY listeners are added at the GLOBAL level
      * (meaning, I add one listener, and ALL connections are notified of that
      * listener.
-     * <p>
+     * <p/>
      * It is POSSIBLE to add a server connection ONLY (ie, not global) listener
      * (via connection.addListener), meaning that ONLY that listener attached to
      * the connection is notified on that event (ie, admin type listeners)
      */
     @SuppressWarnings("rawtypes")
     @Override
-    public final void add(ListenerRaw listener) {
+    public final
+    void add(ListenerRaw listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -586,31 +599,34 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             // is empty, we can remove it from this connection.
             synchronized (this) {
                 if (this.localListenerManager == null) {
-                    this.localListenerManager = ((EndPointServer)this.endPoint).addListenerManager(this);
+                    this.localListenerManager = ((EndPointServer) this.endPoint).addListenerManager(this);
                 }
                 this.localListenerManager.add(listener);
             }
 
-        } else {
-            this.endPoint.listeners().add(listener);
+        }
+        else {
+            this.endPoint.listeners()
+                         .add(listener);
         }
     }
 
     /**
      * Removes a listener from this connection/endpoint to NO LONGER be notified
      * of connect/disconnect/idle/receive(object) events.
-     * <p>
+     * <p/>
      * When called by a server, NORMALLY listeners are added at the GLOBAL level
      * (meaning, I add one listener, and ALL connections are notified of that
      * listener.
-     * <p>
+     * <p/>
      * It is POSSIBLE to remove a server-connection 'non-global' listener (via
      * connection.removeListener), meaning that ONLY that listener attached to
      * the connection is removed
      */
     @SuppressWarnings("rawtypes")
     @Override
-    public final void remove(ListenerRaw listener) {
+    public final
+    void remove(ListenerRaw listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -626,12 +642,14 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
                     this.localListenerManager.remove(listener);
 
                     if (!this.localListenerManager.hasListeners()) {
-                        ((EndPointServer)this.endPoint).removeListenerManager(this);
+                        ((EndPointServer) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
-        } else {
-            this.endPoint.listeners().remove(listener);
+        }
+        else {
+            this.endPoint.listeners()
+                         .remove(listener);
         }
     }
 
@@ -640,7 +658,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * LONGER be notified of connect/disconnect/idle/receive(object) events.
      */
     @Override
-    public final void removeAll() {
+    public final
+    void removeAll() {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -656,11 +675,13 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
                     this.localListenerManager.removeAll();
                     this.localListenerManager = null;
 
-                    ((EndPointServer)this.endPoint).removeListenerManager(this);
+                    ((EndPointServer) this.endPoint).removeListenerManager(this);
                 }
             }
-        } else {
-            this.endPoint.listeners().removeAll();
+        }
+        else {
+            this.endPoint.listeners()
+                         .removeAll();
         }
     }
 
@@ -670,7 +691,8 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
      * connect/disconnect/idle/receive(object) events.
      */
     @Override
-    public final void removeAll(Class<?> classType) {
+    public final
+    void removeAll(Class<?> classType) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -687,27 +709,32 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
 
                     if (!this.localListenerManager.hasListeners()) {
                         this.localListenerManager = null;
-                        ((EndPointServer)this.endPoint).removeListenerManager(this);
+                        ((EndPointServer) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
-        } else {
-            this.endPoint.listeners().removeAll(classType);
+        }
+        else {
+            this.endPoint.listeners()
+                         .removeAll(classType);
         }
     }
 
     @Override
-    public String toString() {
+    public
+    String toString() {
         return this.channelWrapper.toString();
     }
 
     @Override
-    public int hashCode() {
+    public
+    int hashCode() {
         return id();
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public
+    boolean equals(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -723,16 +750,154 @@ public class ConnectionImpl extends ChannelInboundHandlerAdapter
             if (other.channelWrapper != null) {
                 return false;
             }
-        } else if (!this.channelWrapper.equals(other.channelWrapper)) {
+        }
+        else if (!this.channelWrapper.equals(other.channelWrapper)) {
             return false;
         }
-        if (this.name == null) {
-            if (other.name != null) {
-                return false;
-            }
-        } else if (!this.name.equals(other.name)) {
-            return false;
-        }
+
         return true;
+    }
+
+
+    //
+    //
+    // RMI methods
+    //
+
+    volatile RegistrationLatch registrationLatch;
+
+    class RegistrationLatch {
+        final CountDownLatch latch = new CountDownLatch(1);
+        Object remoteObject;
+        boolean hasError = false;
+    }
+
+
+    private final AtomicInteger rmiObjectIdCounter = new AtomicInteger(0);
+
+
+    @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked"})
+    @Override
+    public
+    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Iface> remoteImplementationInterface,
+                                                         final Class<Impl> remoteImplementationClass) throws NetException {
+
+        // only one register can happen at a time
+        synchronized (rmiObjectIdCounter) {
+            registrationLatch = new RegistrationLatch();
+
+            // since this synchronous, we want to wait for the response before we continue
+            TCP(new RmiRegistration(remoteImplementationClass.getName())).flush();
+
+            try {
+                if (!registrationLatch.latch.await(2, TimeUnit.SECONDS)) {
+                    final String errorMessage = "Timed out getting registration ID for: " + remoteImplementationClass;
+                    logger.error(errorMessage);
+                    throw new NetException(errorMessage);
+                }
+            } catch (InterruptedException e) {
+                final String errorMessage = "Error getting registration ID for: " + remoteImplementationClass;
+                logger.error(errorMessage, e);
+                throw new NetException(errorMessage, e);
+            }
+
+            // local var to prevent double hit on volatile field
+            final RegistrationLatch latch = registrationLatch;
+            if (latch.hasError) {
+                final String errorMessage = "Error getting registration ID for: " + remoteImplementationClass;
+                logger.error(errorMessage);
+                throw new NetException(errorMessage);
+            }
+
+            return (Iface) latch.remoteObject;
+        }
+    }
+
+    void registerInternal(final ConnectionImpl connection, final RmiRegistration remoteRegistration) {
+        final String implementationClassName = remoteRegistration.remoteImplementationClass;
+
+
+        if (implementationClassName != null) {
+            // THIS IS ON THE SERVER SIDE
+            // create a new ID, and register the ID and new object (must create a new one) in the object maps
+
+            Class<?> implementationClass;
+
+            try {
+                implementationClass = Class.forName(implementationClassName);
+            } catch (Exception e) {
+                logger.error("Error registering RMI class " + implementationClassName, e);
+                connection.TCP(new RmiRegistration()).flush();
+                return;
+            }
+
+            try {
+                final Object remotePrimaryObject = implementationClass.newInstance();
+                rmiBridge.register(rmiObjectIdCounter.getAndIncrement(), remotePrimaryObject);
+
+                LinkedList<ClassObject> remoteClasses = new LinkedList<ClassObject>();
+                remoteClasses.add(new ClassObject(implementationClass, remotePrimaryObject));
+
+                ClassObject remoteClassObject;
+                while ((remoteClassObject = remoteClasses.pollFirst()) != null) {
+                    // we have to check the class that is being registered for any additional proxy information
+                    for (Field field : remoteClassObject.clazz.getDeclaredFields()) {
+                        Annotation[] annotations = field.getDeclaredAnnotations();
+
+                        if (annotations != null) {
+                            for (Annotation annotation : annotations) {
+                                if (annotation.annotationType().equals(RemoteProxy.class)) {
+                                    boolean prev = field.isAccessible();
+                                    field.setAccessible(true);
+                                    final Object o = field.get(remoteClassObject.object);
+                                    field.setAccessible(prev);
+                                    final Class<?> type = field.getType();
+
+                                    rmiBridge.register(rmiObjectIdCounter.getAndIncrement(), o);
+
+                                    remoteClasses.offerLast(new ClassObject(type, o));
+                                }
+                            }
+                        }
+                    }
+                }
+
+//                connection.TCP(new RmiRegistration()).flush();
+                connection.TCP(new RmiRegistration(remotePrimaryObject)).flush();
+            } catch (Exception e) {
+                logger.error("Error registering RMI class " + implementationClassName, e);
+                connection.TCP(new RmiRegistration()).flush();
+            }
+        } else {
+            // THIS IS ON THE CLIENT SIDE
+
+            // the next two use a local var, so that there isn't a double hit for volatile access
+            final RegistrationLatch latch = this.registrationLatch;
+            latch.hasError = remoteRegistration.hasError;
+
+            if (!remoteRegistration.hasError) {
+                latch.remoteObject = remoteRegistration.remoteObject;
+            }
+
+            // notify the original register that it may continue. We access the volatile field directly, so that it's members are updated
+            registrationLatch.latch.countDown();
+        }
+    }
+
+
+    /**
+     * Returns the object registered with the specified ID.
+     */
+    public
+    Object getRegisteredObject(final int objectID) {
+        return rmiBridge.getRegisteredObject(objectID);
+    }
+
+    /**
+     * Returns the ID registered for the specified object, or Integer.MAX_VALUE if not found.
+     */
+    public
+    int getRegisteredId(final Object object) {
+        return rmiBridge.getRegisteredId(object);
     }
 }

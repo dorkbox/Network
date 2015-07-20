@@ -1,11 +1,5 @@
 package dorkbox.network.connection.registration.local;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPipeline;
-
-import org.slf4j.Logger;
-
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
@@ -13,6 +7,10 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
+import org.slf4j.Logger;
 
 public abstract class RegistrationLocalHandler extends RegistrationHandler {
 
@@ -52,18 +50,16 @@ public abstract class RegistrationLocalHandler extends RegistrationHandler {
      */
     @Override
     public void channelActive(ChannelHandlerContext context) throws Exception {
-        if (this.logger.isDebugEnabled()) {
-            Channel channel = context.channel();
+        Channel channel = context.channel();
 
-            StringBuilder builder = new StringBuilder(76);
-            builder.append("Connected to LOCAL connection. [");
-            builder.append(context.channel().localAddress());
-            builder.append(getConnectionDirection());
-            builder.append(channel.remoteAddress());
-            builder.append("]");
+        StringBuilder builder = new StringBuilder(76);
+        builder.append("Connected to LOCAL connection. [");
+        builder.append(context.channel().localAddress());
+        builder.append(getConnectionDirection());
+        builder.append(channel.remoteAddress());
+        builder.append("]");
 
-            this.logger.debug(builder.toString());
-        }
+        this.logger.debug(builder.toString());
     }
 
     /**

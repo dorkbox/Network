@@ -1,10 +1,26 @@
 package dorkbox.network;
 
+import dorkbox.network.connection.BootstrapWrapper;
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.EndPointClient;
+import dorkbox.network.connection.idle.IdleBridge;
+import dorkbox.network.connection.idle.IdleSender;
+import dorkbox.network.connection.registration.local.RegistrationLocalHandlerClient;
+import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientTCP;
+import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDP;
+import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDT;
+import dorkbox.network.util.exceptions.InitializationException;
+import dorkbox.network.util.exceptions.SecurityException;
+import dorkbox.network.util.udt.UdtEndpointProxy;
+import dorkbox.util.NamedThreadFactory;
+import dorkbox.util.OS;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.local.LocalAddress;
@@ -16,58 +32,50 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioSocketChannel;
 import io.netty.util.internal.PlatformDependent;
-
-import java.net.InetSocketAddress;
-
 import org.slf4j.Logger;
 
-import dorkbox.network.connection.BootstrapWrapper;
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPointClient;
-import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.connection.idle.IdleSender;
-import dorkbox.network.connection.registration.local.RegistrationLocalHandlerClient;
-import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientTCP;
-import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDP;
-import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDT;
-import dorkbox.network.util.SerializationManager;
-import dorkbox.network.util.exceptions.InitializationException;
-import dorkbox.network.util.exceptions.SecurityException;
-import dorkbox.network.util.udt.UdtEndpointProxy;
-import dorkbox.util.NamedThreadFactory;
-import dorkbox.util.OS;
+import java.io.IOException;
+import java.net.InetSocketAddress;
 
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's ASYNC.
  */
-public class Client extends EndPointClient {
+public
+class Client extends EndPointClient {
+
+    private final Configuration options;
 
     /**
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme
      */
-    public Client() throws InitializationException, SecurityException {
-        this(new ConnectionOptions(LOCAL_CHANNEL));
+    public
+    Client() throws InitializationException, SecurityException, IOException {
+        this(new Configuration(LOCAL_CHANNEL));
     }
 
     /**
      * Starts a TCP & UDP client (or a LOCAL client), with the specified serialization scheme
      */
-    public Client(String host, int tcpPort, int udpPort, int udtPort, String localChannelName, SerializationManager serializationManager)
-            throws InitializationException, SecurityException {
-        this(new ConnectionOptions(host, tcpPort, udpPort, udtPort, localChannelName, serializationManager));
+    public
+    Client(String host, int tcpPort, int udpPort, int udtPort, String localChannelName)
+                    throws InitializationException, SecurityException, IOException {
+        this(new Configuration(host, tcpPort, udpPort, udtPort, localChannelName));
     }
 
     /**
      * Starts a REMOTE <b>only</b> client, which will connect to the specified host using the specified Connections Options
      */
-    public Client(ConnectionOptions options) throws InitializationException, SecurityException {
-        super("Client", options);
+    public
+    Client(final Configuration options) throws InitializationException, SecurityException, IOException {
+        super(options);
+        this.options = options;
+
+        String threadName = Client.class.getSimpleName();
 
         Logger logger2 = this.logger;
         if (options.localChannelName != null && (options.tcpPort > 0 || options.udpPort > 0 || options.host != null) ||
-            options.localChannelName == null && (options.tcpPort == 0 || options.udpPort == 0 || options.host == null)
-           ) {
-            String msg = this.name + " Local channel use and TCP/UDP use are MUTUALLY exclusive. Unable to determine intent.";
+            options.localChannelName == null && (options.tcpPort == 0 || options.udpPort == 0 || options.host == null)) {
+            String msg = threadName + " Local channel use and TCP/UDP use are MUTUALLY exclusive. Unable to determine intent.";
             logger2.error(msg);
             throw new IllegalArgumentException(msg);
         }
@@ -87,7 +95,10 @@ public class Client extends EndPointClient {
 
         // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
         SecurityManager s = System.getSecurityManager();
-        ThreadGroup nettyGroup = new ThreadGroup(s != null ? s.getThreadGroup() : Thread.currentThread().getThreadGroup(), this.name + " (Netty)");
+        ThreadGroup nettyGroup = new ThreadGroup(s != null ?
+                                                                 s.getThreadGroup() :
+                                                                 Thread.currentThread()
+                                                                       .getThreadGroup(), threadName + " (Netty)");
 
         if (options.localChannelName != null && options.tcpPort < 0 && options.udpPort < 0 && options.udtPort < 0) {
             // no networked bootstraps. LOCAL connection only
@@ -96,13 +107,12 @@ public class Client extends EndPointClient {
 
             EventLoopGroup boss;
 
-            boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-LOCAL", nettyGroup));
+            boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-LOCAL", nettyGroup));
 
             localBootstrap.group(boss)
                           .channel(LocalChannel.class)
                           .remoteAddress(new LocalAddress(options.localChannelName))
-                          .handler(new RegistrationLocalHandlerClient(this.name,
-                                                                      this.registrationWrapper));
+                          .handler(new RegistrationLocalHandlerClient(threadName, this.registrationWrapper));
 
             manageForShutdown(boss);
         }
@@ -115,23 +125,23 @@ public class Client extends EndPointClient {
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
-                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
+                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-TCP", nettyGroup));
                     tcpBootstrap.channel(OioSocketChannel.class);
-                } else {
-                    if (OS.isLinux()) {
-                        // JNI network stack is MUCH faster (but only on linux)
-                        boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
-                        tcpBootstrap.channel(EpollSocketChannel.class);
-                    } else {
-                        boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-TCP", nettyGroup));
-                        tcpBootstrap.channel(NioSocketChannel.class);
-                    }
+                }
+                else if (OS.isLinux()) {
+                    // JNI network stack is MUCH faster (but only on linux)
+                    boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-TCP", nettyGroup));
+                    tcpBootstrap.channel(EpollSocketChannel.class);
+                }
+                else {
+                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-TCP", nettyGroup));
+                    tcpBootstrap.channel(NioSocketChannel.class);
                 }
 
                 tcpBootstrap.group(boss)
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .remoteAddress(options.host, options.tcpPort)
-                            .handler(new RegistrationRemoteHandlerClientTCP(this.name,
+                            .handler(new RegistrationRemoteHandlerClientTCP(threadName,
                                                                             this.registrationWrapper,
                                                                             this.serializationManager));
 
@@ -152,11 +162,16 @@ public class Client extends EndPointClient {
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
-                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-UDP", nettyGroup));
+                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-UDP", nettyGroup));
                     udpBootstrap.channel(OioDatagramChannel.class);
-                } else {
-                    // CANNOT USE EpollDatagramChannel on the client!
-                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-UDP", nettyGroup));
+                }
+                else if (OS.isLinux()) {
+                    // JNI network stack is MUCH faster (but only on linux)
+                    boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-UDP", nettyGroup));
+                    udpBootstrap.channel(EpollDatagramChannel.class);
+                }
+                else {
+                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-UDP", nettyGroup));
                     udpBootstrap.channel(NioDatagramChannel.class);
                 }
 
@@ -164,7 +179,7 @@ public class Client extends EndPointClient {
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .localAddress(new InetSocketAddress(0))
                             .remoteAddress(new InetSocketAddress(options.host, options.udpPort))
-                            .handler(new RegistrationRemoteHandlerClientUDP(this.name,
+                            .handler(new RegistrationRemoteHandlerClientUDP(threadName,
                                                                             this.registrationWrapper,
                                                                             this.serializationManager));
 
@@ -200,14 +215,14 @@ public class Client extends EndPointClient {
 
                     EventLoopGroup boss;
 
-                    boss = UdtEndpointProxy.getClientWorker(DEFAULT_THREAD_POOL_SIZE, this.name, nettyGroup);
+                    boss = UdtEndpointProxy.getClientWorker(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
 
                     UdtEndpointProxy.setChannelFactory(udtBootstrap);
 
                     udtBootstrap.group(boss)
                                 .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                                 .remoteAddress(options.host, options.udtPort)
-                                .handler(new RegistrationRemoteHandlerClientUDT(this.name,
+                                .handler(new RegistrationRemoteHandlerClientUDT(threadName,
                                                                                 this.registrationWrapper,
                                                                                 this.serializationManager));
 
@@ -220,14 +235,16 @@ public class Client extends EndPointClient {
     /**
      * Allows the client to reconnect to the last connected server
      */
-    public void reconnect() {
+    public
+    void reconnect() {
         reconnect(this.connectionTimeout);
     }
 
     /**
      * Allows the client to reconnect to the last connected server
      */
-    public void reconnect(int connectionTimeout) {
+    public
+    void reconnect(int connectionTimeout) {
         // close out all old connections
         close();
 
@@ -237,21 +254,21 @@ public class Client extends EndPointClient {
 
     /**
      * will attempt to connect to the server, with a 30 second timeout.
-     *
-     * @param connectionTimeout wait for x milliseconds. 0 will wait indefinitely
      */
-    public void connect() {
+    public
+    void connect() {
         connect(30000);
     }
 
     /**
      * will attempt to connect to the server, and will the specified timeout.
-     * <p>
+     * <p/>
      * will BLOCK until completed
      *
      * @param connectionTimeout wait for x milliseconds. 0 will wait indefinitely
      */
-    public void connect(int connectionTimeout) {
+    public
+    void connect(int connectionTimeout) {
         this.connectionTimeout = connectionTimeout;
 
         // make sure we are not trying to connect during a close or stop event.
@@ -277,35 +294,49 @@ public class Client extends EndPointClient {
     /**
      * Expose methods to send objects to a destination when the connection has become idle.
      */
-    public IdleBridge sendOnIdle(IdleSender<?, ?> sender) {
-        return this.connectionManager.getConnection0().sendOnIdle(sender);
+    public
+    IdleBridge sendOnIdle(IdleSender<?, ?> sender) {
+        return this.connectionManager.getConnection0()
+                                     .sendOnIdle(sender);
     }
 
     /**
      * Expose methods to send objects to a destination when the connection has become idle.
      */
-    public IdleBridge sendOnIdle(Object message) {
-        return this.connectionManager.getConnection0().sendOnIdle(message);
+    public
+    IdleBridge sendOnIdle(Object message) {
+        return this.connectionManager.getConnection0()
+                                     .sendOnIdle(message);
     }
 
     /**
      * Fetches the connection used by the client.
-     * <p>
+     * <p/>
      * Make <b>sure</b> that you only call this <b>after</b> the client connects!
-     * <p>
-     * This is preferred to {@link getConnections}, as it properly does some error checking
+     * <p/>
+     * This is preferred to {@link EndPoint#getConnections()} getConnections()}, as it properly does some error checking
      */
-    public Connection getConnection() {
+    public
+    Connection getConnection() {
         return this.connectionManager.getConnection0();
     }
 
     /**
+     * Fetches the host (server) name for this client.
+     */
+    public
+    String getHost() {
+        return this.options.host;
+    }
+
+    /**
      * Closes all connections ONLY (keeps the server/client running).
-     * <p>
+     * <p/>
      * This is used, for example, when reconnecting to a server.
      */
     @Override
-    public void close() {
+    public
+    void close() {
         synchronized (this.registrationLock) {
             this.registrationLock.notify();
         }

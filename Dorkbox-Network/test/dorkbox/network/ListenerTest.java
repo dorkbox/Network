@@ -2,9 +2,11 @@ package dorkbox.network;
 
 
 import dorkbox.network.connection.*;
+import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
+import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,8 +32,8 @@ class ListenerTest extends BaseTest {
     // quick and dirty test to also test connection sub-classing
     class TestConnectionA extends ConnectionImpl {
         public
-        TestConnectionA(Class<? extends EndPoint> type) {
-            super(type);
+        TestConnectionA(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+            super(logger, endPoint, rmiBridge);
         }
 
         public
@@ -43,8 +45,8 @@ class ListenerTest extends BaseTest {
 
     class TestConnectionB extends TestConnectionA {
         public
-        TestConnectionB(Class<? extends EndPoint> type) {
-            super(type);
+        TestConnectionB(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+            super(logger, endPoint, rmiBridge);
         }
 
         @Override
@@ -60,15 +62,15 @@ class ListenerTest extends BaseTest {
     @Test
     public
     void listener() throws SecurityException, InitializationException, IOException {
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
 
-        Server server = new Server(connectionOptions) {
+        Server server = new Server(configuration) {
             @Override
             public
-            TestConnectionA newConnection(Class<? extends EndPoint> type) {
-                return new TestConnectionA(type);
+            TestConnectionA newConnection(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+                return new TestConnectionA(logger, endPoint, rmiBridge);
             }
         };
 
@@ -152,7 +154,7 @@ class ListenerTest extends BaseTest {
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
 
         client.disableRemoteKeyValidation();
         addEndPoint(client);

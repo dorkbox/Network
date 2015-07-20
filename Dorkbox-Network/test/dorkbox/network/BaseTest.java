@@ -8,6 +8,7 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
 import ch.qos.logback.classic.joran.JoranConfigurator;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.ConsoleAppender;
+import com.esotericsoftware.minlog.Log;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.util.entropy.Entropy;
 import dorkbox.network.util.entropy.SimpleEntropy;
@@ -44,6 +45,9 @@ class BaseTest {
     public
     BaseTest() {
         System.out.println("---- " + getClass().getSimpleName());
+
+        // set the minlog logging level
+        Log.DEBUG();
 
         // assume SLF4J is bound to logback in the current environment
         Logger rootLogger = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
@@ -95,40 +99,41 @@ class BaseTest {
         this.endPoints.add(endPoint);
     }
 
+    /**
+     * Immediately stop the endpoints
+     */
     public
     void stopEndPoints() {
-        stopEndPoints(0);
+        stopEndPoints(1);
     }
 
     public
     void stopEndPoints(int stopAfterMillis) {
-        if (stopAfterMillis <= 0) {
-            stopAfterMillis = 1;
-        }
-
-        if (this.timer == null) {
-            this.timer = new Timer("UnitTest timeout timer");
-        }
-
-        // We have to ALWAYS run this in a new timer, BECAUSE if stopEndPoints() is called from a client/server thread, it will DEADLOCK
-        this.timer.schedule(new TimerTask() {
-            @Override
-            public
-            void run() {
-                synchronized (BaseTest.this.endPoints) {
-                    for (EndPoint endPoint : BaseTest.this.endPoints) {
-                        endPoint.stop();
-                        endPoint.waitForShutdown();
-                    }
-                    BaseTest.this.endPoints.clear();
-                }
-                if (BaseTest.this.timer != null) {
-                    BaseTest.this.timer.cancel();
-                    BaseTest.this.timer.purge();
-                    BaseTest.this.timer = null;
-                }
+        if (stopAfterMillis > 0) {
+            if (this.timer == null) {
+                this.timer = new Timer("UnitTest timeout timer");
             }
-        }, stopAfterMillis);
+
+            // We have to ALWAYS run this in a new timer, BECAUSE if stopEndPoints() is called from a client/server thread, it will DEADLOCK
+            this.timer.schedule(new TimerTask() {
+                @Override
+                public
+                void run() {
+                    synchronized (BaseTest.this.endPoints) {
+                        for (EndPoint endPoint : BaseTest.this.endPoints) {
+                            endPoint.stop();
+                            endPoint.waitForShutdown();
+                        }
+                        BaseTest.this.endPoints.clear();
+                    }
+                    if (BaseTest.this.timer != null) {
+                        BaseTest.this.timer.cancel();
+                        BaseTest.this.timer.purge();
+                        BaseTest.this.timer = null;
+                    }
+                }
+            }, stopAfterMillis);
+        }
     }
 
     public
@@ -140,6 +145,9 @@ class BaseTest {
         waitForThreads0(stopAfterSecondsOrMillis);
     }
 
+    /**
+     * Wait for threads until they are done (no timeout)
+     */
     public
     void waitForThreads() {
         waitForThreads0(0);
@@ -186,7 +194,7 @@ class BaseTest {
 
         // Give sockets a chance to close before starting the next test.
         try {
-            Thread.sleep(100);
+            Thread.sleep(1000);
         } catch (InterruptedException ignored) {
         }
     }

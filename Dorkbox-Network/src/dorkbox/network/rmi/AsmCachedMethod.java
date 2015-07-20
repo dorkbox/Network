@@ -1,12 +1,13 @@
 package dorkbox.network.rmi;
 
-import java.lang.reflect.InvocationTargetException;
-
 import com.esotericsoftware.reflectasm.MethodAccess;
 
+import java.lang.reflect.InvocationTargetException;
+
+public
 class AsmCachedMethod extends CachedMethod {
-    MethodAccess methodAccess;
-    int methodAccessIndex = -1;
+    public MethodAccess methodAccess;
+    public int methodAccessIndex = -1;
 
     @Override
     public Object invoke(Object target, Object[] args) throws IllegalAccessException, InvocationTargetException {

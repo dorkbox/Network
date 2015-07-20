@@ -4,9 +4,9 @@ package dorkbox.network;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.ConnectionSerializationManager;
-import dorkbox.network.util.KryoConnectionSerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -21,14 +21,16 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectLocal() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         System.out.println("---- " + "Local");
 
-        ConnectionOptions connectionOptions = new ConnectionOptions(EndPoint.LOCAL_CHANNEL);
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
+        Configuration configuration = new Configuration();
+        configuration.localChannelName = EndPoint.LOCAL_CHANNEL;
 
-        startServer(connectionOptions);
-        startClient(connectionOptions);
+        startServer(configuration);
+        startClient(configuration);
 
         waitForThreads(10);
     }
@@ -36,17 +38,18 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectTcp() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         System.out.println("---- " + "TCP");
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
 
-        startServer(connectionOptions);
+        startServer(configuration);
 
-        connectionOptions.host = host;
-        startClient(connectionOptions);
+        configuration.host = host;
+        startClient(configuration);
 
         waitForThreads(10);
     }
@@ -54,18 +57,19 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectTcpUdp() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         System.out.println("---- " + "TCP UDP");
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
 
-        startServer(connectionOptions);
+        startServer(configuration);
 
-        connectionOptions.host = host;
-        startClient(connectionOptions);
+        configuration.host = host;
+        startClient(configuration);
 
         waitForThreads(10);
     }
@@ -73,18 +77,19 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectTcpUdt() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         System.out.println("---- " + "TCP UDT");
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udtPort = udtPort;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udtPort = udtPort;
 
-        startServer(connectionOptions);
+        startServer(configuration);
 
-        connectionOptions.host = host;
-        startClient(connectionOptions);
+        configuration.host = host;
+        startClient(configuration);
 
         waitForThreads(10);
     }
@@ -92,27 +97,28 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectTcpUdpUdt() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         System.out.println("---- " + "TCP UDP UDT");
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.udtPort = udtPort;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.udtPort = udtPort;
 
-        startServer(connectionOptions);
+        startServer(configuration);
 
-        connectionOptions.host = host;
+        configuration.host = host;
 
-        startClient(connectionOptions);
+        startClient(configuration);
 
         waitForThreads(10);
     }
 
     private
-    Server startServer(ConnectionOptions connectionOptions) throws InitializationException, SecurityException, IOException {
-        Server server = new Server(connectionOptions);
+    Server startServer(Configuration configuration) throws InitializationException, SecurityException, IOException {
+        Server server = new Server(configuration);
 
         server.disableRemoteKeyValidation();
         addEndPoint(server);
@@ -145,10 +151,10 @@ class ConnectionTest extends BaseTest {
     }
 
     private
-    Client startClient(ConnectionOptions connectionOptions) throws InitializationException, SecurityException, IOException {
+    Client startClient(Configuration configuration) throws InitializationException, SecurityException, IOException {
         Client client;
-        if (connectionOptions != null) {
-            client = new Client(connectionOptions);
+        if (configuration != null) {
+            client = new Client(configuration);
         }
         else {
             client = new Client();
@@ -174,7 +180,7 @@ class ConnectionTest extends BaseTest {
     }
 
     private
-    void register(ConnectionSerializationManager kryoMT) {
+    void register(CryptoSerializationManager kryoMT) {
         kryoMT.register(BMessage.class);
     }
 

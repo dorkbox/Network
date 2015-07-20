@@ -23,12 +23,12 @@ class ReuseTest extends BaseTest {
         this.serverCount = new AtomicInteger(0);
         this.clientCount = new AtomicInteger(0);
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.host = host;
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.listeners()
@@ -52,7 +52,7 @@ class ReuseTest extends BaseTest {
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()

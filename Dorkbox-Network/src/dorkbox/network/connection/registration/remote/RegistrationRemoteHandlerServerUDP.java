@@ -1,19 +1,5 @@
 package dorkbox.network.connection.registration.remote;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandler.Sharable;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.socket.DatagramPacket;
-import io.netty.handler.codec.MessageToMessageCodec;
-
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.util.List;
-
-import org.slf4j.Logger;
-
 import dorkbox.network.Broadcast;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
@@ -21,12 +7,24 @@ import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.wrapper.UdpWrapper;
-import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler.Sharable;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.socket.DatagramPacket;
+import io.netty.handler.codec.MessageToMessageCodec;
+import org.slf4j.Logger;
+
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.util.List;
 
 @Sharable
 public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramPacket, UdpWrapper> {
@@ -37,10 +35,10 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
     private final String name;
     private final ByteBuf discoverResponseBuffer;
     private final RegistrationWrapper registrationWrapper;
-    private final SerializationManager serializationManager;
+    private final CryptoSerializationManager serializationManager;
 
 
-    public RegistrationRemoteHandlerServerUDP(String name, RegistrationWrapper registrationWrapper, SerializationManager serializationManager) {
+    public RegistrationRemoteHandlerServerUDP(String name, RegistrationWrapper registrationWrapper, CryptoSerializationManager serializationManager) {
         this.name = name + " Registration-UDP-Server";
         this.logger = org.slf4j.LoggerFactory.getLogger(this.name);
         this.registrationWrapper = registrationWrapper;
@@ -141,7 +139,7 @@ public class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<Da
         // registration is the ONLY thing NOT encrypted
         Logger logger2 = this.logger;
         RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
-        SerializationManager serializationManager2 = this.serializationManager;
+        CryptoSerializationManager serializationManager2 = this.serializationManager;
 
         if (serializationManager2.isEncrypted(data)) {
             // we need to FORWARD this message "down the pipeline".

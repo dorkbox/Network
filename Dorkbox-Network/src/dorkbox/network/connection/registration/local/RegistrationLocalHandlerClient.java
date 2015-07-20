@@ -1,17 +1,19 @@
 package dorkbox.network.connection.registration.local;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.util.ReferenceCountUtil;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.util.collections.IntMap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.util.ReferenceCountUtil;
 
-public class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
+public
+class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
 
-    public RegistrationLocalHandlerClient(String name, RegistrationWrapper registrationWrapper) {
+    public
+    RegistrationLocalHandlerClient(String name, RegistrationWrapper registrationWrapper) {
         super(name, registrationWrapper);
     }
 
@@ -27,11 +29,13 @@ public class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
      * STEP 2: Channel is now active. Start the registration process
      */
     @Override
-    public void channelActive(ChannelHandlerContext context) throws Exception {
+    public
+    void channelActive(ChannelHandlerContext context) throws Exception {
         if (logger.isDebugEnabled()) {
             super.channelActive(context);
         }
 
+        // client starts the registration process
         Channel channel = context.channel();
         channel.writeAndFlush(new Registration());
     }
@@ -40,12 +44,14 @@ public class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
      * @return the direction that traffic is going to this handler (" <== " or " ==> ")
      */
     @Override
-    protected String getConnectionDirection() {
+    protected
+    String getConnectionDirection() {
         return " ==> ";
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext context, Object message) throws Exception {
+    public
+    void channelRead(ChannelHandlerContext context, Object message) throws Exception {
         ReferenceCountUtil.release(message);
 
         Channel channel = context.channel();
@@ -60,14 +66,16 @@ public class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
 
         // have to setup new listeners
         if (metaChannel != null) {
-            channel.pipeline().remove(this);
+            channel.pipeline()
+                   .remove(this);
 
             // Event though a local channel is XOR with everything else, we still have to make the client clean up it's state.
             registrationWrapper.registerNextProtocol0();
 
             Connection connection = metaChannel.connection;
             registrationWrapper.connectionConnected0(connection);
-        } else {
+        }
+        else {
             // this should NEVER happen!
             logger.error("Error registering LOCAL channel! MetaChannel is null!");
             shutdown(registrationWrapper, channel);

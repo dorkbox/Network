@@ -1,5 +1,5 @@
 package dorkbox.network.util;
 
-public interface EndpointTool {
+public interface EndPointTool {
 
 }

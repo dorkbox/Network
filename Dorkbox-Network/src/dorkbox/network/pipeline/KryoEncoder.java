@@ -7,18 +7,18 @@ import io.netty.handler.codec.MessageToByteEncoder;
 
 import com.esotericsoftware.kryo.KryoException;
 
-import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 
 @Sharable
 public class KryoEncoder extends MessageToByteEncoder<Object> {
     private static final int reservedLengthIndex = 4;
-    private final SerializationManager kryoWrapper;
+    private final CryptoSerializationManager kryoWrapper;
     private final OptimizeUtilsByteBuf optimize;
 
 
-    public KryoEncoder(SerializationManager kryoWrapper) {
+    public KryoEncoder(CryptoSerializationManager kryoWrapper) {
         super();
         this.kryoWrapper = kryoWrapper;
         this.optimize = OptimizeUtilsByteBuf.get();
@@ -26,7 +26,7 @@ public class KryoEncoder extends MessageToByteEncoder<Object> {
 
     // the crypto writer will override this
     @SuppressWarnings("unused")
-    protected void writeObject(SerializationManager kryoWrapper, ChannelHandlerContext context, Object msg, ByteBuf buffer) {
+    protected void writeObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext context, Object msg, ByteBuf buffer) {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         kryoWrapper.write(buffer, msg);
     }

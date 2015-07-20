@@ -24,18 +24,18 @@ class PingTest extends BaseTest {
     void pingTCP() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
 
@@ -60,18 +60,18 @@ class PingTest extends BaseTest {
     void pingTCP_testListeners1() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
 
@@ -117,18 +117,18 @@ class PingTest extends BaseTest {
     void pingTCP_testListeners2() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
 
@@ -166,20 +166,20 @@ class PingTest extends BaseTest {
     void pingUDP() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.host = host;
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
 
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
 
@@ -207,19 +207,19 @@ class PingTest extends BaseTest {
     void pingUDT() throws InitializationException, SecurityException, IOException {
         this.response = -1;
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udtPort = udtPort;
-        connectionOptions.host = host;
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udtPort = udtPort;
+        configuration.host = host;
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
 

@@ -22,12 +22,12 @@ class ReconnectTest extends BaseTest {
     void reconnect() throws InitializationException, SecurityException, IOException {
         final Timer timer = new Timer();
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
 
 
-        final Server server = new Server(connectionOptions);
+        final Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
@@ -50,7 +50,7 @@ class ReconnectTest extends BaseTest {
         // ----
 
         final AtomicInteger reconnectCount = new AtomicInteger();
-        final Client client = new Client(connectionOptions);
+        final Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()

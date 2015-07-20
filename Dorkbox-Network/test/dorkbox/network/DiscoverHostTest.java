@@ -19,12 +19,12 @@ class DiscoverHostTest extends BaseTest {
     public
     void broadcast() throws InitializationException, SecurityException, IOException {
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.host = host;
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
@@ -38,7 +38,7 @@ class DiscoverHostTest extends BaseTest {
             return;
         }
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()

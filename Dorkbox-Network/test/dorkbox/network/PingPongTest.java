@@ -3,9 +3,9 @@ package dorkbox.network;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.ConnectionSerializationManager;
-import dorkbox.network.util.KryoConnectionSerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -31,19 +31,21 @@ class PingPongTest extends BaseTest {
     @Test
     public
     void pingPong() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         // UDP data is kinda big. Make sure it fits into one packet.
         int origSize = EndPoint.udpMaxSize;
         EndPoint.udpMaxSize = 2048;
 
         this.fail = "Data not received.";
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.udtPort = udtPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.udtPort = udtPort;
+        configuration.host = host;
+
 
         final Data dataTCP = new Data();
         populateData(dataTCP, TYPE.TCP);
@@ -52,7 +54,7 @@ class PingPongTest extends BaseTest {
         final Data dataUDT = new Data();
         populateData(dataUDT, TYPE.UDT);
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
@@ -100,7 +102,7 @@ class PingPongTest extends BaseTest {
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
@@ -199,11 +201,11 @@ class PingPongTest extends BaseTest {
         EndPoint.udpMaxSize = origSize;
     }
 
-    private
+    private static
     void populateData(Data data, TYPE type) {
         data.type = type;
 
-        StringBuilder buffer = new StringBuilder();
+        StringBuilder buffer = new StringBuilder(3001);
         for (int i = 0; i < 3000; i++) {
             buffer.append('a');
         }
@@ -232,7 +234,7 @@ class PingPongTest extends BaseTest {
     }
 
     private
-    void register(ConnectionSerializationManager kryoMT) {
+    void register(CryptoSerializationManager kryoMT) {
         kryoMT.register(int[].class);
         kryoMT.register(short[].class);
         kryoMT.register(float[].class);
@@ -254,7 +256,7 @@ class PingPongTest extends BaseTest {
         kryoMT.register(TYPE.class);
     }
 
-    static public
+    public static
     class Data {
         public TYPE type;
         public String string;

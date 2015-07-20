@@ -1,8 +1,8 @@
 package dorkbox.network;
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.KryoConnectionSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -19,15 +19,15 @@ class MultipleServerTest extends BaseTest {
     @Test
     public
     void multipleServers() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        KryoCryptoSerializationManager.DEFAULT.register(String[].class);
 
-        ConnectionOptions connectionOptions1 = new ConnectionOptions();
-        connectionOptions1.tcpPort = tcpPort;
-        connectionOptions1.udpPort = udpPort;
-        connectionOptions1.localChannelName = "chan1";
-        connectionOptions1.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        connectionOptions1.serializationManager.register(String[].class);
+        Configuration configuration1 = new Configuration();
+        configuration1.tcpPort = tcpPort;
+        configuration1.udpPort = udpPort;
+        configuration1.localChannelName = "chan1";
 
-        Server server1 = new Server(connectionOptions1);
+        Server server1 = new Server(configuration1);
         server1.disableRemoteKeyValidation();
         addEndPoint(server1);
 
@@ -46,14 +46,12 @@ class MultipleServerTest extends BaseTest {
                    }
                });
 
-        ConnectionOptions connectionOptions2 = new ConnectionOptions();
-        connectionOptions2.tcpPort = tcpPort + 1;
-        connectionOptions2.udpPort = udpPort + 1;
-        connectionOptions2.localChannelName = "chan2";
-        connectionOptions2.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        connectionOptions2.serializationManager.register(String[].class);
+        Configuration configuration2 = new Configuration();
+        configuration2.tcpPort = tcpPort + 1;
+        configuration2.udpPort = udpPort + 1;
+        configuration2.localChannelName = "chan2";
 
-        Server server2 = new Server(connectionOptions2);
+        Server server2 = new Server(configuration2);
         server2.disableRemoteKeyValidation();
 
         addEndPoint(server2);
@@ -74,10 +72,10 @@ class MultipleServerTest extends BaseTest {
 
         // ----
 
-        connectionOptions1.localChannelName = null;
-        connectionOptions1.host = host;
+        configuration1.localChannelName = null;
+        configuration1.host = host;
 
-        Client client1 = new Client(connectionOptions1);
+        Client client1 = new Client(configuration1);
         client1.disableRemoteKeyValidation();
         addEndPoint(client1);
         client1.listeners()
@@ -92,10 +90,10 @@ class MultipleServerTest extends BaseTest {
         client1.connect(5000);
 
 
-        connectionOptions2.localChannelName = null;
-        connectionOptions2.host = host;
+        configuration2.localChannelName = null;
+        configuration2.host = host;
 
-        Client client2 = new Client(connectionOptions2);
+        Client client2 = new Client(configuration2);
         client2.disableRemoteKeyValidation();
         addEndPoint(client2);
         client2.listeners()

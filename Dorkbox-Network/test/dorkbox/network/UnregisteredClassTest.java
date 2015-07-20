@@ -3,8 +3,8 @@ package dorkbox.network;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.KryoConnectionSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -27,14 +27,15 @@ class UnregisteredClassTest extends BaseTest {
     @Test
     public
     void unregisteredClasses() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT(false, false);
+
         int origSize = EndPoint.udpMaxSize;
         EndPoint.udpMaxSize = 2048;
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT(false, false);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
 
         System.err.println("Running test " + this.tries + " times, please wait for it to finish.");
 
@@ -43,7 +44,7 @@ class UnregisteredClassTest extends BaseTest {
         final Data dataUDP = new Data();
         populateData(dataUDP, false);
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
@@ -81,7 +82,7 @@ class UnregisteredClassTest extends BaseTest {
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()

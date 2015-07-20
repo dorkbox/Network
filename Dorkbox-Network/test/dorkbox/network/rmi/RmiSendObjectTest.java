@@ -2,12 +2,11 @@ package dorkbox.network.rmi;
 
 import dorkbox.network.BaseTest;
 import dorkbox.network.Client;
-import dorkbox.network.ConnectionOptions;
+import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.ConnectionSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -15,10 +14,10 @@ import org.junit.Test;
 import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 public
 class RmiSendObjectTest extends BaseTest {
-    private Rmi serverRMI;
 
     /**
      * In this test the server has two objects in an object space. The client
@@ -27,34 +26,24 @@ class RmiSendObjectTest extends BaseTest {
     @Test
     public
     void rmi() throws InitializationException, SecurityException, IOException {
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
-        connectionOptions.enableRmi = true;
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        KryoCryptoSerializationManager.DEFAULT.registerRemote(TestObject.class, TestObjectImpl.class);
+        KryoCryptoSerializationManager.DEFAULT.registerRemote(OtherObject.class, OtherObjectImpl.class);
 
-        Server server = new Server(connectionOptions);
+
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
+        configuration.rmiEnabled = true;
+
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
-        ConnectionSerializationManager serverSerializationManager = server.getSerialization();
-        register(server, serverSerializationManager);
+        server.setIdleTimeout(0);
+
+
         addEndPoint(server);
         server.bind(false);
 
-
-        // After all common registrations, register OtherObjectImpl only on the server using the remote object interface ID.
-        // This causes OtherObjectImpl to be serialized as OtherObject.
-        int otherObjectID = serverSerializationManager.getRegistration(OtherObject.class)
-                                                      .getId();
-        serverSerializationManager.register(OtherObjectImpl.class, new RemoteObjectSerializer<OtherObjectImpl>(server), otherObjectID);
-
-
-        // TestObjectImpl has a reference to an OtherObjectImpl.
-        final TestObjectImpl serverTestObject = new TestObjectImpl();
-        serverTestObject.otherObject = new OtherObjectImpl();
-
-        // Both objects must be registered with the ObjectSpace.
-        this.serverRMI = server.rmi();
-        this.serverRMI.register(42, serverTestObject);
-        this.serverRMI.register(777, serverTestObject.getOtherObject());
 
         server.listeners()
               .add(new Listener<OtherObjectImpl>() {
@@ -62,17 +51,19 @@ class RmiSendObjectTest extends BaseTest {
                   public
                   void received(Connection connection, OtherObjectImpl object) {
                       // The test is complete when the client sends the OtherObject instance.
-                      if (object == serverTestObject.getOtherObject()) {
+                      if (object.value() == 12.34f) {
                           stopEndPoints();
+                      } else {
+                          fail("Incorrect object value");
                       }
                   }
               });
 
 
         // ----
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
-        register(client, client.getSerialization());
+        client.setIdleTimeout(0);
 
         addEndPoint(client);
         client.listeners()
@@ -84,13 +75,15 @@ class RmiSendObjectTest extends BaseTest {
                           @Override
                           public
                           void run() {
-                              TestObject test = connection.getRemoteObject(42, TestObject.class);
+                              TestObject test = connection.createRemoteObject(TestObject.class, TestObjectImpl.class);
+                              test.setOther(43.21f);
                               // Normal remote method call.
                               assertEquals(43.21f, test.other(), .0001f);
 
                               // Make a remote method call that returns another remote proxy object.
                               OtherObject otherObject = test.getOtherObject();
                               // Normal remote method call on the second object.
+                              otherObject.setValue(12.34f);
                               float value = otherObject.value();
                               assertEquals(12.34f, value, .0001f);
 
@@ -109,31 +102,40 @@ class RmiSendObjectTest extends BaseTest {
         waitForThreads(20);
     }
 
-    /**
-     * Registers the same classes in the same order on both the client and server.
-     */
-    public static
-    void register(EndPoint endpoint, ConnectionSerializationManager kryoMT) {
-        kryoMT.register(TestObject.class);
-        kryoMT.register(OtherObject.class, new RemoteObjectSerializer<OtherObject>(endpoint));
-    }
-
     public
     interface TestObject {
+        void setOther(float aFloat);
+
         float other();
 
         OtherObject getOtherObject();
     }
 
 
+    public
+    interface OtherObject {
+        void setValue(float aFloat);
+        float value();
+    }
+
+
     public static
     class TestObjectImpl implements TestObject {
-        public OtherObject otherObject;
+        @RemoteProxy
+        private OtherObject otherObject = new OtherObjectImpl();
+        private float aFloat;
+
+
+        @Override
+        public
+        void setOther(final float aFloat) {
+            this.aFloat = aFloat;
+        }
 
         @Override
         public
         float other() {
-            return 43.21f;
+            return aFloat;
         }
 
         @Override
@@ -144,18 +146,20 @@ class RmiSendObjectTest extends BaseTest {
     }
 
 
-    public
-    interface OtherObject {
-        float value();
-    }
-
-
     public static
     class OtherObjectImpl implements OtherObject {
+        private float aFloat;
+
+        @Override
+        public
+        void setValue(final float aFloat) {
+            this.aFloat = aFloat;
+        }
+
         @Override
         public
         float value() {
-            return 12.34f;
+            return aFloat;
         }
     }
 }

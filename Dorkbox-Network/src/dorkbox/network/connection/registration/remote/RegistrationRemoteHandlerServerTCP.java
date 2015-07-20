@@ -1,14 +1,19 @@
 package dorkbox.network.connection.registration.remote;
 
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+import dorkbox.network.connection.RegistrationWrapper;
+import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.network.connection.registration.Registration;
+import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.util.MathUtils;
+import dorkbox.util.bytes.OptimizeUtilsByteArray;
+import dorkbox.util.collections.IntMap;
+import dorkbox.util.crypto.Crypto;
+import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
-
-import java.math.BigInteger;
-import java.net.InetSocketAddress;
-import java.security.SecureRandom;
-import java.util.concurrent.TimeUnit;
-
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.BasicAgreement;
 import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
@@ -20,37 +25,32 @@ import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.util.Arrays;
 import org.slf4j.Logger;
 
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
+import java.math.BigInteger;
+import java.net.InetSocketAddress;
+import java.security.SecureRandom;
+import java.util.concurrent.TimeUnit;
 
-import dorkbox.network.connection.RegistrationWrapper;
-import dorkbox.network.connection.registration.MetaChannel;
-import dorkbox.network.connection.registration.Registration;
-import dorkbox.network.util.SerializationManager;
-import dorkbox.util.MathUtils;
-import dorkbox.util.bytes.OptimizeUtilsByteArray;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.crypto.Crypto;
-import dorkbox.util.crypto.serialization.EccPublicKeySerializer;
+public
+class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer {
 
-public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer {
+    private static final long ECDH_TIMEOUT = 10 * 60 * 60 * 1000 * 1000 * 1000; // 10 minutes in nanoseconds
 
-    private static final long ECDH_TIMEOUT = 10*60*60*1000*1000*1000; // 10 minutes in nanoseconds
-
-    private final static ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(Crypto.ECC.p521_curve);
-
-    private ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
-
+    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(Crypto.ECC.p521_curve);
     private final Object ecdhKeyLock = new Object();
-    private AsymmetricCipherKeyPair ecdhKeyPair =  Crypto.ECC.generateKeyPair(eccSpec, new SecureRandom());
+    private ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
+    private AsymmetricCipherKeyPair ecdhKeyPair = Crypto.ECC.generateKeyPair(eccSpec, new SecureRandom());
     private volatile long ecdhTimeout = System.nanoTime();
 
 
-    public RegistrationRemoteHandlerServerTCP(String name, RegistrationWrapper registrationWrapper, SerializationManager serializationManager) {
+    public
+    RegistrationRemoteHandlerServerTCP(String name,
+                                       RegistrationWrapper registrationWrapper,
+                                       CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }
 
-    private final IESEngine getEccEngine() {
+    private final
+    IESEngine getEccEngine() {
         IESEngine iesEngine = this.eccEngineLocal.get();
         if (iesEngine == null) {
             iesEngine = Crypto.ECC.createEngine();
@@ -62,7 +62,8 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
     /**
      * Rotates the ECDH key every 10 minutes, as this is a VERY expensive calculation to keep on doing for every connection.
      */
-    private AsymmetricCipherKeyPair getEchdKeyOnRotate(SecureRandom secureRandom) {
+    private
+    AsymmetricCipherKeyPair getEchdKeyOnRotate(SecureRandom secureRandom) {
         if (System.nanoTime() - this.ecdhTimeout > ECDH_TIMEOUT) {
             synchronized (this.ecdhKeyLock) {
                 this.ecdhTimeout = System.nanoTime();
@@ -77,7 +78,8 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
      * STEP 1: Channel is first created (This is TCP/UDT only, as such it differs from the client which is TCP/UDP)
      */
     @Override
-    protected void initChannel(Channel channel) {
+    protected
+    void initChannel(Channel channel) {
         super.initChannel(channel);
     }
 
@@ -85,9 +87,10 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
      * STEP 2: Channel is now active. Prepare the meta channel to listen for the registration process
      */
     @Override
-    public void channelActive(ChannelHandlerContext context) throws Exception {
+    public
+    void channelActive(ChannelHandlerContext context) throws Exception {
         if (this.logger.isDebugEnabled()) {
-           super.channelActive(context);
+            super.channelActive(context);
         }
 
         Channel channel = context.channel();
@@ -105,14 +108,17 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
             this.registrationWrapper.releaseChannelMap();
         }
 
-        this.logger.trace(this.name, "New TCP connection. Saving TCP channel info.");
+        if (this.logger.isTraceEnabled()) {
+            this.logger.trace(this.name, "New TCP connection. Saving TCP channel info.");
+        }
     }
 
     /**
      * STEP 3-XXXXX: We pass registration messages around until we the registration handshake is complete!
      */
     @Override
-    public void channelRead(ChannelHandlerContext context, Object message) throws Exception {
+    public
+    void channelRead(ChannelHandlerContext context, Object message) throws Exception {
         Channel channel = context.channel();
 
         // only TCP will come across here for the server. (UDP here is called by the UDP handler/wrapper)
@@ -155,7 +161,9 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                     if (!valid) {
                         //whoa! abort since something messed up! (log happens inside of validate method)
                         if (logger2.isInfoEnabled()) {
-                            logger2.info("Invalid ECC public key for IP {} during handshake with client. Toggling extra flag in channel to indicate this.", tcpRemoteClient.getAddress().getHostAddress());
+                            logger2.info("Invalid ECC public key for IP {} during handshake with client. Toggling extra flag in channel to indicate this.",
+                                         tcpRemoteClient.getAddress()
+                                                        .getHostAddress());
                         }
                         metaChannel.changedRemoteKey = true;
                     }
@@ -221,13 +229,17 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                     // now we have to ENCRYPT the AES key!
                     register.eccParameters = Crypto.ECC.generateSharedParameters(secureRandom);
                     register.aesIV = metaChannel.aesIV;
-                    register.aesKey = Crypto.ECC.encrypt(encrypt, registrationWrapper2.getPrivateKey(), metaChannel.publicKey, register.eccParameters, metaChannel.aesKey);
+                    register.aesKey = Crypto.ECC.encrypt(encrypt,
+                                                         registrationWrapper2.getPrivateKey(),
+                                                         metaChannel.publicKey,
+                                                         register.eccParameters,
+                                                         metaChannel.aesKey);
 
 
                     // now encrypt payload via AES
                     register.payload = Crypto.AES.encrypt(getAesEngine(), metaChannel.aesKey, register.aesIV, combinedBytes);
 
-                    channel.write(register);
+                    channel.writeAndFlush(register);
 
                     if (logger2.isTraceEnabled()) {
                         logger2.trace("Assigning new random connection ID for TCP and performing ECDH.");
@@ -248,7 +260,10 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                         if (metaChannel.ecdhKey != null) {
                             // now we have to decrypt the ECDH key using our TEMP AES keys
 
-                            byte[] payload = Crypto.AES.decrypt(getAesEngine(), metaChannel.aesKey, metaChannel.aesIV, registration.payload);
+                            byte[] payload = Crypto.AES.decrypt(getAesEngine(),
+                                                                metaChannel.aesKey,
+                                                                metaChannel.aesIV,
+                                                                registration.payload);
 
                             if (payload.length == 0) {
                                 logger2.error("Invalid decryption of payload. Aborting.");
@@ -290,12 +305,12 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
                             metaChannel.aesIV = Arrays.copyOfRange(digest, 32, 48); // 128bit blocksize (16 bytes)
 
                             // tell the client to continue it's registration process.
-                            channel.write(new Registration());
+                            channel.writeAndFlush(new Registration());
                         }
 
                         // we only get this when we are 100% done with the registration of all connection types.
                         else {
-                            channel.write(registration); // causes client to setup network connection & AES
+                            channel.writeAndFlush(registration); // causes client to setup network connection & AES
 
                             setupConnectionCrypto(metaChannel);
                             // AES ENCRPYTION NOW USED
@@ -306,15 +321,18 @@ public class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandle
 
                             final MetaChannel chan2 = metaChannel;
                             // wait for a "round trip" amount of time, then notify the APP!
-                            channel.eventLoop().schedule(new Runnable() {
-                                @Override
-                                public void run() {
-                                    Logger logger2 = RegistrationRemoteHandlerServerTCP.this.logger;
-                                    if (logger2.isTraceEnabled()) {
-                                        logger2.trace("Notify Connection");
-                                    }
-                                    notifyConnection(chan2);
-                                }}, metaChannel.getNanoSecBetweenTCP() * 2, TimeUnit.NANOSECONDS);
+                            channel.eventLoop()
+                                   .schedule(new Runnable() {
+                                       @Override
+                                       public
+                                       void run() {
+                                           Logger logger2 = RegistrationRemoteHandlerServerTCP.this.logger;
+                                           if (logger2.isTraceEnabled()) {
+                                               logger2.trace("Notify Connection");
+                                           }
+                                           notifyConnection(chan2);
+                                       }
+                                   }, metaChannel.getNanoSecBetweenTCP() * 2, TimeUnit.NANOSECONDS);
                         }
                     }
 

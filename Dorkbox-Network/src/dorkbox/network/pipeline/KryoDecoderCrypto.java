@@ -1,7 +1,7 @@
 package dorkbox.network.pipeline;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
@@ -11,12 +11,12 @@ import io.netty.channel.ChannelHandlerContext;
 
 public class KryoDecoderCrypto extends KryoDecoder {
 
-    public KryoDecoderCrypto(SerializationManager kryoWrapper) {
+    public KryoDecoderCrypto(CryptoSerializationManager kryoWrapper) {
         super(kryoWrapper);
     }
 
     @Override
-    protected Object readObject(SerializationManager kryoWrapper, ChannelHandlerContext ctx, ByteBuf in, int length) {
+    protected Object readObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext ctx, ByteBuf in, int length) {
         ChannelHandler last = ctx.pipeline().last();
         if (last instanceof Connection) {
             return kryoWrapper.readWithCryptoTcp((Connection) last, in, length);

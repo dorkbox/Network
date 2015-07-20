@@ -15,7 +15,7 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.pipeline.udp.KryoDecoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
-import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
@@ -24,7 +24,7 @@ import dorkbox.util.crypto.Crypto;
 
 public class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient {
 
-    public RegistrationRemoteHandlerClientUDP(String name, RegistrationWrapper registrationWrapper, SerializationManager serializationManager) {
+    public RegistrationRemoteHandlerClientUDP(String name, RegistrationWrapper registrationWrapper, CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }
 

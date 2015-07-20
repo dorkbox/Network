@@ -1,23 +1,5 @@
 package dorkbox.network.connection.registration.remote;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.epoll.EpollDatagramChannel;
-import io.netty.channel.epoll.EpollSocketChannel;
-import io.netty.channel.socket.nio.NioDatagramChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.channel.udt.nio.NioUdtByteConnectorChannel;
-import io.netty.handler.timeout.IdleStateHandler;
-
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.util.Arrays;
-import java.util.concurrent.TimeUnit;
-
-import org.bouncycastle.crypto.engines.AESFastEngine;
-import org.bouncycastle.crypto.modes.GCMBlockCipher;
-
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
@@ -27,16 +9,32 @@ import dorkbox.network.pipeline.KryoDecoder;
 import dorkbox.network.pipeline.KryoDecoderCrypto;
 import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
-import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.epoll.EpollDatagramChannel;
+import io.netty.channel.epoll.EpollSocketChannel;
+import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.channel.udt.nio.NioUdtByteConnectorChannel;
+import io.netty.handler.timeout.IdleStateHandler;
+import org.bouncycastle.crypto.engines.AESFastEngine;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
 
-public abstract class RegistrationRemoteHandler extends RegistrationHandler {
-    private static final String IDLE_HANDLER_FULL = "idleHandlerFull";
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 
+public abstract
+class RegistrationRemoteHandler extends RegistrationHandler {
     protected static final String KRYO_ENCODER = "kryoEncoder";
     protected static final String KRYO_DECODER = "kryoDecoder";
 
+    private static final String IDLE_HANDLER_FULL = "idleHandlerFull";
     private static final String FRAME_AND_KRYO_ENCODER = "frameAndKryoEncoder";
     private static final String FRAME_AND_KRYO_DECODER = "frameAndKryoDecoder";
 
@@ -47,18 +45,10 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
     private static final String KRYO_CRYPTO_DECODER = "kryoCryptoDecoder";
 
     private static final String IDLE_HANDLER = "idleHandler";
+    private static final ThreadLocal<GCMBlockCipher> aesEngineLocal = new ThreadLocal<GCMBlockCipher>();
 
-    protected final SerializationManager serializationManager;
-
-    private static ThreadLocal<GCMBlockCipher> aesEngineLocal = new ThreadLocal<GCMBlockCipher>();
-
-    public RegistrationRemoteHandler(String name, RegistrationWrapper registrationWrapper, SerializationManager serializationManager) {
-        super(name, registrationWrapper);
-
-        this.serializationManager = serializationManager;
-    }
-
-    protected static final GCMBlockCipher getAesEngine() {
+    protected static
+    GCMBlockCipher getAesEngine() {
         GCMBlockCipher aesEngine = aesEngineLocal.get();
         if (aesEngine == null) {
             aesEngine = new GCMBlockCipher(new AESFastEngine());
@@ -68,10 +58,32 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
     }
 
     /**
+     * Check to verify if two InetAdresses are equal, by comparing the underlying byte arrays.
+     */
+    public static
+    boolean checkEqual(InetAddress serverA, InetAddress serverB) {
+        if (serverA == null || serverB == null) {
+            return false;
+        }
+
+        return Arrays.equals(serverA.getAddress(), serverB.getAddress());
+    }
+
+    protected final CryptoSerializationManager serializationManager;
+
+    public
+    RegistrationRemoteHandler(String name, RegistrationWrapper registrationWrapper, CryptoSerializationManager serializationManager) {
+        super(name, registrationWrapper);
+
+        this.serializationManager = serializationManager;
+    }
+
+    /**
      * STEP 1: Channel is first created
      */
     @Override
-    protected void initChannel(Channel channel) {
+    protected
+    void initChannel(Channel channel) {
         ChannelPipeline pipeline = channel.pipeline();
 
         ///////////////////////
@@ -79,10 +91,12 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
         ///////////////////////
         pipeline.addFirst(FRAME_AND_KRYO_DECODER, new KryoDecoder(this.serializationManager)); // cannot be shared because of possible fragmentation.
 
-        // this makes the proper event get raised in the registrationHandler to kill NEW idle connections. Once "connected" they last a lot longer.
-        // we ALWAYS have this initial IDLE handler, so we don't have to worry about a slow-loris attack against the server.
-        pipeline.addFirst(IDLE_HANDLER, new IdleStateHandler(4, 0, 0)); // timer must be shared.
-
+        int idleTimeout = this.registrationWrapper.getIdleTimeout();
+        if (idleTimeout > 0) {
+            // this makes the proper event get raised in the registrationHandler to kill NEW idle connections. Once "connected" they last a lot longer.
+            // we ALWAYS have this initial IDLE handler, so we don't have to worry about a slow-loris attack against the server.
+            pipeline.addFirst(IDLE_HANDLER, new IdleStateHandler(4, 0, 0)); // in Seconds -- not shared, because it is per-connection
+        }
 
         /////////////////////////
         // ENCODE (or downstream)
@@ -95,7 +109,8 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
      * Debug output, so we can tell what direction the connection is in the log
      */
     @Override
-    public void channelActive(ChannelHandlerContext context) throws Exception {
+    public
+    void channelActive(ChannelHandlerContext context) throws Exception {
         // add the channel so we can access it later.
         // do NOT want to add UDP channels, since they are tracked differently.
 
@@ -110,13 +125,17 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
         stringBuilder.append("Connected to remote ");
         if (channelClass == NioSocketChannel.class) {
             stringBuilder.append("TCP");
-        } else if (channelClass == EpollSocketChannel.class) {
+        }
+        else if (channelClass == EpollSocketChannel.class) {
             stringBuilder.append("TCP");
-        } else if (channelClass == NioDatagramChannel.class) {
+        }
+        else if (channelClass == NioDatagramChannel.class) {
             stringBuilder.append("UDP");
-        } else if (channelClass == EpollDatagramChannel.class) {
+        }
+        else if (channelClass == EpollDatagramChannel.class) {
             stringBuilder.append("UDP");
-        } else if (channelClass == NioUdtByteConnectorChannel.class) {
+        }
+        else if (channelClass == NioUdtByteConnectorChannel.class) {
             stringBuilder.append("UDT");
         }
         else {
@@ -130,12 +149,14 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
             if (channel.remoteAddress() != null) {
                 stringBuilder.append(" ==> ");
                 stringBuilder.append(channel.remoteAddress());
-            } else {
+            }
+            else {
                 // this means we are LISTENING.
                 stringBuilder.append(" <== ");
                 stringBuilder.append("?????");
             }
-        } else {
+        }
+        else {
             stringBuilder.append(getConnectionDirection());
             stringBuilder.append(channel.remoteAddress());
         }
@@ -144,26 +165,27 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
         this.logger.debug(stringBuilder.toString());
     }
 
+    @Override
+    public
+    void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
+        Channel channel = context.channel();
+
+        this.logger.error("Unexpected exception while trying to send/receive data on Client remote (network) channel.  ({})" +
+                          System.getProperty("line.separator"), channel.remoteAddress(), cause);
+        if (channel.isOpen()) {
+            channel.close();
+        }
+    }
+
     /**
      * @return the direction that traffic is going to this handler (" <== " or " ==> ")
      */
-    protected abstract String getConnectionDirection();
-
-
-    /**
-     * Check to verify if two InetAdresses are equal, by comparing the underlying byte arrays.
-     */
-    public static boolean checkEqual(InetAddress serverA, InetAddress serverB) {
-        if (serverA == null || serverB == null) {
-            return false;
-        }
-
-        return Arrays.equals(serverA.getAddress(), serverB.getAddress());
-    }
-
+    protected abstract
+    String getConnectionDirection();
 
     // have to setup AFTER establish connection, data, as we don't want to enable AES until we're ready.
-    protected final void setupConnectionCrypto(MetaChannel metaChannel) {
+    protected final
+    void setupConnectionCrypto(MetaChannel metaChannel) {
 
         if (this.logger.isDebugEnabled()) {
             String type = "TCP";
@@ -175,7 +197,7 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
             }
 
 
-            InetSocketAddress address = (InetSocketAddress)metaChannel.tcpChannel.remoteAddress();
+            InetSocketAddress address = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();
             this.logger.debug("Encrypting {} session with {}", type, address.getAddress());
         }
 
@@ -183,13 +205,20 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
         int idleTimeout = this.registrationWrapper.getIdleTimeout();
 
         // add the new handlers (FORCE encryption and longer IDLE handler)
-        pipeline.replace(FRAME_AND_KRYO_DECODER, FRAME_AND_KRYO_CRYPTO_DECODER, new KryoDecoderCrypto(this.serializationManager)); // cannot be shared because of possible fragmentation.
+        pipeline.replace(FRAME_AND_KRYO_DECODER,
+                         FRAME_AND_KRYO_CRYPTO_DECODER,
+                         new KryoDecoderCrypto(this.serializationManager)); // cannot be shared because of possible fragmentation.
+
         if (idleTimeout > 0) {
-            pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, this.registrationWrapper.getIdleTimeout(), TimeUnit.MILLISECONDS));
-        } else {
-            pipeline.remove(IDLE_HANDLER);
+            pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0,
+                                                                                   0,
+                                                                                   idleTimeout,
+                                                                                   TimeUnit.MILLISECONDS));
         }
-        pipeline.replace(FRAME_AND_KRYO_ENCODER, FRAME_AND_KRYO_CRYPTO_ENCODER, this.registrationWrapper.getKryoTcpCryptoEncoder());  // this is shared
+
+        pipeline.replace(FRAME_AND_KRYO_ENCODER,
+                         FRAME_AND_KRYO_CRYPTO_ENCODER,
+                         this.registrationWrapper.getKryoTcpCryptoEncoder());  // this is shared
 
 
         if (metaChannel.udpChannel != null && metaChannel.udpRemoteAddress == null) {
@@ -201,11 +230,12 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
 
         if (metaChannel.udtChannel != null) {
             pipeline = metaChannel.udtChannel.pipeline();
-            pipeline.replace(FRAME_AND_KRYO_DECODER, FRAME_AND_KRYO_CRYPTO_DECODER, new KryoDecoderCrypto(this.serializationManager)); // cannot be shared because of possible fragmentation.
+            pipeline.replace(FRAME_AND_KRYO_DECODER,
+                             FRAME_AND_KRYO_CRYPTO_DECODER,
+                             new KryoDecoderCrypto(this.serializationManager)); // cannot be shared because of possible fragmentation.
+
             if (idleTimeout > 0) {
                 pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, idleTimeout, TimeUnit.MILLISECONDS));
-            } else {
-                pipeline.remove(IDLE_HANDLER);
             }
             pipeline.replace(FRAME_AND_KRYO_ENCODER, FRAME_AND_KRYO_CRYPTO_ENCODER, this.registrationWrapper.getKryoTcpCryptoEncoder());
         }
@@ -214,7 +244,8 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
     /**
      * Setup our meta-channel to migrate to the correct connection handler for all regular data.
      */
-    protected final void establishConnection(MetaChannel metaChannel) {
+    protected final
+    void establishConnection(MetaChannel metaChannel) {
         ChannelPipeline tcpPipe = metaChannel.tcpChannel.pipeline();
         ChannelPipeline udpPipe;
         ChannelPipeline udtPipe;
@@ -223,13 +254,15 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
             // don't want to muck with the SERVER udp pipeline, as it NEVER CHANGES.
             // only the client will have the udp remote address
             udpPipe = metaChannel.udpChannel.pipeline();
-        } else {
+        }
+        else {
             udpPipe = null;
         }
 
         if (metaChannel.udtChannel != null) {
             udtPipe = metaChannel.udtChannel.pipeline();
-        } else {
+        }
+        else {
             udtPipe = null;
         }
 
@@ -254,9 +287,9 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
         }
     }
 
-
     // have to setup AFTER establish connection, data, as we don't want to enable AES until we're ready.
-    protected final void setupConnection(MetaChannel metaChannel) {
+    protected final
+    void setupConnection(MetaChannel metaChannel) {
         boolean registerServer = false;
 
         // now that we are CONNECTED, we want to remove ourselves (and channel ID's) from the map.
@@ -281,7 +314,8 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
                     //  to keep track of UDP connections. This is very different than how the client works
                     // only the client will have the udp remote address
                     channelMap.remove(metaChannel.udpChannel.hashCode());
-                } else {
+                }
+                else {
                     // SERVER RUNS THIS
                     // don't ALWAYS have UDP on SERVER...
                     registerServer = true;
@@ -305,31 +339,34 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
                 type += "/UDT";
             }
 
-            InetSocketAddress address = (InetSocketAddress)metaChannel.tcpChannel.remoteAddress();
+            InetSocketAddress address = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();
             this.logger.info("Created a {} connection with {}", type, address.getAddress());
         }
     }
 
     /**
      * Registers the metachannel for the UDP server. Default is to do nothing.
-     *
+     * <p/>
      * The server will override this.
      * Only called if we have a UDP channel when we finalize the setup of the TCP connection
      */
     @SuppressWarnings("unused")
-    protected void setupServerUdpConnection(MetaChannel metaChannel) {
+    protected
+    void setupServerUdpConnection(MetaChannel metaChannel) {
     }
 
     /**
      * Internal call by the pipeline to notify the "Connection" object that it has "connected", meaning that modifications
      * to the pipeline are finished.
      */
-    protected final void notifyConnection(MetaChannel metaChannel) {
+    protected final
+    void notifyConnection(MetaChannel metaChannel) {
         this.registrationWrapper.connectionConnected0(metaChannel.connection);
     }
 
     @Override
-    public final void channelInactive(ChannelHandlerContext context) throws Exception {
+    public final
+    void channelInactive(ChannelHandlerContext context) throws Exception {
         Channel channel = context.channel();
 
         this.logger.info("Closed connection: {}", channel.remoteAddress());
@@ -357,15 +394,5 @@ public abstract class RegistrationRemoteHandler extends RegistrationHandler {
         }
 
         super.channelInactive(context);
-    }
-
-    @Override
-    public void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
-        Channel channel = context.channel();
-
-        this.logger.error("Unexpected exception while trying to send/receive data on Client remote (network) channel.  ({})" + System.getProperty("line.separator"), channel.remoteAddress(), cause);
-        if (channel.isOpen()) {
-            channel.close();
-        }
     }
 }

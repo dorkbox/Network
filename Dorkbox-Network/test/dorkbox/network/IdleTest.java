@@ -3,11 +3,11 @@ package dorkbox.network;
 
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.InputStreamSender;
-import dorkbox.network.util.ConnectionSerializationManager;
-import dorkbox.network.util.KryoConnectionSerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -34,32 +34,31 @@ class IdleTest extends BaseTest {
     @Test
     public
     void InputStreamSender() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT(false, false);
+
         final int largeDataSize = 12345;
 
         System.err.println("-- TCP");
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT(false, false);
-        streamSpecificType(largeDataSize, connectionOptions, ConnectionType.TCP);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
+        streamSpecificType(largeDataSize, configuration, ConnectionType.TCP);
 
 
         System.err.println("-- UDP");
-        connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT(false, false);
-        streamSpecificType(largeDataSize, connectionOptions, ConnectionType.UDP);
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
+        streamSpecificType(largeDataSize, configuration, ConnectionType.UDP);
 
 
         System.err.println("-- UDT");
-        connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udtPort = udtPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT(false, false);
-        streamSpecificType(largeDataSize, connectionOptions, ConnectionType.UDT);
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udtPort = udtPort;
+        configuration.host = host;
+        streamSpecificType(largeDataSize, configuration, ConnectionType.UDT);
     }
 
 
@@ -68,45 +67,42 @@ class IdleTest extends BaseTest {
     @Test
     public
     void ObjectSender() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         final Data mainData = new Data();
         populateData(mainData);
 
 
         System.err.println("-- TCP");
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
-        sendObject(mainData, connectionOptions, ConnectionType.TCP);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
+        sendObject(mainData, configuration, ConnectionType.TCP);
 
 
         System.err.println("-- UDP");
-        connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
-        sendObject(mainData, connectionOptions, ConnectionType.TCP);
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
+        sendObject(mainData, configuration, ConnectionType.TCP);
 
 
         System.err.println("-- UDT");
-        connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udtPort = udtPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
-        sendObject(mainData, connectionOptions, ConnectionType.TCP);
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udtPort = udtPort;
+        configuration.host = host;
+        sendObject(mainData, configuration, ConnectionType.TCP);
     }
 
 
 
     private
-    void sendObject(final Data mainData, ConnectionOptions connectionOptions, final ConnectionType type)
+    void sendObject(final Data mainData, Configuration configuration, final ConnectionType type)
                     throws InitializationException, SecurityException, IOException {
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.setIdleTimeout(100);
@@ -135,7 +131,7 @@ class IdleTest extends BaseTest {
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
@@ -163,9 +159,9 @@ class IdleTest extends BaseTest {
 
 
     private
-    void streamSpecificType(final int largeDataSize, ConnectionOptions connectionOptions, final ConnectionType type)
+    void streamSpecificType(final int largeDataSize, Configuration configuration, final ConnectionType type)
                     throws InitializationException, SecurityException, IOException {
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.setIdleTimeout(100);
@@ -215,7 +211,7 @@ class IdleTest extends BaseTest {
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
@@ -276,7 +272,7 @@ class IdleTest extends BaseTest {
     }
 
     private
-    void register(ConnectionSerializationManager kryoMT) {
+    void register(CryptoSerializationManager kryoMT) {
         kryoMT.register(int[].class);
         kryoMT.register(short[].class);
         kryoMT.register(float[].class);

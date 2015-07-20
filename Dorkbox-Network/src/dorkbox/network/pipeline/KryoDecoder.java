@@ -1,26 +1,25 @@
 package dorkbox.network.pipeline;
 
+import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
 import java.util.List;
 
-import dorkbox.network.util.SerializationManager;
-import dorkbox.util.bytes.OptimizeUtilsByteBuf;
-
 public class KryoDecoder extends ByteToMessageDecoder {
     private final OptimizeUtilsByteBuf optimize;
-    private final SerializationManager kryoWrapper;
+    private final CryptoSerializationManager kryoWrapper;
 
-    public KryoDecoder(SerializationManager kryoWrapper) {
+    public KryoDecoder(CryptoSerializationManager kryoWrapper) {
         super();
         this.kryoWrapper = kryoWrapper;
         this.optimize = OptimizeUtilsByteBuf.get();
     }
 
     @SuppressWarnings("unused")
-    protected Object readObject(SerializationManager kryoWrapper, ChannelHandlerContext context, ByteBuf in, int length) {
+    protected Object readObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext context, ByteBuf in, int length) {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         return kryoWrapper.read(in, length);
     }
@@ -96,13 +95,11 @@ public class KryoDecoder extends ByteToMessageDecoder {
             // how many more objects?? The first time, it can be off, because we already KNOW it's > 0.
             //  (That's how we got here to begin with)
             while (readableBytes > 0) {
-                objectCount++;
                 if (optimize.canReadInt(in) > 0) {
                     length = optimize.readInt(in, true);
 
                     if (length <= 0) {
                         // throw new IllegalStateException("Kryo DecoderTCP had a read length of 0");
-                        objectCount--;
                         break;
                     }
 
@@ -112,12 +109,11 @@ public class KryoDecoder extends ByteToMessageDecoder {
                     if (endOfObjectPosition <= writerIndex) {
                         in.readerIndex(endOfObjectPosition);
                         readableBytes = in.readableBytes();
+                        objectCount++;
                     } else {
-                        objectCount--;
                         break;
                     }
                 } else {
-                    objectCount--;
                     break;
                 }
             }

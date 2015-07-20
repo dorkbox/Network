@@ -1,11 +1,11 @@
 package dorkbox.network.connection.registration.remote;
 
 import dorkbox.network.connection.RegistrationWrapper;
-import dorkbox.network.util.SerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 
 public class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
-    public RegistrationRemoteHandlerClient(String name, RegistrationWrapper registrationWrapper, SerializationManager serializationManager) {
+    public RegistrationRemoteHandlerClient(String name, RegistrationWrapper registrationWrapper, CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }
 

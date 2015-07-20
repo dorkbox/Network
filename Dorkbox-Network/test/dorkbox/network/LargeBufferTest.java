@@ -1,11 +1,10 @@
-
 package dorkbox.network;
 
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.ConnectionSerializationManager;
-import dorkbox.network.util.KryoConnectionSerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -16,7 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.fail;
 
-public class LargeBufferTest extends BaseTest {
+public
+class LargeBufferTest extends BaseTest {
     private static final int OBJ_SIZE = 1024 * 10;
 
     private volatile int finalCheckAmount = 0;
@@ -24,74 +24,84 @@ public class LargeBufferTest extends BaseTest {
     private volatile int clientCheck = -1;
 
     @Test
-    public void manyLargeMessages () throws InitializationException, SecurityException, IOException {
+    public
+    void manyLargeMessages() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         final int messageCount = 1024;
 
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
 
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
-        server.listeners().add(new Listener<LargeMessage>() {
-            AtomicInteger received = new AtomicInteger();
-            AtomicInteger receivedBytes = new AtomicInteger();
+        server.listeners()
+              .add(new Listener<LargeMessage>() {
+                  AtomicInteger received = new AtomicInteger();
+                  AtomicInteger receivedBytes = new AtomicInteger();
 
-            @Override
-            public void received (Connection connection, LargeMessage object) {
-//                System.err.println("Server ack message: " + received.get());
-                connection.send().TCP(object);
-                this.receivedBytes.addAndGet(object.bytes.length);
+                  @Override
+                  public
+                  void received(Connection connection, LargeMessage object) {
+                      //System.err.println("Server ack message: " + received.get());
 
-                if (this.received.incrementAndGet() == messageCount) {
-                    System.out.println("Server received all " + messageCount + " messages!");
-                    System.out.println("Server received and sent " + this.receivedBytes.get() + " bytes.");
-                    LargeBufferTest.this.serverCheck = LargeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
-                    System.out.println("Server missed " + LargeBufferTest.this.serverCheck + " bytes.");
-                    stopEndPoints();
-                }
-            }
-        });
+                      connection.send()
+                                .TCP(object);
+                      this.receivedBytes.addAndGet(object.bytes.length);
 
-        Client client = new Client(connectionOptions);
+                      if (this.received.incrementAndGet() == messageCount) {
+                          System.out.println("Server received all " + messageCount + " messages!");
+                          System.out.println("Server received and sent " + this.receivedBytes.get() + " bytes.");
+                          LargeBufferTest.this.serverCheck = LargeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
+                          System.out.println("Server missed " + LargeBufferTest.this.serverCheck + " bytes.");
+                          stopEndPoints();
+                      }
+                  }
+              });
+
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
+
+        client.listeners()
+              .add(new Listener<LargeMessage>() {
+                  AtomicInteger received = new AtomicInteger();
+                  AtomicInteger receivedBytes = new AtomicInteger();
+
+                  @Override
+                  public
+                  void received(Connection connection, LargeMessage object) {
+                      this.receivedBytes.addAndGet(object.bytes.length);
+
+                      int count = this.received.incrementAndGet();
+                      //System.out.println("Client received " + count + " messages.");
+
+                      if (count == messageCount) {
+                          System.out.println("Client received all " + messageCount + " messages!");
+                          System.out.println("Client received and sent " + this.receivedBytes.get() + " bytes.");
+                          LargeBufferTest.this.clientCheck = LargeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
+                          System.out.println("Client missed " + LargeBufferTest.this.clientCheck + " bytes.");
+                      }
+                  }
+              });
         client.connect(5000);
 
-        client.listeners().add(new Listener<LargeMessage>() {
-            AtomicInteger received = new AtomicInteger();
-            AtomicInteger receivedBytes = new AtomicInteger();
-
-            @Override
-            public void received (Connection connection, LargeMessage object) {
-                this.receivedBytes.addAndGet(object.bytes.length);
-
-                int count = this.received.incrementAndGet();
-                //System.out.println("Client received " + count + " messages.");
-
-                if (count == messageCount) {
-                    System.out.println("Client received all " + messageCount + " messages!");
-                    System.out.println("Client received and sent " + this.receivedBytes.get() + " bytes.");
-                    LargeBufferTest.this.clientCheck = LargeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
-                    System.out.println("Client missed " + LargeBufferTest.this.clientCheck + " bytes.");
-                }
-            }
-        });
-
         SecureRandom random = new SecureRandom();
-        byte[] b = new byte[OBJ_SIZE];
-        random.nextBytes(b);
 
+        System.err.println("  Client sending " + messageCount + " messages");
         for (int i = 0; i < messageCount; i++) {
             this.finalCheckAmount += OBJ_SIZE;
-            System.err.println("  Client sending number: " + i);
-            client.send().TCP(new LargeMessage(b));
+
+            byte[] b = new byte[OBJ_SIZE];
+            random.nextBytes(b);
+            client.send()
+                  .TCP(new LargeMessage(b));
         }
         System.err.println("Client has queued " + messageCount + " messages.");
 
@@ -106,18 +116,22 @@ public class LargeBufferTest extends BaseTest {
         }
     }
 
-    private void register (ConnectionSerializationManager kryoMT) {
+    private
+    void register(CryptoSerializationManager kryoMT) {
         kryoMT.register(byte[].class);
         kryoMT.register(LargeMessage.class);
     }
 
-    public static class LargeMessage {
+    public static
+    class LargeMessage {
         public byte[] bytes;
 
-        public LargeMessage () {
+        public
+        LargeMessage() {
         }
 
-        public LargeMessage (byte[] bytes) {
+        public
+        LargeMessage(byte[] bytes) {
             this.bytes = bytes;
         }
     }

@@ -2,9 +2,9 @@ package dorkbox.network;
 
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.ConnectionSerializationManager;
-import dorkbox.network.util.KryoConnectionSerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -22,13 +22,14 @@ class ClientSendTest extends BaseTest {
     @Test
     public
     void sendDataFromClientClass() throws InitializationException, SecurityException, IOException {
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
 
-        Server server = new Server(connectionOptions);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
+
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
@@ -44,7 +45,7 @@ class ClientSendTest extends BaseTest {
                   }
               });
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.connect(5000);
@@ -70,7 +71,7 @@ class ClientSendTest extends BaseTest {
     }
 
     private static
-    void register(ConnectionSerializationManager kryoMT) {
+    void register(CryptoSerializationManager kryoMT) {
         kryoMT.register(AMessage.class);
     }
 

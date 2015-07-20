@@ -2,6 +2,7 @@ package dorkbox.network.rmi;
 
 
 /** Internal message to invoke methods remotely. */
+public
 class InvokeMethod implements RmiMessages {
     public int objectID;
     public CachedMethod cachedMethod;

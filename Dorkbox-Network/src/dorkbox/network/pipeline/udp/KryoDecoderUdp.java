@@ -1,5 +1,7 @@
 package dorkbox.network.pipeline.udp;
 
+import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.network.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -8,20 +10,20 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 
 import java.util.List;
 
-import dorkbox.network.util.SerializationManager;
-import dorkbox.network.util.exceptions.NetException;
-
 @Sharable
-public class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
+public
+class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
 
-    private final SerializationManager kryoWrapper;
+    private final CryptoSerializationManager kryoWrapper;
 
-    public KryoDecoderUdp(SerializationManager kryoWrapper) {
+    public
+    KryoDecoderUdp(CryptoSerializationManager kryoWrapper) {
         this.kryoWrapper = kryoWrapper;
     }
 
     @Override
-    protected void decode(ChannelHandlerContext ctx, DatagramPacket msg, List<Object> out) throws Exception {
+    protected
+    void decode(ChannelHandlerContext ctx, DatagramPacket msg, List<Object> out) throws Exception {
         if (msg != null) {
             ByteBuf data = msg.content();
 
@@ -30,7 +32,7 @@ public class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
                 // COULD be encrypted!
 
                 if (kryoWrapper.isEncrypted(data)) {
-                    throw new NetException("Encrypted UDP packet recieved before registration complete. WHOOPS!");
+                    throw new NetException("Encrypted UDP packet received before registration complete. WHOOPS!");
                 }
 
                 // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.

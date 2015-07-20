@@ -5,8 +5,10 @@ import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import dorkbox.network.connection.KryoExtra;
 
 /** Internal message to invoke methods remotely. */
+public
 class InvokeMethodSerializer extends Serializer<InvokeMethod> {
     private RmiBridge rmi;
 
@@ -46,7 +48,9 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
 
         byte methodIndex = input.readByte();
         try {
-            invokeMethod.cachedMethod = this.rmi.getMethods(kryo, methodClass)[methodIndex];
+            KryoExtra kryoExtra = (KryoExtra) kryo;
+
+            invokeMethod.cachedMethod = kryoExtra.getMethods(methodClass)[methodIndex];
         } catch (IndexOutOfBoundsException ex) {
             throw new KryoException("Invalid method index " + methodIndex + " for class: " + methodClass.getName());
         }

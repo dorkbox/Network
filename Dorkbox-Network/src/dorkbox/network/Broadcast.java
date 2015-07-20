@@ -186,7 +186,7 @@ public class Broadcast {
                         // don't error out on one particular octect
                         try {
                             InetAddress byAddress = InetAddress.getByAddress(ip);
-                            channel1.write(new DatagramPacket(buffer, new InetSocketAddress(byAddress, udpPort)));
+                            channel1.writeAndFlush(new DatagramPacket(buffer, new InetSocketAddress(byAddress, udpPort)));
 
 
                             // response is received.  If the channel is not closed within 5 seconds, move to the next one.

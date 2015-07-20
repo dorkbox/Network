@@ -12,7 +12,6 @@
 	<classpathentry kind="lib" path="/Dependencies/logging/logback-core-1.0.13.jar" sourcepath="/Dependencies/logging/logback-core-1.0.13-sources.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/logging/minlog-1.2-to-slf4j.jar" sourcepath="/Dependencies/logging/minlog-1.2-to-slf4j-sources.zip"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/Dorkbox-Util"/>
-	<classpathentry kind="lib" path="/Dependencies/kryo/reflectasm.jar" sourcepath="/Dependencies/kryo/reflectasm-src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/BouncyCastleCrypto/bcpkix-jdk15on-151.jar" sourcepath="/Dependencies/BouncyCastleCrypto/bcpkix-jdk15on-151-src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/BouncyCastleCrypto/bcprov-debug-jdk15on-151.jar" sourcepath="/Dependencies/BouncyCastleCrypto/bcprov-jdk15on-151-src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/netty/netty-all-4.1.0.jar" sourcepath="/Dependencies/netty/netty-all-4.1.0-sources.zip">
@@ -22,8 +21,10 @@
 	</classpathentry>
 	<classpathentry combineaccessrules="false" kind="src" path="/JavaLauncher-Util"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/objenesis-2.1.jar" sourcepath="/Dependencies/kryo/objenesis-2.1-srcs.zip"/>
-	<classpathentry kind="lib" path="/Dependencies/kryo/kryo3-debug.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/dorkbox/object_pool/ObjectPool_v1.1.jar" sourcepath="/Dependencies/dorkbox/object_pool/ObjectPool_v1.1_src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/asm/asm-5.0.4.jar"/>
+	<classpathentry kind="lib" path="/Dependencies/JCTools/JCTools-v1.1-alpha-MTAQ.jar" sourcepath="/Dependencies/JCTools/JCTools-1.1-alpha-MTAQ-src.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/kryo/kryo3-debug.jar" sourcepath="/Dependencies/kryo/kryo3_src.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/kryo/reflectasm-1.11.0.jar" sourcepath="/Dependencies/kryo/reflectasm-1.11.0-sources.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/dorkbox/object_pool/ObjectPool_v1.2.jar" sourcepath="/Dependencies/dorkbox/object_pool/ObjectPool_v1.2_src.zip"/>
 	<classpathentry kind="output" path="classes"/>
 </classpath>

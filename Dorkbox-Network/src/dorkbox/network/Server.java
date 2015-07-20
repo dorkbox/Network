@@ -1,25 +1,5 @@
 package dorkbox.network;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.DefaultEventLoopGroup;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.epoll.EpollServerSocketChannel;
-import io.netty.channel.local.LocalAddress;
-import io.netty.channel.local.LocalServerChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.oio.OioEventLoopGroup;
-import io.netty.channel.socket.nio.NioDatagramChannel;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.channel.socket.oio.OioDatagramChannel;
-import io.netty.channel.socket.oio.OioServerSocketChannel;
-
-import org.slf4j.Logger;
-
 import dorkbox.network.connection.EndPointServer;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerTCP;
@@ -31,15 +11,38 @@ import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Sys;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollChannelOption;
+import io.netty.channel.epoll.EpollDatagramChannel;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
+import io.netty.channel.local.LocalAddress;
+import io.netty.channel.local.LocalServerChannel;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.oio.OioEventLoopGroup;
+import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.oio.OioDatagramChannel;
+import io.netty.channel.socket.oio.OioServerSocketChannel;
+import org.slf4j.Logger;
+
+import java.io.IOException;
 
 
 /**
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE
  * to events. If you access the server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
- * <p>
- *  To put it bluntly, ONLY have the server do work inside of a listener!
+ * <p/>
+ * To put it bluntly, ONLY have the server do work inside of a listener!
  */
-public class Server extends EndPointServer {
+public
+class Server extends EndPointServer {
 
     /**
      * The maximum queue length for incoming connection indications (a request to connect). If a connection indication arrives when
@@ -61,17 +64,19 @@ public class Server extends EndPointServer {
     /**
      * Starts a LOCAL <b>only</b> server, with the default serialization scheme
      */
-    public Server() throws InitializationException, SecurityException {
-        this(new ConnectionOptions(LOCAL_CHANNEL));
+    public
+    Server() throws InitializationException, SecurityException, IOException {
+        this(new Configuration(LOCAL_CHANNEL));
     }
 
     /**
      * Convenience method to starts a server with the specified Connection Options
      */
-    public Server(ConnectionOptions options) throws InitializationException, SecurityException {
+    public
+    Server(Configuration options) throws InitializationException, SecurityException, IOException {
         // watch-out for serialization... it can be NULL incoming. The EndPoint (superclass) sets it, if null, so
-        // you have to make sure to use this.serializatino
-        super("Server", options);
+        // you have to make sure to use this.serialization
+        super(options);
 
         Logger logger2 = this.logger;
         if (Sys.isAndroid && options.udtPort > 0) {
@@ -88,23 +93,29 @@ public class Server extends EndPointServer {
 
         this.localChannelName = options.localChannelName;
 
-        if (this.localChannelName != null ) {
+        if (this.localChannelName != null) {
             this.localBootstrap = new ServerBootstrap();
-        } else {
+        }
+        else {
             this.localBootstrap = null;
         }
 
         if (this.tcpPort > 0) {
             this.tcpBootstrap = new ServerBootstrap();
-        } else {
+        }
+        else {
             this.tcpBootstrap = null;
         }
 
         if (this.udpPort > 0) {
             this.udpBootstrap = new Bootstrap();
-        } else {
+        }
+        else {
             this.udpBootstrap = null;
         }
+
+
+        String threadName = Server.class.getSimpleName();
 
         if (this.udtPort > 0) {
             // check to see if we have UDT available!
@@ -118,10 +129,12 @@ public class Server extends EndPointServer {
 
             if (udtAvailable) {
                 this.udtBootstrap = new ServerBootstrap();
-            } else {
+            }
+            else {
                 this.udtBootstrap = null;
             }
-        } else {
+        }
+        else {
             this.udtBootstrap = null;
         }
 
@@ -131,7 +144,10 @@ public class Server extends EndPointServer {
 
         // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
         SecurityManager s = System.getSecurityManager();
-        ThreadGroup nettyGroup = new ThreadGroup(s != null ? s.getThreadGroup() : Thread.currentThread().getThreadGroup(), this.name + " (Netty)");
+        ThreadGroup nettyGroup = new ThreadGroup(s != null
+                                                 ? s.getThreadGroup()
+                                                 : Thread.currentThread()
+                                                         .getThreadGroup(), threadName + " (Netty)");
 
 
         // always use local channels on the server.
@@ -140,15 +156,15 @@ public class Server extends EndPointServer {
             EventLoopGroup worker;
 
             if (this.localBootstrap != null) {
-                boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-boss-LOCAL", nettyGroup));
-                worker = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-LOCAL", nettyGroup));
+                boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-LOCAL", nettyGroup));
+                worker = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-LOCAL",
+                                                                                                    nettyGroup));
 
                 this.localBootstrap.group(boss, worker)
                                    .channel(LocalServerChannel.class)
                                    .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                                    .localAddress(new LocalAddress(this.localChannelName))
-                                   .childHandler(new RegistrationLocalHandlerServer(this.name,
-                                                                                    this.registrationWrapper));
+                                   .childHandler(new RegistrationLocalHandlerServer(threadName, this.registrationWrapper));
 
                 manageForShutdown(boss);
                 manageForShutdown(worker);
@@ -161,22 +177,22 @@ public class Server extends EndPointServer {
 
             if (Sys.isAndroid) {
                 // android ONLY supports OIO (not NIO)
-                boss = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-boss-TCP", nettyGroup));
-                worker = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
+                boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-boss-TCP", nettyGroup));
+                worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-worker-TCP", nettyGroup));
                 this.tcpBootstrap.channel(OioServerSocketChannel.class);
-            } else {
-                if (OS.isLinux()) {
-                    // JNI network stack is MUCH faster (but only on linux)
-                    boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-boss-TCP", nettyGroup));
-                    worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
+            }
+            else if (OS.isLinux()) {
+                // JNI network stack is MUCH faster (but only on linux)
+                boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-TCP", nettyGroup));
+                worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-TCP", nettyGroup));
 
-                    this.tcpBootstrap.channel(EpollServerSocketChannel.class);
-                } else {
-                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-boss-TCP", nettyGroup));
-                    worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-TCP", nettyGroup));
+                this.tcpBootstrap.channel(EpollServerSocketChannel.class);
+            }
+            else {
+                boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-TCP", nettyGroup));
+                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-TCP", nettyGroup));
 
-                    this.tcpBootstrap.channel(NioServerSocketChannel.class);
-                }
+                this.tcpBootstrap.channel(NioServerSocketChannel.class);
             }
 
             // TODO: If we use netty for an HTTP server,
@@ -189,13 +205,14 @@ public class Server extends EndPointServer {
                              .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                              .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
                              .option(ChannelOption.SO_REUSEADDR, true)
-                             .childHandler(new RegistrationRemoteHandlerServerTCP(this.name,
+                             .childHandler(new RegistrationRemoteHandlerServerTCP(threadName,
                                                                                   this.registrationWrapper,
                                                                                   this.serializationManager));
 
             if (options.host != null) {
                 this.tcpBootstrap.localAddress(options.host, this.tcpPort);
-            } else {
+            }
+            else {
                 this.tcpBootstrap.localAddress(this.tcpPort);
             }
 
@@ -212,29 +229,30 @@ public class Server extends EndPointServer {
 
             if (Sys.isAndroid) {
                 // android ONLY supports OIO (not NIO)
-                worker = new OioEventLoopGroup(0, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
+                worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-worker-UDP", nettyGroup));
                 this.udpBootstrap.channel(OioDatagramChannel.class);
-            } else {
-//                if (OS.isLinux()) {
-//                    // JNI network stack is MUCH faster (but only on linux)
-//                    worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
-//
-//                    this.udpBootstrap.channel(EpollDatagramChannel.class)
-//                                     .option(EpollChannelOption.SO_REUSEPORT, true);
-//                } else {
-                    worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(this.name + "-worker-UDP", nettyGroup));
+            }
+            else if (OS.isLinux()) {
+                // JNI network stack is MUCH faster (but only on linux)
+                worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-UDP", nettyGroup));
 
-                    this.udpBootstrap.channel(NioDatagramChannel.class);
-//                }
+                this.udpBootstrap.channel(EpollDatagramChannel.class)
+                                 .option(EpollChannelOption.SO_REUSEPORT, true);
+            }
+            else {
+                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-UDP", nettyGroup));
+
+                this.udpBootstrap.channel(NioDatagramChannel.class);
             }
 
             manageForShutdown(worker);
 
-            this.udpBootstrap.group(worker)
-                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                             // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                             .localAddress(this.udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
-                             .handler(new RegistrationRemoteHandlerServerUDP(this.name, this.registrationWrapper, this.serializationManager));
+            this.udpBootstrap.group(worker).option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                            // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
+                            .localAddress(this.udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
+                            .handler(new RegistrationRemoteHandlerServerUDP(threadName,
+                                                                            this.registrationWrapper,
+                                                                            this.serializationManager));
 
 
             // Enable to READ from MULTICAST data (ie, 192.168.1.0)
@@ -256,18 +274,18 @@ public class Server extends EndPointServer {
 
             // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
             // Annoying and abusing the classloader, but it works well.
-            boss = UdtEndpointProxy.getServerBoss(DEFAULT_THREAD_POOL_SIZE, this.name, nettyGroup);
-            worker = UdtEndpointProxy.getServerWorker(DEFAULT_THREAD_POOL_SIZE, this.name, nettyGroup);
+            boss = UdtEndpointProxy.getServerBoss(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
+            worker = UdtEndpointProxy.getServerWorker(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
 
             UdtEndpointProxy.setChannelFactory(this.udtBootstrap);
             this.udtBootstrap.group(boss, worker)
-                             .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
-                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                             // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                             .localAddress(this.udtPort)
-                             .childHandler(new RegistrationRemoteHandlerServerUDT(this.name,
-                                                                                  this.registrationWrapper,
-                                                                                  this.serializationManager));
+                             .option(ChannelOption.SO_BACKLOG, backlogConnectionCount).option(ChannelOption.ALLOCATOR,
+                                                                                              PooledByteBufAllocator.DEFAULT)
+                            // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
+                            .localAddress(this.udtPort)
+                            .childHandler(new RegistrationRemoteHandlerServerUDT(threadName,
+                                                                                 this.registrationWrapper,
+                                                                                 this.serializationManager));
 
             manageForShutdown(boss);
             manageForShutdown(worker);
@@ -276,33 +294,34 @@ public class Server extends EndPointServer {
 
     /**
      * Binds the server to the configured, underlying protocols.
-     * <p>
+     * <p/>
      * This method will also BLOCK until the stop method is called, and if
      * you want to continue running code after this method invocation, bind should be called in a separate, non-daemon thread.
      */
-    public void bind() {
+    public
+    void bind() {
         bind(true);
     }
 
     /**
      * Binds the server to the configured, underlying protocols.
-     * <p>
+     * <p/>
      * This is a more advanced method, and you should consider calling <code>bind()</code> instead.
      *
      * @param blockUntilTerminate will BLOCK until the server stop method is called, and if
-     * you want to continue running code after this method invocation, bind should be called in a separate,
-     * non-daemon thread - or with false as the parameter.
+     *                            you want to continue running code after this method invocation, bind should be called in a separate,
+     *                            non-daemon thread - or with false as the parameter.
      */
-    public void bind(boolean blockUntilTerminate) {
+    public
+    void bind(boolean blockUntilTerminate) {
         // make sure we are not trying to connect during a close or stop event.
         // This will wait until we have finished starting up/shutting down.
         synchronized (this.shutdownInProgress) {
         }
 
 
-        // Note: The bootstraps will be accessed ONE AT A TIME, in this order!
-
-        ChannelFuture future = null;
+        // The bootstraps will be accessed ONE AT A TIME, in this order!
+        ChannelFuture future;
 
         // LOCAL
         Logger logger2 = this.logger;
@@ -337,7 +356,9 @@ public class Server extends EndPointServer {
             }
 
             if (!future.isSuccess()) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to TCP port " + this.tcpPort + " on the server.", future.cause());
+                String errorMessage = stopWithErrorMessage(logger2,
+                                                           "Could not bind to TCP port " + this.tcpPort + " on the server.",
+                                                           future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
@@ -357,7 +378,9 @@ public class Server extends EndPointServer {
             }
 
             if (!future.isSuccess()) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDP port " + this.udpPort + " on the server.", future.cause());
+                String errorMessage = stopWithErrorMessage(logger2,
+                                                           "Could not bind to UDP port " + this.udpPort + " on the server.",
+                                                           future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
@@ -377,7 +400,9 @@ public class Server extends EndPointServer {
             }
 
             if (!future.isSuccess()) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDT port " + this.udtPort + " on the server.", future.cause());
+                String errorMessage = stopWithErrorMessage(logger2,
+                                                           "Could not bind to UDT port " + this.udtPort + " on the server.",
+                                                           future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
@@ -387,6 +412,8 @@ public class Server extends EndPointServer {
 
         // we now BLOCK until the stop method is called.
         // if we want to continue running code in the server, bind should be called in a separate, non-daemon thread.
-        waitForStop(blockUntilTerminate);
+        if (blockUntilTerminate) {
+            waitForShutdown();
+        }
     }
 }

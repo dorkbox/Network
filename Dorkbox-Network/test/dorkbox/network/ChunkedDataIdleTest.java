@@ -4,10 +4,10 @@ package dorkbox.network;
 
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.util.ConnectionSerializationManager;
-import dorkbox.network.util.KryoConnectionSerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -17,7 +17,7 @@ import java.util.Arrays;
 
 import static org.junit.Assert.fail;
 
-public class ChunkedDataTest extends BaseTest {
+public class ChunkedDataIdleTest extends BaseTest {
     private volatile boolean success = false;
 
     enum ConnectionType {
@@ -29,51 +29,45 @@ public class ChunkedDataTest extends BaseTest {
     // have to test sending objects
     @Test
     public void ObjectSender() throws InitializationException, SecurityException, IOException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         final Data mainData = new Data();
         populateData(mainData);
 
 
         System.err.println("-- TCP");
-        ConnectionOptions connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
-
-        sendObject(mainData, connectionOptions, ConnectionType.TCP);
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
+        sendObject(mainData, configuration, ConnectionType.TCP);
 
 
         System.err.println("-- UDP");
-        connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udpPort = udpPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
-
-        sendObject(mainData, connectionOptions, ConnectionType.UDP);
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
+        sendObject(mainData, configuration, ConnectionType.UDP);
 
 
         System.err.println("-- UDT");
-        connectionOptions = new ConnectionOptions();
-        connectionOptions.tcpPort = tcpPort;
-        connectionOptions.udtPort = udtPort;
-        connectionOptions.host = host;
-        connectionOptions.serializationManager = KryoConnectionSerializationManager.DEFAULT();
-        register(connectionOptions.serializationManager);
-
-        sendObject(mainData, connectionOptions, ConnectionType.UDT);
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udtPort = udtPort;
+        configuration.host = host;
+        sendObject(mainData, configuration, ConnectionType.UDT);
     }
 
 
 
-    private void sendObject(final Data mainData, ConnectionOptions connectionOptions, final ConnectionType type)
+    private void sendObject(final Data mainData, Configuration configuration, final ConnectionType type)
                     throws InitializationException, SecurityException, IOException {
-        Server server = new Server(connectionOptions);
+        Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
 
         addEndPoint(server);
-        server.setIdleTimeout(100);
+        server.setIdleTimeout(10);
         server.bind(false);
         server.listeners().add(new Listener<Data>() {
 
@@ -94,14 +88,15 @@ public class ChunkedDataTest extends BaseTest {
 
         // ----
 
-        Client client = new Client(connectionOptions);
+        Client client = new Client(configuration);
         client.disableRemoteKeyValidation();
+        client.setIdleTimeout(10);
         addEndPoint(client);
         client.listeners().add(new Listener<Data>() {
             @Override
             public void received(Connection connection, Data object) {
                 if (mainData.equals(object)) {
-                    ChunkedDataTest.this.success = true;
+                    ChunkedDataIdleTest.this.success = true;
                 }
 
                 System.err.println("finished!");
@@ -146,7 +141,7 @@ public class ChunkedDataTest extends BaseTest {
         data.Booleans = new Boolean[] {true, false};
     }
 
-    private void register (ConnectionSerializationManager kryoMT) {
+    private void register (CryptoSerializationManager kryoMT) {
         kryoMT.register(int[].class);
         kryoMT.register(short[].class);
         kryoMT.register(float[].class);

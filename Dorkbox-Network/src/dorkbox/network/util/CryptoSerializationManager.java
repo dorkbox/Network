@@ -10,7 +10,7 @@ import io.netty.buffer.ByteBuf;
  * it is possible to use a single kryo with the use of synchronize, however - that defeats the point of multi-threaded
  */
 public
-interface ConnectionSerializationManager extends SerializationManager, RMISerializationManager {
+interface CryptoSerializationManager extends SerializationManager, RMISerializationManager {
 
     /**
      * Determines if this buffer is encrypted or not.
@@ -53,4 +53,6 @@ interface ConnectionSerializationManager extends SerializationManager, RMISerial
      * @param length     should ALWAYS be the length of the expected object!
      */
     Object readWithCryptoUdp(Connection connection, ByteBuf buffer, int length);
+
+
 }

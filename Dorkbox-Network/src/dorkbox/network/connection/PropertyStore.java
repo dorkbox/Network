@@ -1,197 +1,203 @@
 package dorkbox.network.connection;
 
 
-import java.io.File;
-import java.security.SecureRandom;
-import java.util.HashMap;
-import java.util.Map;
-
+import dorkbox.network.util.store.SettingsStore;
+import dorkbox.util.SerializationManager;
+import dorkbox.util.bytes.ByteArrayWrapper;
+import dorkbox.util.database.DB_Server;
+import dorkbox.util.database.DatabaseStorage;
+import dorkbox.util.storage.Storage;
+import dorkbox.util.storage.Store;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
-import dorkbox.network.util.store.SettingsStore;
-import dorkbox.util.FileUtil;
-import dorkbox.util.bytes.ByteArrayWrapper;
-import dorkbox.util.storage.Storage;
+import java.io.IOException;
+import java.security.SecureRandom;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * The property store is the DEFAULT type of store for the network stack.
  * This is package private.
  */
+public
 class PropertyStore extends SettingsStore {
 
-    private static class Props {
-        private volatile ECPrivateKeyParameters serverPrivateKey = null;
-        private volatile ECPublicKeyParameters serverPublicKey = null;
-        private volatile byte[] salt = null;
+    protected Storage storage;
+    protected Map<ByteArrayWrapper, DB_Server> servers;
 
-        private volatile Map<ByteArrayWrapper, ECPublicKeyParameters> registeredServer = new HashMap<ByteArrayWrapper, ECPublicKeyParameters>(16);
-
-        private Props() {
-        }
-
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + (this.serverPrivateKey == null ? 0 : this.serverPrivateKey.getD().hashCode());
-            return result;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            Props other = (Props) obj;
-            if (this.serverPrivateKey == null) {
-                if (other.serverPrivateKey != null) {
-                    return false;
-                }
-            } else if (!this.serverPrivateKey.getD().equals(other.serverPrivateKey.getD())) {
-                return false;
-            } else if (!this.serverPrivateKey.getParameters().getCurve().equals(other.serverPrivateKey.getParameters().getCurve())) {
-                return false;
-            } else if (!this.serverPrivateKey.getParameters().getG().equals(other.serverPrivateKey.getParameters().getG())) {
-                return false;
-            } else if (!this.serverPrivateKey.getParameters().getH().equals(other.serverPrivateKey.getParameters().getH())) {
-                return false;
-            } else if (!this.serverPrivateKey.getParameters().getN().equals(other.serverPrivateKey.getParameters().getN())) {
-                return false;
-            }
-            return true;
-        }
+    public
+    PropertyStore() {
     }
 
+    /**
+     * Method of preference for creating/getting this connection store. package only since only the ConnectionStoreProxy calls this
+     *
+     * @param type                 this is either "Client" or "Server", depending on who is creating this endpoint.
+     * @param serializationManager this is the serialization used for saving objects into the storage database
+     */
+    @Override
+    public
+    void init(Class<? extends EndPoint> type, final SerializationManager serializationManager, Storage storage) throws IOException {
+        // make sure our custom types are registered
+        serializationManager.register(HashMap.class);
+        serializationManager.register(ByteArrayWrapper.class);
+        serializationManager.register(DB_Server.class);
 
-    // the name of the file that contains the saved properties
-    private static final String SETTINGS_FILE_NAME = "settings.db";
+        if (storage == null) {
+            this.storage = Store.Memory()
+                                .make();
+        }
+        else {
+            this.storage = storage;
+        }
 
-    private String name;
-    private final Storage storage;
-    private Props props = new Props();
+        servers = this.storage.load(DatabaseStorage.SERVERS, new HashMap<ByteArrayWrapper, DB_Server>(16));
 
+        //use map to keep track of recid, so we can get record info during restarts.
+        DB_Server localServer = servers.get(DB_Server.IP_0_0_0_0);
+        if (localServer == null) {
+            localServer = new DB_Server();
+            servers.put(DB_Server.IP_0_0_0_0, localServer);
 
-    // Method of preference for creating/getting this connection store. Private since only the ConnectionStoreProxy calls this
-    public PropertyStore(String name) {
-        this.name = name;
-
-        // DEFAULT location! (if it's for testing, etc)
-        File propertiesFile = new File(SETTINGS_FILE_NAME);
-        propertiesFile = FileUtil.normalize(propertiesFile);
-
-        propertiesFile = propertiesFile.getAbsoluteFile();
-
-        // loads the saved data into the props
-        this.storage = Storage.open(propertiesFile);
-        this.storage.load(name, this.props);
+            // have to always specify what we are saving
+            this.storage.commit(DatabaseStorage.SERVERS, servers);
+        }
     }
 
     /**
      * Simple, property based method to getting the private key of the server
      */
     @Override
-    public synchronized ECPrivateKeyParameters getPrivateKey() throws dorkbox.network.util.exceptions.SecurityException {
+    public synchronized
+    ECPrivateKeyParameters getPrivateKey() throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
-        return this.props.serverPrivateKey;
+        return servers.get(DB_Server.IP_0_0_0_0)
+                      .getPrivateKey();
     }
 
     /**
      * Simple, property based method for saving the private key of the server
      */
     @Override
-    public synchronized void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws dorkbox.network.util.exceptions.SecurityException {
+    public synchronized
+    void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
-        this.props.serverPrivateKey = serverPrivateKey;
+        servers.get(DB_Server.IP_0_0_0_0)
+               .setPrivateKey(serverPrivateKey);
 
-        this.storage.save(this.name);
+        // have to always specify what we are saving
+        storage.commit(DatabaseStorage.SERVERS, servers);
     }
 
     /**
      * Simple, property based method to getting the public key of the server
      */
     @Override
-    public synchronized ECPublicKeyParameters getPublicKey() throws dorkbox.network.util.exceptions.SecurityException {
+    public synchronized
+    ECPublicKeyParameters getPublicKey() throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
-        return this.props.serverPublicKey;
+        return servers.get(DB_Server.IP_0_0_0_0)
+                      .getPublicKey();
     }
 
     /**
      * Simple, property based method for saving the public key of the server
      */
     @Override
-    public synchronized void savePublicKey(ECPublicKeyParameters serverPublicKey) throws dorkbox.network.util.exceptions.SecurityException {
+    public synchronized
+    void savePublicKey(ECPublicKeyParameters serverPublicKey) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
-        this.props.serverPublicKey = serverPublicKey;
-        this.storage.save(this.name, this.props);
+        servers.get(DB_Server.IP_0_0_0_0)
+               .setPublicKey(serverPublicKey);
+
+        // have to always specify what we are saving
+        storage.commit(DatabaseStorage.SERVERS, servers);
     }
 
     /**
      * Simple, property based method to getting the server salt
      */
     @Override
-    public synchronized byte[] getSalt() {
+    public synchronized
+    byte[] getSalt() {
+        final DB_Server localServer = servers.get(DB_Server.IP_0_0_0_0);
+        byte[] salt = localServer.getSalt();
+
         // we don't care who gets the server salt
-        if (this.props.salt == null) {
+        if (salt == null) {
             SecureRandom secureRandom = new SecureRandom();
 
             // server salt is used to salt usernames and other various connection handshake parameters
-            this.props.salt = new byte[256];
-            secureRandom.nextBytes(this.props.salt);
+            byte[] bytes = new byte[256];
+            secureRandom.nextBytes(bytes);
 
-            this.storage.save(this.name, this.props);
-            return this.props.salt;
+            salt = bytes;
+
+            localServer.setSalt(bytes);
+
+            // have to always specify what we are saving
+            storage.commit(DatabaseStorage.SERVERS, servers);
         }
 
-        return this.props.salt;
+        return salt;
     }
 
     /**
      * Simple, property based method to getting a connected computer by host IP address
      */
     @Override
-    public synchronized ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
+    public synchronized
+    ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(RegistrationWrapper.class);
 
-        return this.props.registeredServer.get(ByteArrayWrapper.wrap(hostAddress));
+        final DB_Server db_server = this.servers.get(ByteArrayWrapper.wrap(hostAddress));
+        if (db_server != null) {
+            return db_server.getPublicKey();
+        }
+        return null;
     }
 
     /**
      * Saves a connected computer by host IP address and public key
      */
     @Override
-    public synchronized void addRegisteredServerKey(byte[] hostAddress, ECPublicKeyParameters publicKey) throws dorkbox.network.util.exceptions.SecurityException {
+    public synchronized
+    void addRegisteredServerKey(byte[] hostAddress, ECPublicKeyParameters publicKey)
+                    throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(RegistrationWrapper.class);
 
-        this.props.registeredServer.put(ByteArrayWrapper.wrap(hostAddress), publicKey);
-        this.storage.save(this.name, this.props);
+        final ByteArrayWrapper wrap = ByteArrayWrapper.wrap(hostAddress);
+        DB_Server db_server = this.servers.get(wrap);
+        if (db_server == null) {
+            db_server = new DB_Server();
+        }
+
+        db_server.setPublicKey(publicKey);
+        servers.put(wrap, db_server);
     }
 
     /**
      * Deletes a registered computer by host IP address
      */
     @Override
-    public synchronized boolean removeRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
+    public synchronized
+    boolean removeRegisteredServerKey(byte[] hostAddress) throws dorkbox.network.util.exceptions.SecurityException {
         checkAccess(RegistrationWrapper.class);
 
-        ECPublicKeyParameters remove = this.props.registeredServer.remove(ByteArrayWrapper.wrap(hostAddress));
-        this.storage.save(this.name, this.props);
+        final ByteArrayWrapper wrap = ByteArrayWrapper.wrap(hostAddress);
+        DB_Server db_server = this.servers.remove(wrap);
 
-        return remove != null;
+        return db_server != null;
     }
 
     @Override
-    public void shutdown() {
-        Storage.close(this.storage);
+    public
+    void shutdown() {
+        Store.close(storage);
     }
 }

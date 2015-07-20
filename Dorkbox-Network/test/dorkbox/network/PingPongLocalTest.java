@@ -3,7 +3,7 @@ package dorkbox.network;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.ConnectionSerializationManager;
+import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.exceptions.InitializationException;
 import dorkbox.network.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -126,7 +126,7 @@ public class PingPongLocalTest extends BaseTest {
         data.Booleans = new Boolean[] {true,false};
     }
 
-    private void register(ConnectionSerializationManager kryoMT) {
+    private void register(CryptoSerializationManager kryoMT) {
         kryoMT.register(int[].class);
         kryoMT.register(short[].class);
         kryoMT.register(float[].class);
