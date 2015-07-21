@@ -55,6 +55,7 @@ import java.net.InetSocketAddress;
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's ASYNC.
  */
+@SuppressWarnings("unused")
 public
 class Client extends EndPointClient {
 

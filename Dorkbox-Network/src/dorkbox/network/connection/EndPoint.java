@@ -144,6 +144,10 @@ class EndPoint {
 
     private final Executor rmiExecutor;
     private final boolean rmiEnabled;
+    // When using RMI, we want to keep track of what our current thread execution connection is. This is because we store state info in the
+    // connection object. This is the only way to retrieve this info "out-of-band"
+    private final ThreadLocal<Connection> currentConnection = new ThreadLocal<Connection>();
+
     // the eventLoop groups are used to track and manage the event loops for startup/shutdown
     private final List<EventLoopGroup> eventLoopGroups = new ArrayList<EventLoopGroup>(8);
     private final List<ChannelFuture> shutdownChannelList = new ArrayList<ChannelFuture>();
@@ -838,5 +842,20 @@ class EndPoint {
         int globalObjectId = globalRmiBridge.nextObjectId();
         globalRmiBridge.register(globalObjectId, globalObject);
         return globalObjectId;
+    }
+
+    /**
+     * When using RMI, we want to keep track of what our current thread execution connection is.
+     * <p/>
+     * This is because we store state info in the connection object. This is the only way to retrieve this info "out-of-band"
+     */
+    public
+    Connection getCurrentConnection() {
+        return this.currentConnection.get();
+    }
+
+    public
+    void setCurrentConnection(final Connection currentConnection) {
+        this.currentConnection.set(currentConnection);
     }
 }

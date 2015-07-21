@@ -17,8 +17,8 @@ package dorkbox.network.connection;
 
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.connection.idle.IdleObjectSender;
 import dorkbox.network.connection.idle.IdleSender;
+import dorkbox.network.connection.idle.IdleSenderFactory;
 import dorkbox.network.connection.ping.PingFuture;
 import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.connection.ping.PingTuple;
@@ -386,8 +386,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     @Override
     public final
     IdleBridge sendOnIdle(@SuppressWarnings("rawtypes") IdleSender sender) {
-        listeners().add(sender);
-        return sender;
+        return new IdleSenderFactory(this, sender);
     }
 
 
@@ -397,10 +396,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     @Override
     public final
     IdleBridge sendOnIdle(Object message) {
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        IdleObjectSender sender = new IdleObjectSender(message);
-        listeners().add(sender);
-        return sender;
+        return new IdleSenderFactory(this, message);
     }
 
     /**

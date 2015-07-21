@@ -23,6 +23,7 @@ class IdleListenerUDP<C extends Connection, M> extends IdleListener<C, M> {
     /**
      * used by the Idle Sender
      */
+    public
     IdleListenerUDP() {
     }
 

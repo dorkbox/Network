@@ -18,7 +18,7 @@ package dorkbox.network.connection.idle;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ListenerRaw;
 
-abstract
+public abstract
 class IdleListener<C extends Connection, M> extends ListenerRaw<C, M> {
 
     /**

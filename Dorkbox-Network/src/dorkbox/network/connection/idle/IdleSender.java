@@ -19,19 +19,19 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ListenerRaw;
 
 public abstract
-class IdleSender<C extends Connection, M> extends ListenerRaw<C, M> implements IdleBridge {
+class IdleSender<C extends Connection, M> extends ListenerRaw<C, M> {
+    final IdleListener<C, M> idleListener;
     volatile boolean started;
-    IdleListener<C, M> idleListener;
+
+    public
+    IdleSender(final IdleListener<C, M> idleListener) {
+        this.idleListener = idleListener;
+    }
 
     @Override
     public
     void idle(C connection) {
         if (!this.started) {
-            if (this.idleListener != null) {
-                // haven't defined TCP/UDP/UDT yet. It's a race condition, but we don't care.
-                return;
-            }
-
             this.started = true;
             start();
         }
@@ -45,26 +45,6 @@ class IdleSender<C extends Connection, M> extends ListenerRaw<C, M> implements I
             this.idleListener.send(connection, message);
         }
     }
-
-    @Override
-    public
-    void TCP() {
-        this.idleListener = new IdleListenerTCP<C, M>();
-    }
-
-    @Override
-    public
-    void UDP() {
-        this.idleListener = new IdleListenerUDP<C, M>();
-    }
-
-    @Override
-    public
-    void UDT() {
-        this.idleListener = new IdleListenerUDT<C, M>();
-    }
-
-
 
     /**
      * Called once, before the first send. Subclasses can override this method to send something so the receiving side expects

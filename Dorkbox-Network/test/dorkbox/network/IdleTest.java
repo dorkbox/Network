@@ -5,8 +5,7 @@ import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.connection.idle.InputStreamSender;
+import dorkbox.network.connection.idle.*;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -102,6 +101,7 @@ class IdleTest extends BaseTest {
     private
     void sendObject(final Data mainData, Configuration configuration, final ConnectionType type)
                     throws InitializationException, SecurityException, IOException {
+
         Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         addEndPoint(server);
@@ -178,8 +178,22 @@ class IdleTest extends BaseTest {
 
                       ByteArrayInputStream input = new ByteArrayInputStream(output.toByteArray());
 
+                      IdleListener<Connection, byte[]> listener = null;
+                      switch (type) {
+                          case TCP:
+                              listener = new IdleListenerTCP<Connection, byte[]>();
+                              break;
+                          case UDP:
+                              listener = new IdleListenerUDP<Connection, byte[]>();
+                              break;
+                          case UDT:
+                              listener = new IdleListenerUDT<Connection, byte[]>();
+                              break;
+                      }
+
+
                       // Send data in 512 byte chunks.
-                      IdleBridge sendOnIdle = connection.sendOnIdle(new InputStreamSender(input, 512) {
+                      IdleBridge sendOnIdle = connection.sendOnIdle(new InputStreamSender<Connection>(listener, input, 512) {
                           @Override
                           protected
                           void start() {
@@ -241,9 +255,9 @@ class IdleTest extends BaseTest {
     }
 
 
-    private
+    private static
     void populateData(Data data) {
-        StringBuilder buffer = new StringBuilder();
+        StringBuilder buffer = new StringBuilder(3001);
         for (int i = 0; i < 3000; i++) {
             buffer.append('a');
         }
@@ -271,7 +285,7 @@ class IdleTest extends BaseTest {
         data.Booleans = new Boolean[] {true, false};
     }
 
-    private
+    private static
     void register(CryptoSerializationManager kryoMT) {
         kryoMT.register(int[].class);
         kryoMT.register(short[].class);
@@ -294,7 +308,7 @@ class IdleTest extends BaseTest {
         kryoMT.register(TYPE.class);
     }
 
-    static public
+    public static
     class Data {
         public String string;
         public String[] strings;

@@ -28,7 +28,8 @@ class InputStreamSender<C extends Connection> extends IdleSender<C, byte[]> {
     private final byte[] chunk;
 
     public
-    InputStreamSender(InputStream input, int chunkSize) {
+    InputStreamSender(final IdleListener<C, byte[]> idleListener, InputStream input, int chunkSize) {
+        super(idleListener);
         this.input = input;
         this.chunk = new byte[chunkSize];
     }

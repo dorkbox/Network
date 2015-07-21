@@ -213,6 +213,11 @@ class RmiBridge  {
         Object result;
         CachedMethod cachedMethod = invokeMethod.cachedMethod;
 
+        // we have to provide access to the connection (since the RMI-server is generally going to keep the state in
+        // the connection object.
+        connection.getEndPoint()
+                  .setCurrentConnection(connection);
+
         try {
             result = cachedMethod.invoke(target, invokeMethod.args);
         } catch (Exception ex) {
@@ -422,6 +427,4 @@ class RmiBridge  {
 
         return id;
     }
-
-
 }

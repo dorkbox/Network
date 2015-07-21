@@ -16,7 +16,6 @@
 package dorkbox.network.connection.idle;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.util.exceptions.NetException;
 
 public
 class IdleObjectSender<C extends Connection, M> extends IdleSender<C, M> {
@@ -24,7 +23,8 @@ class IdleObjectSender<C extends Connection, M> extends IdleSender<C, M> {
     private final M message;
 
     public
-    IdleObjectSender(M message) {
+    IdleObjectSender(final IdleListener<C, M> idleListener, M message) {
+        super(idleListener);
         this.message = message;
     }
 
@@ -32,10 +32,6 @@ class IdleObjectSender<C extends Connection, M> extends IdleSender<C, M> {
     public
     void idle(C connection) {
         if (!this.started) {
-            if (this.idleListener != null) {
-                // haven't defined TCP/UDP/UDT yet. It's a race condition, but we don't care.
-                return;
-            }
             this.started = true;
             start();
         }
@@ -43,12 +39,7 @@ class IdleObjectSender<C extends Connection, M> extends IdleSender<C, M> {
         connection.listeners()
                   .remove(this);
 
-        if (this.idleListener != null) {
-            this.idleListener.send(connection, this.message);
-        }
-        else {
-            throw new NetException("Invalid idle listener. Please specify .TCP(), .UDP(), or .UDT()");
-        }
+        this.idleListener.send(connection, this.message);
     }
 
     @Override
