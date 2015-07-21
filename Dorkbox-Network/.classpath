@@ -22,7 +22,7 @@
 	<classpathentry combineaccessrules="false" kind="src" path="/JavaLauncher-Util"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/objenesis-2.1.jar" sourcepath="/Dependencies/kryo/objenesis-2.1-srcs.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/asm/asm-5.0.4.jar"/>
-	<classpathentry kind="lib" path="/Dependencies/JCTools/JCTools-v1.1-alpha-MTAQ.jar" sourcepath="/Dependencies/JCTools/JCTools-1.1-alpha-MTAQ-src.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/JCTools/JCTools-v1.1-alpha-MTAQ.jar" sourcepath="/Dependencies/JCTools/JCTools-v1.1-alpha-MTAQ-src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/kryo3-debug.jar" sourcepath="/Dependencies/kryo/kryo3_src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/reflectasm-1.11.0.jar" sourcepath="/Dependencies/kryo/reflectasm-1.11.0-sources.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/dorkbox/object_pool/ObjectPool_v1.2.jar" sourcepath="/Dependencies/dorkbox/object_pool/ObjectPool_v1.2_src.zip"/>
