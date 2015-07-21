@@ -136,9 +136,12 @@ class EndPoint {
     protected final Object shutdownInProgress = new Object();
     final ECPrivateKeyParameters privateKey;
     final ECPublicKeyParameters publicKey;
+
     final SecureRandom secureRandom;
     final RmiBridge globalRmiBridge;
+
     private final CountDownLatch blockUntilDone = new CountDownLatch(1);
+
     private final Executor rmiExecutor;
     private final boolean rmiEnabled;
     // the eventLoop groups are used to track and manage the event loops for startup/shutdown
@@ -703,6 +706,7 @@ class EndPoint {
                 while (entries.hasNext()) {
                     MetaChannel metaChannel = entries.next().value;
                     metaChannel.close(maxShutdownWaitTimeInMilliSeconds);
+                    Thread.yield();
                 }
 
                 channelMap.clear();
@@ -720,6 +724,7 @@ class EndPoint {
                 Channel channel = f.channel();
                 channel.close()
                        .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+                Thread.yield();
             }
 
             // we have to clear the shutdown list.
@@ -732,12 +737,14 @@ class EndPoint {
                 shutdownThreadList.add(loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds,
                                                                     maxShutdownWaitTimeInMilliSeconds * 4,
                                                                     TimeUnit.MILLISECONDS));
+                Thread.yield();
             }
 
             // now wait for them to finish!
             // It can take a few seconds to shut down the executor. This will affect unit testing, where connections are quickly created/stopped
             for (Future<?> f : shutdownThreadList) {
                 f.syncUninterruptibly();
+                Thread.yield();
             }
 
             // when the eventloop closes, the associated selectors are ALSO closed!
