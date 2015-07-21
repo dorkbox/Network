@@ -444,10 +444,14 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     public synchronized
     void register(Class<?> clazz) {
         Kryo kryo;
-        for (int i = 0; i < capacity; i++) {
-            kryo = this.pool.takeUninterruptibly();
-            kryo.register(clazz);
-            this.pool.release(kryo);
+        try {
+            for (int i = 0; i < capacity; i++) {
+                kryo = this.pool.take();
+                kryo.register(clazz);
+                this.pool.release(kryo);
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Thread interrupted during kryo pool take/release cycle!", e);
         }
     }
 
@@ -465,10 +469,14 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     public synchronized
     void register(Class<?> clazz, Serializer<?> serializer) {
         Kryo kryo;
-        for (int i = 0; i < capacity; i++) {
-            kryo = this.pool.takeUninterruptibly();
-            kryo.register(clazz, serializer);
-            this.pool.release(kryo);
+        try {
+            for (int i = 0; i < capacity; i++) {
+                kryo = this.pool.take();
+                kryo.register(clazz, serializer);
+                this.pool.release(kryo);
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Thread interrupted during kryo pool take/release cycle!", e);
         }
     }
 
@@ -488,10 +496,14 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     public synchronized
     void register(Class<?> clazz, Serializer<?> serializer, int id) {
         Kryo kryo;
-        for (int i = 0; i < capacity; i++) {
-            kryo = this.pool.takeUninterruptibly();
-            kryo.register(clazz, serializer, id);
-            this.pool.release(kryo);
+        try {
+            for (int i = 0; i < capacity; i++) {
+                kryo = this.pool.take();
+                kryo.register(clazz, serializer, id);
+                this.pool.release(kryo);
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Thread interrupted during kryo pool take/release cycle!", e);
         }
     }
 
@@ -507,61 +519,66 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
         rmiInitialized = true;
 
         Kryo kryo;
-        for (int i = 0; i < capacity; i++) {
-            kryo = this.pool.takeUninterruptibly();
-            // necessary for the RMI bridge. Only called once, but for all kryo instances
+        try {
+            for (int i = 0; i < capacity; i++) {
+                kryo = this.pool.take();
+                // necessary for the RMI bridge. Only called once, but for all kryo instances
 
-            kryo.register(Class.class);
-            kryo.register(RmiRegistration.class);
-            kryo.register(Object[].class);
-            kryo.register(InvokeMethod.class, new InvokeMethodSerializer());
+                kryo.register(Class.class);
+                kryo.register(RmiRegistration.class);
+                kryo.register(Object[].class);
+                kryo.register(InvokeMethod.class, new InvokeMethodSerializer());
 
-            FieldSerializer<InvokeMethodResult> resultSerializer = new FieldSerializer<InvokeMethodResult>(kryo, InvokeMethodResult.class) {
-                @Override
-                public
-                void write(Kryo kryo, Output output, InvokeMethodResult result) {
-                    super.write(kryo, output, result);
-                    output.writeInt(result.objectID, true);
-                }
-
-                @Override
-                public
-                InvokeMethodResult read(Kryo kryo, Input input, Class<InvokeMethodResult> type) {
-                    InvokeMethodResult result = super.read(kryo, input, type);
-                    result.objectID = input.readInt(true);
-                    return result;
-                }
-            };
-            resultSerializer.removeField(OBJECT_ID);
-            kryo.register(InvokeMethodResult.class, resultSerializer);
-
-            kryo.register(InvocationHandler.class, new Serializer<Object>() {
-                @Override
-                public
-                void write(Kryo kryo, Output output, Object object) {
-                    RemoteInvocationHandler handler = (RemoteInvocationHandler) Proxy.getInvocationHandler(object);
-                    output.writeInt(handler.objectID, true);
-                }
-
-                @Override
-                @SuppressWarnings({"unchecked"})
-                public
-                Object read(Kryo kryo, Input input, Class<Object> type) {
-                    int objectID = input.readInt(true);
-
-                    KryoExtra kryoExtra = (KryoExtra) kryo;
-                    Object object = kryoExtra.connection.getRegisteredObject(objectID);
-
-                    if (object == null) {
-                        logger.error("Unknown object ID in RMI ObjectSpace: {}", objectID);
+                FieldSerializer<InvokeMethodResult> resultSerializer = new FieldSerializer<InvokeMethodResult>(kryo, InvokeMethodResult.class) {
+                    @Override
+                    public
+                    void write(Kryo kryo, Output output, InvokeMethodResult result) {
+                        super.write(kryo, output, result);
+                        output.writeInt(result.objectID, true);
                     }
-                    return object;
-                }
-            });
 
-            this.pool.release(kryo);
+                    @Override
+                    public
+                    InvokeMethodResult read(Kryo kryo, Input input, Class<InvokeMethodResult> type) {
+                        InvokeMethodResult result = super.read(kryo, input, type);
+                        result.objectID = input.readInt(true);
+                        return result;
+                    }
+                };
+                resultSerializer.removeField(OBJECT_ID);
+                kryo.register(InvokeMethodResult.class, resultSerializer);
+
+                kryo.register(InvocationHandler.class, new Serializer<Object>() {
+                    @Override
+                    public
+                    void write(Kryo kryo, Output output, Object object) {
+                        RemoteInvocationHandler handler = (RemoteInvocationHandler) Proxy.getInvocationHandler(object);
+                        output.writeInt(handler.objectID, true);
+                    }
+
+                    @Override
+                    @SuppressWarnings({"unchecked"})
+                    public
+                    Object read(Kryo kryo, Input input, Class<Object> type) {
+                        int objectID = input.readInt(true);
+
+                        KryoExtra kryoExtra = (KryoExtra) kryo;
+                        Object object = kryoExtra.connection.getRegisteredObject(objectID);
+
+                        if (object == null) {
+                            logger.error("Unknown object ID in RMI ObjectSpace: {}", objectID);
+                        }
+                        return object;
+                    }
+                });
+
+                this.pool.release(kryo);
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Thread interrupted during kryo pool take/release cycle!", e);
         }
     }
+
 
     /**
      * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
@@ -611,7 +628,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
         } finally {
             if (kryo != null) {
                 kryo.setRegistrationRequired(prev);
-                 this.pool.release(kryo);
+                this.pool.release(kryo);
             }
         }
     }
@@ -642,8 +659,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
 
     @Override
     public
-    Kryo take() throws InterruptedException
-    {
+    Kryo take() throws InterruptedException {
         return this.pool.take();
     }
 
@@ -687,7 +703,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      * class is ALREADY registered, then it's registration will be overwritten by this one
      *
      * @param ifaceClass The interface used to access the remote object
-     * @param implClass The implementation class of the interface
+     * @param implClass  The implementation class of the interface
      */
     @Override
     public
