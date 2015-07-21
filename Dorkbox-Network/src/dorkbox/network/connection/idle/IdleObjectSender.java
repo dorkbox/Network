@@ -32,12 +32,17 @@ class IdleObjectSender<C extends Connection, M> extends IdleSender<C, M> {
     public
     void idle(C connection) {
         if (!this.started) {
+            if (this.idleListener != null) {
+                // haven't defined TCP/UDP/UDT yet. It's a race condition, but we don't care.
+                return;
+            }
             this.started = true;
             start();
         }
 
         connection.listeners()
                   .remove(this);
+
         if (this.idleListener != null) {
             this.idleListener.send(connection, this.message);
         }
