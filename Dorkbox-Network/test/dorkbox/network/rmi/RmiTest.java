@@ -1,15 +1,6 @@
 package dorkbox.network.rmi;
 
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.io.Serializable;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import org.junit.Test;
-
 import dorkbox.network.BaseTest;
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
@@ -20,6 +11,14 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.io.Serializable;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public
 class RmiTest extends BaseTest {
@@ -211,6 +210,7 @@ class RmiTest extends BaseTest {
               });
 
         client.connect(5000);
+
         waitForThreads();
     }
 
