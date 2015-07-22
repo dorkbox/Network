@@ -21,7 +21,7 @@ import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.MathUtils;
+import dorkbox.util.MathUtil;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.Crypto;
@@ -184,13 +184,13 @@ class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer
                     }
 
 
-                    Integer connectionID = MathUtils.randomInt();
+                    Integer connectionID = MathUtil.randomInt();
                     // if I'm unlucky, keep from confusing connections!
 
                     try {
                         IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                         while (channelMap.containsKey(connectionID)) {
-                            connectionID = MathUtils.randomInt();
+                            connectionID = MathUtil.randomInt();
                         }
 
                         metaChannel.connectionID = connectionID;
