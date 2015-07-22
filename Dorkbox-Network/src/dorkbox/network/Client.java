@@ -25,10 +25,13 @@ import dorkbox.network.connection.registration.local.RegistrationLocalHandlerCli
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientTCP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDT;
+import dorkbox.network.rmi.RemoteObject;
+import dorkbox.network.rmi.TimeoutException;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.NetException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -57,7 +60,7 @@ import java.net.InetSocketAddress;
  */
 @SuppressWarnings("unused")
 public
-class Client extends EndPointClient {
+class Client extends EndPointClient implements Connection {
 
     private final Configuration options;
 
@@ -307,6 +310,49 @@ class Client extends EndPointClient {
         }
     }
 
+
+    @Override
+    public
+    boolean hasRemoteKeyChanged() {
+        return this.connectionManager.getConnection0().hasRemoteKeyChanged();
+    }
+
+    @Override
+    public
+    String getRemoteHost() {
+        return this.connectionManager.getConnection0().getRemoteHost();
+    }
+
+    @Override
+    public
+    EndPoint getEndPoint() {
+        return this;
+    }
+
+    @Override
+    public
+    int id() {
+        return this.connectionManager.getConnection0().id();
+    }
+
+    @Override
+    public
+    String idAsHex() {
+        return this.connectionManager.getConnection0().idAsHex();
+    }
+
+    @Override
+    public
+    boolean hasUDP() {
+        return this.connectionManager.getConnection0().hasUDP();
+    }
+
+    @Override
+    public
+    boolean hasUDT() {
+        return this.connectionManager.getConnection0().hasUDT();
+    }
+
     /**
      * Expose methods to send objects to a destination when the connection has become idle.
      */
@@ -357,4 +403,64 @@ class Client extends EndPointClient {
             this.registrationLock.notify();
         }
     }
+
+    /**
+     * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be
+     * invoked remotely on the object with the specified ID in the ObjectSpace for the current connection.
+     * <p/>
+     * This will request a registration ID from the remote endpoint, <b>and will block</b> until the object
+     * has been returned.
+     * <p/>
+     * Methods that return a value will throw {@link TimeoutException} if the
+     * response is not received with the
+     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
+     * <p/>
+     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
+     * (the default), then methods that return a value must not be called from
+     * the update thread for the connection. An exception will be thrown if this
+     * occurs. Methods with a void return value can be called on the update
+     * thread.
+     * <p/>
+     * If a proxy returned from this method is part of an object graph sent over
+     * the network, the object graph on the receiving side will have the proxy
+     * object replaced with the registered (non-proxy) object.
+     *
+     * @see RemoteObject
+     */
+    public
+    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws NetException {
+        return this.connectionManager.getConnection0().createRemoteObject(remoteImplementationClass);
+    }
+
+
+    /**
+     * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be
+     * invoked remotely on the object with the specified ID in the ObjectSpace for the current connection.
+     * <p/>
+     * This will REUSE a registration ID from the remote endpoint, <b>and will block</b> until the object
+     * has been returned.
+     * <p/>
+     * Methods that return a value will throw {@link TimeoutException} if the
+     * response is not received with the
+     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
+     * <p/>
+     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
+     * (the default), then methods that return a value must not be called from
+     * the update thread for the connection. An exception will be thrown if this
+     * occurs. Methods with a void return value can be called on the update
+     * thread.
+     * <p/>
+     * If a proxy returned from this method is part of an object graph sent over
+     * the network, the object graph on the receiving side will have the proxy
+     * object replaced with the registered (non-proxy) object.
+     *
+     * @see RemoteObject
+     */
+    public
+    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws NetException {
+        return this.connectionManager.getConnection0().getRemoteObject(objectId);
+    }
+
+
+
 }
