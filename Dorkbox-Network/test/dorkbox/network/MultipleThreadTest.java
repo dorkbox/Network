@@ -11,7 +11,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map.Entry;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -26,9 +26,13 @@ class MultipleThreadTest extends BaseTest {
 
     private final List<Client> clients = new ArrayList<Client>(this.clientCount);
 
+    int perClientReceiveTotal = (MultipleThreadTest.this.messageCount * MultipleThreadTest.this.threadCount);
+    int serverReceiveTotal = perClientReceiveTotal * MultipleThreadTest.this.clientCount;
+
     AtomicInteger sent = new AtomicInteger(0);
-    AtomicInteger totalClientCounter = new AtomicInteger(1);
+    AtomicInteger totalClientReceived = new AtomicInteger(0);
     AtomicInteger receivedServer = new AtomicInteger(1);
+
     ConcurrentHashMap<Integer, DataClass> sentStringsToClientDebug = new ConcurrentHashMap<Integer, DataClass>();
 
     @Test
@@ -47,9 +51,10 @@ class MultipleThreadTest extends BaseTest {
 
         addEndPoint(server);
         server.bind(false);
+
+
         server.listeners()
               .add(new Listener<DataClass>() {
-                  private final int total = MultipleThreadTest.this.messageCount * MultipleThreadTest.this.clientCount;
 
                   @Override
                   public
@@ -69,6 +74,7 @@ class MultipleThreadTest extends BaseTest {
                                                       "Server -> client. Thread #" + index + "  message# " + incrementAndGet,
                                                       incrementAndGet);
 
+                                      //System.err.println(dataClass.data);
                                       MultipleThreadTest.this.sentStringsToClientDebug.put(incrementAndGet, dataClass);
                                       connection.send()
                                                 .TCP(dataClass)
@@ -79,16 +85,14 @@ class MultipleThreadTest extends BaseTest {
                       }
                   }
 
-
                   @Override
                   public
                   void received(Connection connection, DataClass object) {
                       int incrementAndGet = MultipleThreadTest.this.receivedServer.getAndIncrement();
 
-
-                      if (incrementAndGet == total) {
+                      //System.err.println("server #" + incrementAndGet);
+                      if (incrementAndGet == serverReceiveTotal) {
                           System.err.println("Server DONE " + incrementAndGet);
-                          // note. this is getting called BEFORE it's ready?
                           stopEndPoints();
                           synchronized (MultipleThreadTest.this.lock) {
                               MultipleThreadTest.this.lock.notifyAll();
@@ -110,31 +114,26 @@ class MultipleThreadTest extends BaseTest {
             addEndPoint(client);
             client.listeners()
                   .add(new Listener<DataClass>() {
-                      AtomicInteger received = new AtomicInteger(1);
-                      private final int total = MultipleThreadTest.this.messageCount * MultipleThreadTest.this.clientCount;
-
-                      @Override
-                      public
-                      void connected(Connection connection) {
-                          System.err.println("Client #" + index + " connected.");
-                      }
+                      final int clientIndex = index;
+                      final AtomicInteger received = new AtomicInteger(1);
 
                       @Override
                       public
                       void received(Connection connection, DataClass object) {
+                          totalClientReceived.getAndIncrement();
                           int clientLocalCounter = this.received.getAndIncrement();
                           MultipleThreadTest.this.sentStringsToClientDebug.remove(object.index);
 
+                          //System.err.println(object.data);
                           // we finished!!
-                          if (clientLocalCounter == total) {
-                              System.err.println("Client #" + index + " received " + clientLocalCounter + " (" +
-                                                 MultipleThreadTest.this.totalClientCounter.getAndIncrement() + ")  Sending back " +
-                                                 MultipleThreadTest.this.messageCount + " messages.");
+                          if (clientLocalCounter == perClientReceiveTotal) {
+                              //System.err.println("Client #" + clientIndex + " received " + clientLocalCounter + " Sending back " +
+                              //                   MultipleThreadTest.this.messageCount + " messages.");
 
                               // now spam back messages!
                               for (int i = 0; i < MultipleThreadTest.this.messageCount; i++) {
                                   connection.send()
-                                            .TCP(new DataClass("Client #" + index + " -> Server  message " + i, index));
+                                            .TCP(new DataClass("Client #" + clientIndex + " -> Server  message " + i, index));
                               }
                           }
                       }
@@ -143,15 +142,18 @@ class MultipleThreadTest extends BaseTest {
         }
 
         // CLIENT will wait until it's done connecting, but SERVER is async.
-        // the ONLY way to safely work in the server is with LISTENERS. Everything else can FAIL, because of it's async. nature.
+        // the ONLY way to safely work in the server is with LISTENERS. Everything else can FAIL, because of it's async nature.
 
         // our clients should receive messageCount * threadCount * clientCount TOTAL messages
-        System.err.println("SEND COUNTS: " + this.threadCount * this.clientCount * this.messageCount + " and then " +
-                           this.messageCount * this.clientCount + " total messages");
+        int totalClientReceivedCountExpected = this.threadCount * this.clientCount * this.messageCount;
+        int totalServerReceivedCountExpected = this.clientCount * this.messageCount;
+
+        System.err.println("CLIENT RECEIVES: " + totalClientReceivedCountExpected);
+        System.err.println("SERVER RECEIVES: " + totalServerReceivedCountExpected);
 
         synchronized (this.lock) {
             try {
-                this.lock.wait(150 * 1000); // 15 secs
+                this.lock.wait(5 * 1000); // 5 secs
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -159,14 +161,16 @@ class MultipleThreadTest extends BaseTest {
 
         if (!this.sentStringsToClientDebug.isEmpty()) {
             System.err.println("MISSED DATA: " + this.sentStringsToClientDebug.size());
-            for (Entry<Integer, DataClass> i : this.sentStringsToClientDebug.entrySet()) {
+            for (Map.Entry<Integer, DataClass> i : this.sentStringsToClientDebug.entrySet()) {
                 System.err.println(i.getKey() + " : " + i.getValue().data);
             }
         }
 
         stopEndPoints();
-        assertEquals(this.messageCount * this.clientCount, this.receivedServer.get() - 1); // offset by 1 since we start at 1.
+        assertEquals(totalClientReceivedCountExpected, totalClientReceived.get());
+        assertEquals(totalServerReceivedCountExpected, this.receivedServer.get() - 1); // offset by 1 since we start at 1.
     }
+
 
     public static
     class DataClass {
