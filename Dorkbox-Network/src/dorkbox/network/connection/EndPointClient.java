@@ -131,7 +131,7 @@ class EndPointClient extends EndPoint implements Runnable {
      */
     @Override
     final
-    void connectionConnected0(Connection connection) {
+    void connectionConnected0(ConnectionImpl connection) {
         // invokes the listener.connection() method, and initialize the connection channels with whatever extra info they might need.
         super.connectionConnected0(connection);
 

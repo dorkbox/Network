@@ -77,7 +77,6 @@ class EndPoint {
     // TODO: maybe some sort of STUN-like connection keep-alive??
 
 
-    // TODO: do we really need this? Maybe?
     public static final String LOCAL_CHANNEL = "local_channel";
     protected static final String shutdownHookName = "::SHUTDOWN_HOOK::";
     protected static final String stopTreadName = "::STOP_THREAD::";
@@ -417,14 +416,14 @@ class EndPoint {
     /**
      * This method allows the connections used by the client/server to be subclassed (custom implementations).
      * <p/>
-     * As this is for the network stack, the new connection MUST subclass {@link Connection}
+     * As this is for the network stack, the new connection MUST subclass {@link ConnectionImpl}
      * <p/>
      * The parameters are ALL NULL when getting the base class, as this instance is just thrown away.
      *
      * @return a new network connection
      */
     public
-    Connection newConnection(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+    ConnectionImpl newConnection(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
         return new ConnectionImpl(logger, endPoint, rmiBridge);
     }
 
@@ -437,7 +436,7 @@ class EndPoint {
      */
     protected final
     Connection connection0(MetaChannel metaChannel) {
-        Connection connection;
+        ConnectionImpl connection;
 
         RmiBridge rmiBridge = null;
         if (metaChannel != null && rmiEnabled) {
@@ -490,7 +489,7 @@ class EndPoint {
      * <p/>
      * Only the CLIENT injects in front of this)
      */
-    void connectionConnected0(Connection connection) {
+    void connectionConnected0(ConnectionImpl connection) {
         this.isConnected.set(true);
 
         // prep the channel wrapper

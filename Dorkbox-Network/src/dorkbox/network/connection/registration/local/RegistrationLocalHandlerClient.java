@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection.registration.local;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -87,7 +87,7 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
             // Event though a local channel is XOR with everything else, we still have to make the client clean up it's state.
             registrationWrapper.registerNextProtocol0();
 
-            Connection connection = metaChannel.connection;
+            ConnectionImpl connection = metaChannel.connection;
             registrationWrapper.connectionConnected0(connection);
         }
         else {

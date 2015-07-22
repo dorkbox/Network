@@ -737,7 +737,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    void writeWithCryptoTcp(Connection connection, ByteBuf buffer, Object message) {
+    void writeWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, Object message) {
         if (connection == null) {
             throw new NetException("Unable to perform crypto when NO network connection!");
         }
@@ -752,7 +752,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    void writeWithCryptoUdp(Connection connection, ByteBuf buffer, Object message) {
+    void writeWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, Object message) {
         if (connection == null) {
             throw new NetException("Unable to perform crypto when NO network connection!");
         }
@@ -770,7 +770,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    Object readWithCryptoTcp(Connection connection, ByteBuf buffer, int length) {
+    Object readWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, int length) {
         if (connection == null) {
             throw new NetException("Unable to perform crypto when NO network connection!");
         }
@@ -788,7 +788,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    Object readWithCryptoUdp(Connection connection, ByteBuf buffer, int length) {
+    Object readWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, int length) {
         if (connection == null) {
             throw new NetException("Unable to perform crypto when NO network connection!");
         }
@@ -801,7 +801,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @SuppressWarnings("unchecked")
     private
-    void write0(final Connection connection, final ByteBuf buffer, final Object message, final boolean doCrypto) {
+    void write0(final ConnectionImpl connection, final ByteBuf buffer, final Object message, final boolean doCrypto) {
         final KryoExtra kryo = (KryoExtra) this.pool.takeUninterruptibly();
         Logger logger2 = logger;
 
@@ -911,7 +911,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @SuppressWarnings({"unchecked", "UnnecessaryLocalVariable"})
     private
-    Object read0(final Connection connection, final ByteBuf buffer, final int length, final boolean doCrypto) {
+    Object read0(final ConnectionImpl connection, final ByteBuf buffer, final int length, final boolean doCrypto) {
         final KryoExtra kryo = (KryoExtra) this.pool.takeUninterruptibly();
         Logger logger2 = logger;
 

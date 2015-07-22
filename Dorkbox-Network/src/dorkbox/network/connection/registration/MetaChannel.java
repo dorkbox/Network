@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection.registration;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import io.netty.channel.Channel;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
@@ -43,7 +43,7 @@ class MetaChannel {
 
     public Channel udtChannel   = null;
 
-    public Connection connection; // only needed until the connection has been notified.
+    public ConnectionImpl connection; // only needed until the connection has been notified.
 
     public ECPublicKeyParameters publicKey; // used for ECC crypto + handshake on NETWORK (remote) connections. This is the remote public key.
 

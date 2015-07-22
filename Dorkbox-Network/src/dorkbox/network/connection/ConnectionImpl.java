@@ -103,9 +103,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
     /**
      * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
+     * <p/>
+     * This happens BEFORE prep.
      */
-    @Override
-    public
     void init(final Bridge bridge) {
         if (bridge != null) {
             this.sessionManager = bridge.sessionManager;
@@ -126,10 +126,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     }
 
     /**
-     * Prepare the channel wrapper, since it doesn't have access to certain fields during it's construction.
+     * Prepare the channel wrapper, since it doesn't have access to certain fields during it's initialization.
+     * <p/>
+     * This happens AFTER init.
      */
-    @Override
-    public
     void prep() {
         if (this.channelWrapper != null) {
             this.channelWrapper.init();
@@ -140,8 +140,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     /**
      * @return the AES key/IV, etc associated with this connection
      */
-    @Override
-    public final
+    final
     ParametersWithIV getCryptoParameters() {
         return this.channelWrapper.cryptoParameters();
     }

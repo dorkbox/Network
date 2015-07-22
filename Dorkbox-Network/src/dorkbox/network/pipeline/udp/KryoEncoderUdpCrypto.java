@@ -15,9 +15,8 @@
  */
 package dorkbox.network.pipeline.udp;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -28,22 +27,16 @@ public
 class KryoEncoderUdpCrypto extends KryoEncoderUdp {
 
     public
-    KryoEncoderUdpCrypto(CryptoSerializationManager kryoWrapper) {
-        super(kryoWrapper);
+    KryoEncoderUdpCrypto(CryptoSerializationManager serializationManager) {
+        super(serializationManager);
     }
 
     @Override
     protected
-    void writeObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext ctx, Object msg, ByteBuf buffer) {
+    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext ctx, Object msg, ByteBuf buffer) {
         ChannelHandler last = ctx.pipeline()
                                  .last();
 
-        if (last instanceof Connection) {
-            kryoWrapper.writeWithCryptoUdp((Connection) last, buffer, msg);
-        }
-        else {
-            // SHOULD NEVER HAPPEN!
-            throw new NetException("Tried to use kryo to WRITE an object with NO network connection!");
-        }
+        serializationManager.writeWithCryptoUdp((ConnectionImpl) last, buffer, msg);
     }
 }

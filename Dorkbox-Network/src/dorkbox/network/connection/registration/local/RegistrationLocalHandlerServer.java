@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection.registration.local;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.util.collections.IntMap;
@@ -79,7 +79,7 @@ class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
             logger2.trace("Sent registration");
         }
 
-        Connection connection = null;
+        ConnectionImpl connection = null;
         try {
             IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
             MetaChannel metaChannel = channelMap.remove(channel.hashCode());

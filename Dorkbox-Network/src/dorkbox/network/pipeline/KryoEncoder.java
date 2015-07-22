@@ -17,8 +17,8 @@ package dorkbox.network.pipeline;
 
 import com.esotericsoftware.kryo.KryoException;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
+import dorkbox.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -28,14 +28,14 @@ import io.netty.handler.codec.MessageToByteEncoder;
 public
 class KryoEncoder extends MessageToByteEncoder<Object> {
     private static final int reservedLengthIndex = 4;
-    private final CryptoSerializationManager kryoWrapper;
+    private final CryptoSerializationManager serializationManager;
     private final OptimizeUtilsByteBuf optimize;
 
 
     public
-    KryoEncoder(CryptoSerializationManager kryoWrapper) {
+    KryoEncoder(CryptoSerializationManager serializationManager) {
         super();
-        this.kryoWrapper = kryoWrapper;
+        this.serializationManager = serializationManager;
         this.optimize = OptimizeUtilsByteBuf.get();
     }
 
@@ -60,7 +60,7 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
             out.writeInt(0);  // put an int in, which is the same size as reservedLengthIndex
 
             try {
-                writeObject(this.kryoWrapper, ctx, msg, out);
+                writeObject(this.serializationManager, ctx, msg, out);
 
                 // now set the frame (if it's TCP)!
                 int length = out.readableBytes() - startIndex -

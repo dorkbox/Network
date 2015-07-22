@@ -29,11 +29,11 @@ import java.util.List;
 public
 class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
 
-    private final CryptoSerializationManager kryoWrapper;
+    private final CryptoSerializationManager serializationManager;
 
     public
-    KryoDecoderUdp(CryptoSerializationManager kryoWrapper) {
-        this.kryoWrapper = kryoWrapper;
+    KryoDecoderUdp(CryptoSerializationManager serializationManager) {
+        this.serializationManager = serializationManager;
     }
 
     @Override
@@ -46,12 +46,12 @@ class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
                 // there is a REMOTE possibility that UDP traffic BEAT the TCP registration traffic, which means that THIS packet
                 // COULD be encrypted!
 
-                if (kryoWrapper.isEncrypted(data)) {
+                if (serializationManager.isEncrypted(data)) {
                     throw new NetException("Encrypted UDP packet received before registration complete. WHOOPS!");
                 }
 
                 // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-                Object read = kryoWrapper.read(data, data.writerIndex());
+                Object read = serializationManager.read(data, data.writerIndex());
                 out.add(read);
             }
         }

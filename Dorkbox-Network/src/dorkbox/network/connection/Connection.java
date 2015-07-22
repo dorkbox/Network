@@ -15,8 +15,6 @@
  */
 package dorkbox.network.connection;
 
-import org.bouncycastle.crypto.params.ParametersWithIV;
-
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
@@ -27,24 +25,6 @@ import dorkbox.util.exceptions.NetException;
 @SuppressWarnings("unused")
 public
 interface Connection {
-    /**
-     * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
-     * <p/>
-     * This happens BEFORE prep.
-     */
-    void init(Bridge bridge);
-
-    /**
-     * Prepare the channel wrapper, since it doesn't have access to certain fields during it's initialization.
-     * <p/>
-     * This happens AFTER init.
-     */
-    void prep();
-
-    /**
-     * @return the AES key/IV, etc associated with this connection
-     */
-    ParametersWithIV getCryptoParameters();
 
     /**
      * Has the remote ECC public key changed. This can be useful if specific actions are necessary when the key has changed.

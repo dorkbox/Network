@@ -15,9 +15,8 @@
  */
 package dorkbox.network.pipeline;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -29,21 +28,15 @@ public
 class KryoDecoderCrypto extends KryoDecoder {
 
     public
-    KryoDecoderCrypto(CryptoSerializationManager kryoWrapper) {
-        super(kryoWrapper);
+    KryoDecoderCrypto(CryptoSerializationManager serializationManager) {
+        super(serializationManager);
     }
 
     @Override
     protected
-    Object readObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext ctx, ByteBuf in, int length) {
+    Object readObject(CryptoSerializationManager serializationManager, ChannelHandlerContext ctx, ByteBuf in, int length) {
         ChannelHandler last = ctx.pipeline()
                                  .last();
-        if (last instanceof Connection) {
-            return kryoWrapper.readWithCryptoTcp((Connection) last, in, length);
-        }
-        else {
-            // SHOULD NEVER HAPPEN!
-            throw new NetException("Tried to use kryo to READ an object with NO network connection!");
-        }
+        return serializationManager.readWithCryptoTcp((ConnectionImpl) last, in, length);
     }
 }

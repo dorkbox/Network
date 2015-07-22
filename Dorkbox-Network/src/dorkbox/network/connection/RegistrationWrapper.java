@@ -18,9 +18,9 @@ package dorkbox.network.connection;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
-import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.Crypto;
+import dorkbox.util.exceptions.SecurityException;
 import org.bouncycastle.crypto.CipherParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
@@ -135,7 +135,7 @@ class RegistrationWrapper implements UdpServer {
      * to the pipeline are finished.
      */
     public
-    void connectionConnected0(Connection networkConnection) {
+    void connectionConnected0(ConnectionImpl networkConnection) {
         this.endPoint.connectionConnected0(networkConnection);
     }
 

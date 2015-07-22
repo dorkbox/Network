@@ -15,7 +15,7 @@
  */
 package dorkbox.network.util;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.util.SerializationManager;
 import io.netty.buffer.ByteBuf;
 
@@ -37,14 +37,14 @@ interface CryptoSerializationManager extends SerializationManager, RMISerializat
      * <p/>
      * There is a small speed penalty if there were no kryo's available to use.
      */
-    void writeWithCryptoTcp(Connection connection, ByteBuf buffer, Object message);
+    void writeWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, Object message);
 
     /**
      * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
      * <p/>
      * There is a small speed penalty if there were no kryo's available to use.
      */
-    void writeWithCryptoUdp(Connection connection, ByteBuf buffer, Object message);
+    void writeWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, Object message);
 
     /**
      * Reads an object from the buffer.
@@ -54,7 +54,7 @@ interface CryptoSerializationManager extends SerializationManager, RMISerializat
      * @param connection can be NULL
      * @param length     should ALWAYS be the length of the expected object!
      */
-    Object readWithCryptoTcp(Connection connection, ByteBuf buffer, int length);
+    Object readWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, int length);
 
     /**
      * Reads an object from the buffer.
@@ -64,5 +64,5 @@ interface CryptoSerializationManager extends SerializationManager, RMISerializat
      * @param connection can be NULL
      * @param length     should ALWAYS be the length of the expected object!
      */
-    Object readWithCryptoUdp(Connection connection, ByteBuf buffer, int length);
+    Object readWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, int length);
 }

@@ -15,9 +15,8 @@
  */
 package dorkbox.network.pipeline.udp;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -31,11 +30,11 @@ import java.util.List;
 public
 class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
 
-    private final CryptoSerializationManager kryoWrapper;
+    private final CryptoSerializationManager serializationManager;
 
     public
-    KryoDecoderUdpCrypto(CryptoSerializationManager kryoWrapper) {
-        this.kryoWrapper = kryoWrapper;
+    KryoDecoderUdpCrypto(CryptoSerializationManager serializationManager) {
+        this.serializationManager = serializationManager;
     }
 
     @Override
@@ -44,14 +43,8 @@ class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
         ChannelHandler last = ctx.pipeline()
                                  .last();
 
-        if (last instanceof Connection) {
-            ByteBuf data = in.content();
-            Object object = kryoWrapper.readWithCryptoUdp((Connection) last, data, data.readableBytes());
-            out.add(object);
-        }
-        else {
-            // SHOULD NEVER HAPPEN!
-            throw new NetException("Tried to use kryo to READ an object with NO network connection!");
-        }
+        ByteBuf data = in.content();
+        Object object = serializationManager.readWithCryptoUdp((ConnectionImpl) last, data, data.readableBytes());
+        out.add(object);
     }
 }

@@ -16,18 +16,17 @@
 package dorkbox.network.connection.registration.remote;
 
 import dorkbox.network.Broadcast;
-import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.wrapper.UdpWrapper;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
+import dorkbox.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -149,7 +148,7 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
     public final
     void sendUDP(ChannelHandlerContext context, Object object, ByteBuf buffer, InetSocketAddress udpRemoteAddress) {
 
-        Connection networkConnection = this.registrationWrapper.getServerUDP(udpRemoteAddress);
+        ConnectionImpl networkConnection = this.registrationWrapper.getServerUDP(udpRemoteAddress);
         if (networkConnection != null) {
             // try to write data! (IT SHOULD ALWAYS BE ENCRYPTED HERE!)
             this.serializationManager.writeWithCryptoUdp(networkConnection, buffer, object);

@@ -26,20 +26,20 @@ import java.util.List;
 public
 class KryoDecoder extends ByteToMessageDecoder {
     private final OptimizeUtilsByteBuf optimize;
-    private final CryptoSerializationManager kryoWrapper;
+    private final CryptoSerializationManager serializationManager;
 
     public
-    KryoDecoder(CryptoSerializationManager kryoWrapper) {
+    KryoDecoder(CryptoSerializationManager serializationManager) {
         super();
-        this.kryoWrapper = kryoWrapper;
+        this.serializationManager = serializationManager;
         this.optimize = OptimizeUtilsByteBuf.get();
     }
 
     @SuppressWarnings("unused")
     protected
-    Object readObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext context, ByteBuf in, int length) {
+    Object readObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-        return kryoWrapper.read(in, length);
+        return serializationManager.read(in, length);
     }
 
     @Override
@@ -150,13 +150,13 @@ class KryoDecoder extends ByteToMessageDecoder {
                 length = optimize.readInt(in, true); // object LENGTH
 
                 // however many we need to
-                out.add(readObject(this.kryoWrapper, ctx, in, length));
+                out.add(readObject(this.serializationManager, ctx, in, length));
             }
             // the buffer reader index will be at the correct location, since the read object method advances it.
         }
         else {
             // exactly one!
-            out.add(readObject(this.kryoWrapper, ctx, in, length));
+            out.add(readObject(this.serializationManager, ctx, in, length));
         }
     }
 }
