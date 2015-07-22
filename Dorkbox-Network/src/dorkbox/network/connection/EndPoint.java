@@ -29,7 +29,6 @@ import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.EndPointTool;
 import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
-import dorkbox.util.Sys;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
@@ -48,7 +47,6 @@ import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -80,11 +78,7 @@ class EndPoint {
     public static final String LOCAL_CHANNEL = "local_channel";
     protected static final String shutdownHookName = "::SHUTDOWN_HOOK::";
     protected static final String stopTreadName = "::STOP_THREAD::";
-    /**
-     * Shall we REALLY use a valid lan IP address instead of the loopback address? A common mistake is to listen on localhost, which does
-     * not accept external network connections
-     */
-    public static boolean useLanIpInsteadOfLoopback = true;
+
     /**
      * this can be changed to a more specialized value, if necessary
      */
@@ -183,14 +177,9 @@ class EndPoint {
                                                            this.logger); // TODO - get rid of the wrapper, since it just loops back on itself
 
         // make sure that 'localhost' is REALLY our specific IP address
-        if (useLanIpInsteadOfLoopback && options.host != null && (options.host.equals("localhost") || options.host.startsWith("127."))) {
-            try {
-                InetAddress localHostLanAddress = Sys.getLocalHostLanAddress();
-                options.host = localHostLanAddress.getHostAddress();
-                this.logger.info("Network localhost request, using real IP instead: {}", options.host);
-            } catch (UnknownHostException e) {
-                this.logger.error("Unable to get the actual 'localhost' IP address", e);
-            }
+        if (options.host != null && (options.host.equals("localhost") || options.host.startsWith("127."))) {
+            InetAddress localHostLanAddress = InetAddress.getLoopbackAddress();
+            options.host = localHostLanAddress.getHostAddress();
         }
 
         // serialization stuff
