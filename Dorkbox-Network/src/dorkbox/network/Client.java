@@ -62,8 +62,6 @@ import java.net.InetSocketAddress;
 public
 class Client extends EndPointClient implements Connection {
 
-    private final Configuration options;
-
     /**
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme
      */
@@ -87,7 +85,6 @@ class Client extends EndPointClient implements Connection {
     public
     Client(final Configuration options) throws InitializationException, SecurityException, IOException {
         super(options);
-        this.options = options;
 
         String threadName = Client.class.getSimpleName();
 
@@ -108,9 +105,6 @@ class Client extends EndPointClient implements Connection {
             }
             options.udtPort = -1;
         }
-
-//      tcpBootstrap.setOption(SO_SNDBUF, 1048576);
-//      tcpBootstrap.setOption(SO_RCVBUF, 1048576);
 
         // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
         SecurityManager s = System.getSecurityManager();
@@ -136,6 +130,10 @@ class Client extends EndPointClient implements Connection {
             manageForShutdown(boss);
         }
         else {
+            if (options.host == null) {
+                throw new IllegalArgumentException("You must define what host you want to connect to.");
+            }
+
             if (options.tcpPort > 0) {
                 Bootstrap tcpBootstrap = new Bootstrap();
                 this.bootstraps.add(new BootstrapWrapper("TCP", options.tcpPort, tcpBootstrap));
@@ -356,6 +354,7 @@ class Client extends EndPointClient implements Connection {
     /**
      * Expose methods to send objects to a destination when the connection has become idle.
      */
+    @Override
     public
     IdleBridge sendOnIdle(IdleSender<?, ?> sender) {
         return this.connectionManager.getConnection0()
@@ -365,6 +364,7 @@ class Client extends EndPointClient implements Connection {
     /**
      * Expose methods to send objects to a destination when the connection has become idle.
      */
+    @Override
     public
     IdleBridge sendOnIdle(Object message) {
         return this.connectionManager.getConnection0()
@@ -381,14 +381,6 @@ class Client extends EndPointClient implements Connection {
     public
     Connection getConnection() {
         return this.connectionManager.getConnection0();
-    }
-
-    /**
-     * Fetches the host (server) name for this client.
-     */
-    public
-    String getHost() {
-        return this.options.host;
     }
 
     /**
@@ -427,6 +419,7 @@ class Client extends EndPointClient implements Connection {
      *
      * @see RemoteObject
      */
+    @Override
     public
     <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws NetException {
         return this.connectionManager.getConnection0().createRemoteObject(remoteImplementationClass);
@@ -456,11 +449,9 @@ class Client extends EndPointClient implements Connection {
      *
      * @see RemoteObject
      */
+    @Override
     public
     <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws NetException {
         return this.connectionManager.getConnection0().getRemoteObject(objectId);
     }
-
-
-
 }

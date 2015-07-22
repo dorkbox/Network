@@ -152,10 +152,6 @@ class Server extends EndPointServer {
             this.udtBootstrap = null;
         }
 
-        //TODO: do we need to set the snd/rcv buffer?
-//        tcpBootstrap.setOption(SO_SNDBUF, 1048576);
-//        tcpBootstrap.setOption(SO_RCVBUF, 1048576);
-
         // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
         SecurityManager s = System.getSecurityManager();
         ThreadGroup nettyGroup = new ThreadGroup(s != null
@@ -229,6 +225,7 @@ class Server extends EndPointServer {
             else {
                 this.tcpBootstrap.localAddress(this.tcpPort);
             }
+
 
             // android screws up on this!!
             this.tcpBootstrap.option(ChannelOption.TCP_NODELAY, !Sys.isAndroid);

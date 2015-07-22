@@ -68,12 +68,10 @@ class RegistrationWrapper implements UdpServer {
         }
     }
 
-    public
     void setKryoTcpEncoder(KryoEncoder kryoTcpEncoder) {
         this.kryoTcpEncoder = kryoTcpEncoder;
     }
 
-    public
     void setKryoTcpCryptoEncoder(KryoEncoderCrypto kryoTcpCryptoEncoder) {
         this.kryoTcpCryptoEncoder = kryoTcpCryptoEncoder;
     }

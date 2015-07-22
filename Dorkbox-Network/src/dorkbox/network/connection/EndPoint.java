@@ -173,8 +173,11 @@ class EndPoint {
 
         this.logger = org.slf4j.LoggerFactory.getLogger(type);
 
+        // The registration wrapper permits the registration process to access protected/package fields/methods, that we don't want
+        // to expose to external code. "this" escaping can be ignored, because it is benign.
+        //noinspection ThisEscapedInObjectConstruction
         this.registrationWrapper = new RegistrationWrapper(this,
-                                                           this.logger); // TODO - get rid of the wrapper, since it just loops back on itself
+                                                           this.logger);
 
         // make sure that 'localhost' is REALLY our specific IP address
         if (options.host != null && (options.host.equals("localhost") || options.host.startsWith("127."))) {
@@ -316,26 +319,6 @@ class EndPoint {
     }
 
     /**
-     * TODO maybe remove this? method call is used by jetty ssl
-     *
-     * @return the ECC public key in use by this endpoint
-     */
-    public
-    ECPrivateKeyParameters getPrivateKey() {
-        return this.privateKey;
-    }
-
-    /**
-     * TODO maybe remove this? method call is used by jetty ssl
-     *
-     * @return the ECC private key in use by this endpoint
-     */
-    public
-    ECPublicKeyParameters getPublicKey() {
-        return this.publicKey;
-    }
-
-    /**
      * Internal call by the pipeline to notify the client to continue registering the different session protocols.
      * The server does not use this.
      */
@@ -411,7 +394,7 @@ class EndPoint {
      *
      * @return a new network connection
      */
-    public
+    protected
     ConnectionImpl newConnection(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
         return new ConnectionImpl(logger, endPoint, rmiBridge);
     }
@@ -522,38 +505,12 @@ class EndPoint {
      * Registers a tool with the server, to be used by other services.
      */
     public
-    void registerTool(EndPointTool toolClass) {
+    <T extends EndPointTool> void registerTool(T toolClass) {
         if (toolClass == null) {
             throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
         }
 
-        Class<?>[] interfaces = toolClass.getClass()
-                                         .getInterfaces();
-        int length = interfaces.length;
-        int index = -1;
-
-        if (length > 1) {
-            Class<?> clazz2;
-            Class<EndPointTool> cls = EndPointTool.class;
-
-            for (int i = 0; i < length; i++) {
-                clazz2 = interfaces[i];
-                if (cls.isAssignableFrom(clazz2)) {
-                    index = i;
-                    break;
-                }
-            }
-
-            if (index == -1) {
-                throw new IllegalArgumentException("Unable to discover tool interface! WHOOPS!");
-            }
-        }
-        else {
-            index = 0;
-        }
-
-        Class<?> clazz = interfaces[index];
-        EndPointTool put = this.toolMap.put(clazz, toolClass);
+        EndPointTool put = this.toolMap.put(toolClass.getClass(), toolClass);
         if (put != null) {
             throw new IllegalArgumentException("Tool must be unique! Unable to add tool");
         }
@@ -563,7 +520,7 @@ class EndPoint {
      * Only get the tools in the ModuleStart (ie: load) methods. If done in the constructor, the tool might not be available yet
      */
     public
-    <T extends EndPointTool> T getTool(Class<?> toolClass) {
+    <T extends EndPointTool> T getTool(Class<T> toolClass) {
         if (toolClass == null) {
             throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
         }

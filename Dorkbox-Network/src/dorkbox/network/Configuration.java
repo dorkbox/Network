@@ -21,6 +21,9 @@ import java.util.concurrent.Executor;
 
 public
 class Configuration {
+    /**
+     * On the server, if host is null, it will bind to the "any" address, otherwise you must specify the hostname/IP to bind to.
+     */
     public String host = null;
     public int tcpPort = -1;
 
