@@ -47,9 +47,11 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.slf4j.Logger;
 
 import java.io.IOException;
-import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.util.Collections;
 import java.util.LinkedList;
+import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -71,18 +73,18 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     private final Object messageInProgressLock = new Object();
     private final AtomicBoolean messageInProgress = new AtomicBoolean(false);
 
-    private ISessionManager<ConnectionImpl> sessionManager;
+    private ISessionManager<Connection> sessionManager;
     private ChannelWrapper channelWrapper;
 
     private volatile PingFuture pingFuture = null;
 
     // used to store connection local listeners (instead of global listeners). Only possible on the server.
-    private volatile ConnectionManager<ConnectionImpl> localListenerManager;
+    private volatile ConnectionManager<Connection> localListenerManager;
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private boolean remoteKeyChanged;
 
-    private final EndPoint<ConnectionImpl> endPoint;
+    private final EndPoint<Connection> endPoint;
 
     // when true, the connection will be closed (either as RMI or as 'normal' listener execution) when the thread execution returns control
     // back to the network stack
@@ -91,6 +93,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     private volatile ObjectRegistrationLatch objectRegistrationLatch;
     private final Object remoteObjectLock = new Object();
     private final RmiBridge rmiBridge;
+    private final Map<Integer, RemoteObject> proxyObjectCache = Collections.synchronizedMap(new WeakHashMap<Integer, RemoteObject>(8));
 
 
     /**
@@ -108,15 +111,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
      * <p/>
      * This happens BEFORE prep.
      */
-    void init(final Bridge bridge) {
-        if (bridge != null) {
-            this.sessionManager = bridge.sessionManager;
-            this.channelWrapper = bridge.channelWrapper;
-        }
-        else {
-            this.sessionManager = null;
-            this.channelWrapper = null;
-        }
+    void init(final ChannelWrapper channelWrapper, final ConnectionManager<Connection> sessionManager) {
+        this.sessionManager = sessionManager;
+        this.channelWrapper = channelWrapper;
 
         //noinspection SimplifiableIfStatement
         if (this.channelWrapper instanceof ChannelNetworkWrapper) {
@@ -171,7 +168,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
      */
     @Override
     public
-    EndPoint getEndPoint() {
+    EndPoint<Connection> getEndPoint() {
         return this.endPoint;
     }
 
@@ -629,7 +626,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             // is empty, we can remove it from this connection.
             synchronized (this) {
                 if (this.localListenerManager == null) {
-                    this.localListenerManager = ((EndPointServer<ConnectionImpl>) this.endPoint).addListenerManager(this);
+                    this.localListenerManager = ((EndPointServer<Connection>) this.endPoint).addListenerManager(this);
                 }
                 this.localListenerManager.add(listener);
             }
@@ -672,7 +669,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                     this.localListenerManager.remove(listener);
 
                     if (!this.localListenerManager.hasListeners()) {
-                        ((EndPointServer<ConnectionImpl>) this.endPoint).removeListenerManager(this);
+                        ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
@@ -705,7 +702,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                     this.localListenerManager.removeAll();
                     this.localListenerManager = null;
 
-                    ((EndPointServer<ConnectionImpl>) this.endPoint).removeListenerManager(this);
+                    ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
                 }
             }
         }
@@ -739,7 +736,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
                     if (!this.localListenerManager.hasListeners()) {
                         this.localListenerManager = null;
-                        ((EndPointServer<ConnectionImpl>) this.endPoint).removeListenerManager(this);
+                        ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
@@ -874,7 +871,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         if (implementationClassName != null) {
             // THIS IS ON THE SERVER SIDE
             //
-            // create a new ID, and register the ID and new object (must create a new one) in the object maps
+            // CREATE a new ID, and register the ID and new object (must create a new one) in the object maps
 
             Class<?> implementationClass;
 
@@ -897,22 +894,17 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                 while ((remoteClassObject = remoteClasses.pollFirst()) != null) {
                     // we have to check the class that is being registered for any additional proxy information
                     for (Field field : remoteClassObject.clazz.getDeclaredFields()) {
-                        Annotation[] annotations = field.getDeclaredAnnotations();
+                        RMI annotation = field.getAnnotation(RMI.class);
+                        if (annotation != null) {
+                            boolean prev = field.isAccessible();
+                            field.setAccessible(true);
+                            final Object o = field.get(remoteClassObject.object);
+                            field.setAccessible(prev);
+                            final Class<?> type = field.getType();
 
-                        if (annotations != null) {
-                            for (Annotation annotation : annotations) {
-                                if (annotation.annotationType().equals(RMI.class)) {
-                                    boolean prev = field.isAccessible();
-                                    field.setAccessible(true);
-                                    final Object o = field.get(remoteClassObject.object);
-                                    field.setAccessible(prev);
-                                    final Class<?> type = field.getType();
+                            rmiBridge.register(rmiBridge.nextObjectId(), o);
 
-                                    rmiBridge.register(rmiBridge.nextObjectId(), o);
-
-                                    remoteClasses.offerLast(new ClassObject(type, o));
-                                }
-                            }
+                            remoteClasses.offerLast(new ClassObject(type, o));
                         }
                     }
                 }
@@ -926,7 +918,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         else if (remoteRegistration.remoteObjectId > RmiBridge.INVALID_RMI) {
             // THIS IS ON THE SERVER SIDE
             //
-            // Get a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
+            // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
             Object object = getRegisteredObject(remoteRegistration.remoteObjectId);
 
             if (object != null) {
@@ -962,11 +954,26 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         }
     }
 
+
+    /**
+     * Used by the LOCAL side, to get the proxy object as an interface
+     */
     public
     RemoteObject getRemoteObject(final int objectID, final Class<?> type) {
-        return RmiBridge.getRemoteObject(this, objectID, type);
+        // we want to have a connection specific cache of IDs, using weak references.
+        RemoteObject remoteObject = proxyObjectCache.get(objectID);
+
+        if (remoteObject == null) {
+            // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
+            remoteObject = RmiBridge.createProxyObject(this, objectID, type);
+        }
+
+        return remoteObject;
     }
 
+    /**
+     * This is used by the REMOTE side, to get the implementation
+     */
     public
     Object getRegisteredObject(final int objectID) {
         if (RmiBridge.isGlobal(objectID)) {

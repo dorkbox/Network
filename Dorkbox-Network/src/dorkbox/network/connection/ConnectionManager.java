@@ -34,7 +34,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     public static Listener<?> unRegisteredType_Listener = null;
 
     // these are final, because the REFERENCE to these will never change. They ARE NOT immutable objects (meaning their content can change)
-    private final ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> listeners;
+    private final ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>> listeners;
     private final ConcurrentHashMapFactory<Connection, ConnectionManager<C>> localManagers;
     private final CopyOnWriteArrayList<C> connections = new CopyOnWriteArrayList<C>();
 
@@ -51,13 +51,13 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
 
         this.baseClass = baseClass;
 
-        this.listeners = new ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>() {
+        this.listeners = new ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>>() {
             private static final long serialVersionUID = 1L;
 
             @Override
             public
-            CopyOnWriteArrayList<ListenerRaw<Connection, Object>> createNewObject(Object... args) {
-                return new CopyOnWriteArrayList<ListenerRaw<Connection, Object>>();
+            CopyOnWriteArrayList<ListenerRaw<C, Object>> createNewObject(Object... args) {
+                return new CopyOnWriteArrayList<ListenerRaw<C, Object>>();
             }
         };
 
@@ -129,7 +129,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     void addListener0(ListenerRaw listener) {
         Class<?> type = listener.getObjectType();
 
-        CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list = this.listeners.getOrCreate(type);
+        CopyOnWriteArrayList<ListenerRaw<C, Object>> list = this.listeners.getOrCreate(type);
         list.addIfAbsent(listener);
 
         Logger logger2 = this.logger;
@@ -163,7 +163,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
 
         Class<?> type = listener.getObjectType();
 
-        CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list = this.listeners.get(type);
+        CopyOnWriteArrayList<ListenerRaw<C, Object>> list = this.listeners.get(type);
         if (list != null) {
             list.remove(listener);
         }
@@ -225,18 +225,18 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public final
-    void notifyOnMessage(Connection connection, Object message) {
+    void notifyOnMessage(C connection, Object message) {
         notifyOnMessage0(connection, message, false);
     }
 
     private
-    boolean notifyOnMessage0(Connection connection, Object message, boolean foundListener) {
+    boolean notifyOnMessage0(C connection, Object message, boolean foundListener) {
         Class<?> objectType = message.getClass();
 
         // this is the GLOBAL version (unless it's the call from below, then it's the connection scoped version)
-        CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list = this.listeners.get(objectType);
+        CopyOnWriteArrayList<ListenerRaw<C, Object>> list = this.listeners.get(objectType);
         if (list != null) {
-            for (ListenerRaw<Connection, Object> listener : list) {
+            for (ListenerRaw<C, Object> listener : list) {
                 if (this.shutdown) {
                     return true;
                 }
@@ -270,7 +270,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
             }
 
             if (list != null) {
-                for (ListenerRaw<Connection, Object> listener : list) {
+                for (ListenerRaw<C, Object> listener : list) {
                     if (this.shutdown) {
                         return true;
                     }
@@ -317,13 +317,13 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public final
-    void notifyOnIdle(Connection connection) {
-        Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>> entrySet = this.listeners.entrySet();
-        CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list;
-        for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> entry : entrySet) {
+    void notifyOnIdle(C connection) {
+        Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>>> entrySet = this.listeners.entrySet();
+        CopyOnWriteArrayList<ListenerRaw<C, Object>> list;
+        for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>> entry : entrySet) {
             list = entry.getValue();
             if (list != null) {
-                for (ListenerRaw<Connection, Object> listener : list) {
+                for (ListenerRaw<C, Object> listener : list) {
                     if (this.shutdown) {
                         return;
                     }
@@ -358,12 +358,12 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
         this.connections.add(connection);
 
         try {
-            Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>> entrySet = this.listeners.entrySet();
-            CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list;
-            for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> entry : entrySet) {
+            Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>>> entrySet = this.listeners.entrySet();
+            CopyOnWriteArrayList<ListenerRaw<C, Object>> list;
+            for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>> entry : entrySet) {
                 list = entry.getValue();
                 if (list != null) {
-                    for (ListenerRaw<Connection, Object> listener : list) {
+                    for (ListenerRaw<C, Object> listener : list) {
                         if (this.shutdown) {
                             return;
                         }
@@ -392,12 +392,12 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @Override
     public
     void connectionDisconnected(C connection) {
-        Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>> entrySet = this.listeners.entrySet();
-        CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list;
-        for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> entry : entrySet) {
+        Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>>> entrySet = this.listeners.entrySet();
+        CopyOnWriteArrayList<ListenerRaw<C, Object>> list;
+        for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>> entry : entrySet) {
             list = entry.getValue();
             if (list != null) {
-                for (ListenerRaw<Connection, Object> listener : list) {
+                for (ListenerRaw<C, Object> listener : list) {
                     if (this.shutdown) {
                         return;
                     }
@@ -427,13 +427,13 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public
-    void connectionError(Connection connection, Throwable throwable) {
-        Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>> entrySet = this.listeners.entrySet();
-        CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list;
-        for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> entry : entrySet) {
+    void connectionError(C connection, Throwable throwable) {
+        Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>>> entrySet = this.listeners.entrySet();
+        CopyOnWriteArrayList<ListenerRaw<C, Object>> list;
+        for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>> entry : entrySet) {
             list = entry.getValue();
             if (list != null) {
-                for (ListenerRaw<Connection, Object> listener : list) {
+                for (ListenerRaw<C, Object> listener : list) {
                     if (this.shutdown) {
                         return;
                     }

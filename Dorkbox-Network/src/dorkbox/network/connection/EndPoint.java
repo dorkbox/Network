@@ -120,7 +120,7 @@ class EndPoint<C extends Connection> {
     }
 
     protected final org.slf4j.Logger logger;
-    protected final Class<? extends EndPoint> type;
+    protected final Class<? extends EndPoint<C>> type;
 
     protected final ConnectionManager<C> connectionManager;
     protected final CryptoSerializationManager serializationManager;
@@ -166,7 +166,7 @@ class EndPoint<C extends Connection> {
      */
     public
     EndPoint(Class<? extends EndPoint> type, final Configuration options) throws InitializationException, SecurityException, IOException {
-        this.type = type;
+        this.type = (Class<? extends EndPoint<C>>) type;
 
         this.logger = org.slf4j.LoggerFactory.getLogger(type);
 
@@ -404,6 +404,7 @@ class EndPoint<C extends Connection> {
      *
      * @param metaChannel can be NULL (when getting the baseClass)
      */
+    @SuppressWarnings("unchecked")
     protected final
     Connection connection0(MetaChannel metaChannel) {
         ConnectionImpl connection;
@@ -435,7 +436,7 @@ class EndPoint<C extends Connection> {
             metaChannel.connection = connection;
 
             // now initialize the connection channels with whatever extra info they might need.
-            connection.init(new Bridge<C>(wrapper, this.connectionManager));
+            connection.init(wrapper, (ConnectionManager<Connection>) this.connectionManager);
 
             if (rmiBridge != null) {
                 // notify our remote object space that it is able to receive method calls.

@@ -41,7 +41,7 @@ interface Connection {
     /**
      * @return the endpoint associated with this connection
      */
-    EndPoint<Connection> getEndPoint();
+    EndPoint getEndPoint();
 
 
     /**
@@ -146,6 +146,4 @@ interface Connection {
      * @see RemoteObject
      */
     <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws IOException;
-
-
 }
