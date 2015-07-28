@@ -46,6 +46,8 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
     @Override
     public
     void write(Object object) {
+        // we should check to see if this class is registered as having RMI methods present.
+
         this.channel.write(object);
         this.shouldFlush.set(true);
     }

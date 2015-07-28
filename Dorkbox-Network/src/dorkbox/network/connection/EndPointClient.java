@@ -34,7 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointClient extends EndPoint implements Runnable {
+class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnable {
+
+    protected C connection;
 
     protected final Object registrationLock = new Object();
     protected final AtomicInteger connectingBootstrap = new AtomicInteger(0);
@@ -152,8 +154,7 @@ class EndPointClient extends EndPoint implements Runnable {
     ConnectionBridge send() {
         ConnectionBridgeFlushAlways connectionBridgeFlushAlways2 = this.connectionBridgeFlushAlways;
         if (connectionBridgeFlushAlways2 == null) {
-            ConnectionBridge clientBridge = this.connectionManager.getConnection0()
-                                                                  .send();
+            ConnectionBridge clientBridge = this.connection.send();
             this.connectionBridgeFlushAlways = new ConnectionBridgeFlushAlways(clientBridge);
         }
 

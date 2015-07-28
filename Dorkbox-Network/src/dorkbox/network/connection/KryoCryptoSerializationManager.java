@@ -27,7 +27,6 @@ import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.rmi.*;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.crypto.Crypto;
-import dorkbox.util.exceptions.NetException;
 import dorkbox.util.objectPool.ObjectPool;
 import dorkbox.util.objectPool.ObjectPoolFactory;
 import dorkbox.util.objectPool.PoolableObject;
@@ -43,6 +42,7 @@ import org.bouncycastle.crypto.params.IESWithCipherParameters;
 import org.jctools.util.Pow2;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
@@ -91,7 +91,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     public static boolean useUnsafeMemory = false;
 
     private static final String OBJECT_ID = "objectID";
-    private boolean rmiInitialized = false;
+    private boolean initialized = false;
 
     /**
      * The default serialization manager. This is static, since serialization must be consistent within the JVM. This can be changed.
@@ -159,7 +159,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
 
 
     private static
-    void decompress(ByteBuf inputBuffer, ByteBuf outputBuffer, Inflater decompress) {
+    void decompress(ByteBuf inputBuffer, ByteBuf outputBuffer, Inflater decompress) throws IOException {
         byte[] in = new byte[inputBuffer.readableBytes()];
         inputBuffer.readBytes(in);
 
@@ -173,7 +173,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
                 numBytes = decompress.inflate(out, 0, out.length);
             } catch (DataFormatException e) {
                 logger.error("Error inflating data.", e);
-                throw new NetException(e.getCause());
+                throw new IOException(e.getCause());
             }
 
             outputBuffer.writeBytes(out, 0, numBytes);
@@ -213,7 +213,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     }
 
     private static
-    void snappyDecompress(ByteBuf inputBuffer, ByteBuf outputBuffer, SnappyAccess snappy) {
+    void snappyDecompress(ByteBuf inputBuffer, ByteBuf outputBuffer, SnappyAccess snappy) throws IOException {
         try {
             int idx = inputBuffer.readerIndex();
             final int inSize = inputBuffer.writerIndex() - idx;
@@ -280,7 +280,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
                 break;
             }
         } catch (Exception e) {
-            throw new NetException("Unable to decompress SNAPPY data!! " + e.getMessage());
+            throw new IOException("Unable to decompress SNAPPY data!! " + e.getMessage());
         }
     }
 
@@ -430,6 +430,34 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     }
 
     /**
+     * If the class is not registered and {@link Kryo#setRegistrationRequired(boolean)} is false, it is
+     * automatically registered using the {@link Kryo#addDefaultSerializer(Class, Class) default serializer}.
+     *
+     * @throws IllegalArgumentException if the class is not registered and {@link Kryo#setRegistrationRequired(boolean)} is true.
+     * @see ClassResolver#getRegistration(Class)
+     */
+    @Override
+    public synchronized
+    Registration getRegistration(Class<?> clazz) {
+        Kryo kryo = null;
+        Registration r = null;
+
+        try {
+            kryo = this.pool.take();
+            r = kryo.getRegistration(clazz);
+        } catch (InterruptedException e) {
+            final String msg = "Interrupted during getRegistration()";
+            logger.error(msg);
+        } finally {
+            if (kryo != null) {
+                this.pool.release(kryo);
+            }
+        }
+
+        return r;
+    }
+
+    /**
      * Registers the class using the lowest, next available integer ID and the
      * {@link Kryo#getDefaultSerializer(Class) default serializer}. If the class
      * is already registered, the existing entry is updated with the new
@@ -443,6 +471,10 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     @Override
     public synchronized
     void register(Class<?> clazz) {
+        if (initialized) {
+            throw new RuntimeException("Cannot register classes after initialization.");
+        }
+
         Kryo kryo;
         try {
             for (int i = 0; i < capacity; i++) {
@@ -468,6 +500,10 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     @Override
     public synchronized
     void register(Class<?> clazz, Serializer<?> serializer) {
+        if (initialized) {
+            throw new RuntimeException("Cannot register classes after initialization.");
+        }
+
         Kryo kryo;
         try {
             for (int i = 0; i < capacity; i++) {
@@ -495,6 +531,10 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     @Override
     public synchronized
     void register(Class<?> clazz, Serializer<?> serializer, int id) {
+        if (initialized) {
+            throw new RuntimeException("Cannot register classes after initialization.");
+        }
+
         Kryo kryo;
         try {
             for (int i = 0; i < capacity; i++) {
@@ -508,26 +548,74 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     }
 
     /**
+     * Objects that we want to use RMI with must be accessed via an interface. This method configures the serialization of an
+     * implementation to be serialized via the defined interface, as a RemoteObject (ie: proxy object). If the implementation
+     * class is ALREADY registered, then it's registration will be overwritten by this one
+     *
+     * @param ifaceClass The interface used to access the remote object
+     * @param implClass  The implementation class of the interface
+     */
+    @Override
+    public synchronized
+    <Iface, Impl extends Iface> void registerRemote(final Class<Iface> ifaceClass, final Class<Impl> implClass) {
+        register(implClass, new RemoteObjectSerializer<Impl>());
+
+        // After all common registrations, register OtherObjectImpl only on the server using the remote object interface ID.
+        // This causes OtherObjectImpl to be serialized as OtherObject.
+        int otherObjectID = getRegistration(implClass).getId();
+
+        // this overrides the 'otherObjectID' with the specified class/serializer, so that when we WRITE this ID, the impl ID is written.
+        register(ifaceClass, new RemoteObjectSerializer<Impl>(), otherObjectID);
+
+        // we have to save this info in CachedMethod.
+        CachedMethod.registerOverridden(ifaceClass, implClass);
+    }
+
+    /**
      * Necessary to register classes for RMI, only called once when the RMI bridge is created.
      */
     @Override
     public synchronized
     void initRmiSerialization() {
-        if (rmiInitialized) {
+        if (initialized) {
+            // already initialized.
             return;
         }
-        rmiInitialized = true;
+
+        InvokeMethodSerializer methodSerializer = new InvokeMethodSerializer();
+        Serializer<Object> invocationSerializer = new Serializer<Object>() {
+            @Override
+            public
+            void write(Kryo kryo, Output output, Object object) {
+                RemoteInvocationHandler handler = (RemoteInvocationHandler) Proxy.getInvocationHandler(object);
+                output.writeInt(handler.objectID, true);
+            }
+
+            @Override
+            @SuppressWarnings({"unchecked", "AutoBoxing"})
+            public
+            Object read(Kryo kryo, Input input, Class<Object> type) {
+                int objectID = input.readInt(true);
+
+                KryoExtra kryoExtra = (KryoExtra) kryo;
+                Object object = kryoExtra.connection.getRegisteredObject(objectID);
+
+                if (object == null) {
+                    logger.error("Unknown object ID in RMI ObjectSpace: {}", objectID);
+                }
+                return object;
+            }
+        };
 
         Kryo kryo;
         try {
             for (int i = 0; i < capacity; i++) {
                 kryo = this.pool.take();
-                // necessary for the RMI bridge. Only called once, but for all kryo instances
 
                 kryo.register(Class.class);
                 kryo.register(RmiRegistration.class);
+                kryo.register(InvokeMethod.class, methodSerializer);
                 kryo.register(Object[].class);
-                kryo.register(InvokeMethod.class, new InvokeMethodSerializer());
 
                 FieldSerializer<InvokeMethodResult> resultSerializer = new FieldSerializer<InvokeMethodResult>(kryo, InvokeMethodResult.class) {
                     @Override
@@ -547,30 +635,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
                 };
                 resultSerializer.removeField(OBJECT_ID);
                 kryo.register(InvokeMethodResult.class, resultSerializer);
-
-                kryo.register(InvocationHandler.class, new Serializer<Object>() {
-                    @Override
-                    public
-                    void write(Kryo kryo, Output output, Object object) {
-                        RemoteInvocationHandler handler = (RemoteInvocationHandler) Proxy.getInvocationHandler(object);
-                        output.writeInt(handler.objectID, true);
-                    }
-
-                    @Override
-                    @SuppressWarnings({"unchecked"})
-                    public
-                    Object read(Kryo kryo, Input input, Class<Object> type) {
-                        int objectID = input.readInt(true);
-
-                        KryoExtra kryoExtra = (KryoExtra) kryo;
-                        Object object = kryoExtra.connection.getRegisteredObject(objectID);
-
-                        if (object == null) {
-                            logger.error("Unknown object ID in RMI ObjectSpace: {}", objectID);
-                        }
-                        return object;
-                    }
-                });
+                kryo.register(InvocationHandler.class, invocationSerializer);
 
                 this.pool.release(kryo);
             }
@@ -579,6 +644,19 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
         }
     }
 
+    /**
+     * Called when initialization is complete. This is to prevent (and recognize) out-of-order class/serializer registration.
+     */
+    public
+    void finishInit() {
+        initialized = true;
+    }
+
+    @Override
+    public
+    boolean initialized() {
+        return initialized;
+    }
 
     /**
      * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
@@ -589,7 +667,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    void write(ByteBuf buffer, Object message) {
+    void write(ByteBuf buffer, Object message) throws IOException {
         write0(null, buffer, message, false);
     }
 
@@ -602,7 +680,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    Object read(ByteBuf buffer, int length) {
+    Object read(ByteBuf buffer, int length) throws IOException {
         return read0(null, buffer, length, false);
     }
 
@@ -611,7 +689,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public
-    void writeFullClassAndObject(Output output, Object value) {
+    void writeFullClassAndObject(final Logger logger, Output output, Object value) throws IOException {
         Kryo kryo = null;
         boolean prev = false;
 
@@ -623,8 +701,10 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
             kryo.writeClassAndObject(output, value);
         } catch (Exception ex) {
             final String msg = "Unable to serialize buffer";
-            logger.error(msg, ex);
-            throw new NetException(msg, ex);
+            if (logger != null) {
+                logger.error(msg, ex);
+            }
+            throw new IOException(msg, ex);
         } finally {
             if (kryo != null) {
                 kryo.setRegistrationRequired(prev);
@@ -635,7 +715,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
 
     @Override
     public
-    Object readFullClassAndObject(final Input input) {
+    Object readFullClassAndObject(final Logger logger, final Input input) throws IOException {
         Kryo kryo = null;
         boolean prev = false;
 
@@ -647,8 +727,10 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
             return kryo.readClassAndObject(input);
         } catch (Exception ex) {
             final String msg = "Unable to deserialize buffer";
-            logger.error(msg, ex);
-            throw new NetException(msg, ex);
+            if (logger != null) {
+                logger.error(msg, ex);
+            }
+            throw new IOException(msg, ex);
         } finally {
             if (kryo != null) {
                 kryo.setRegistrationRequired(prev);
@@ -670,60 +752,9 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     }
 
     /**
-     * If the class is not registered and {@link Kryo#setRegistrationRequired(boolean)} is false, it is
-     * automatically registered using the {@link Kryo#addDefaultSerializer(Class, Class) default serializer}.
-     *
-     * @throws IllegalArgumentException if the class is not registered and {@link Kryo#setRegistrationRequired(boolean)} is true.
-     * @see ClassResolver#getRegistration(Class)
-     */
-    @Override
-    public
-    Registration getRegistration(Class<?> clazz) {
-        Kryo kryo = null;
-        Registration r = null;
-
-        try {
-            kryo = this.pool.take();
-            r = kryo.getRegistration(clazz);
-        } catch (InterruptedException e) {
-            final String msg = "Interrupted during getRegistration()";
-            logger.error(msg);
-        } finally {
-            if (kryo != null) {
-                this.pool.release(kryo);
-            }
-        }
-
-        return r;
-    }
-
-    /**
-     * Objects that we want to use RMI with must be accessed via an interface. This method configures the serialization of an
-     * implementation to be serialized via the defined interface, as a RemoteObject (ie: proxy object). If the implementation
-     * class is ALREADY registered, then it's registration will be overwritten by this one
-     *
-     * @param ifaceClass The interface used to access the remote object
-     * @param implClass  The implementation class of the interface
-     */
-    @Override
-    public
-    <Iface, Impl extends Iface> void registerRemote(final Class<Iface> ifaceClass, final Class<Impl> implClass) {
-
-        register(implClass, new RemoteObjectSerializer<Impl>());
-
-        // After all common registrations, register OtherObjectImpl only on the server using the remote object interface ID.
-        // This causes OtherObjectImpl to be serialized as OtherObject.
-        int otherObjectID = getRegistration(implClass).getId();
-
-        // this overrides the 'otherObjectID' with the specified class/serializer
-        register(ifaceClass, new RemoteObjectSerializer<Impl>(), otherObjectID);
-    }
-
-    /**
      * Determines if this buffer is encrypted or not.
      */
-    @Override
-    public final
+    public static
     boolean isEncrypted(ByteBuf buffer) {
         // read off the magic byte
         byte magicByte = buffer.getByte(buffer.readerIndex());
@@ -737,11 +768,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    void writeWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, Object message) {
-        if (connection == null) {
-            throw new NetException("Unable to perform crypto when NO network connection!");
-        }
-
+    void writeWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, Object message) throws IOException {
         write0(connection, buffer, message, true);
     }
 
@@ -752,11 +779,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    void writeWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, Object message) {
-        if (connection == null) {
-            throw new NetException("Unable to perform crypto when NO network connection!");
-        }
-
+    void writeWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, Object message) throws IOException {
         write0(connection, buffer, message, true);
     }
 
@@ -770,11 +793,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    Object readWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, int length) {
-        if (connection == null) {
-            throw new NetException("Unable to perform crypto when NO network connection!");
-        }
-
+    Object readWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, int length) throws IOException {
         return read0(connection, buffer, length, true);
     }
 
@@ -788,11 +807,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    Object readWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, int length) {
-        if (connection == null) {
-            throw new NetException("Unable to perform crypto when NO network connection!");
-        }
-
+    Object readWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, int length) throws IOException {
         return read0(connection, buffer, length, true);
     }
 
@@ -801,7 +816,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @SuppressWarnings("unchecked")
     private
-    void write0(final ConnectionImpl connection, final ByteBuf buffer, final Object message, final boolean doCrypto) {
+    void write0(final ConnectionImpl connection, final ByteBuf buffer, final Object message, final boolean doCrypto) throws IOException {
         final KryoExtra kryo = (KryoExtra) this.pool.takeUninterruptibly();
         Logger logger2 = logger;
 
@@ -826,7 +841,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
             // connection will ALWAYS be of type Connection or NULL.
             // used by RMI/some serializers to determine which connection wrote this object
             // NOTE: this is only valid in the context of this thread, which RMI stuff is accessed in -- so this is SAFE for RMI
-            kryo.connection = (ConnectionImpl) connection;
+            kryo.connection = connection;
 
             kryo.writeClassAndObject(kryo.output, message);
 
@@ -893,7 +908,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
         } catch (Exception ex) {
             final String msg = "Unable to serialize buffer";
             logger2.error(msg, ex);
-            throw new NetException(msg, ex);
+            throw new IOException(msg, ex);
         } finally {
             // release resources
             kryo.output.setBuffer(NULL_BUFFER);
@@ -911,7 +926,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @SuppressWarnings({"unchecked", "UnnecessaryLocalVariable"})
     private
-    Object read0(final ConnectionImpl connection, final ByteBuf buffer, final int length, final boolean doCrypto) {
+    Object read0(final ConnectionImpl connection, final ByteBuf buffer, final int length, final boolean doCrypto) throws IOException {
         final KryoExtra kryo = (KryoExtra) this.pool.takeUninterruptibly();
         Logger logger2 = logger;
 
@@ -938,7 +953,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
             // AES CRYPTO STUFF
             if (doCrypto) {
                 if ((magicByte & crypto) != crypto) {
-                    throw new NetException("Unable to perform crypto when data does not use crypto!");
+                    throw new IOException("Unable to perform crypto when data does not use crypto!");
                 }
 
                 if (logger2.isTraceEnabled()) {
@@ -977,7 +992,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
             // connection will ALWAYS be of type IConnection or NULL.
             // used by RMI/some serializers to determine which connection read this object
             // NOTE: this is only valid in the context of this thread, which RMI stuff is accessed in -- so this is SAFE for RMI
-            kryo.connection = (ConnectionImpl) connection;
+            kryo.connection = connection;
 
 
             Object object = kryo.readClassAndObject(kryo.input);
@@ -985,7 +1000,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
         } catch (Exception ex) {
             final String msg = "Unable to deserialize buffer";
             logger2.error(msg, ex);
-            throw new NetException(msg, ex);
+            throw new IOException(msg, ex);
         } finally {
             // make sure the end of the buffer is in the correct spot.
             // move the reader index to the end of the object (since we are reading encrypted data

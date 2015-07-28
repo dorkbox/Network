@@ -15,6 +15,7 @@
  */
 package dorkbox.network;
 
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointServer;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerTCP;
@@ -56,7 +57,7 @@ import java.io.IOException;
  * To put it bluntly, ONLY have the server do work inside of a listener!
  */
 public
-class Server extends EndPointServer {
+class Server<C extends Connection> extends EndPointServer<C> {
 
     /**
      * The maximum queue length for incoming connection indications (a request to connect). If a connection indication arrives when
@@ -323,6 +324,7 @@ class Server extends EndPointServer {
      *                            you want to continue running code after this method invocation, bind should be called in a separate,
      *                            non-daemon thread - or with false as the parameter.
      */
+    @SuppressWarnings("AutoBoxing")
     public
     void bind(boolean blockUntilTerminate) {
         // make sure we are not trying to connect during a close or stop event.

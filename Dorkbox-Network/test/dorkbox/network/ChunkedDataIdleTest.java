@@ -28,7 +28,7 @@ public class ChunkedDataIdleTest extends BaseTest {
 
     // have to test sending objects
     @Test
-    public void ObjectSender() throws InitializationException, SecurityException, IOException {
+    public void ObjectSender() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 
@@ -62,7 +62,7 @@ public class ChunkedDataIdleTest extends BaseTest {
 
 
     private void sendObject(final Data mainData, Configuration configuration, final ConnectionType type)
-                    throws InitializationException, SecurityException, IOException {
+                    throws InitializationException, SecurityException, IOException, InterruptedException {
         Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
 

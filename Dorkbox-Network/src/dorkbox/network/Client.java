@@ -31,7 +31,6 @@ import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.exceptions.InitializationException;
-import dorkbox.util.exceptions.NetException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -60,7 +59,7 @@ import java.net.InetSocketAddress;
  */
 @SuppressWarnings("unused")
 public
-class Client extends EndPointClient implements Connection {
+class Client<C extends Connection> extends EndPointClient<C> implements Connection {
 
     /**
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme
@@ -132,6 +131,10 @@ class Client extends EndPointClient implements Connection {
         else {
             if (options.host == null) {
                 throw new IllegalArgumentException("You must define what host you want to connect to.");
+            }
+
+            if (options.tcpPort < 0 && options.udpPort < 0 && options.udtPort < 0) {
+                throw new IllegalArgumentException("You must define what port you want to connect to.");
             }
 
             if (options.tcpPort > 0) {
@@ -251,17 +254,21 @@ class Client extends EndPointClient implements Connection {
 
     /**
      * Allows the client to reconnect to the last connected server
+     *
+     * @throws InterruptedException if the client is unable to reconnect in the previously requested connection-timeout
      */
     public
-    void reconnect() {
+    void reconnect() throws IOException {
         reconnect(this.connectionTimeout);
     }
 
     /**
      * Allows the client to reconnect to the last connected server
+     *
+     * @throws InterruptedException if the client is unable to reconnect in the requested time
      */
     public
-    void reconnect(int connectionTimeout) {
+    void reconnect(int connectionTimeout) throws IOException {
         // close out all old connections
         close();
 
@@ -271,9 +278,11 @@ class Client extends EndPointClient implements Connection {
 
     /**
      * will attempt to connect to the server, with a 30 second timeout.
+     *
+     * @throws IOException if the client is unable to connect in 30 seconds
      */
     public
-    void connect() {
+    void connect() throws IOException {
         connect(30000);
     }
 
@@ -283,9 +292,10 @@ class Client extends EndPointClient implements Connection {
      * will BLOCK until completed
      *
      * @param connectionTimeout wait for x milliseconds. 0 will wait indefinitely
+     * @throws IOException if the client is unable to connect in the requested time
      */
     public
-    void connect(int connectionTimeout) {
+    void connect(int connectionTimeout) throws IOException {
         this.connectionTimeout = connectionTimeout;
 
         // make sure we are not trying to connect during a close or stop event.
@@ -303,22 +313,24 @@ class Client extends EndPointClient implements Connection {
             try {
                 this.registrationLock.wait(connectionTimeout);
             } catch (InterruptedException e) {
-                this.logger.error("Registration thread interrupted!");
+                throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds", e);
             }
         }
+
+        connection = this.connectionManager.getConnection0();
     }
 
 
     @Override
     public
     boolean hasRemoteKeyChanged() {
-        return this.connectionManager.getConnection0().hasRemoteKeyChanged();
+        return this.connection.hasRemoteKeyChanged();
     }
 
     @Override
     public
     String getRemoteHost() {
-        return this.connectionManager.getConnection0().getRemoteHost();
+        return this.connection.getRemoteHost();
     }
 
     @Override
@@ -330,25 +342,25 @@ class Client extends EndPointClient implements Connection {
     @Override
     public
     int id() {
-        return this.connectionManager.getConnection0().id();
+        return this.connection.id();
     }
 
     @Override
     public
     String idAsHex() {
-        return this.connectionManager.getConnection0().idAsHex();
+        return this.connection.idAsHex();
     }
 
     @Override
     public
     boolean hasUDP() {
-        return this.connectionManager.getConnection0().hasUDP();
+        return this.connection.hasUDP();
     }
 
     @Override
     public
     boolean hasUDT() {
-        return this.connectionManager.getConnection0().hasUDT();
+        return this.connection.hasUDT();
     }
 
     /**
@@ -357,8 +369,7 @@ class Client extends EndPointClient implements Connection {
     @Override
     public
     IdleBridge sendOnIdle(IdleSender<?, ?> sender) {
-        return this.connectionManager.getConnection0()
-                                     .sendOnIdle(sender);
+        return this.connection.sendOnIdle(sender);
     }
 
     /**
@@ -367,33 +378,13 @@ class Client extends EndPointClient implements Connection {
     @Override
     public
     IdleBridge sendOnIdle(Object message) {
-        return this.connectionManager.getConnection0()
-                                     .sendOnIdle(message);
+        return this.connection.sendOnIdle(message);
     }
 
-    /**
-     * Fetches the connection used by the client.
-     * <p/>
-     * Make <b>sure</b> that you only call this <b>after</b> the client connects!
-     * <p/>
-     * This is preferred to {@link EndPoint#getConnections()} getConnections()}, as it properly does some error checking
-     */
-    public
-    Connection getConnection() {
-        return this.connectionManager.getConnection0();
-    }
-
-    /**
-     * Closes all connections ONLY (keeps the server/client running).
-     * <p/>
-     * This is used, for example, when reconnecting to a server.
-     */
     @Override
     public
-    void close() {
-        synchronized (this.registrationLock) {
-            this.registrationLock.notify();
-        }
+    void closeAsap() {
+//TODO
     }
 
     /**
@@ -421,10 +412,10 @@ class Client extends EndPointClient implements Connection {
      */
     @Override
     public
-    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws NetException {
-        return this.connectionManager.getConnection0().createRemoteObject(remoteImplementationClass);
+    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws IOException {
+        return this.connectionManager.getConnection0()
+                                     .createRemoteObject(remoteImplementationClass);
     }
-
 
     /**
      * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be
@@ -451,7 +442,33 @@ class Client extends EndPointClient implements Connection {
      */
     @Override
     public
-    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws NetException {
-        return this.connectionManager.getConnection0().getRemoteObject(objectId);
+    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws IOException {
+        return this.connectionManager.getConnection0()
+                                     .getRemoteObject(objectId);
+    }
+
+    /**
+     * Fetches the connection used by the client.
+     * <p/>
+     * Make <b>sure</b> that you only call this <b>after</b> the client connects!
+     * <p/>
+     * This is preferred to {@link EndPoint#getConnections()} getConnections()}, as it properly does some error checking
+     */
+    public
+    C getConnection() {
+        return this.connection;
+    }
+
+    /**
+     * Closes all connections ONLY (keeps the server/client running).
+     * <p/>
+     * This is used, for example, when reconnecting to a server.
+     */
+    @Override
+    public
+    void close() {
+        synchronized (this.registrationLock) {
+            this.registrationLock.notify();
+        }
     }
 }

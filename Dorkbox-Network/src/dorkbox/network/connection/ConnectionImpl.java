@@ -25,11 +25,10 @@ import dorkbox.network.connection.ping.PingTuple;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
+import dorkbox.network.rmi.RMI;
 import dorkbox.network.rmi.RemoteObject;
-import dorkbox.network.rmi.RemoteProxy;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.rmi.RmiRegistration;
-import dorkbox.util.exceptions.NetException;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -72,19 +71,22 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     private final Object messageInProgressLock = new Object();
     private final AtomicBoolean messageInProgress = new AtomicBoolean(false);
 
-    private ISessionManager sessionManager;
+    private ISessionManager<ConnectionImpl> sessionManager;
     private ChannelWrapper channelWrapper;
 
     private volatile PingFuture pingFuture = null;
 
     // used to store connection local listeners (instead of global listeners). Only possible on the server.
-    private volatile ConnectionManager localListenerManager;
+    private volatile ConnectionManager<ConnectionImpl> localListenerManager;
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private boolean remoteKeyChanged;
 
+    private final EndPoint<ConnectionImpl> endPoint;
 
-    private final EndPoint endPoint;
+    // when true, the connection will be closed (either as RMI or as 'normal' listener execution) when the thread execution returns control
+    // back to the network stack
+    private boolean closeAsap = false;
 
     private volatile ObjectRegistrationLatch objectRegistrationLatch;
     private final Object remoteObjectLock = new Object();
@@ -442,6 +444,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                 this.messageInProgressLock.notifyAll();
             }
         }
+
+        // in some cases, we want to close the current connection -- and given the way the system is designed, we cannot always close it before
+        // we return. This will let us close the connection when our business logic is finished.
+        if (closeAsap) {
+            close();
+        }
     }
 
     @Override
@@ -551,6 +559,16 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         }
     }
 
+    /**
+     * Marks the connection to be closed as soon as possible. This is evaluated when the current
+     * thread execution returns to the network stack.
+     */
+    @Override
+    public final
+    void closeAsap() {
+        closeAsap = true;
+    }
+
     @Override
     public
     void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
@@ -611,7 +629,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             // is empty, we can remove it from this connection.
             synchronized (this) {
                 if (this.localListenerManager == null) {
-                    this.localListenerManager = ((EndPointServer) this.endPoint).addListenerManager(this);
+                    this.localListenerManager = ((EndPointServer<ConnectionImpl>) this.endPoint).addListenerManager(this);
                 }
                 this.localListenerManager.add(listener);
             }
@@ -654,7 +672,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                     this.localListenerManager.remove(listener);
 
                     if (!this.localListenerManager.hasListeners()) {
-                        ((EndPointServer) this.endPoint).removeListenerManager(this);
+                        ((EndPointServer<ConnectionImpl>) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
@@ -687,7 +705,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                     this.localListenerManager.removeAll();
                     this.localListenerManager = null;
 
-                    ((EndPointServer) this.endPoint).removeListenerManager(this);
+                    ((EndPointServer<ConnectionImpl>) this.endPoint).removeListenerManager(this);
                 }
             }
         }
@@ -721,7 +739,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
                     if (!this.localListenerManager.hasListeners()) {
                         this.localListenerManager = null;
-                        ((EndPointServer) this.endPoint).removeListenerManager(this);
+                        ((EndPointServer<ConnectionImpl>) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
@@ -780,7 +798,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked"})
     @Override
     public final
-    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws NetException {
+    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws IOException {
         // only one register can happen at a time
         synchronized (remoteObjectLock) {
             objectRegistrationLatch = new ObjectRegistrationLatch();
@@ -793,12 +811,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                 if (!objectRegistrationLatch.latch.await(2, TimeUnit.SECONDS)) {
                     final String errorMessage = "Timed out getting registration ID for: " + remoteImplementationClass;
                     logger.error(errorMessage);
-                    throw new NetException(errorMessage);
+                    throw new IOException(errorMessage);
                 }
             } catch (InterruptedException e) {
                 final String errorMessage = "Error getting registration ID for: " + remoteImplementationClass;
                 logger.error(errorMessage, e);
-                throw new NetException(errorMessage, e);
+                throw new IOException(errorMessage, e);
             }
 
             // local var to prevent double hit on volatile field
@@ -806,7 +824,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             if (latch.hasError) {
                 final String errorMessage = "Error getting registration ID for: " + remoteImplementationClass;
                 logger.error(errorMessage);
-                throw new NetException(errorMessage);
+                throw new IOException(errorMessage);
             }
 
             return (Iface) latch.remoteObject;
@@ -816,7 +834,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked"})
     @Override
     public final
-    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws NetException {
+    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws IOException {
         // only one register can happen at a time
         synchronized (remoteObjectLock) {
             objectRegistrationLatch = new ObjectRegistrationLatch();
@@ -829,12 +847,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                 if (!objectRegistrationLatch.latch.await(2, TimeUnit.SECONDS)) {
                     final String errorMessage = "Timed out getting registration for ID: " + objectId;
                     logger.error(errorMessage);
-                    throw new NetException(errorMessage);
+                    throw new IOException(errorMessage);
                 }
             } catch (InterruptedException e) {
                 final String errorMessage = "Error getting registration for ID: " + objectId;
                 logger.error(errorMessage, e);
-                throw new NetException(errorMessage, e);
+                throw new IOException(errorMessage, e);
             }
 
             // local var to prevent double hit on volatile field
@@ -842,7 +860,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             if (latch.hasError) {
                 final String errorMessage = "Error getting registration for ID: " + objectId;
                 logger.error(errorMessage);
-                throw new NetException(errorMessage);
+                throw new IOException(errorMessage);
             }
 
             return (Iface) latch.remoteObject;
@@ -883,7 +901,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
                         if (annotations != null) {
                             for (Annotation annotation : annotations) {
-                                if (annotation.annotationType().equals(RemoteProxy.class)) {
+                                if (annotation.annotationType().equals(RMI.class)) {
                                     boolean prev = field.isAccessible();
                                     field.setAccessible(true);
                                     final Object o = field.get(remoteClassObject.object);

@@ -34,6 +34,15 @@
  */
 package dorkbox.network.rmi;
 
+import com.esotericsoftware.kryo.util.IntMap;
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.ListenerRaw;
+import dorkbox.util.collections.ObjectIntMap;
+import org.slf4j.Logger;
+
+import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
@@ -42,29 +51,31 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
-import org.slf4j.Logger;
-
-import com.esotericsoftware.kryo.util.IntMap;
-
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.ListenerRaw;
-import dorkbox.util.collections.ObjectIntMap;
-import dorkbox.util.exceptions.NetException;
-import dorkbox.util.objectPool.ObjectPool;
-import dorkbox.util.objectPool.ObjectPoolFactory;
-
 /**
  * Allows methods on objects to be invoked remotely over TCP, UDP, or UDT. Objects are
  * {@link dorkbox.network.util.RMISerializationManager#registerRemote(Class, Class)}, and endpoint connections
- * can then {@link Connection#createRemoteObject(Class, Class)} for the registered objects.
+ * can then {@link Connection#createRemoteObject(Class)} for the registered objects.
  * <p/>
  * It costs at least 2 bytes more to use remote method invocation than just
  * sending the parameters. If the method has a return value which is not
  * {@link RemoteObject#setNonBlocking(boolean) ignored}, an extra byte is
  * written. If the type of a parameter is not final (note that primitives are final)
  * then an extra byte is written for that parameter.
+ * <p/>
+ * <p/>
+ * In situations where we want to pass in the Connection (to an RMI method), we have to be able to override method A, with method B.
+ * <p/>
+ * This is to support calling RMI methods from an interface (that does pass the connection reference) to
+ * an implementation, that DOES pass the connection reference. The remote side (that initiates the RMI calls), MUST use
+ * the interface, and the implementation may override the method, so that we add the connection as the first in
+ * the list of parameters.
+ * <p/>
+ * for example:
+ *  Interface: foo(String x)
+ *       Impl: foo(Connection c, String x)
+ * <p/>
+ * The implementation (if it exists, with the same name, and with the same signature+connection) will be called from the interface.
+ * This MUST hold valid for both remote and local connection types.
  *
  * @author Nathan Sweet <misc@n4te.com>, Nathan Robinson
  */
@@ -101,16 +112,16 @@ class RmiBridge  {
 
     private final Executor executor;
 
-    // 4096 concurrent method invocations max
-    private static final ObjectPool<InvokeMethod> invokeMethodPool = ObjectPoolFactory.create(new InvokeMethodPoolable(), 4096);
-
     private final ListenerRaw<ConnectionImpl, InvokeMethod> invokeListener = new ListenerRaw<ConnectionImpl, InvokeMethod>() {
+        @SuppressWarnings("AutoBoxing")
         @Override
         public
         void received(final ConnectionImpl connection, final InvokeMethod invokeMethod) {
             int objectID = invokeMethod.objectID;
 
             // have to make sure to get the correct object (global vs local)
+            // This is what is overridden when registering interfaces/classes for RMI.
+            // objectID is the interface ID, and this returns the implementation ID.
             final Object target = connection.getRegisteredObject(objectID);
 
             if (target == null) {
@@ -124,19 +135,59 @@ class RmiBridge  {
 
             Executor executor2 = RmiBridge.this.executor;
             if (executor2 == null) {
-                invoke(connection, target, invokeMethod);
+                try {
+                    invoke(connection, target, invokeMethod);
+                } catch (IOException e) {
+                    logger.error("Unable to invoke method.", e);
+                }
             }
             else {
                 executor2.execute(new Runnable() {
                     @Override
                     public
                     void run() {
-                        invoke(connection, target, invokeMethod);
+                        try {
+                            invoke(connection, target, invokeMethod);
+                        } catch (IOException e) {
+                            logger.error("Unable to invoke method.", e);
+                        }
                     }
                 });
             }
         }
     };
+
+
+    //for (int i = 0; i < cachedMethods.length; i++) {
+    //    Method cachedMethod = cachedMethods[i].method;
+    //    String name = cachedMethod.getName();
+    //    Class<?>[] types = cachedMethod.getParameterTypes();
+    //    int modLength = types.length + 1;
+    //
+    //    for (int j = i+1; j < cachedMethods.length; j++) {
+    //        Method checkMethod = cachedMethods[j].method;
+    //        String checkName = checkMethod.getName();
+    //        Class<?>[] checkTypes = cachedMethod.getParameterTypes();
+    //        int checkLength = checkTypes.length;
+    //
+    //        if (modLength != checkLength || !(name.equals(checkName))) {
+    //            break;
+    //        }
+    //
+    //        // checkLength > 0
+    //        Class<?> checkType = checkTypes[0];
+    //        if (!checkType.isAssignableFrom(com.sun.jdi.connect.spi.Connection.class)) {
+    //            break;
+    //        }
+    //
+    //        // now we check to see if our "check" method is equal to our "cached" method + Connection
+    //
+    //    }
+    //}
+    //
+
+
+
 
     /**
      * Creates an RmiBridge with no connections. Connections must be
@@ -179,7 +230,9 @@ class RmiBridge  {
      * @param connection The remote side of this connection requested the invocation.
      */
     protected
-    void invoke(Connection connection, Object target, InvokeMethod invokeMethod) {
+    void invoke(final Connection connection, final Object target, final InvokeMethod invokeMethod) throws IOException {
+        CachedMethod cachedMethod = invokeMethod.cachedMethod;
+
         Logger logger2 = this.logger;
         if (logger2.isDebugEnabled()) {
             String argString = "";
@@ -197,13 +250,16 @@ class RmiBridge  {
             stringBuilder.append(":")
                          .append(invokeMethod.objectID);
             stringBuilder.append("#")
-                         .append(invokeMethod.cachedMethod.method.getName());
+                         .append(cachedMethod.method.getName());
             stringBuilder.append("(")
                          .append(argString)
                          .append(")");
+
+            if (cachedMethod.origMethod != null) {
+                stringBuilder.append(" [Connection param override]");
+            }
             logger2.debug(stringBuilder.toString());
         }
-
 
         byte responseData = invokeMethod.responseData;
         boolean transmitReturnVal = (responseData & returnValueMask) == returnValueMask;
@@ -211,15 +267,8 @@ class RmiBridge  {
         int responseID = responseData & responseIdMask;
 
         Object result;
-        CachedMethod cachedMethod = invokeMethod.cachedMethod;
-
-        // we have to provide access to the connection (since the RMI-server is generally going to keep the state in
-        // the connection object.
-        connection.getEndPoint()
-                  .setCurrentConnection(connection);
-
         try {
-            result = cachedMethod.invoke(target, invokeMethod.args);
+            result = cachedMethod.invoke(connection, target, invokeMethod.args);
         } catch (Exception ex) {
             if (transmitExceptions) {
                 Throwable cause = ex.getCause();
@@ -236,8 +285,8 @@ class RmiBridge  {
                 result = cause;
             }
             else {
-                throw new NetException("Error invoking method: " + cachedMethod.method.getDeclaringClass()
-                                                                                      .getName() + "." + cachedMethod.method.getName(), ex);
+                throw new IOException("Error invoking method: " + cachedMethod.method.getDeclaringClass()
+                                                                                     .getName() + "." + cachedMethod.method.getName(), ex);
             }
         }
 
@@ -275,7 +324,7 @@ class RmiBridge  {
         int value = rmiObjectIdCounter.getAndAdd(2);
         if (value > MAX_RMI_VALUE) {
             rmiObjectIdCounter.set(MAX_RMI_VALUE); // prevent wrapping by spammy callers
-            throw new NetException("RMI next value has exceeded maximum limits.");
+            logger.error("RMI next value has exceeded maximum limits in RmiBridge!");
         }
         return value;
     }
@@ -286,6 +335,7 @@ class RmiBridge  {
      *
      * @param objectID Must not be Integer.MAX_VALUE.
      */
+    @SuppressWarnings("AutoBoxing")
     public
     void register(int objectID, Object object) {
         if (objectID == Integer.MAX_VALUE) {
@@ -307,12 +357,12 @@ class RmiBridge  {
         if (logger2.isTraceEnabled()) {
             logger2.trace("Object registered with ObjectSpace as {}:{}", objectID, object);
         }
-        logger2.info("Object registered with ObjectSpace as {}:{}", objectID, object);
     }
 
     /**
      * Removes an object. The remote end of the RmiBridge connection will no longer be able to access it.
      */
+    @SuppressWarnings("AutoBoxing")
     public
     void remove(int objectID) {
         WriteLock writeLock = RmiBridge.this.objectLock.writeLock();
@@ -334,6 +384,7 @@ class RmiBridge  {
     /**
      * Removes an object. The remote end of the RmiBridge connection will no longer be able to access it.
      */
+    @SuppressWarnings("AutoBoxing")
     public
     void remove(Object object) {
         WriteLock writeLock = RmiBridge.this.objectLock.writeLock();
@@ -395,7 +446,7 @@ class RmiBridge  {
 
         return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(),
                                                      temp,
-                                                     new RemoteInvocationHandler(invokeMethodPool, connection, objectID));
+                                                     new RemoteInvocationHandler(connection, objectID));
     }
 
     /**

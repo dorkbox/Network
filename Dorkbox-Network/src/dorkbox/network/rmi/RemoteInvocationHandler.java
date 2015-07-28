@@ -35,16 +35,15 @@
 package dorkbox.network.rmi;
 
 
+import com.esotericsoftware.kryo.Kryo;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.ListenerRaw;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.NetException;
-import dorkbox.util.objectPool.ObjectPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -82,12 +81,9 @@ class RemoteInvocationHandler implements InvocationHandler {
     final InvokeMethodResult[] responseTable = new InvokeMethodResult[64];
     final boolean[] pendingResponses = new boolean[64];
 
-    private final ObjectPool<InvokeMethod> invokeMethodPool;
-
     public
-    RemoteInvocationHandler(ObjectPool<InvokeMethod> invokeMethodPool, Connection connection, final int objectID) {
+    RemoteInvocationHandler(Connection connection, final int objectID) {
         super();
-        this.invokeMethodPool = invokeMethodPool;
         this.connection = connection;
         this.objectID = objectID;
 
@@ -129,6 +125,7 @@ class RemoteInvocationHandler implements InvocationHandler {
                   .add(this.responseListener);
     }
 
+    @SuppressWarnings({"AutoUnboxing", "AutoBoxing"})
     @Override
     public
     Object invoke(Object proxy, Method method, Object[] args) throws Exception {
@@ -189,41 +186,62 @@ class RemoteInvocationHandler implements InvocationHandler {
                 return this.connection;
             }
             // Should never happen, for debugging purposes only
-            throw new Exception("Invocation handler could not find RemoteObject method. Check ObjectSpace.java");
+            throw new Exception("Invocation handler could not find RemoteObject method.");
         }
         else if (!this.remoteToString && declaringClass == Object.class && method.getName()
                                                                                  .equals("toString")) {
             return "<proxy>";
         }
 
+        final Logger logger1 = RemoteInvocationHandler.logger;
 
-        EndPoint endPoint = this.connection.getEndPoint();
+        EndPoint<Connection> endPoint = this.connection.getEndPoint();
+        final CryptoSerializationManager serializationManager = endPoint.getSerialization();
 
-        InvokeMethod invokeMethod = this.invokeMethodPool.take();
+        InvokeMethod invokeMethod = new InvokeMethod();
         invokeMethod.objectID = this.objectID;
         invokeMethod.args = args;
 
-        final CryptoSerializationManager serializationManager = endPoint.getSerialization();
+
         // thread safe access.
-        final KryoExtra kryo = (KryoExtra) serializationManager.take();
+        final Kryo kryo = serializationManager.take();
         if (kryo == null) {
             String msg = "Interrupted during kryo pool.take()";
-            logger.error(msg);
+            logger1.error(msg);
             return msg;
         }
 
-        CachedMethod[] cachedMethods = kryo.getMethods(method.getDeclaringClass());
+        // which method do we access?
+        CachedMethod[] cachedMethods = CachedMethod.getMethods(kryo, method.getDeclaringClass());
         serializationManager.release(kryo);
         for (int i = 0, n = cachedMethods.length; i < n; i++) {
             CachedMethod cachedMethod = cachedMethods[i];
-            if (cachedMethod.method.equals(method)) {
+            Method checkMethod = cachedMethod.origMethod;
+            if (checkMethod == null) {
+                checkMethod = cachedMethod.method;
+            }
+
+            // In situations where we want to pass in the Connection (to an RMI method), we have to be able to override method A, with method B.
+            // This is to support calling RMI methods from an interface (that does pass the connection reference) to
+            // an implementation, that DOES pass the connection reference. The remote side (that initiates the RMI calls), MUST use
+            // the interface, and the implementation may override the method, so that we add the connection as the first in
+            // the list of parameters.
+            //
+            // for example:
+            // Interface: foo(String x)
+            //      Impl: foo(Connection c, String x)
+            //
+            // The implementation (if it exists, with the same name, and with the same signature+connection) will be called from the interface.
+            // This MUST hold valid for both remote and local connection types.
+
+            if (checkMethod.equals(method)) {
                 invokeMethod.cachedMethod = cachedMethod;
                 break;
             }
         }
         if (invokeMethod.cachedMethod == null) {
             String msg = "Method not found: " + method;
-            logger.error(msg);
+            logger1.error(msg);
             return msg;
         }
 
@@ -270,21 +288,22 @@ class RemoteInvocationHandler implements InvocationHandler {
                            .flush();
         }
 
-        if (logger.isDebugEnabled()) {
+        if (logger1.isTraceEnabled()) {
             String argString = "";
             if (args != null) {
                 argString = Arrays.deepToString(args);
                 argString = argString.substring(1, argString.length() - 1);
             }
-            logger.debug(this.connection + " sent: " + method.getDeclaringClass()
+            logger1.trace(this.connection + " sent: " + method.getDeclaringClass()
                                                              .getSimpleName() +
                          "#" + method.getName() + "(" + argString + ")");
         }
 
         this.lastResponseID = (byte) (invokeMethod.responseData & RmiBridge.responseIdMask);
-        this.invokeMethodPool.release(invokeMethod);
 
-        if (this.nonBlocking || this.udp) {
+
+
+        if (this.nonBlocking || this.udp || this.udt) {
             Class<?> returnType = method.getReturnType();
             if (returnType.isPrimitive()) {
                 if (returnType == int.class) {
@@ -334,12 +353,16 @@ class RemoteInvocationHandler implements InvocationHandler {
         }
     }
 
+    /**
+     * A timeout of 0 means that we want to disable waiting, otherwise - it waits in milliseconds
+     */
     private
-    Object waitForResponse(byte responseID) {
+    Object waitForResponse(byte responseID) throws IOException {
         long endTime = System.currentTimeMillis() + this.timeoutMillis;
         long remaining = this.timeoutMillis;
 
-        while (remaining > 0) {
+        if (remaining == 0) {
+            // just wait however log it takes.
             InvokeMethodResult invokeMethodResult;
             synchronized (this) {
                 invokeMethodResult = this.responseTable[responseID];
@@ -352,18 +375,54 @@ class RemoteInvocationHandler implements InvocationHandler {
             else {
                 this.lock.lock();
                 try {
-                    this.responseCondition.await(remaining, TimeUnit.MILLISECONDS);
+                    this.responseCondition.await();
                 } catch (InterruptedException e) {
                     Thread.currentThread()
                           .interrupt();
-                    throw new NetException(e);
+                    throw new IOException("Response timed out.", e);
                 } finally {
                     this.lock.unlock();
                 }
             }
 
-            remaining = endTime - System.currentTimeMillis();
+            synchronized (this) {
+                invokeMethodResult = this.responseTable[responseID];
+            }
+            if (invokeMethodResult != null) {
+                this.lastResponseID = null;
+                return invokeMethodResult.result;
+            }
         }
+        else {
+            // wait for the specified time
+            while (remaining > 0) {
+                InvokeMethodResult invokeMethodResult;
+                synchronized (this) {
+                    invokeMethodResult = this.responseTable[responseID];
+                }
+
+                if (invokeMethodResult != null) {
+                    this.lastResponseID = null;
+                    return invokeMethodResult.result;
+                }
+                else {
+                    this.lock.lock();
+                    try {
+                        this.responseCondition.await(remaining, TimeUnit.MILLISECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread()
+                              .interrupt();
+                        throw new IOException("Response timed out.", e);
+                    } finally {
+                        this.lock.unlock();
+                    }
+                }
+
+                remaining = endTime - System.currentTimeMillis();
+            }
+        }
+
+
 
         // only get here if we timeout
         throw new TimeoutException("Response timed out.");

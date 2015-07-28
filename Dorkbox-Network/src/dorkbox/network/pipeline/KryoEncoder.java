@@ -18,11 +18,12 @@ package dorkbox.network.pipeline;
 import com.esotericsoftware.kryo.KryoException;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
-import dorkbox.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
+
+import java.io.IOException;
 
 @Sharable
 public
@@ -33,7 +34,7 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
 
 
     public
-    KryoEncoder(CryptoSerializationManager serializationManager) {
+    KryoEncoder(final CryptoSerializationManager serializationManager) {
         super();
         this.serializationManager = serializationManager;
         this.optimize = OptimizeUtilsByteBuf.get();
@@ -42,14 +43,22 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
     // the crypto writer will override this
     @SuppressWarnings("unused")
     protected
-    void writeObject(CryptoSerializationManager kryoWrapper, ChannelHandlerContext context, Object msg, ByteBuf buffer) {
+    void writeObject(final CryptoSerializationManager kryoWrapper,
+                     final ChannelHandlerContext context,
+                     final Object msg,
+                     final ByteBuf buffer) {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-        kryoWrapper.write(buffer, msg);
+        try {
+            kryoWrapper.write(buffer, msg);
+        } catch (IOException ex) {
+            context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass()
+                                                                                                    .getName(), ex));
+        }
     }
 
     @Override
     protected
-    void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) throws Exception {
+    void encode(final ChannelHandlerContext context, final Object msg, final ByteBuf out) throws Exception {
         // we don't necessarily start at 0!!
         int startIndex = out.writerIndex();
 
@@ -60,7 +69,7 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
             out.writeInt(0);  // put an int in, which is the same size as reservedLengthIndex
 
             try {
-                writeObject(this.serializationManager, ctx, msg, out);
+                writeObject(this.serializationManager, context, msg, out);
 
                 // now set the frame (if it's TCP)!
                 int length = out.readableBytes() - startIndex -
@@ -80,8 +89,8 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
                 optimize.writeInt(out, length, true);
                 out.setIndex(newIndex, oldIndex);
             } catch (KryoException ex) {
-                ctx.fireExceptionCaught(new NetException("Unable to serialize object of type: " + msg.getClass()
-                                                                                                     .getName(), ex));
+                context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass()
+                                                                                                        .getName(), ex));
             }
         }
     }

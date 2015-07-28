@@ -16,7 +16,6 @@
 package dorkbox.network.connection.idle;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.util.exceptions.NetException;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,23 +35,19 @@ class InputStreamSender<C extends Connection> extends IdleSender<C, byte[]> {
 
     @Override
     protected final
-    byte[] next() {
-        try {
-            int total = 0;
-            while (total < this.chunk.length) {
-                int count = this.input.read(this.chunk, total, this.chunk.length - total);
-                if (count < 0) {
-                    if (total == 0) {
-                        return null;
-                    }
-                    byte[] partial = new byte[total];
-                    System.arraycopy(this.chunk, 0, partial, 0, total);
-                    return onNext(partial);
+    byte[] next() throws IOException {
+        int total = 0;
+        while (total < this.chunk.length) {
+            int count = this.input.read(this.chunk, total, this.chunk.length - total);
+            if (count < 0) {
+                if (total == 0) {
+                    return null;
                 }
-                total += count;
+                byte[] partial = new byte[total];
+                System.arraycopy(this.chunk, 0, partial, 0, total);
+                return onNext(partial);
             }
-        } catch (IOException ex) {
-            throw new NetException(ex);
+            total += count;
         }
         return onNext(this.chunk);
     }

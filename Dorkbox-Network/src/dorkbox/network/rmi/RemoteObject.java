@@ -44,7 +44,7 @@ import dorkbox.network.connection.Connection;
 public
 interface RemoteObject {
     /**
-     * Sets the milliseconds to wait for a method to return value. Default is 3000.
+     * Sets the milliseconds to wait for a method to return value. Default is 3000, 0 disables (ie: waits forever)
      */
     void setResponseTimeout(int timeoutMillis);
 

@@ -15,10 +15,10 @@
  */
 package dorkbox.network.connection.ping;
 
-import dorkbox.util.exceptions.NetException;
+import java.io.IOException;
 
 public
-class PingCanceledException extends NetException {
+class PingCanceledException extends IOException {
 
     private static final long serialVersionUID = 9045461384091038605L;
 

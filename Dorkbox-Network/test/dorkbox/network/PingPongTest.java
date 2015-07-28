@@ -30,7 +30,7 @@ class PingPongTest extends BaseTest {
 
     @Test
     public
-    void pingPong() throws InitializationException, SecurityException, IOException {
+    void pingPong() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 

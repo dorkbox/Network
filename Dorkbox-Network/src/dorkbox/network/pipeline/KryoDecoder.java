@@ -21,6 +21,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
+import java.io.IOException;
 import java.util.List;
 
 public
@@ -39,7 +40,12 @@ class KryoDecoder extends ByteToMessageDecoder {
     protected
     Object readObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-        return serializationManager.read(in, length);
+        try {
+            return serializationManager.read(in, length);
+        } catch (IOException e) {
+            context.fireExceptionCaught(e);
+            return null;
+        }
     }
 
     @Override

@@ -23,7 +23,9 @@ import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageDecoder;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.List;
 
 @Sharable
@@ -43,8 +45,15 @@ class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
         ChannelHandler last = ctx.pipeline()
                                  .last();
 
-        ByteBuf data = in.content();
-        Object object = serializationManager.readWithCryptoUdp((ConnectionImpl) last, data, data.readableBytes());
-        out.add(object);
+
+        try {
+            ByteBuf data = in.content();
+            Object object = serializationManager.readWithCryptoUdp((ConnectionImpl) last, data, data.readableBytes());
+            out.add(object);
+        } catch (IOException e) {
+            String message = "Unable to deserialize object";
+            LoggerFactory.getLogger(this.getClass()).error(message, e);
+            throw new IOException(message, e);
+        }
     }
 }

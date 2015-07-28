@@ -21,7 +21,7 @@ class PingTest extends BaseTest {
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
     public
-    void pingTCP() throws InitializationException, SecurityException, IOException {
+    void pingTCP() throws InitializationException, SecurityException, IOException, InterruptedException {
         this.response = -1;
 
         Configuration configuration = new Configuration();
@@ -57,7 +57,7 @@ class PingTest extends BaseTest {
 
     @Test
     public
-    void pingTCP_testListeners1() throws InitializationException, SecurityException, IOException {
+    void pingTCP_testListeners1() throws InitializationException, SecurityException, IOException, InterruptedException {
         this.response = -1;
 
         Configuration configuration = new Configuration();
@@ -114,7 +114,7 @@ class PingTest extends BaseTest {
 
     @Test
     public
-    void pingTCP_testListeners2() throws InitializationException, SecurityException, IOException {
+    void pingTCP_testListeners2() throws InitializationException, SecurityException, IOException, InterruptedException {
         this.response = -1;
 
         Configuration configuration = new Configuration();
@@ -163,7 +163,7 @@ class PingTest extends BaseTest {
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
     public
-    void pingUDP() throws InitializationException, SecurityException, IOException {
+    void pingUDP() throws InitializationException, SecurityException, IOException, InterruptedException {
         this.response = -1;
 
         Configuration configuration = new Configuration();
@@ -204,7 +204,7 @@ class PingTest extends BaseTest {
     // ping prefers the following order:  UDP, UDT, TCP
     @Test
     public
-    void pingUDT() throws InitializationException, SecurityException, IOException {
+    void pingUDT() throws InitializationException, SecurityException, IOException, InterruptedException {
         this.response = -1;
 
         Configuration configuration = new Configuration();

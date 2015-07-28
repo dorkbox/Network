@@ -17,6 +17,7 @@ package dorkbox.network.connection.registration.remote;
 
 import dorkbox.network.Broadcast;
 import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -26,7 +27,6 @@ import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.Crypto;
-import dorkbox.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -36,6 +36,7 @@ import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageCodec;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.List;
@@ -97,11 +98,25 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
             // this is regular registration stuff
             ByteBuf buffer = context.alloc()
                                     .buffer();
-            // writes data into buffer
-            sendUDP(context, object, buffer, remoteAddress);
 
-            if (buffer != null) {
-                out.add(new DatagramPacket(buffer, remoteAddress));
+            // writes data into buffer
+            try {
+                ConnectionImpl networkConnection = this.registrationWrapper.getServerUDP(remoteAddress);
+                if (networkConnection != null) {
+                    // try to write data! (IT SHOULD ALWAYS BE ENCRYPTED HERE!)
+                    this.serializationManager.writeWithCryptoUdp(networkConnection, buffer, object);
+                }
+                else {
+                    // this means we are still in the REGISTRATION phase.
+                    this.serializationManager.write(buffer, object);
+                }
+
+                if (buffer != null) {
+                    out.add(new DatagramPacket(buffer, remoteAddress));
+                }
+            } catch (IOException e) {
+                logger.error("Unable to write data to the socket.", e);
+                throw e;
             }
         }
     }
@@ -144,22 +159,6 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
     }
 
 
-    @SuppressWarnings("unused")
-    public final
-    void sendUDP(ChannelHandlerContext context, Object object, ByteBuf buffer, InetSocketAddress udpRemoteAddress) {
-
-        ConnectionImpl networkConnection = this.registrationWrapper.getServerUDP(udpRemoteAddress);
-        if (networkConnection != null) {
-            // try to write data! (IT SHOULD ALWAYS BE ENCRYPTED HERE!)
-            this.serializationManager.writeWithCryptoUdp(networkConnection, buffer, object);
-        }
-        else {
-            // this means we are still in the REGISTRATION phase.
-            this.serializationManager.write(buffer, object);
-        }
-    }
-
-
     // this will be invoked by the UdpRegistrationHandlerServer. Remember, TCP will be established first.
     @SuppressWarnings("unused")
     private
@@ -169,7 +168,7 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
         RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
         CryptoSerializationManager serializationManager2 = this.serializationManager;
 
-        if (serializationManager2.isEncrypted(data)) {
+        if (KryoCryptoSerializationManager.isEncrypted(data)) {
             // we need to FORWARD this message "down the pipeline".
 
             ConnectionImpl connection = registrationWrapper2.getServerUDP(udpRemoteAddress);
@@ -180,10 +179,10 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
 
                 try {
                     object = serializationManager2.readWithCryptoUdp(connection, data, data.writerIndex());
-                } catch (NetException e) {
+                } catch (Exception e) {
                     logger2.error("UDP unable to deserialize buffer", e);
                     shutdown(registrationWrapper2, channel);
-                    return;
+                    throw e;
                 }
 
                 connection.channelRead(object);

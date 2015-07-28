@@ -22,20 +22,31 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 
+import java.io.IOException;
+
 @Sharable
 public
 class KryoEncoderCrypto extends KryoEncoder {
 
     public
-    KryoEncoderCrypto(CryptoSerializationManager serializationManager) {
+    KryoEncoderCrypto(final CryptoSerializationManager serializationManager) {
         super(serializationManager);
     }
 
     @Override
     protected
-    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext ctx, Object msg, ByteBuf buffer) {
-        ChannelHandler last = ctx.pipeline()
-                                 .last();
-        serializationManager.writeWithCryptoTcp((ConnectionImpl) last, buffer, msg);
+    void writeObject(final CryptoSerializationManager serializationManager,
+                     final ChannelHandlerContext context,
+                     final Object msg,
+                     final ByteBuf buffer) {
+
+        ChannelHandler last = context.pipeline()
+                                     .last();
+        try {
+            serializationManager.writeWithCryptoTcp((ConnectionImpl) last, buffer, msg);
+        } catch (IOException ex) {
+            context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass()
+                                                                                                    .getName(), ex));
+        }
     }
 }

@@ -61,7 +61,7 @@ class ListenerTest extends BaseTest {
     @SuppressWarnings("rawtypes")
     @Test
     public
-    void listener() throws SecurityException, InitializationException, IOException {
+    void listener() throws SecurityException, InitializationException, IOException, InterruptedException {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;

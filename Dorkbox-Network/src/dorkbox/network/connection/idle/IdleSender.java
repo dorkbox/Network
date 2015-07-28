@@ -18,6 +18,8 @@ package dorkbox.network.connection.idle;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ListenerRaw;
 
+import java.io.IOException;
+
 public abstract
 class IdleSender<C extends Connection, M> extends ListenerRaw<C, M> {
     final IdleListener<C, M> idleListener;
@@ -30,7 +32,7 @@ class IdleSender<C extends Connection, M> extends ListenerRaw<C, M> {
 
     @Override
     public
-    void idle(C connection) {
+    void idle(C connection) throws IOException {
         if (!this.started) {
             this.started = true;
             start();
@@ -58,5 +60,5 @@ class IdleSender<C extends Connection, M> extends ListenerRaw<C, M> {
      * Returns the next object to send, or null if no more objects will be sent.
      */
     protected abstract
-    M next();
+    M next() throws IOException;
 }

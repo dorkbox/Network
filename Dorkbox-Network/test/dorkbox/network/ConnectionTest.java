@@ -20,7 +20,7 @@ class ConnectionTest extends BaseTest {
 
     @Test
     public
-    void connectLocal() throws InitializationException, SecurityException, IOException {
+    void connectLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 
@@ -37,7 +37,7 @@ class ConnectionTest extends BaseTest {
 
     @Test
     public
-    void connectTcp() throws InitializationException, SecurityException, IOException {
+    void connectTcp() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 
@@ -56,7 +56,7 @@ class ConnectionTest extends BaseTest {
 
     @Test
     public
-    void connectTcpUdp() throws InitializationException, SecurityException, IOException {
+    void connectTcpUdp() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 
@@ -76,7 +76,7 @@ class ConnectionTest extends BaseTest {
 
     @Test
     public
-    void connectTcpUdt() throws InitializationException, SecurityException, IOException {
+    void connectTcpUdt() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 
@@ -96,7 +96,7 @@ class ConnectionTest extends BaseTest {
 
     @Test
     public
-    void connectTcpUdpUdt() throws InitializationException, SecurityException, IOException {
+    void connectTcpUdpUdt() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 
@@ -151,7 +151,7 @@ class ConnectionTest extends BaseTest {
     }
 
     private
-    Client startClient(Configuration configuration) throws InitializationException, SecurityException, IOException {
+    Client startClient(Configuration configuration) throws InitializationException, SecurityException, IOException, InterruptedException {
         Client client;
         if (configuration != null) {
             client = new Client(configuration);

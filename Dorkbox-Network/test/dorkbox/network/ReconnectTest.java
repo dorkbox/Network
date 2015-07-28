@@ -19,7 +19,7 @@ class ReconnectTest extends BaseTest {
 
     @Test
     public
-    void reconnect() throws InitializationException, SecurityException, IOException {
+    void reconnect() throws InitializationException, SecurityException, IOException, InterruptedException {
         final Timer timer = new Timer();
 
         Configuration configuration = new Configuration();
@@ -67,7 +67,11 @@ class ReconnectTest extends BaseTest {
                           public
                           void run() {
                               System.out.println("Reconnecting: " + reconnectCount.get());
-                              client.reconnect();
+                              try {
+                                  client.reconnect();
+                              } catch (IOException e) {
+                                  e.printStackTrace();
+                              }
                           }
                       }.start();
                   }

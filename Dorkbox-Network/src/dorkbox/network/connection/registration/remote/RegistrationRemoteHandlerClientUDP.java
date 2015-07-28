@@ -21,7 +21,6 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.pipeline.udp.KryoDecoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
@@ -32,6 +31,7 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
@@ -112,7 +112,7 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
             }
 
             if (!success) {
-                throw new NetException("UDP cannot connect to a remote server before TCP is established!");
+                throw new IOException("UDP cannot connect to a remote server before TCP is established!");
             }
 
             if (logger2.isTraceEnabled()) {
@@ -124,7 +124,7 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
             channel.writeAndFlush(registration);
         }
         else {
-            throw new NetException("UDP cannot connect to remote server! No remote address specified!");
+            throw new IOException("UDP cannot connect to remote server! No remote address specified!");
         }
     }
 

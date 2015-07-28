@@ -34,13 +34,13 @@
  */
 package dorkbox.network.rmi;
 
-import dorkbox.util.exceptions.NetException;
+import java.io.IOException;
 
 /** Thrown when a method with a return value is invoked on a remote object and the response is not received with the
  * {@link RemoteObject#setResponseTimeout(int) response timeout}.
  * @see dorkbox.network.connection.Connection#createRemoteObject(Class, Class)
  * @author Nathan Sweet <misc@n4te.com> */
-public class TimeoutException extends NetException {
+public class TimeoutException extends IOException {
     private static final long serialVersionUID = -3526277240277423682L;
 
     public TimeoutException () {

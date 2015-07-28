@@ -2,6 +2,7 @@ package dorkbox.network;
 
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
@@ -19,7 +20,10 @@ public class PingPongLocalTest extends BaseTest {
     int                     tries = 10000;
 
     @Test
-    public void pingPongLocal() throws InitializationException, SecurityException, IOException {
+    public void pingPongLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
+        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        register(KryoCryptoSerializationManager.DEFAULT);
+
         this.fail = "Data not received.";
 
         final Data dataLOCAL = new Data();
@@ -28,7 +32,6 @@ public class PingPongLocalTest extends BaseTest {
         Server server = new Server();
         server.disableRemoteKeyValidation();
         addEndPoint(server);
-        register(server.getSerialization());
         server.bind(false);
         server.listeners().add(new Listener<Data>() {
             @Override
@@ -52,7 +55,6 @@ public class PingPongLocalTest extends BaseTest {
         Client client = new Client();
         client.disableRemoteKeyValidation();
         addEndPoint(client);
-        register(client.getSerialization());
         client.listeners().add(new Listener<Data>() {
             AtomicInteger check = new AtomicInteger(0);
 

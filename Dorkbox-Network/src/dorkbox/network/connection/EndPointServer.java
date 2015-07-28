@@ -27,7 +27,7 @@ import java.io.IOException;
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointServer extends EndPoint {
+class EndPointServer<C extends Connection> extends EndPoint<C> {
 
     private final ServerConnectionBridge serverConnections;
 
@@ -57,7 +57,7 @@ class EndPointServer extends EndPoint {
      * @return a newly created listener manager for the connection
      */
     final
-    ConnectionManager addListenerManager(Connection connection) {
+    ConnectionManager<C> addListenerManager(C connection) {
         return this.connectionManager.addListenerManager(connection);
     }
 
@@ -71,7 +71,7 @@ class EndPointServer extends EndPoint {
      * This removes the listener manager for that specific connection
      */
     final
-    void removeListenerManager(Connection connection) {
+    void removeListenerManager(C connection) {
         this.connectionManager.removeListenerManager(connection);
     }
 }

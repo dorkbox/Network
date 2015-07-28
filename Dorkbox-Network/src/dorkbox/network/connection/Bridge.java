@@ -18,12 +18,12 @@ package dorkbox.network.connection;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 
 public
-class Bridge {
+class Bridge <C extends Connection> {
 
     final ChannelWrapper channelWrapper;
-    final ISessionManager sessionManager;
+    final ISessionManager<C> sessionManager;
 
-    Bridge(ChannelWrapper channelWrapper, ISessionManager sessionManager) {
+    Bridge(ChannelWrapper channelWrapper, ISessionManager<C> sessionManager) {
         this.channelWrapper = channelWrapper;
         this.sessionManager = sessionManager;
     }

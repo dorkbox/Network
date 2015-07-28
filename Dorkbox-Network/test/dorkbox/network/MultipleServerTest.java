@@ -18,7 +18,7 @@ class MultipleServerTest extends BaseTest {
 
     @Test
     public
-    void multipleServers() throws InitializationException, SecurityException, IOException {
+    void multipleServers() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         KryoCryptoSerializationManager.DEFAULT.register(String[].class);
 

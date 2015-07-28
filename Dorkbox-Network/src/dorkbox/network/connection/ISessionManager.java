@@ -18,29 +18,29 @@ package dorkbox.network.connection;
 import java.util.Collection;
 
 public
-interface ISessionManager {
+interface ISessionManager<T extends Connection> {
     /**
      * Called when a message is received
      */
-    void notifyOnMessage(Connection connection, Object message);
+    void notifyOnMessage(T connection, Object message);
 
     /**
      * Called when the connection has been idle (read & write) for 2 seconds
      */
-    void notifyOnIdle(Connection connection);
+    void notifyOnIdle(T connection);
 
 
-    void connectionConnected(Connection connection);
+    void connectionConnected(T connection);
 
-    void connectionDisconnected(Connection connection);
+    void connectionDisconnected(T connection);
 
     /**
      * Called when there is an error of some kind during the up/down stream process
      */
-    void connectionError(Connection connection, Throwable throwable);
+    void connectionError(T connection, Throwable throwable);
 
     /**
      * Returns a non-modifiable list of active connections
      */
-    Collection<Connection> getConnections();
+    Collection<T> getConnections();
 }

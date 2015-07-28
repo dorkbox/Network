@@ -22,6 +22,8 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 
+import java.io.IOException;
+
 @Sharable
 public
 class KryoEncoderUdpCrypto extends KryoEncoderUdp {
@@ -32,8 +34,8 @@ class KryoEncoderUdpCrypto extends KryoEncoderUdp {
     }
 
     @Override
-    protected
-    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext ctx, Object msg, ByteBuf buffer) {
+    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext ctx, Object msg, ByteBuf buffer)
+                    throws IOException {
         ChannelHandler last = ctx.pipeline()
                                  .last();
 

@@ -27,7 +27,7 @@ class RmiSendObjectTest extends BaseTest {
      */
     @Test
     public
-    void rmi() throws InitializationException, SecurityException, IOException {
+    void rmi() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         KryoCryptoSerializationManager.DEFAULT.registerRemote(TestObject.class, TestObjectImpl.class);
         KryoCryptoSerializationManager.DEFAULT.registerRemote(OtherObject.class, OtherObjectImpl.class);
@@ -77,23 +77,32 @@ class RmiSendObjectTest extends BaseTest {
                           @Override
                           public
                           void run() {
-                              TestObject test = connection.createRemoteObject(TestObjectImpl.class);
-                              test.setOther(43.21f);
-                              // Normal remote method call.
-                              assertEquals(43.21f, test.other(), .0001f);
 
-                              // Make a remote method call that returns another remote proxy object.
-                              OtherObject otherObject = test.getOtherObject();
-                              // Normal remote method call on the second object.
-                              otherObject.setValue(12.34f);
-                              float value = otherObject.value();
-                              assertEquals(12.34f, value, .0001f);
 
-                              // When a remote proxy object is sent, the other side receives its actual remote object.
-                              // we have to manually flush, since we are in a separate thread that does not auto-flush.
-                              connection.send()
-                                        .TCP(otherObject)
-                                        .flush();
+                              TestObject test = null;
+                              try {
+                                  test = connection.createRemoteObject(TestObjectImpl.class);
+
+                                  test.setOther(43.21f);
+                                  // Normal remote method call.
+                                  assertEquals(43.21f, test.other(), .0001f);
+
+                                  // Make a remote method call that returns another remote proxy object.
+                                  OtherObject otherObject = test.getOtherObject();
+                                  // Normal remote method call on the second object.
+                                  otherObject.setValue(12.34f);
+                                  float value = otherObject.value();
+                                  assertEquals(12.34f, value, .0001f);
+
+                                  // When a remote proxy object is sent, the other side receives its actual remote object.
+                                  // we have to manually flush, since we are in a separate thread that does not auto-flush.
+                                  connection.send()
+                                            .TCP(otherObject)
+                                            .flush();
+                              } catch (IOException e) {
+                                  e.printStackTrace();
+                                  fail();
+                              }
                           }
                       }).start();
                   }
@@ -129,7 +138,7 @@ class RmiSendObjectTest extends BaseTest {
         @IgnoreSerialization
         private final int ID = idCounter.getAndIncrement();
 
-        @RemoteProxy
+        @RMI
         private final OtherObject otherObject = new OtherObjectImpl();
         private float aFloat;
 

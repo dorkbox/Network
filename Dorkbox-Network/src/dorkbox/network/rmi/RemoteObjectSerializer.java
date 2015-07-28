@@ -40,7 +40,6 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.KryoExtra;
-import dorkbox.util.exceptions.NetException;
 
 /**
  * Serializes an object registered with the RmiBridge so the receiving side
@@ -62,7 +61,7 @@ class RemoteObjectSerializer<T> extends Serializer<T> {
         KryoExtra kryoExtra = (KryoExtra) kryo;
         int id = kryoExtra.connection.getRegisteredId(object);
         if (id == Integer.MAX_VALUE) {
-            throw new NetException("Object not found in an ObjectSpace: " + object);
+            throw new RuntimeException("Object not found in RMI objectSpace: " + object);
         }
 
         output.writeInt(id, true);

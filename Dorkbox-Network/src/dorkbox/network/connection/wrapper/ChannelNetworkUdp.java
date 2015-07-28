@@ -16,7 +16,6 @@
 package dorkbox.network.connection.wrapper;
 
 import dorkbox.network.connection.UdpServer;
-import dorkbox.util.exceptions.NetException;
 import io.netty.channel.Channel;
 
 import java.net.InetSocketAddress;
@@ -30,10 +29,6 @@ class ChannelNetworkUdp extends ChannelNetwork {
     public
     ChannelNetworkUdp(Channel channel, InetSocketAddress udpRemoteAddress, UdpServer udpServer) {
         super(channel);
-
-        if (udpRemoteAddress == null) {
-            throw new NetException("Cannot create a server UDP channel wihtout a remote udp address!");
-        }
 
         this.udpRemoteAddress = udpRemoteAddress;
         this.udpServer = udpServer; // ONLY valid in the server!

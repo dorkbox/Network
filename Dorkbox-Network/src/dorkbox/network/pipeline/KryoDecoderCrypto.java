@@ -21,22 +21,33 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 
-// on client this is MessageToMessage *because of the UdpDecoder in the pipeline!)
+import java.io.IOException;
+
+// on client this is MessageToMessage (because of the UdpDecoder in the pipeline!)
 
 
 public
 class KryoDecoderCrypto extends KryoDecoder {
 
     public
-    KryoDecoderCrypto(CryptoSerializationManager serializationManager) {
+    KryoDecoderCrypto(final CryptoSerializationManager serializationManager) {
         super(serializationManager);
     }
 
     @Override
     protected
-    Object readObject(CryptoSerializationManager serializationManager, ChannelHandlerContext ctx, ByteBuf in, int length) {
-        ChannelHandler last = ctx.pipeline()
-                                 .last();
-        return serializationManager.readWithCryptoTcp((ConnectionImpl) last, in, length);
+    Object readObject(final CryptoSerializationManager serializationManager,
+                      final ChannelHandlerContext context,
+                      final ByteBuf in,
+                      final int length) {
+
+        ChannelHandler last = context.pipeline()
+                                     .last();
+        try {
+            return serializationManager.readWithCryptoTcp((ConnectionImpl) last, in, length);
+        } catch (IOException e) {
+            context.fireExceptionCaught(e);
+            return null;
+        }
     }
 }

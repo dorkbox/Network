@@ -47,7 +47,6 @@ class InvokeMethod implements RmiMessages {
     // possible duplicate IDs. A response data of 0 means to not respond.
     public byte responseData;
 
-
     public InvokeMethod() {
     }
 }

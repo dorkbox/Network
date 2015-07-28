@@ -25,7 +25,7 @@ class LargeBufferTest extends BaseTest {
 
     @Test
     public
-    void manyLargeMessages() throws InitializationException, SecurityException, IOException {
+    void manyLargeMessages() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 

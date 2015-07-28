@@ -19,7 +19,7 @@ class ReuseTest extends BaseTest {
 
     @Test
     public
-    void socketReuse() throws InitializationException, SecurityException, IOException {
+    void socketReuse() throws InitializationException, SecurityException, IOException, InterruptedException {
         this.serverCount = new AtomicInteger(0);
         this.clientCount = new AtomicInteger(0);
 
@@ -99,7 +99,7 @@ class ReuseTest extends BaseTest {
 
     @Test
     public
-    void localReuse() throws InitializationException, SecurityException, IOException {
+    void localReuse() throws InitializationException, SecurityException, IOException, InterruptedException {
         this.serverCount = new AtomicInteger(0);
         this.clientCount = new AtomicInteger(0);
 

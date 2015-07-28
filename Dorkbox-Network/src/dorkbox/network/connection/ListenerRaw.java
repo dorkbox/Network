@@ -17,6 +17,8 @@ package dorkbox.network.connection;
 
 import dorkbox.util.ClassHelper;
 
+import java.io.IOException;
+
 public abstract
 class ListenerRaw<C extends Connection, M extends Object> {
 
@@ -103,7 +105,7 @@ class ListenerRaw<C extends Connection, M extends Object> {
      */
     @SuppressWarnings("unused")
     public
-    void idle(C connection) {
+    void idle(C connection) throws IOException {
     }
 
     /**

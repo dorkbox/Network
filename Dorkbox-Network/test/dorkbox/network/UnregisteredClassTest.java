@@ -26,7 +26,7 @@ class UnregisteredClassTest extends BaseTest {
 
     @Test
     public
-    void unregisteredClasses() throws InitializationException, SecurityException, IOException {
+    void unregisteredClasses() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT(false, false);
 
         int origSize = EndPoint.udpMaxSize;

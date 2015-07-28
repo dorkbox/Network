@@ -62,7 +62,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * represents the base of a client/server end point
  */
 public abstract
-class EndPoint {
+class EndPoint<C extends Connection> {
     // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
     // it results in severe UDP packet loss and contention.
     //
@@ -122,7 +122,7 @@ class EndPoint {
     protected final org.slf4j.Logger logger;
     protected final Class<? extends EndPoint> type;
 
-    protected final ConnectionManager connectionManager;
+    protected final ConnectionManager<C> connectionManager;
     protected final CryptoSerializationManager serializationManager;
     protected final RegistrationWrapper registrationWrapper;
 
@@ -137,9 +137,6 @@ class EndPoint {
 
     private final Executor rmiExecutor;
     private final boolean rmiEnabled;
-    // When using RMI, we want to keep track of what our current thread execution connection is. This is because we store state info in the
-    // connection object. This is the only way to retrieve this info "out-of-band"
-    private final ThreadLocal<Connection> currentConnection = new ThreadLocal<Connection>();
 
     // the eventLoop groups are used to track and manage the event loops for startup/shutdown
     private final List<EventLoopGroup> eventLoopGroups = new ArrayList<EventLoopGroup>(8);
@@ -193,7 +190,6 @@ class EndPoint {
             // setup our RMI serialization managers. Can only be called once
             serializationManager.initRmiSerialization();
         }
-
         rmiExecutor = options.rmiExecutor;
 
 
@@ -278,7 +274,7 @@ class EndPoint {
 
 
         // we don't care about un-instantiated/constructed members, since the class type is the only interest.
-        this.connectionManager = new ConnectionManager(type.getSimpleName(), connection0(null).getClass());
+        this.connectionManager = new ConnectionManager<C>(type.getSimpleName(), connection0(null).getClass());
 
         // add the ping listener (internal use only!)
         this.connectionManager.add(new PingSystemListener());
@@ -291,6 +287,8 @@ class EndPoint {
         else {
             this.globalRmiBridge = null;
         }
+
+        serializationManager.finishInit();
     }
 
     public
@@ -314,8 +312,8 @@ class EndPoint {
      */
     @SuppressWarnings("unchecked")
     public
-    <T extends SettingsStore> T getPropertyStore() {
-        return (T) this.propertyStore;
+    <S extends SettingsStore> S getPropertyStore() {
+        return (S) this.propertyStore;
     }
 
     /**
@@ -395,7 +393,7 @@ class EndPoint {
      * @return a new network connection
      */
     protected
-    ConnectionImpl newConnection(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+    ConnectionImpl newConnection(final Logger logger, final EndPoint<C> endPoint, final RmiBridge rmiBridge) {
         return new ConnectionImpl(logger, endPoint, rmiBridge);
     }
 
@@ -437,7 +435,7 @@ class EndPoint {
             metaChannel.connection = connection;
 
             // now initialize the connection channels with whatever extra info they might need.
-            connection.init(new Bridge(wrapper, this.connectionManager));
+            connection.init(new Bridge<C>(wrapper, this.connectionManager));
 
             if (rmiBridge != null) {
                 // notify our remote object space that it is able to receive method calls.
@@ -461,13 +459,14 @@ class EndPoint {
      * <p/>
      * Only the CLIENT injects in front of this)
      */
+    @SuppressWarnings("unchecked")
     void connectionConnected0(ConnectionImpl connection) {
         this.isConnected.set(true);
 
         // prep the channel wrapper
         connection.prep();
 
-        this.connectionManager.connectionConnected(connection);
+        this.connectionManager.connectionConnected((C) connection);
     }
 
     /**
@@ -482,7 +481,7 @@ class EndPoint {
      * Returns a non-modifiable list of active connections
      */
     public
-    List<Connection> getConnections() {
+    List<C> getConnections() {
         return this.connectionManager.getConnections();
     }
 
@@ -491,8 +490,8 @@ class EndPoint {
      */
     @SuppressWarnings("unchecked")
     public
-    <C extends Connection> Collection<C> getConnectionsAs() {
-        return (Collection<C>) this.connectionManager.getConnections();
+    Collection<C> getConnectionsAs() {
+        return this.connectionManager.getConnections();
     }
 
     /**
@@ -505,7 +504,7 @@ class EndPoint {
      * Registers a tool with the server, to be used by other services.
      */
     public
-    <T extends EndPointTool> void registerTool(T toolClass) {
+    <Tool extends EndPointTool> void registerTool(Tool toolClass) {
         if (toolClass == null) {
             throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
         }
@@ -520,13 +519,13 @@ class EndPoint {
      * Only get the tools in the ModuleStart (ie: load) methods. If done in the constructor, the tool might not be available yet
      */
     public
-    <T extends EndPointTool> T getTool(Class<T> toolClass) {
+    <Tool extends EndPointTool> Tool getTool(Class<Tool> toolClass) {
         if (toolClass == null) {
             throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
         }
 
         @SuppressWarnings("unchecked")
-        T tool = (T) this.toolMap.get(toolClass);
+        Tool tool = (Tool) this.toolMap.get(toolClass);
         return tool;
     }
 
@@ -734,6 +733,7 @@ class EndPoint {
         return result;
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public
     boolean equals(Object obj) {
@@ -787,20 +787,5 @@ class EndPoint {
         int globalObjectId = globalRmiBridge.nextObjectId();
         globalRmiBridge.register(globalObjectId, globalObject);
         return globalObjectId;
-    }
-
-    /**
-     * When using RMI, we want to keep track of what our current thread execution connection is.
-     * <p/>
-     * This is because we store state info in the connection object. This is the only way to retrieve this info "out-of-band"
-     */
-    public
-    Connection getCurrentConnection() {
-        return this.currentConnection.get();
-    }
-
-    public
-    void setCurrentConnection(final Connection currentConnection) {
-        this.currentConnection.set(currentConnection);
     }
 }

@@ -39,7 +39,6 @@ import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import dorkbox.network.connection.KryoExtra;
 
 /**
  * Internal message to invoke methods remotely.
@@ -61,7 +60,9 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
 
         Serializer[] serializers = object.cachedMethod.serializers;
         Object[] args = object.args;
-        for (int i = 0, n = serializers.length; i < n; i++) {
+
+        int i = 0, n = serializers.length;
+        for (; i < n; i++) {
             Serializer serializer = serializers[i];
             if (serializer != null) {
                 kryo.writeObjectOrNull(output, args[i], serializer);
@@ -87,15 +88,14 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
 
         byte methodIndex = input.readByte();
         try {
-            KryoExtra kryoExtra = (KryoExtra) kryo;
-
-            invokeMethod.cachedMethod = kryoExtra.getMethods(methodClass)[methodIndex];
+            invokeMethod.cachedMethod = CachedMethod.getMethods(kryo, methodClass)[methodIndex];
         } catch (IndexOutOfBoundsException ex) {
             throw new KryoException("Invalid method index " + methodIndex + " for class: " + methodClass.getName());
         }
 
-        Serializer<?>[] serializers = invokeMethod.cachedMethod.serializers;
-        Class<?>[] parameterTypes = invokeMethod.cachedMethod.method.getParameterTypes();
+        CachedMethod cachedMethod = invokeMethod.cachedMethod;
+        Serializer<?>[] serializers = cachedMethod.serializers;
+        Class<?>[] parameterTypes = cachedMethod.method.getParameterTypes();
         Object[] args = new Object[serializers.length];
         invokeMethod.args = args;
         for (int i = 0, n = args.length; i < n; i++) {

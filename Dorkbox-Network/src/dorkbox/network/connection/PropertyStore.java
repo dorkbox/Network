@@ -55,9 +55,13 @@ class PropertyStore extends SettingsStore {
     public
     void init(Class<? extends EndPoint> type, final SerializationManager serializationManager, Storage storage) throws IOException {
         // make sure our custom types are registered
-        serializationManager.register(HashMap.class);
-        serializationManager.register(ByteArrayWrapper.class);
-        serializationManager.register(DB_Server.class);
+        // only register if not ALREADY initialized, since we can initialize in the server and in the client. This creates problems if
+        // running inside the same JVM (we don't permit it)
+        if (!serializationManager.initialized()) {
+            serializationManager.register(HashMap.class);
+            serializationManager.register(ByteArrayWrapper.class);
+            serializationManager.register(DB_Server.class);
+        }
 
         if (storage == null) {
             this.storage = Store.Memory()
@@ -67,16 +71,16 @@ class PropertyStore extends SettingsStore {
             this.storage = storage;
         }
 
-        servers = this.storage.load(DatabaseStorage.SERVERS, new HashMap<ByteArrayWrapper, DB_Server>(16));
+        servers = this.storage.getAndPut(DatabaseStorage.SERVERS, new HashMap<ByteArrayWrapper, DB_Server>(16));
 
         //use map to keep track of recid, so we can get record info during restarts.
-        DB_Server localServer = servers.get(DB_Server.IP_0_0_0_0);
+        DB_Server localServer = servers.get(DB_Server.IP_LOCALHOST);
         if (localServer == null) {
             localServer = new DB_Server();
-            servers.put(DB_Server.IP_0_0_0_0, localServer);
+            servers.put(DB_Server.IP_LOCALHOST, localServer);
 
             // have to always specify what we are saving
-            this.storage.commit(DatabaseStorage.SERVERS, servers);
+            this.storage.putAndSave(DatabaseStorage.SERVERS, servers);
         }
     }
 
@@ -88,7 +92,7 @@ class PropertyStore extends SettingsStore {
     ECPrivateKeyParameters getPrivateKey() throws dorkbox.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
-        return servers.get(DB_Server.IP_0_0_0_0)
+        return servers.get(DB_Server.IP_LOCALHOST)
                       .getPrivateKey();
     }
 
@@ -100,11 +104,11 @@ class PropertyStore extends SettingsStore {
     void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws SecurityException {
         checkAccess(EndPoint.class);
 
-        servers.get(DB_Server.IP_0_0_0_0)
+        servers.get(DB_Server.IP_LOCALHOST)
                .setPrivateKey(serverPrivateKey);
 
         // have to always specify what we are saving
-        storage.commit(DatabaseStorage.SERVERS, servers);
+        storage.putAndSave(DatabaseStorage.SERVERS, servers);
     }
 
     /**
@@ -115,7 +119,7 @@ class PropertyStore extends SettingsStore {
     ECPublicKeyParameters getPublicKey() throws SecurityException {
         checkAccess(EndPoint.class);
 
-        return servers.get(DB_Server.IP_0_0_0_0)
+        return servers.get(DB_Server.IP_LOCALHOST)
                       .getPublicKey();
     }
 
@@ -127,11 +131,11 @@ class PropertyStore extends SettingsStore {
     void savePublicKey(ECPublicKeyParameters serverPublicKey) throws SecurityException {
         checkAccess(EndPoint.class);
 
-        servers.get(DB_Server.IP_0_0_0_0)
+        servers.get(DB_Server.IP_LOCALHOST)
                .setPublicKey(serverPublicKey);
 
         // have to always specify what we are saving
-        storage.commit(DatabaseStorage.SERVERS, servers);
+        storage.putAndSave(DatabaseStorage.SERVERS, servers);
     }
 
     /**
@@ -140,7 +144,7 @@ class PropertyStore extends SettingsStore {
     @Override
     public synchronized
     byte[] getSalt() {
-        final DB_Server localServer = servers.get(DB_Server.IP_0_0_0_0);
+        final DB_Server localServer = servers.get(DB_Server.IP_LOCALHOST);
         byte[] salt = localServer.getSalt();
 
         // we don't care who gets the server salt
@@ -156,7 +160,7 @@ class PropertyStore extends SettingsStore {
             localServer.setSalt(bytes);
 
             // have to always specify what we are saving
-            storage.commit(DatabaseStorage.SERVERS, servers);
+            storage.putAndSave(DatabaseStorage.SERVERS, servers);
         }
 
         return salt;

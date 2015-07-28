@@ -17,10 +17,10 @@ package dorkbox.network.connection;
 
 import dorkbox.network.rmi.RmiMessages;
 import dorkbox.network.util.ConcurrentHashMapFactory;
-import dorkbox.util.exceptions.NetException;
 import dorkbox.util.ClassHelper;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.*;
 import java.util.Map.Entry;
@@ -29,14 +29,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 //note that we specifically DO NOT implement equals/hashCode, because we cannot create two separate
 // objects that are somehow equal to each other.
 public
-class ConnectionManager implements ListenerBridge, ISessionManager {
+class ConnectionManager<C extends Connection> implements ListenerBridge, ISessionManager<C> {
 
     public static Listener<?> unRegisteredType_Listener = null;
 
     // these are final, because the REFERENCE to these will never change. They ARE NOT immutable objects (meaning their content can change)
     private final ConcurrentHashMapFactory<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> listeners;
-    private final ConcurrentHashMapFactory<Connection, ConnectionManager> localManagers;
-    private final CopyOnWriteArrayList<Connection> connections = new CopyOnWriteArrayList<Connection>();
+    private final ConcurrentHashMapFactory<Connection, ConnectionManager<C>> localManagers;
+    private final CopyOnWriteArrayList<C> connections = new CopyOnWriteArrayList<C>();
 
     /**
      * Used by the listener subsystem to determine types.
@@ -61,13 +61,13 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
             }
         };
 
-        this.localManagers = new ConcurrentHashMapFactory<Connection, ConnectionManager>() {
+        this.localManagers = new ConcurrentHashMapFactory<Connection, ConnectionManager<C>>() {
             private static final long serialVersionUID = 1L;
 
             @Override
             public
-            ConnectionManager createNewObject(Object... args) {
-                return new ConnectionManager(loggerName + "-" + args[0] + " Specific", ConnectionManager.this.baseClass);
+            ConnectionManager<C> createNewObject(Object... args) {
+                return new ConnectionManager<C>(loggerName + "-" + args[0] + " Specific", ConnectionManager.this.baseClass);
             }
         };
     }
@@ -283,7 +283,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
 
 
         // now have to account for additional connection listener managers (non-global).
-        ConnectionManager localManager = this.localManagers.get(connection);
+        ConnectionManager<C> localManager = this.localManagers.get(connection);
         if (localManager != null) {
             // if we found a listener during THIS method call, we need to let the NEXT method call know,
             // so it doesn't spit out error for not handling a message (since that message MIGHT have
@@ -328,7 +328,11 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
                         return;
                     }
 
-                    listener.idle(connection);
+                    try {
+                        listener.idle(connection);
+                    } catch (IOException e) {
+                        logger.error("Unable to notify listener on idle.", e);
+                    }
                 }
                 connection.send()
                           .flush();
@@ -336,7 +340,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
         }
 
         // now have to account for additional (local) listener managers.
-        ConnectionManager localManager = this.localManagers.get(connection);
+        ConnectionManager<C> localManager = this.localManagers.get(connection);
         if (localManager != null) {
             localManager.notifyOnIdle(connection);
         }
@@ -349,7 +353,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public
-    void connectionConnected(Connection connection) {
+    void connectionConnected(C connection) {
         // create a new connection!
         this.connections.add(connection);
 
@@ -371,7 +375,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
             }
 
             // now have to account for additional (local) listener managers.
-            ConnectionManager localManager = this.localManagers.get(connection);
+            ConnectionManager<C> localManager = this.localManagers.get(connection);
             if (localManager != null) {
                 localManager.connectionConnected(connection);
             }
@@ -387,7 +391,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public
-    void connectionDisconnected(Connection connection) {
+    void connectionDisconnected(C connection) {
         Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>>> entrySet = this.listeners.entrySet();
         CopyOnWriteArrayList<ListenerRaw<Connection, Object>> list;
         for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<Connection, Object>>> entry : entrySet) {
@@ -404,7 +408,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
         }
 
         // now have to account for additional (local) listener managers.
-        ConnectionManager localManager = this.localManagers.get(connection);
+        ConnectionManager<C> localManager = this.localManagers.get(connection);
         if (localManager != null) {
             localManager.connectionDisconnected(connection);
 
@@ -442,7 +446,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
         }
 
         // now have to account for additional (local) listener managers.
-        ConnectionManager localManager = this.localManagers.get(connection);
+        ConnectionManager<C> localManager = this.localManagers.get(connection);
         if (localManager != null) {
             localManager.connectionError(connection, throwable);
         }
@@ -455,20 +459,20 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
      */
     @Override
     public
-    List<Connection> getConnections() {
+    List<C> getConnections() {
         return Collections.unmodifiableList(this.connections);
     }
 
 
 
     final
-    ConnectionManager addListenerManager(Connection connection) {
+    ConnectionManager<C> addListenerManager(Connection connection) {
         // when we are a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections
         // are notified of that listener.
         // it is POSSIBLE to add a connection-specfic listener (via connection.addListener), meaning that ONLY
         // that listener is notified on that event (ie, admin type listeners)
 
-        ConnectionManager lm = this.localManagers.getOrCreate(connection, connection.toString());
+        ConnectionManager<C> lm = this.localManagers.getOrCreate(connection, connection.toString());
 
         Logger logger2 = this.logger;
         if (logger2.isDebugEnabled()) {
@@ -490,7 +494,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
      * @return Returns a FAST list of active connections.
      */
     public final
-    Collection<Connection> getConnections0() {
+    Collection<C> getConnections0() {
         return this.connections;
     }
 
@@ -500,14 +504,14 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
      * @return Returns a FAST first connection (for client!).
      */
     public final
-    Connection getConnection0() {
+    C getConnection0() throws IOException {
         if (this.connections.iterator()
                             .hasNext()) {
             return this.connections.iterator()
                                    .next();
         }
         else {
-            throw new NetException("Not connected to a remote computer. Unable to continue!");
+            throw new IOException("Not connected to a remote computer. Unable to continue!");
         }
     }
 
@@ -540,7 +544,7 @@ class ConnectionManager implements ListenerBridge, ISessionManager {
     final
     void closeConnections() {
         // close the sessions
-        Iterator<Connection> iterator = this.connections.iterator();
+        Iterator<C> iterator = this.connections.iterator();
         //noinspection WhileLoopReplaceableByForEach
         while (iterator.hasNext()) {
             Connection connection = iterator.next();

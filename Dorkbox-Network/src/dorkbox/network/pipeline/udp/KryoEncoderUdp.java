@@ -15,17 +15,17 @@
  */
 package dorkbox.network.pipeline.udp;
 
-import com.esotericsoftware.kryo.KryoException;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.NetException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageEncoder;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.List;
 
@@ -46,9 +46,8 @@ class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
     }
 
     // the crypto writer will override this
-    @SuppressWarnings("unused")
-    protected
-    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, Object msg, ByteBuf buffer) {
+    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, Object msg, ByteBuf buffer)
+                    throws IOException {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         serializationManager.write(buffer, msg);
     }
@@ -63,21 +62,25 @@ class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
                 // no size info, since this is UDP, it is not segmented
                 writeObject(this.serializationManager, ctx, msg, outBuffer);
 
-
                 // have to check to see if we are too big for UDP!
                 if (outBuffer.readableBytes() > EndPoint.udpMaxSize) {
                     System.err.println("Object larger than MAX udp size!  " + EndPoint.udpMaxSize + "/" + outBuffer.readableBytes());
-                    throw new NetException("Object is TOO BIG FOR UDP! " + msg.toString() + " (" + EndPoint.udpMaxSize + "/" +
-                                           outBuffer.readableBytes() + ")");
+
+                    String message = "Object is TOO BIG FOR UDP! " + msg.toString() + " (" + EndPoint.udpMaxSize + "/" +
+                                     outBuffer.readableBytes() + ")";
+                    LoggerFactory.getLogger(this.getClass()).error(message);
+                    throw new IOException(message);
                 }
 
                 DatagramPacket packet = new DatagramPacket(outBuffer,
                                                            (InetSocketAddress) ctx.channel()
                                                                                   .remoteAddress());
                 out.add(packet);
-            } catch (KryoException ex) {
-                throw new NetException("Unable to serialize object of type: " + msg.getClass()
-                                                                                   .getName(), ex);
+            } catch (Exception e) {
+                String message = "Unable to serialize object of type: " + msg.getClass()
+                                                                             .getName();
+                LoggerFactory.getLogger(this.getClass()).error(message, e);
+                throw new IOException(message, e);
             }
         }
     }

@@ -19,7 +19,6 @@ import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.NetException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
@@ -29,6 +28,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
@@ -103,7 +103,7 @@ class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandlerClient
             }
 
             if (!success) {
-                throw new NetException("UDT cannot connect to a remote server before TCP is established!");
+                throw new IOException("UDT cannot connect to a remote server before TCP is established!");
             }
 
             if (logger2.isTraceEnabled()) {
@@ -115,7 +115,7 @@ class RegistrationRemoteHandlerClientUDT extends RegistrationRemoteHandlerClient
             channel.writeAndFlush(registration);
         }
         else {
-            throw new NetException("UDT cannot connect to remote server! No remote address specified!");
+            throw new IOException("UDT cannot connect to remote server! No remote address specified!");
         }
     }
 

@@ -19,6 +19,8 @@ import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.util.SerializationManager;
 import io.netty.buffer.ByteBuf;
 
+import java.io.IOException;
+
 /**
  * Threads reading/writing, it messes up a single instance.
  * it is possible to use a single kryo with the use of synchronize, however - that defeats the point of multi-threaded
@@ -27,24 +29,18 @@ public
 interface CryptoSerializationManager extends SerializationManager, RMISerializationManager {
 
     /**
-     * Determines if this buffer is encrypted or not.
+     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
+     * <p/>
+     * There is a small speed penalty if there were no kryo's available to use.
      */
-    boolean isEncrypted(ByteBuf buffer);
-
+    void writeWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, Object message) throws IOException;
 
     /**
      * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
      * <p/>
      * There is a small speed penalty if there were no kryo's available to use.
      */
-    void writeWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, Object message);
-
-    /**
-     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
-     * <p/>
-     * There is a small speed penalty if there were no kryo's available to use.
-     */
-    void writeWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, Object message);
+    void writeWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, Object message) throws IOException;
 
     /**
      * Reads an object from the buffer.
@@ -54,7 +50,7 @@ interface CryptoSerializationManager extends SerializationManager, RMISerializat
      * @param connection can be NULL
      * @param length     should ALWAYS be the length of the expected object!
      */
-    Object readWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, int length);
+    Object readWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, int length) throws IOException;
 
     /**
      * Reads an object from the buffer.
@@ -64,5 +60,5 @@ interface CryptoSerializationManager extends SerializationManager, RMISerializat
      * @param connection can be NULL
      * @param length     should ALWAYS be the length of the expected object!
      */
-    Object readWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, int length);
+    Object readWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, int length) throws IOException;
 }

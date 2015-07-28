@@ -17,7 +17,7 @@ class DiscoverHostTest extends BaseTest {
 
     @Test
     public
-    void broadcast() throws InitializationException, SecurityException, IOException {
+    void broadcast() throws InitializationException, SecurityException, IOException, InterruptedException {
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;

@@ -20,7 +20,8 @@ import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
 import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.rmi.TimeoutException;
-import dorkbox.util.exceptions.NetException;
+
+import java.io.IOException;
 
 @SuppressWarnings("unused")
 public
@@ -40,7 +41,7 @@ interface Connection {
     /**
      * @return the endpoint associated with this connection
      */
-    EndPoint getEndPoint();
+    EndPoint<Connection> getEndPoint();
 
 
     /**
@@ -90,6 +91,12 @@ interface Connection {
     void close();
 
     /**
+     * Marks the connection to be closed as soon as possible. This is evaluated when the current
+     * thread execution returns to the network stack.
+     */
+    void closeAsap();
+
+    /**
      * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be
      * invoked remotely on the object with the specified ID in the ObjectSpace for the current connection.
      * <p/>
@@ -112,7 +119,7 @@ interface Connection {
      *
      * @see RemoteObject
      */
-    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws NetException;
+    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws IOException;
 
 
     /**
@@ -138,5 +145,7 @@ interface Connection {
      *
      * @see RemoteObject
      */
-    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws NetException;
+    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws IOException;
+
+
 }

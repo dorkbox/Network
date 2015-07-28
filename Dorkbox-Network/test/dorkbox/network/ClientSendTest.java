@@ -21,7 +21,7 @@ class ClientSendTest extends BaseTest {
 
     @Test
     public
-    void sendDataFromClientClass() throws InitializationException, SecurityException, IOException {
+    void sendDataFromClientClass() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 

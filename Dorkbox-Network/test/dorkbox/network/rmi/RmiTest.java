@@ -17,8 +17,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public
 class RmiTest extends BaseTest {
@@ -29,104 +28,111 @@ class RmiTest extends BaseTest {
             @Override
             public
             void run() {
-                TestObject test = connection.createRemoteObject(TestObjectImpl.class);
-
-                System.err.println("Starting test for: " + remoteObjectID);
-
-                //TestObject test = connection.getRemoteObject(id, TestObject.class);
-                RemoteObject remoteObject = (RemoteObject) test;
-
-                // Default behavior. RMI is transparent, method calls behave like normal
-                // (return values and exceptions are returned, call is synchronous)
-                System.err.println("hashCode: " + test.hashCode());
-                System.err.println("toString: " + test);
-                test.moo();
-                test.moo("Cow");
-                assertEquals(remoteObjectID, test.id());
-
-
-                // UDP calls that ignore the return value
-                remoteObject.setUDP(true);
-                test.moo("Meow");
-                assertEquals(0, test.id());
-                remoteObject.setUDP(false);
-
-
-                // Test that RMI correctly waits for the remotely invoked method to exit
-                remoteObject.setResponseTimeout(5000);
-                test.moo("You should see this two seconds before...", 2000);
-                System.out.println("...This");
-                remoteObject.setResponseTimeout(3000);
-
-                // Try exception handling
-                boolean caught = false;
+                TestObject test = null;
                 try {
+                    test = connection.createRemoteObject(TestObjectImpl.class);
+
+                    System.err.println("Starting test for: " + remoteObjectID);
+
+                    //TestObject test = connection.getRemoteObject(id, TestObject.class);
+                    RemoteObject remoteObject = (RemoteObject) test;
+
+                    // Default behavior. RMI is transparent, method calls behave like normal
+                    // (return values and exceptions are returned, call is synchronous)
+                    System.err.println("hashCode: " + test.hashCode());
+                    System.err.println("toString: " + test);
+                    test.moo();
+                    test.moo("Cow");
+                    assertEquals(remoteObjectID, test.id());
+
+
+                    // UDP calls that ignore the return value
+                    remoteObject.setUDP(true);
+                    test.moo("Meow");
+                    assertEquals(0, test.id());
+                    remoteObject.setUDP(false);
+
+
+                    // Test that RMI correctly waits for the remotely invoked method to exit
+                    remoteObject.setResponseTimeout(5000);
+                    test.moo("You should see this two seconds before...", 2000);
+                    System.out.println("...This");
+                    remoteObject.setResponseTimeout(3000);
+
+                    // Try exception handling
+                    boolean caught = false;
+                    try {
+                        test.throwException();
+                    } catch (UnsupportedOperationException ex) {
+                        System.err.println("\tExpected.");
+                        caught = true;
+                    }
+                    assertTrue(caught);
+
+                    // Return values are ignored, but exceptions are still dealt with properly
+
+                    remoteObject.setTransmitReturnValue(false);
+                    test.moo("Baa");
+                    test.id();
+                    caught = false;
+                    try {
+                        test.throwException();
+                    } catch (UnsupportedOperationException ex) {
+                        caught = true;
+                    }
+                    assertTrue(caught);
+
+                    // Non-blocking call that ignores the return value
+                    remoteObject.setNonBlocking(true);
+                    remoteObject.setTransmitReturnValue(false);
+                    test.moo("Meow");
+                    assertEquals(0, test.id());
+
+                    // Non-blocking call that returns the return value
+                    remoteObject.setTransmitReturnValue(true);
+                    test.moo("Foo");
+
+                    assertEquals(0, test.id());
+                    // wait for the response to id()
+                    assertEquals(remoteObjectID, remoteObject.waitForLastResponse());
+
+                    assertEquals(0, test.id());
+                    byte responseID = remoteObject.getLastResponseID();
+                    // wait for the response to id()
+                    assertEquals(remoteObjectID, remoteObject.waitForResponse(responseID));
+
+                    // Non-blocking call that errors out
+                    remoteObject.setTransmitReturnValue(false);
                     test.throwException();
-                } catch (UnsupportedOperationException ex) {
-                    System.err.println("\tExpected.");
-                    caught = true;
+                    assertEquals(remoteObject.waitForLastResponse()
+                                             .getClass(), UnsupportedOperationException.class);
+
+                    // Call will time out if non-blocking isn't working properly
+                    remoteObject.setTransmitExceptions(false);
+                    test.moo("Mooooooooo", 3000);
+
+                    // should wait for a small time
+                    remoteObject.setTransmitReturnValue(true);
+                    remoteObject.setNonBlocking(false);
+                    remoteObject.setResponseTimeout(6000);
+                    System.out.println("You should see this 2 seconds before");
+                    float slow = test.slow();
+                    System.out.println("...This");
+                    assertEquals(slow, 123, .0001D);
+
+                    // Test sending a reference to a remote object.
+                    MessageWithTestObject m = new MessageWithTestObject();
+                    m.number = 678;
+                    m.text = "sometext";
+                    m.testObject = test;
+                    connection.send()
+                              .TCP(m)
+                              .flush();
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    fail();
                 }
-                assertTrue(caught);
-
-                // Return values are ignored, but exceptions are still dealt with properly
-
-                remoteObject.setTransmitReturnValue(false);
-                test.moo("Baa");
-                test.id();
-                caught = false;
-                try {
-                    test.throwException();
-                } catch (UnsupportedOperationException ex) {
-                    caught = true;
-                }
-                assertTrue(caught);
-
-                // Non-blocking call that ignores the return value
-                remoteObject.setNonBlocking(true);
-                remoteObject.setTransmitReturnValue(false);
-                test.moo("Meow");
-                assertEquals(0, test.id());
-
-                // Non-blocking call that returns the return value
-                remoteObject.setTransmitReturnValue(true);
-                test.moo("Foo");
-
-                assertEquals(0, test.id());
-                // wait for the response to id()
-                assertEquals(remoteObjectID, remoteObject.waitForLastResponse());
-
-                assertEquals(0, test.id());
-                byte responseID = remoteObject.getLastResponseID();
-                // wait for the response to id()
-                assertEquals(remoteObjectID, remoteObject.waitForResponse(responseID));
-
-                // Non-blocking call that errors out
-                remoteObject.setTransmitReturnValue(false);
-                test.throwException();
-                assertEquals(remoteObject.waitForLastResponse()
-                                         .getClass(), UnsupportedOperationException.class);
-
-                // Call will time out if non-blocking isn't working properly
-                remoteObject.setTransmitExceptions(false);
-                test.moo("Mooooooooo", 3000);
-
-                // should wait for a small time
-                remoteObject.setTransmitReturnValue(true);
-                remoteObject.setNonBlocking(false);
-                remoteObject.setResponseTimeout(6000);
-                System.out.println("You should see this 2 seconds before");
-                float slow = test.slow();
-                System.out.println("...This");
-                assertEquals(slow, 123, .0001D);
-
-                // Test sending a reference to a remote object.
-                MessageWithTestObject m = new MessageWithTestObject();
-                m.number = 678;
-                m.text = "sometext";
-                m.testObject = test;
-                connection.send()
-                          .TCP(m)
-                          .flush();
             }
         }.start();
     }
@@ -143,7 +149,7 @@ class RmiTest extends BaseTest {
 
     @Test
     public
-    void rmi() throws InitializationException, SecurityException, IOException {
+    void rmi() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
 
@@ -157,9 +163,6 @@ class RmiTest extends BaseTest {
         final Server server = new Server(configuration);
         server.disableRemoteKeyValidation();
         server.setIdleTimeout(0);
-
-        register(server.getSerialization());
-
 
         addEndPoint(server);
         server.bind(false);

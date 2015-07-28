@@ -17,8 +17,21 @@ package dorkbox.network.rmi;
 
 import java.lang.annotation.*;
 
+
+
+/**
+ * This specifies to the serializer, that this field is an RMI object.
+ * <p/>
+ * Additional behavior of RMI methods, is if there is another method (of the same name and signature), with the addition of a
+ * Connection parameter in the first position, THAT method will be called instead, an will have the current connection object passed
+ * into the method.
+ * <p/>
+ * It is mandatory for the correct implementation (as per the interface guideline) to exist, and should return null.
+ * <p/>
+ * IE: foo(String something)...  ->  foo(Connection connection, String something)....
+ */
 @Retention(value = RetentionPolicy.RUNTIME)
 @Inherited
-@Target(value = {ElementType.FIELD, ElementType.ANNOTATION_TYPE})
+@Target(value = {ElementType.FIELD})
 public
-@interface RemoteProxy {}
+@interface RMI {}
