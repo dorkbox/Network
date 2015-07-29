@@ -93,17 +93,18 @@ class RegistrationLocalHandlerServer<C extends Connection> extends RegistrationL
 
         if (connection != null) {
             // add our RMI handlers
+            if (registrationWrapper.rmiEnabled()) {
+                ///////////////////////
+                // DECODE (or upstream)
+                ///////////////////////
+                pipeline.addFirst(LOCAL_RMI_ENCODER, decoder);
 
-            ///////////////////////
-            // DECODE (or upstream)
-            ///////////////////////
-            pipeline.addFirst(LOCAL_RMI_ENCODER, decoder);
 
-
-            /////////////////////////
-            // ENCODE (or downstream)
-            /////////////////////////
-            pipeline.addFirst(LOCAL_RMI_DECODER, encoder);
+                /////////////////////////
+                // ENCODE (or downstream)
+                /////////////////////////
+                pipeline.addFirst(LOCAL_RMI_DECODER, encoder);
+            }
 
             // have to setup connection handler
             pipeline.addLast(CONNECTION_HANDLER, connection);

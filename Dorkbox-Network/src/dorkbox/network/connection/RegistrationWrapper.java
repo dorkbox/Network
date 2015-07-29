@@ -74,6 +74,13 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         }
     }
 
+    /**
+     * @return true if RMI is enabled
+     */
+    public boolean rmiEnabled() {
+        return endPoint.globalRmiBridge != null;
+    }
+
     public
     KryoEncoder getKryoEncoder() {
         return this.kryoEncoder;
