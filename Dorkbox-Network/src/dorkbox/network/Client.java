@@ -385,7 +385,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     void closeAsap() {
-//TODO
+        this.connection.closeAsap();
     }
 
     /**
