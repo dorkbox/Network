@@ -87,6 +87,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
     /**
      * Convenience method to starts a server with the specified Connection Options
      */
+    @SuppressWarnings("AutoBoxing")
     public
     Server(Configuration options) throws InitializationException, SecurityException, IOException {
         // watch-out for serialization... it can be NULL incoming. The EndPoint (superclass) sets it, if null, so
@@ -175,7 +176,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                                    .channel(LocalServerChannel.class)
                                    .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                                    .localAddress(new LocalAddress(this.localChannelName))
-                                   .childHandler(new RegistrationLocalHandlerServer(threadName, this.registrationWrapper));
+                                   .childHandler(new RegistrationLocalHandlerServer<C>(threadName, this.registrationWrapper));
 
                 manageForShutdown(boss);
                 manageForShutdown(worker);

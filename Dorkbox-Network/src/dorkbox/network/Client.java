@@ -81,6 +81,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     /**
      * Starts a REMOTE <b>only</b> client, which will connect to the specified host using the specified Connections Options
      */
+    @SuppressWarnings("AutoBoxing")
     public
     Client(final Configuration options) throws InitializationException, SecurityException, IOException {
         super(options);
@@ -255,7 +256,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     /**
      * Allows the client to reconnect to the last connected server
      *
-     * @throws InterruptedException if the client is unable to reconnect in the previously requested connection-timeout
+     * @throws IOException if the client is unable to reconnect in the previously requested connection-timeout
      */
     public
     void reconnect() throws IOException {
@@ -265,7 +266,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     /**
      * Allows the client to reconnect to the last connected server
      *
-     * @throws InterruptedException if the client is unable to reconnect in the requested time
+     * @throws IOException if the client is unable to reconnect in the requested time
      */
     public
     void reconnect(int connectionTimeout) throws IOException {
@@ -412,9 +413,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     @Override
     public
-    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws IOException {
+    <Iface, Impl extends Iface> Iface createProxyObject(final Class<Impl> remoteImplementationClass) throws IOException {
         return this.connectionManager.getConnection0()
-                                     .createRemoteObject(remoteImplementationClass);
+                                     .createProxyObject(remoteImplementationClass);
     }
 
     /**
@@ -442,9 +443,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     @Override
     public
-    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws IOException {
+    <Iface, Impl extends Iface> Iface getProxyObject(final int objectId) throws IOException {
         return this.connectionManager.getConnection0()
-                                     .getRemoteObject(objectId);
+                                     .getProxyObject(objectId);
     }
 
     /**
