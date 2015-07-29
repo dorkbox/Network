@@ -48,18 +48,14 @@ class RegistrationLocalHandlerServer<C extends Connection> extends RegistrationL
     @Override
     public
     void channelActive(ChannelHandlerContext context) throws Exception {
-        if (logger.isDebugEnabled()) {
-            super.channelActive(context);
-        }
-    }
+        Channel channel = context.channel();
+        this.logger.info("Connected to LOCAL connection. [{} <== {}]",
+                         context.channel()
+                                .localAddress(),
+                         channel.remoteAddress());
 
-    /**
-     * @return the direction that traffic is going to this handler (" <== " or " ==> ")
-     */
-    @Override
-    protected
-    String getConnectionDirection() {
-        return " <== ";
+
+        super.channelActive(context);
     }
 
     @Override

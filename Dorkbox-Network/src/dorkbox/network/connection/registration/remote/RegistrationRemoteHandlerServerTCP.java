@@ -105,9 +105,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
     @Override
     public
     void channelActive(ChannelHandlerContext context) throws Exception {
-        if (this.logger.isDebugEnabled()) {
-            super.channelActive(context);
-        }
+        super.channelActive(context);
 
         Channel channel = context.channel();
 
@@ -124,8 +122,9 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
             this.registrationWrapper.releaseChannelMap();
         }
 
-        if (this.logger.isTraceEnabled()) {
-            this.logger.trace(this.name, "New TCP connection. Saving TCP channel info.");
+        Logger logger2 = this.logger;
+        if (logger2.isTraceEnabled()) {
+            logger2.trace(this.name, "New TCP connection. Saving TCP channel info.");
         }
     }
 
@@ -249,11 +248,12 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                                                          registrationWrapper2.getPrivateKey(),
                                                          metaChannel.publicKey,
                                                          register.eccParameters,
-                                                         metaChannel.aesKey);
+                                                         metaChannel.aesKey,
+                                                         logger);
 
 
                     // now encrypt payload via AES
-                    register.payload = Crypto.AES.encrypt(getAesEngine(), metaChannel.aesKey, register.aesIV, combinedBytes);
+                    register.payload = Crypto.AES.encrypt(getAesEngine(), metaChannel.aesKey, register.aesIV, combinedBytes, logger);
 
                     channel.writeAndFlush(register);
 
@@ -279,7 +279,8 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                             byte[] payload = Crypto.AES.decrypt(getAesEngine(),
                                                                 metaChannel.aesKey,
                                                                 metaChannel.aesIV,
-                                                                registration.payload);
+                                                                registration.payload,
+                                                                logger);
 
                             if (payload.length == 0) {
                                 logger2.error("Invalid decryption of payload. Aborting.");

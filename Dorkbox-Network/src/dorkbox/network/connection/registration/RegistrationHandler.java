@@ -36,7 +36,7 @@ class RegistrationHandler<C extends Connection> extends ChannelInboundHandlerAda
 
     public
     RegistrationHandler(final String name, RegistrationWrapper<C> registrationWrapper) {
-        this.name = name + " Discovery/Registration";
+        this.name = name;
         this.logger = org.slf4j.LoggerFactory.getLogger(this.name);
         this.registrationWrapper = registrationWrapper;
     }

@@ -57,9 +57,7 @@ class RegistrationRemoteHandlerServerUDT<C extends Connection> extends Registrat
     @Override
     public
     void channelActive(final ChannelHandlerContext context) throws Exception {
-        if (this.logger.isDebugEnabled()) {
-            super.channelActive(context);
-        }
+        super.channelActive(context);
 
         // UDT channels are added when the registration request arrives on a UDT channel.
     }
@@ -132,7 +130,8 @@ class RegistrationRemoteHandlerServerUDT<C extends Connection> extends Registrat
                 register.payload = Crypto.AES.encrypt(RegistrationRemoteHandler.getAesEngine(),
                                                       metaChannel.aesKey,
                                                       metaChannel.aesIV,
-                                                      idAsBytes);
+                                                      idAsBytes,
+                                                      logger);
 
                 // send back, so the client knows that UDP was ok. We include the encrypted connection ID, so the client knows it's a legit server
                 channel.writeAndFlush(register);

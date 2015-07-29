@@ -233,13 +233,9 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         if (metaChannel != null && metaChannel.udpRemoteAddress != null) {
             this.udpRemoteMap.put(metaChannel.udpRemoteAddress, metaChannel.connection);
 
-            Logger logger2 = this.logger;
-            if (logger2.isDebugEnabled()) {
-                logger2.debug("Connected to remote UDP connection. [{} <== {}]",
-                              metaChannel.udpChannel.localAddress()
-                                                    .toString(),
-                              metaChannel.udpRemoteAddress.toString());
-            }
+            this.logger.info("Connected to remote UDP connection. [{} <== {}]",
+                             metaChannel.udpChannel.localAddress(),
+                             metaChannel.udpRemoteAddress);
         }
     }
 
@@ -251,10 +247,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     void unRegisterServerUDP(final InetSocketAddress udpRemoteAddress) {
         if (udpRemoteAddress != null) {
             this.udpRemoteMap.remove(udpRemoteAddress);
-            Logger logger2 = this.logger;
-            if (logger2.isInfoEnabled()) {
-                logger2.info("Closed remote UDP connection: {}", udpRemoteAddress.toString());
-            }
+            logger.info("Closed remote UDP connection: {}", udpRemoteAddress);
         }
     }
 

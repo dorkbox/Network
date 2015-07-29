@@ -887,7 +887,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
                     logger2.trace("Encrypting data with - AES {}", connection);
                 }
 
-                Crypto.AES.encrypt(kryo.aesEngine, connection.getCryptoParameters(), bufferWithData, bufferTempData, length);
+                Crypto.AES.encrypt(kryo.aesEngine, connection.getCryptoParameters(), bufferWithData, bufferTempData, length, logger);
 
                 // swap buffers
                 ByteBuf tmp = bufferWithData;
@@ -962,7 +962,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
                 }
 
                 // length-1 to adjust for the magic byte
-                Crypto.AES.decrypt(kryo.aesEngine, connection.getCryptoParameters(), bufferWithData, bufferTempData, length - 1);
+                Crypto.AES.decrypt(kryo.aesEngine, connection.getCryptoParameters(), bufferWithData, bufferTempData, length - 1, logger);
 
                 // correct which buffers are used
                 bufferWithData = bufferTempData;

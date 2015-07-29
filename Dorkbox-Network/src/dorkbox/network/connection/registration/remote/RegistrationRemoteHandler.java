@@ -139,7 +139,7 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
         Class<? extends Channel> channelClass = channel.getClass();
 
 
-        StringBuilder stringBuilder = new StringBuilder(76);
+        StringBuilder stringBuilder = new StringBuilder(96);
 
         stringBuilder.append("Connected to remote ");
         if (channelClass == NioSocketChannel.class || channelClass == EpollSocketChannel.class) {
@@ -175,7 +175,7 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
         }
         stringBuilder.append("]");
 
-        this.logger.debug(stringBuilder.toString());
+        this.logger.info(stringBuilder.toString());
     }
 
     @Override

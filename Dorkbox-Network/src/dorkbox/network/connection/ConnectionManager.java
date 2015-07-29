@@ -475,8 +475,8 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
         ConnectionManager<C> lm = this.localManagers.getOrCreate(connection, connection.toString());
 
         Logger logger2 = this.logger;
-        if (logger2.isDebugEnabled()) {
-            this.logger.debug("Connection specific Listener Manager added on connection: {}", connection);
+        if (logger2.isTraceEnabled()) {
+            this.logger.trace("Connection specific Listener Manager added on connection: {}", connection);
         }
 
         return lm;

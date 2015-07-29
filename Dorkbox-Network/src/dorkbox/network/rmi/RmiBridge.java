@@ -232,7 +232,7 @@ class RmiBridge {
         CachedMethod cachedMethod = invokeMethod.cachedMethod;
 
         Logger logger2 = this.logger;
-        if (logger2.isDebugEnabled()) {
+        if (logger2.isTraceEnabled()) {
             String argString = "";
             if (invokeMethod.args != null) {
                 argString = Arrays.deepToString(invokeMethod.args);
@@ -254,9 +254,9 @@ class RmiBridge {
                          .append(")");
 
             if (cachedMethod.origMethod != null) {
-                stringBuilder.append(" [Connection param override]");
+                stringBuilder.append(" [Connection method override]");
             }
-            logger2.debug(stringBuilder.toString());
+            logger2.trace(stringBuilder.toString());
         }
 
         byte responseData = invokeMethod.responseData;

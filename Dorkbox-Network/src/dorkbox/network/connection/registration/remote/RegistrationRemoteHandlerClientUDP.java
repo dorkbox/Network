@@ -73,10 +73,7 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
     @Override
     public
     void channelActive(final ChannelHandlerContext context) throws Exception {
-        Logger logger2 = this.logger;
-        if (logger2.isDebugEnabled()) {
-            super.channelActive(context);
-        }
+        super.channelActive(context);
 
         Channel channel = context.channel();
 
@@ -116,6 +113,7 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
                 throw new IOException("UDP cannot connect to a remote server before TCP is established!");
             }
 
+            Logger logger2 = this.logger;
             if (logger2.isTraceEnabled()) {
                 logger2.trace("Start new UDP Connection. Sending request to server");
             }
@@ -151,7 +149,7 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
                 Registration registration = (Registration) message;
 
                 // now decrypt channelID using AES
-                byte[] payload = Crypto.AES.decrypt(getAesEngine(), metaChannel.aesKey, metaChannel.aesIV, registration.payload);
+                byte[] payload = Crypto.AES.decrypt(getAesEngine(), metaChannel.aesKey, metaChannel.aesIV, registration.payload, logger);
 
                 OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
                 if (!optimizeUtils.canReadInt(payload)) {

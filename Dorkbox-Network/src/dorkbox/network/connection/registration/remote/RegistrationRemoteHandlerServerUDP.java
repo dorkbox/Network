@@ -260,7 +260,8 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
                     register.payload = Crypto.AES.encrypt(RegistrationRemoteHandler.getAesEngine(),
                                                           metaChannel.aesKey,
                                                           metaChannel.aesIV,
-                                                          idAsBytes);
+                                                          idAsBytes,
+                                                          logger);
 
                     channel.writeAndFlush(new UdpWrapper(register, udpRemoteAddress));
                     if (logger2.isTraceEnabled()) {

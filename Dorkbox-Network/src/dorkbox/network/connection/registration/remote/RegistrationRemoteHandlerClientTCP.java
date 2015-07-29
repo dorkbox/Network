@@ -127,10 +127,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
     @Override
     public
     void channelActive(final ChannelHandlerContext context) throws Exception {
-        Logger logger2 = this.logger;
-        if (logger2.isDebugEnabled()) {
-            super.channelActive(context);
-        }
+        super.channelActive(context);
 
         Channel channel = context.channel();
 
@@ -149,6 +146,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
             this.registrationWrapper.releaseChannelMap();
         }
 
+        Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
             logger2.trace("Start new TCP Connection. Sending request to server");
         }
@@ -213,7 +211,8 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                                                             registrationWrapper2.getPrivateKey(),
                                                             registration.publicKey,
                                                             registration.eccParameters,
-                                                            registration.aesKey);
+                                                            registration.aesKey,
+                                                            logger);
 
                     if (aesKeyBytes.length != 32) {
                         logger2.error("Invalid decryption of aesKey. Aborting.");
@@ -224,7 +223,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     }
 
                     // now decrypt payload using AES
-                    byte[] payload = Crypto.AES.decrypt(getAesEngine(), aesKeyBytes, registration.aesIV, registration.payload);
+                    byte[] payload = Crypto.AES.decrypt(getAesEngine(), aesKeyBytes, registration.aesIV, registration.payload, logger);
 
                     if (payload.length == 0) {
                         logger2.error("Invalid decryption of payload. Aborting.");
@@ -308,7 +307,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     Output output = new Output(1024);
                     EccPublicKeySerializer.write(output, (ECPublicKeyParameters) metaChannel.ecdhKey.getPublic());
                     byte[] pubKeyAsBytes = output.toBytes();
-                    register.payload = Crypto.AES.encrypt(getAesEngine(), aesKeyBytes, registration.aesIV, pubKeyAsBytes);
+                    register.payload = Crypto.AES.encrypt(getAesEngine(), aesKeyBytes, registration.aesIV, pubKeyAsBytes, logger);
 
                     channel.writeAndFlush(register);
 

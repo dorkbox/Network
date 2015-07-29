@@ -169,7 +169,7 @@ class EndPoint<C extends Connection> {
     EndPoint(Class<? extends EndPoint> type, final Configuration options) throws InitializationException, SecurityException, IOException {
         this.type = (Class<? extends EndPoint<C>>) type;
 
-        this.logger = org.slf4j.LoggerFactory.getLogger(type);
+        this.logger = org.slf4j.LoggerFactory.getLogger(type.getSimpleName());
 
         // make sure that 'localhost' is REALLY our specific IP address
         if (options.host != null && (options.host.equals("localhost") || options.host.startsWith("127."))) {

@@ -65,26 +65,6 @@ class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler
         this.registrationWrapper.connection0(metaChannel);
     }
 
-    /**
-     * STEP 2: Channel is now active. Start the registration process
-     */
-    @Override
-    public
-    void channelActive(ChannelHandlerContext context) throws Exception {
-        Channel channel = context.channel();
-
-        //noinspection StringBufferReplaceableByString
-        StringBuilder builder = new StringBuilder(76);
-        builder.append("Connected to LOCAL connection. [");
-        builder.append(context.channel()
-                              .localAddress());
-        builder.append(getConnectionDirection());
-        builder.append(channel.remoteAddress());
-        builder.append("]");
-
-        this.logger.debug(builder.toString());
-    }
-
     @Override
     public
     void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
@@ -98,12 +78,6 @@ class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler
             channel.close();
         }
     }
-
-    /**
-     * @return the direction that traffic is going to this handler (" <== " or " ==> ")
-     */
-    protected abstract
-    String getConnectionDirection();
 
     // this SHOULDN'T ever happen, but we might shutdown in the middle of registration
     @Override
