@@ -22,6 +22,7 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.util.collections.IntMap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
 import io.netty.util.ReferenceCountUtil;
 
 public
@@ -81,13 +82,31 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
 
         // have to setup new listeners
         if (metaChannel != null) {
-            channel.pipeline()
-                   .remove(this);
+            ChannelPipeline pipeline = channel.pipeline();
+            pipeline.remove(this);
 
             // Event though a local channel is XOR with everything else, we still have to make the client clean up it's state.
             registrationWrapper.registerNextProtocol0();
 
             ConnectionImpl connection = metaChannel.connection;
+
+
+            // add our RMI handlers
+
+            ///////////////////////
+            // DECODE (or upstream)
+            ///////////////////////
+            pipeline.addFirst(LOCAL_RMI_ENCODER, decoder);
+
+
+            /////////////////////////
+            // ENCODE (or downstream)
+            /////////////////////////
+            pipeline.addFirst(LOCAL_RMI_DECODER, encoder);
+
+            // have to setup connection handler
+            pipeline.addLast(CONNECTION_HANDLER, connection);
+
             registrationWrapper.connectionConnected0(connection);
         }
         else {

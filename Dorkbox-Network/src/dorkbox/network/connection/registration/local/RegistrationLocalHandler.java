@@ -15,23 +15,29 @@
  */
 package dorkbox.network.connection.registration.local;
 
-import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
+import dorkbox.network.pipeline.LocalRmiDecoder;
+import dorkbox.network.pipeline.LocalRmiEncoder;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPipeline;
 import org.slf4j.Logger;
 
 public abstract
-class RegistrationLocalHandler extends RegistrationHandler {
+class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler<C> {
+    protected static final String LOCAL_RMI_ENCODER = "localRmiEncoder";
+    protected static final String LOCAL_RMI_DECODER = "localRmiDecoder";
+
+    protected final LocalRmiEncoder encoder = new LocalRmiEncoder();
+    protected final LocalRmiDecoder decoder = new LocalRmiDecoder();
 
     public
-    RegistrationLocalHandler(String name, RegistrationWrapper registrationWrapper) {
+    RegistrationLocalHandler(String name, RegistrationWrapper<C> registrationWrapper) {
         super(name, registrationWrapper);
     }
 
@@ -57,10 +63,6 @@ class RegistrationLocalHandler extends RegistrationHandler {
         }
 
         this.registrationWrapper.connection0(metaChannel);
-
-        // have to setup connection handler
-        ChannelPipeline pipeline = channel.pipeline();
-        pipeline.addLast(CONNECTION_HANDLER, (ConnectionImpl) metaChannel.connection);
     }
 
     /**

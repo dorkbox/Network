@@ -117,7 +117,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
         /////////////////////////
         // ENCODE (or downstream)
         /////////////////////////
-        pipeline.addFirst(FRAME_AND_KRYO_ENCODER, this.registrationWrapper.getKryoTcpEncoder()); // this is shared
+        pipeline.addFirst(FRAME_AND_KRYO_ENCODER, this.registrationWrapper.getKryoEncoder()); // this is shared
     }
 
     /**
@@ -228,7 +228,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
 
         pipeline.replace(FRAME_AND_KRYO_ENCODER,
                          FRAME_AND_KRYO_CRYPTO_ENCODER,
-                         this.registrationWrapper.getKryoTcpCryptoEncoder());  // this is shared
+                         this.registrationWrapper.getKryoEncoderCrypto());  // this is shared
 
 
         if (metaChannel.udpChannel != null && metaChannel.udpRemoteAddress == null) {
@@ -247,7 +247,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             if (idleTimeout > 0) {
                 pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, idleTimeout, TimeUnit.MILLISECONDS));
             }
-            pipeline.replace(FRAME_AND_KRYO_ENCODER, FRAME_AND_KRYO_CRYPTO_ENCODER, this.registrationWrapper.getKryoTcpCryptoEncoder());
+            pipeline.replace(FRAME_AND_KRYO_ENCODER, FRAME_AND_KRYO_CRYPTO_ENCODER, this.registrationWrapper.getKryoEncoderCrypto());
         }
     }
 
@@ -283,8 +283,6 @@ class RegistrationRemoteHandler extends RegistrationHandler {
 
 
         // to have connection notified via the disruptor, we have to specify a custom ChannelHandlerInvoker.
-//        ChannelHandlerInvoker channelHandlerInvoker = new ChannelHandlerInvoker();
-
         tcpPipe.addLast(CONNECTION_HANDLER, connection);
 
         if (udpPipe != null) {

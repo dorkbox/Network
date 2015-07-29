@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection.registration.local;
 
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -26,10 +27,10 @@ import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 
 public
-class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
+class RegistrationLocalHandlerServer<C extends Connection> extends RegistrationLocalHandler<C> {
 
     public
-    RegistrationLocalHandlerServer(String name, RegistrationWrapper registrationWrapper) {
+    RegistrationLocalHandlerServer(String name, RegistrationWrapper<C> registrationWrapper) {
         super(name, registrationWrapper);
     }
 
@@ -91,6 +92,22 @@ class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
         }
 
         if (connection != null) {
+            // add our RMI handlers
+
+            ///////////////////////
+            // DECODE (or upstream)
+            ///////////////////////
+            pipeline.addFirst(LOCAL_RMI_ENCODER, decoder);
+
+
+            /////////////////////////
+            // ENCODE (or downstream)
+            /////////////////////////
+            pipeline.addFirst(LOCAL_RMI_DECODER, encoder);
+
+            // have to setup connection handler
+            pipeline.addLast(CONNECTION_HANDLER, connection);
+
             this.registrationWrapper.connectionConnected0(connection);
         }
     }

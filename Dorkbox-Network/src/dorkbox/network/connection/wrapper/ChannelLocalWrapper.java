@@ -31,14 +31,14 @@ public
 class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
 
     private final Channel channel;
-    private String remoteAddress;
-
     private final AtomicBoolean shouldFlush = new AtomicBoolean(false);
+    private String remoteAddress;
 
     public
     ChannelLocalWrapper(MetaChannel metaChannel) {
         this.channel = metaChannel.localChannel;
     }
+
 
     /**
      * Write an object to the underlying channel
@@ -46,8 +46,6 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
     @Override
     public
     void write(Object object) {
-        // we should check to see if this class is registered as having RMI methods present.
-
         this.channel.write(object);
         this.shouldFlush.set(true);
     }

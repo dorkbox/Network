@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection.registration;
 
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
@@ -25,16 +26,16 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 
 @Sharable
 public abstract
-class RegistrationHandler extends ChannelInboundHandlerAdapter {
+class RegistrationHandler<C extends Connection> extends ChannelInboundHandlerAdapter {
     protected static final String CONNECTION_HANDLER = "connectionHandler";
 
-    protected final RegistrationWrapper registrationWrapper;
+    protected final RegistrationWrapper<C> registrationWrapper;
     protected final org.slf4j.Logger logger;
     protected final String name;
 
 
     public
-    RegistrationHandler(String name, RegistrationWrapper registrationWrapper) {
+    RegistrationHandler(String name, RegistrationWrapper<C> registrationWrapper) {
         this.name = name + " Discovery/Registration";
         this.logger = org.slf4j.LoggerFactory.getLogger(this.name);
         this.registrationWrapper = registrationWrapper;
@@ -85,7 +86,7 @@ class RegistrationHandler extends ChannelInboundHandlerAdapter {
     void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception;
 
     public
-    MetaChannel shutdown(RegistrationWrapper registrationWrapper, Channel channel) {
+    MetaChannel shutdown(RegistrationWrapper<C> registrationWrapper, Channel channel) {
         this.logger.error("SHUTDOWN HANDLER REACHED! SOMETHING MESSED UP! TRYING TO ABORT");
 
         // shutdown. Something messed up. Only reach this is something messed up.
