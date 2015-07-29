@@ -18,7 +18,6 @@ package dorkbox.network.pipeline;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.util.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 
@@ -40,10 +39,10 @@ class KryoEncoderCrypto extends KryoEncoder {
                      final Object msg,
                      final ByteBuf buffer) {
 
-        ChannelHandler last = context.pipeline()
-                                     .last();
+        ConnectionImpl connection = (ConnectionImpl) context.pipeline()
+                                                            .last();
         try {
-            serializationManager.writeWithCryptoTcp((ConnectionImpl) last, buffer, msg);
+            serializationManager.writeWithCryptoTcp(connection, buffer, msg);
         } catch (IOException ex) {
             context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass()
                                                                                                     .getName(), ex));

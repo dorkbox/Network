@@ -18,7 +18,6 @@ package dorkbox.network.pipeline;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.util.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.io.IOException;
@@ -41,10 +40,10 @@ class KryoDecoderCrypto extends KryoDecoder {
                       final ByteBuf in,
                       final int length) {
 
-        ChannelHandler last = context.pipeline()
-                                     .last();
+        ConnectionImpl connection = (ConnectionImpl) context.pipeline()
+                                                            .last();
         try {
-            return serializationManager.readWithCryptoTcp((ConnectionImpl) last, in, length);
+            return serializationManager.readWithCryptoTcp(connection, in, length);
         } catch (IOException e) {
             context.fireExceptionCaught(e);
             return null;
