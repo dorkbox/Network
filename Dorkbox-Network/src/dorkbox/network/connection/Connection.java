@@ -41,7 +41,7 @@ interface Connection {
     /**
      * @return the endpoint associated with this connection
      */
-    EndPoint getEndPoint();
+    EndPoint<Connection> getEndPoint();
 
 
     /**
@@ -119,7 +119,7 @@ interface Connection {
      *
      * @see RemoteObject
      */
-    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws IOException;
+    <Iface, Impl extends Iface> Iface createProxyObject(final Class<Impl> remoteImplementationClass) throws IOException;
 
 
     /**
@@ -145,5 +145,5 @@ interface Connection {
      *
      * @see RemoteObject
      */
-    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws IOException;
+    <Iface, Impl extends Iface> Iface getProxyObject(final int objectId) throws IOException;
 }

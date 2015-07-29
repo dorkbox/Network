@@ -39,10 +39,13 @@ import java.util.concurrent.locks.ReentrantLock;
  * This is in the connection package, so it can access the endpoint methods that it needs to.
  */
 public
-class RegistrationWrapper implements UdpServer {
+class RegistrationWrapper<C extends Connection> implements UdpServer {
     private final org.slf4j.Logger logger;
 
-    private final EndPoint endPoint;
+    private final KryoEncoder kryoEncoder;
+    private final KryoEncoderCrypto kryoEncoderCrypto;
+
+    private final EndPoint<C> endPoint;
 
     // keeps track of connections (TCP/UDT/UDP-client)
     private final ReentrantLock channelMapLock = new ReentrantLock();
@@ -52,13 +55,16 @@ class RegistrationWrapper implements UdpServer {
     // this is final, because the REFERENCE to these will never change. They ARE NOT immutable objects (meaning their content can change)
     private final ConcurrentMap<InetSocketAddress, ConnectionImpl> udpRemoteMap;
 
-    private KryoEncoder kryoTcpEncoder;
-    private KryoEncoderCrypto kryoTcpCryptoEncoder;
 
     public
-    RegistrationWrapper(final EndPoint endPoint, final Logger logger) {
+    RegistrationWrapper(final EndPoint<C> endPoint,
+                        final Logger logger,
+                        final KryoEncoder kryoEncoder,
+                        final KryoEncoderCrypto kryoEncoderCrypto) {
         this.endPoint = endPoint;
         this.logger = logger;
+        this.kryoEncoder = kryoEncoder;
+        this.kryoEncoderCrypto = kryoEncoderCrypto;
 
         if (endPoint instanceof EndPointServer) {
             this.udpRemoteMap = new ConcurrentHashMap<InetSocketAddress, ConnectionImpl>();
@@ -68,22 +74,14 @@ class RegistrationWrapper implements UdpServer {
         }
     }
 
-    void setKryoTcpEncoder(KryoEncoder kryoTcpEncoder) {
-        this.kryoTcpEncoder = kryoTcpEncoder;
-    }
-
-    void setKryoTcpCryptoEncoder(KryoEncoderCrypto kryoTcpCryptoEncoder) {
-        this.kryoTcpCryptoEncoder = kryoTcpCryptoEncoder;
+    public
+    KryoEncoder getKryoEncoder() {
+        return this.kryoEncoder;
     }
 
     public
-    KryoEncoder getKryoTcpEncoder() {
-        return this.kryoTcpEncoder;
-    }
-
-    public
-    KryoEncoderCrypto getKryoTcpCryptoEncoder() {
-        return this.kryoTcpCryptoEncoder;
+    KryoEncoderCrypto getKryoEncoderCrypto() {
+        return this.kryoEncoderCrypto;
     }
 
     /**
@@ -202,6 +200,7 @@ class RegistrationWrapper implements UdpServer {
         return true;
     }
 
+    @SuppressWarnings("AutoBoxing")
     public
     void removeRegisteredServerKey(byte[] hostAddress) throws SecurityException {
         ECPublicKeyParameters savedPublicKey = this.endPoint.propertyStore.getRegisteredServerKey(hostAddress);
@@ -227,7 +226,7 @@ class RegistrationWrapper implements UdpServer {
     public final
     void registerServerUDP(MetaChannel metaChannel) {
         if (metaChannel != null && metaChannel.udpRemoteAddress != null) {
-            this.udpRemoteMap.put(metaChannel.udpRemoteAddress, (ConnectionImpl) metaChannel.connection);
+            this.udpRemoteMap.put(metaChannel.udpRemoteAddress, metaChannel.connection);
 
             Logger logger2 = this.logger;
             if (logger2.isDebugEnabled()) {
@@ -272,7 +271,7 @@ class RegistrationWrapper implements UdpServer {
     public
     void abortRegistrationIfClient() {
         if (this.endPoint instanceof EndPointClient) {
-            ((EndPointClient) this.endPoint).abortRegistration();
+            ((EndPointClient<C>) this.endPoint).abortRegistration();
         }
     }
 }

@@ -124,7 +124,7 @@ class EndPoint<C extends Connection> {
 
     protected final ConnectionManager<C> connectionManager;
     protected final CryptoSerializationManager serializationManager;
-    protected final RegistrationWrapper registrationWrapper;
+    protected final RegistrationWrapper<C> registrationWrapper;
 
     protected final Object shutdownInProgress = new Object();
     final ECPrivateKeyParameters privateKey;
@@ -164,17 +164,12 @@ class EndPoint<C extends Connection> {
      * @throws InitializationException
      * @throws SecurityException
      */
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public
     EndPoint(Class<? extends EndPoint> type, final Configuration options) throws InitializationException, SecurityException, IOException {
         this.type = (Class<? extends EndPoint<C>>) type;
 
         this.logger = org.slf4j.LoggerFactory.getLogger(type);
-
-        // The registration wrapper permits the registration process to access protected/package fields/methods, that we don't want
-        // to expose to external code. "this" escaping can be ignored, because it is benign.
-        //noinspection ThisEscapedInObjectConstruction
-        this.registrationWrapper = new RegistrationWrapper(this,
-                                                           this.logger);
 
         // make sure that 'localhost' is REALLY our specific IP address
         if (options.host != null && (options.host.equals("localhost") || options.host.startsWith("127."))) {
@@ -193,9 +188,13 @@ class EndPoint<C extends Connection> {
         rmiExecutor = options.rmiExecutor;
 
 
-        // setup our TCP kryo encoders
-        this.registrationWrapper.setKryoTcpEncoder(new KryoEncoder(this.serializationManager));
-        this.registrationWrapper.setKryoTcpCryptoEncoder(new KryoEncoderCrypto(this.serializationManager));
+        // The registration wrapper permits the registration process to access protected/package fields/methods, that we don't want
+        // to expose to external code. "this" escaping can be ignored, because it is benign.
+        //noinspection ThisEscapedInObjectConstruction
+        this.registrationWrapper = new RegistrationWrapper(this,
+                                                           this.logger,
+                                                           new KryoEncoder(this.serializationManager),
+                                                           new KryoEncoderCrypto(this.serializationManager));
 
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
@@ -420,6 +419,9 @@ class EndPoint<C extends Connection> {
         if (metaChannel != null) {
             ChannelWrapper wrapper;
 
+            connection = newConnection(logger, this, rmiBridge);
+            metaChannel.connection = connection;
+
             if (metaChannel.localChannel != null) {
                 wrapper = new ChannelLocalWrapper(metaChannel);
             }
@@ -431,9 +433,6 @@ class EndPoint<C extends Connection> {
                     wrapper = new ChannelNetworkWrapper(metaChannel, null);
                 }
             }
-
-            connection = newConnection(logger, this, rmiBridge);
-            metaChannel.connection = connection;
 
             // now initialize the connection channels with whatever extra info they might need.
             connection.init(wrapper, (ConnectionManager<Connection>) this.connectionManager);
@@ -648,7 +647,7 @@ class EndPoint<C extends Connection> {
 
             // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
             long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
-            RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
+            RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
             try {
                 IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                 Entries<MetaChannel> entries = channelMap.entries();

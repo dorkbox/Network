@@ -564,10 +564,10 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
         // This causes OtherObjectImpl to be serialized as OtherObject.
         int otherObjectID = getRegistration(implClass).getId();
 
-        // this overrides the 'otherObjectID' with the specified class/serializer, so that when we WRITE this ID, the impl ID is written.
+        // this overrides the 'otherObjectID' with the specified class/serializer, so that when we WRITE this ID, the impl is READ
         register(ifaceClass, new RemoteObjectSerializer<Impl>(), otherObjectID);
 
-        // we have to save this info in CachedMethod.
+        // we have to save the fact that we might have overridden methods
         CachedMethod.registerOverridden(ifaceClass, implClass);
     }
 
@@ -598,7 +598,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
                 int objectID = input.readInt(true);
 
                 KryoExtra kryoExtra = (KryoExtra) kryo;
-                Object object = kryoExtra.connection.getRegisteredObject(objectID);
+                Object object = kryoExtra.connection.getImplementationObject(objectID);
 
                 if (object == null) {
                     logger.error("Unknown object ID in RMI ObjectSpace: {}", objectID);

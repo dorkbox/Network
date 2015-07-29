@@ -93,12 +93,15 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     private volatile ObjectRegistrationLatch objectRegistrationLatch;
     private final Object remoteObjectLock = new Object();
     private final RmiBridge rmiBridge;
-    private final Map<Integer, RemoteObject> proxyObjectCache = Collections.synchronizedMap(new WeakHashMap<Integer, RemoteObject>(8));
+
+    private final Map<Integer, RemoteObject> proxyIdCache = Collections.synchronizedMap(new WeakHashMap<Integer, RemoteObject>(8));
+    private final Map<Object, RemoteObject> proxyObjectCache = Collections.synchronizedMap(new WeakHashMap<Object, RemoteObject>(8));
 
 
     /**
      * All of the parameters can be null, when metaChannel wants to get the base class type
      */
+    @SuppressWarnings("rawtypes")
     public
     ConnectionImpl(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
         this.logger = logger;
@@ -795,7 +798,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked"})
     @Override
     public final
-    <Iface, Impl extends Iface> Iface createRemoteObject(final Class<Impl> remoteImplementationClass) throws IOException {
+    <Iface, Impl extends Iface> Iface createProxyObject(final Class<Impl> remoteImplementationClass) throws IOException {
         // only one register can happen at a time
         synchronized (remoteObjectLock) {
             objectRegistrationLatch = new ObjectRegistrationLatch();
@@ -831,7 +834,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked"})
     @Override
     public final
-    <Iface, Impl extends Iface> Iface getRemoteObject(final int objectId) throws IOException {
+    <Iface, Impl extends Iface> Iface getProxyObject(final int objectId) throws IOException {
         // only one register can happen at a time
         synchronized (remoteObjectLock) {
             objectRegistrationLatch = new ObjectRegistrationLatch();
@@ -892,18 +895,17 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
                 ClassObject remoteClassObject;
                 while ((remoteClassObject = remoteClasses.pollFirst()) != null) {
-                    // we have to check the class that is being registered for any additional proxy information
+                    // we have to check for any additional fields that will have proxy information
                     for (Field field : remoteClassObject.clazz.getDeclaredFields()) {
-                        RMI annotation = field.getAnnotation(RMI.class);
-                        if (annotation != null) {
+                        if (field.getAnnotation(RMI.class) != null) {
                             boolean prev = field.isAccessible();
                             field.setAccessible(true);
                             final Object o = field.get(remoteClassObject.object);
                             field.setAccessible(prev);
+
                             final Class<?> type = field.getType();
 
                             rmiBridge.register(rmiBridge.nextObjectId(), o);
-
                             remoteClasses.offerLast(new ClassObject(type, o));
                         }
                     }
@@ -919,7 +921,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             // THIS IS ON THE SERVER SIDE
             //
             // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
-            Object object = getRegisteredObject(remoteRegistration.remoteObjectId);
+            Object object = getImplementationObject(remoteRegistration.remoteObjectId);
 
             if (object != null) {
                 connection.TCP(new RmiRegistration(object)).flush();
@@ -956,16 +958,39 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
 
     /**
-     * Used by the LOCAL side, to get the proxy object as an interface
+     * Used by the LOCAL side, to get the proxy object from an implementation, as an interface
+     *
+     * @param type must be the interface the proxy will bind to
      */
     public
-    RemoteObject getRemoteObject(final int objectID, final Class<?> type) {
+    RemoteObject getProxyObject(final Object object, final Class<?> type) {
         // we want to have a connection specific cache of IDs, using weak references.
-        RemoteObject remoteObject = proxyObjectCache.get(objectID);
+        RemoteObject remoteObject = proxyObjectCache.get(object);
+
+        if (remoteObject == null) {
+            // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
+            int registeredId = getRegisteredId(object);
+
+            remoteObject = getProxyObject(registeredId, type); // has to be the interface
+            proxyObjectCache.put(object, remoteObject);
+        }
+
+        return remoteObject;
+    }
+
+    /**
+     * Used by the LOCAL side, to get the proxy object as an interface
+     * @param type must be the interface the proxy will bind to
+     */
+    public
+    RemoteObject getProxyObject(final int objectID, final Class<?> type) {
+        // we want to have a connection specific cache of IDs, using weak references.
+        RemoteObject remoteObject = proxyIdCache.get(objectID);
 
         if (remoteObject == null) {
             // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
             remoteObject = RmiBridge.createProxyObject(this, objectID, type);
+            proxyIdCache.put(objectID, remoteObject);
         }
 
         return remoteObject;
@@ -975,7 +1000,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
      * This is used by the REMOTE side, to get the implementation
      */
     public
-    Object getRegisteredObject(final int objectID) {
+    Object getImplementationObject(final int objectID) {
         if (RmiBridge.isGlobal(objectID)) {
             return endPoint.globalRmiBridge.getRegisteredObject(objectID);
         } else {
