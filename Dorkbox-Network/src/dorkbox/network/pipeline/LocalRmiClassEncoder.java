@@ -13,16 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.bridge;
+package dorkbox.network.pipeline;
 
-import dorkbox.network.connection.Connection;
+class LocalRmiClassEncoder {
+    public Object rmiObject;
 
-public
-interface ConnectionBridgeServer<C extends Connection> extends ConnectionBridgeBase {
-
-    /**
-     * Exposes methods to send the object to all server connections (except the specified one) over the network. (or via LOCAL when it's a
-     * local channel).
-     */
-    ConnectionExceptSpecifiedBridgeServer<C> except();
+    // these are the "in order" rmi ID's for the fields of 'rmiObject'
+    public int[] rmiFieldIds;
 }

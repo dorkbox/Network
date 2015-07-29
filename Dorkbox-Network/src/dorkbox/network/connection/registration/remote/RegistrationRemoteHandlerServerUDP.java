@@ -16,6 +16,7 @@
 package dorkbox.network.connection.registration.remote;
 
 import dorkbox.network.Broadcast;
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.RegistrationWrapper;
@@ -43,20 +44,20 @@ import java.util.List;
 
 @Sharable
 public
-class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramPacket, UdpWrapper> {
+class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageToMessageCodec<DatagramPacket, UdpWrapper> {
 
     // this is for the SERVER only. UDP channel is ALWAYS the SAME channel (it's the server's listening channel).
 
     private final org.slf4j.Logger logger;
     private final ByteBuf discoverResponseBuffer;
-    private final RegistrationWrapper registrationWrapper;
+    private final RegistrationWrapper<C> registrationWrapper;
     private final CryptoSerializationManager serializationManager;
 
 
     public
-    RegistrationRemoteHandlerServerUDP(String name,
-                                       RegistrationWrapper registrationWrapper,
-                                       CryptoSerializationManager serializationManager) {
+    RegistrationRemoteHandlerServerUDP(final String name,
+                                       final RegistrationWrapper<C> registrationWrapper,
+                                       final CryptoSerializationManager serializationManager) {
         final String name1 = name + " Registration-UDP-Server";
         this.logger = org.slf4j.LoggerFactory.getLogger(name1);
         this.registrationWrapper = registrationWrapper;
@@ -72,13 +73,13 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
      */
     @Override
     public
-    void channelActive(ChannelHandlerContext context) throws Exception {
+    void channelActive(final ChannelHandlerContext context) throws Exception {
         // do NOT want to add UDP channels, since they are tracked differently for the server.
     }
 
     @Override
     public
-    void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
+    void exceptionCaught(final ChannelHandlerContext context, final Throwable cause) throws Exception {
         // log UDP errors.
         this.logger.error("Exception caught in UDP stream.", cause);
         super.exceptionCaught(context, cause);
@@ -86,7 +87,7 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
 
     @Override
     protected
-    void encode(ChannelHandlerContext context, UdpWrapper msg, List<Object> out) throws Exception {
+    void encode(final ChannelHandlerContext context, final UdpWrapper msg, final List<Object> out) throws Exception {
         Object object = msg.object();
         InetSocketAddress remoteAddress = msg.remoteAddress();
 
@@ -123,7 +124,7 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
 
     @Override
     protected
-    void decode(ChannelHandlerContext context, DatagramPacket msg, List<Object> out) throws Exception {
+    void decode(final ChannelHandlerContext context, final DatagramPacket msg, final List<Object> out) throws Exception {
         Channel channel = context.channel();
         ByteBuf data = msg.content();
         InetSocketAddress remoteAddress = msg.sender();
@@ -160,12 +161,15 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
 
 
     // this will be invoked by the UdpRegistrationHandlerServer. Remember, TCP will be established first.
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "AutoUnboxing"})
     private
-    void receivedUDP(ChannelHandlerContext context, Channel channel, ByteBuf data, InetSocketAddress udpRemoteAddress) throws Exception {
+    void receivedUDP(final ChannelHandlerContext context,
+                     final Channel channel,
+                     final ByteBuf data,
+                     final InetSocketAddress udpRemoteAddress) throws Exception {
         // registration is the ONLY thing NOT encrypted
         Logger logger2 = this.logger;
-        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
+        RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
         CryptoSerializationManager serializationManager2 = this.serializationManager;
 
         if (KryoCryptoSerializationManager.isEncrypted(data)) {
@@ -280,7 +284,7 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
      * Copied from RegistrationHandler. There were issues accessing it as static with generics.
      */
     public
-    MetaChannel shutdown(RegistrationWrapper registrationWrapper, Channel channel) {
+    MetaChannel shutdown(final RegistrationWrapper<C> registrationWrapper, final Channel channel) {
         this.logger.error("SHUTDOWN HANDLER REACHED! SOMETHING MESSED UP! TRYING TO ABORT");
 
         // shutdown. Something messed up. Only reach this is something messed up.

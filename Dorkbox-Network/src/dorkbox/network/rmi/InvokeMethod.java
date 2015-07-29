@@ -35,7 +35,9 @@
 package dorkbox.network.rmi;
 
 
-/** Internal message to invoke methods remotely. */
+/**
+ * Internal message to invoke methods remotely.
+ */
 public
 class InvokeMethod implements RmiMessages {
     public int objectID;
@@ -47,6 +49,7 @@ class InvokeMethod implements RmiMessages {
     // possible duplicate IDs. A response data of 0 means to not respond.
     public byte responseData;
 
-    public InvokeMethod() {
+    public
+    InvokeMethod() {
     }
 }

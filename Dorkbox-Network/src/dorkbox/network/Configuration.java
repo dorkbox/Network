@@ -44,18 +44,15 @@ class Configuration {
     /**
      * Enable remote method invocation (RMI) for this connection. This is additional overhead to using RMI.
      * <p/>
-     * Specifically, It costs at least 2 bytes more to use remote method invocation than just
-     * sending the parameters. If the method has a return value which is not
-     * {@link dorkbox.network.rmi.RemoteObject#setNonBlocking(boolean) ignored}, an extra byte is
-     * written. If the type of a parameter is not final (note primitives are final)
-     * then an extra byte is written for that parameter.
+     * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
+     * return value which is not {@link dorkbox.network.rmi.RemoteObject#setNonBlocking(boolean) ignored}, an extra byte is written. If the
+     * type of a parameter is not final (note primitives are final) then an extra byte is written for that parameter.
      */
     public boolean rmiEnabled = false;
 
     /**
-     * Sets the executor used to invoke methods when an invocation is received
-     * from a remote endpoint. By default, no executor is set and invocations
-     * occur on the network thread, which should not be blocked for long.
+     * Sets the executor used to invoke methods when an invocation is received from a remote endpoint. By default, no executor is set and
+     * invocations occur on the network thread, which should not be blocked for long.
      */
     public Executor rmiExecutor = null;
 

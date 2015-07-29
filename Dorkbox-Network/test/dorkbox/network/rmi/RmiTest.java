@@ -14,7 +14,6 @@ import dorkbox.util.exceptions.SecurityException;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.*;
@@ -28,9 +27,8 @@ class RmiTest extends BaseTest {
             @Override
             public
             void run() {
-                TestObject test = null;
                 try {
-                    test = connection.createRemoteObject(TestObjectImpl.class);
+                    TestObject test = connection.createProxyObject(TestObjectImpl.class);
 
                     System.err.println("Starting test for: " + remoteObjectID);
 
@@ -218,7 +216,7 @@ class RmiTest extends BaseTest {
     }
 
     public
-    interface TestObject extends Serializable {
+    interface TestObject {
         void throwException();
 
         void moo();

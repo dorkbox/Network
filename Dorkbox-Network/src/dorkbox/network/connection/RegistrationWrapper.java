@@ -77,7 +77,8 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     /**
      * @return true if RMI is enabled
      */
-    public boolean rmiEnabled() {
+    public
+    boolean rmiEnabled() {
         return endPoint.globalRmiBridge != null;
     }
 
@@ -114,8 +115,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     }
 
     /**
-     * The amount of milli-seconds that must elapse with no read or write before {@link Listener:idle()}
-     * will be triggered
+     * The amount of milli-seconds that must elapse with no read or write before {@link Listener:idle()} will be triggered
      */
     public
     int getIdleTimeout() {
@@ -123,8 +123,8 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     }
 
     /**
-     * Internal call by the pipeline to notify the client to continue registering the different session protocols.
-     * The server does not use this.
+     * Internal call by the pipeline to notify the client to continue registering the different session protocols. The server does not use
+     * this.
      *
      * @return true if we are done registering bootstraps
      */
@@ -134,8 +134,8 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     }
 
     /**
-     * Internal call by the pipeline to notify the "Connection" object that it has "connected", meaning that modifications
-     * to the pipeline are finished.
+     * Internal call by the pipeline to notify the "Connection" object that it has "connected", meaning that modifications to the pipeline
+     * are finished.
      */
     public
     void connectionConnected0(ConnectionImpl networkConnection) {
@@ -143,11 +143,10 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     }
 
     /**
-     * Internal call by the pipeline when:
-     * - creating a new network connection
-     * - when determining the baseClass for generics
+     * Internal call by the pipeline when: - creating a new network connection - when determining the baseClass for generics
      *
-     * @param metaChannel can be NULL (when getting the baseClass)
+     * @param metaChannel
+     *                 can be NULL (when getting the baseClass)
      */
     public
     Connection connection0(MetaChannel metaChannel) {
@@ -170,7 +169,8 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     }
 
     public
-    boolean validateRemoteServerAddress(InetSocketAddress tcpRemoteServer, ECPublicKeyParameters publicKey) throws SecurityException {
+    boolean validateRemoteServerAddress(final InetSocketAddress tcpRemoteServer, final ECPublicKeyParameters publicKey)
+                    throws SecurityException {
         if (this.endPoint.disableRemoteKeyValidation) {
             return true;
         }
@@ -209,7 +209,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
 
     @SuppressWarnings("AutoBoxing")
     public
-    void removeRegisteredServerKey(byte[] hostAddress) throws SecurityException {
+    void removeRegisteredServerKey(final byte[] hostAddress) throws SecurityException {
         ECPublicKeyParameters savedPublicKey = this.endPoint.propertyStore.getRegisteredServerKey(hostAddress);
         if (savedPublicKey != null) {
             Logger logger2 = this.logger;
@@ -225,13 +225,11 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     }
 
     /**
-     * ONLY SERVER SIDE CALLS THIS
-     * Called when creating a connection.
-     * Only called if we have a UDP channel
+     * ONLY SERVER SIDE CALLS THIS Called when creating a connection. Only called if we have a UDP channel
      */
     @Override
     public final
-    void registerServerUDP(MetaChannel metaChannel) {
+    void registerServerUDP(final MetaChannel metaChannel) {
         if (metaChannel != null && metaChannel.udpRemoteAddress != null) {
             this.udpRemoteMap.put(metaChannel.udpRemoteAddress, metaChannel.connection);
 
@@ -246,12 +244,11 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     }
 
     /**
-     * ONLY SERVER SIDE CALLS THIS
-     * Called when closing a connection.
+     * ONLY SERVER SIDE CALLS THIS Called when closing a connection.
      */
     @Override
     public final
-    void unRegisterServerUDP(InetSocketAddress udpRemoteAddress) {
+    void unRegisterServerUDP(final InetSocketAddress udpRemoteAddress) {
         if (udpRemoteAddress != null) {
             this.udpRemoteMap.remove(udpRemoteAddress);
             Logger logger2 = this.logger;
@@ -266,7 +263,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      */
     @Override
     public
-    ConnectionImpl getServerUDP(InetSocketAddress udpRemoteAddress) {
+    ConnectionImpl getServerUDP(final InetSocketAddress udpRemoteAddress) {
         if (udpRemoteAddress != null) {
             return this.udpRemoteMap.get(udpRemoteAddress);
         }

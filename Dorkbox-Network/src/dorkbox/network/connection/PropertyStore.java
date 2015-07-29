@@ -48,12 +48,11 @@ class PropertyStore extends SettingsStore {
     /**
      * Method of preference for creating/getting this connection store. package only since only the ConnectionStoreProxy calls this
      *
-     * @param type                 this is either "Client" or "Server", depending on who is creating this endpoint.
      * @param serializationManager this is the serialization used for saving objects into the storage database
      */
     @Override
     public
-    void init(Class<? extends EndPoint> type, final SerializationManager serializationManager, Storage storage) throws IOException {
+    void init(final SerializationManager serializationManager, final Storage storage) throws IOException {
         // make sure our custom types are registered
         // only register if not ALREADY initialized, since we can initialize in the server and in the client. This creates problems if
         // running inside the same JVM (we don't permit it)
@@ -101,7 +100,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    void savePrivateKey(ECPrivateKeyParameters serverPrivateKey) throws SecurityException {
+    void savePrivateKey(final ECPrivateKeyParameters serverPrivateKey) throws SecurityException {
         checkAccess(EndPoint.class);
 
         servers.get(DB_Server.IP_LOCALHOST)
@@ -128,7 +127,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    void savePublicKey(ECPublicKeyParameters serverPublicKey) throws SecurityException {
+    void savePublicKey(final ECPublicKeyParameters serverPublicKey) throws SecurityException {
         checkAccess(EndPoint.class);
 
         servers.get(DB_Server.IP_LOCALHOST)
@@ -171,7 +170,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    ECPublicKeyParameters getRegisteredServerKey(byte[] hostAddress) throws SecurityException {
+    ECPublicKeyParameters getRegisteredServerKey(final byte[] hostAddress) throws SecurityException {
         checkAccess(RegistrationWrapper.class);
 
         final DB_Server db_server = this.servers.get(ByteArrayWrapper.wrap(hostAddress));
@@ -186,7 +185,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    void addRegisteredServerKey(byte[] hostAddress, ECPublicKeyParameters publicKey)
+    void addRegisteredServerKey(final byte[] hostAddress, ECPublicKeyParameters publicKey)
                     throws SecurityException {
         checkAccess(RegistrationWrapper.class);
 
@@ -205,7 +204,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public synchronized
-    boolean removeRegisteredServerKey(byte[] hostAddress) throws SecurityException {
+    boolean removeRegisteredServerKey(final byte[] hostAddress) throws SecurityException {
         checkAccess(RegistrationWrapper.class);
 
         final ByteArrayWrapper wrap = ByteArrayWrapper.wrap(hostAddress);

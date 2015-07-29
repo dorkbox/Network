@@ -205,7 +205,7 @@ class EndPoint<C extends Connection> {
             this.propertyStore = options.settingsStore;
         }
 
-        this.propertyStore.init(type, this.serializationManager, null);
+        this.propertyStore.init(this.serializationManager, null);
 
         // null it out, since it is sensitive!
         options.settingsStore = null;
@@ -417,7 +417,7 @@ class EndPoint<C extends Connection> {
         // These properties are ASSIGNED in the same thread that CREATED the object. Only the AES info needs to be
         // volatile since it is the only thing that changes.
         if (metaChannel != null) {
-            ChannelWrapper wrapper;
+            ChannelWrapper<C> wrapper;
 
             connection = newConnection(logger, this, rmiBridge);
             metaChannel.connection = connection;

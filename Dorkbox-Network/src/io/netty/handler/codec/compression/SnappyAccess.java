@@ -30,7 +30,7 @@ class SnappyAccess {
         return Snappy.calculateChecksum(slice);
     }
     // oh well. At least we can still get to it.
-    private Snappy snappy = new Snappy();
+    private final Snappy snappy = new Snappy();
 
     public
     SnappyAccess() {

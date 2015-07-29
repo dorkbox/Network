@@ -89,7 +89,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void add(ListenerRaw listener) {
+    void add(final ListenerRaw listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
@@ -126,7 +126,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private
-    void addListener0(ListenerRaw listener) {
+    void addListener0(final ListenerRaw listener) {
         Class<?> type = listener.getObjectType();
 
         CopyOnWriteArrayList<ListenerRaw<C, Object>> list = this.listeners.getOrCreate(type);
@@ -156,7 +156,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void remove(ListenerRaw listener) {
+    void remove(final ListenerRaw listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
@@ -199,7 +199,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public final
-    void removeAll(Class<?> classType) {
+    void removeAll(final Class<?> classType) {
         if (classType == null) {
             throw new IllegalArgumentException("classType cannot be null.");
         }
@@ -225,12 +225,12 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public final
-    void notifyOnMessage(C connection, Object message) {
+    void notifyOnMessage(final C connection, final Object message) {
         notifyOnMessage0(connection, message, false);
     }
 
     private
-    boolean notifyOnMessage0(C connection, Object message, boolean foundListener) {
+    boolean notifyOnMessage0(final C connection, final Object message, boolean foundListener) {
         Class<?> objectType = message.getClass();
 
         // this is the GLOBAL version (unless it's the call from below, then it's the connection scoped version)
@@ -317,7 +317,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public final
-    void notifyOnIdle(C connection) {
+    void notifyOnIdle(final C connection) {
         Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>>> entrySet = this.listeners.entrySet();
         CopyOnWriteArrayList<ListenerRaw<C, Object>> list;
         for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>> entry : entrySet) {
@@ -353,7 +353,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public
-    void connectionConnected(C connection) {
+    void connectionConnected(final C connection) {
         // create a new connection!
         this.connections.add(connection);
 
@@ -391,7 +391,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public
-    void connectionDisconnected(C connection) {
+    void connectionDisconnected(final C connection) {
         Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>>> entrySet = this.listeners.entrySet();
         CopyOnWriteArrayList<ListenerRaw<C, Object>> list;
         for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>> entry : entrySet) {
@@ -427,7 +427,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public
-    void connectionError(C connection, Throwable throwable) {
+    void connectionError(final C connection, final Throwable throwable) {
         Set<Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>>> entrySet = this.listeners.entrySet();
         CopyOnWriteArrayList<ListenerRaw<C, Object>> list;
         for (Entry<Type, CopyOnWriteArrayList<ListenerRaw<C, Object>>> entry : entrySet) {
@@ -466,10 +466,10 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
 
 
     final
-    ConnectionManager<C> addListenerManager(Connection connection) {
+    ConnectionManager<C> addListenerManager(final Connection connection) {
         // when we are a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections
         // are notified of that listener.
-        // it is POSSIBLE to add a connection-specfic listener (via connection.addListener), meaning that ONLY
+        // it is POSSIBLE to add a connection-specific listener (via connection.addListener), meaning that ONLY
         // that listener is notified on that event (ie, admin type listeners)
 
         ConnectionManager<C> lm = this.localManagers.getOrCreate(connection, connection.toString());
@@ -483,7 +483,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     }
 
     final
-    void removeListenerManager(Connection connection) {
+    void removeListenerManager(final Connection connection) {
         this.localManagers.remove(connection);
     }
 

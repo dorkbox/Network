@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection.registration.remote;
 
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -36,12 +37,12 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 public
-class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient {
+class RegistrationRemoteHandlerClientUDP<C extends Connection> extends RegistrationRemoteHandlerClient<C> {
 
     public
-    RegistrationRemoteHandlerClientUDP(String name,
-                                       RegistrationWrapper registrationWrapper,
-                                       CryptoSerializationManager serializationManager) {
+    RegistrationRemoteHandlerClientUDP(final String name,
+                                       final RegistrationWrapper<C> registrationWrapper,
+                                       final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }
 
@@ -50,7 +51,7 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
      */
     @Override
     protected
-    void initChannel(Channel channel) {
+    void initChannel(final Channel channel) {
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
             logger2.trace("Channel registered: " + channel.getClass()
@@ -71,7 +72,7 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
      */
     @Override
     public
-    void channelActive(ChannelHandlerContext context) throws Exception {
+    void channelActive(final ChannelHandlerContext context) throws Exception {
         Logger logger2 = this.logger;
         if (logger2.isDebugEnabled()) {
             super.channelActive(context);
@@ -90,7 +91,7 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
             InetAddress udpRemoteServer = udpRemoteAddress.getAddress();
 
 
-            RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
+            RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
             try {
                 IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
                 Entries<MetaChannel> entries = channelMap.entries();
@@ -128,15 +129,16 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
         }
     }
 
+    @SuppressWarnings({"AutoUnboxing", "AutoBoxing"})
     @Override
     public
-    void channelRead(ChannelHandlerContext context, Object message) throws Exception {
+    void channelRead(final ChannelHandlerContext context, Object message) throws Exception {
         Channel channel = context.channel();
 
         // if we also have a UDP channel, we will receive the "connected" message on UDP (otherwise it will be on TCP)
 
         MetaChannel metaChannel = null;
-        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
+        RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
         try {
             IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
             metaChannel = channelMap.get(channel.hashCode());

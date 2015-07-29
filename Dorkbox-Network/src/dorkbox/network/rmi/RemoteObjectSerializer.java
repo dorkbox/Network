@@ -42,9 +42,8 @@ import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.KryoExtra;
 
 /**
- * Serializes an object registered with the RmiBridge so the receiving side
- * gets a {@link RemoteObject} proxy rather than the bytes for the serialized
- * object.
+ * Serializes an object registered with the RmiBridge so the receiving side gets a {@link RemoteObject} proxy rather than the bytes for the
+ * serialized object.
  *
  * @author Nathan Sweet <misc@n4te.com>
  */
@@ -73,7 +72,8 @@ class RemoteObjectSerializer<T> extends Serializer<T> {
     T read(Kryo kryo, Input input, Class type) {
         KryoExtra kryoExtra = (KryoExtra) kryo;
         int objectID = input.readInt(true);
+
         final ConnectionImpl connection = kryoExtra.connection;
-        return (T) connection.getRemoteObject(objectID, type);
+        return (T) connection.getProxyObject(objectID, type);
     }
 }

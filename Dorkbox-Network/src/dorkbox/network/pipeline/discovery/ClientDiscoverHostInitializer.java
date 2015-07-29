@@ -33,7 +33,7 @@ class ClientDiscoverHostInitializer extends ChannelInitializer<NioDatagramChanne
 
     @Override
     public
-    void initChannel(NioDatagramChannel ch) throws Exception {
+    void initChannel(final NioDatagramChannel ch) throws Exception {
         ChannelPipeline pipeline = ch.pipeline();
 
         pipeline.addLast("discoverHostHandler", clientDiscoverHostHandler);

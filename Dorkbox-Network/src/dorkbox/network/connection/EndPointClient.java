@@ -57,6 +57,7 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
         new Thread(this, "Bootstrap registration").start();
     }
 
+    @SuppressWarnings("AutoBoxing")
     @Override
     public
     void run() {

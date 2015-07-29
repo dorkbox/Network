@@ -78,7 +78,7 @@ class MetaChannel {
     }
 
     public
-    void close(long maxShutdownWaitTimeInMilliSeconds) {
+    void close(final long maxShutdownWaitTimeInMilliSeconds) {
         if (this.localChannel != null) {
             this.localChannel.close();
         }

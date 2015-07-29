@@ -81,7 +81,7 @@ class RmiSendObjectTest extends BaseTest {
 
                               TestObject test = null;
                               try {
-                                  test = connection.createRemoteObject(TestObjectImpl.class);
+                                  test = connection.createProxyObject(TestObjectImpl.class);
 
                                   test.setOther(43.21f);
                                   // Normal remote method call.

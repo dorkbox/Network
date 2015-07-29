@@ -647,6 +647,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     /**
      * Called when initialization is complete. This is to prevent (and recognize) out-of-order class/serializer registration.
      */
+    @Override
     public
     void finishInit() {
         initialized = true;
@@ -667,7 +668,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    void write(ByteBuf buffer, Object message) throws IOException {
+    void write(final ByteBuf buffer, final Object message) throws IOException {
         write0(null, buffer, message, false);
     }
 
@@ -680,7 +681,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    Object read(ByteBuf buffer, int length) throws IOException {
+    Object read(final ByteBuf buffer, final int length) throws IOException {
         return read0(null, buffer, length, false);
     }
 
@@ -689,7 +690,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public
-    void writeFullClassAndObject(final Logger logger, Output output, Object value) throws IOException {
+    void writeFullClassAndObject(final Logger logger, final Output output, final Object value) throws IOException {
         Kryo kryo = null;
         boolean prev = false;
 
@@ -755,7 +756,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      * Determines if this buffer is encrypted or not.
      */
     public static
-    boolean isEncrypted(ByteBuf buffer) {
+    boolean isEncrypted(final ByteBuf buffer) {
         // read off the magic byte
         byte magicByte = buffer.getByte(buffer.readerIndex());
         return (magicByte & crypto) == crypto;
@@ -768,7 +769,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    void writeWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, Object message) throws IOException {
+    void writeWithCryptoTcp(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
         write0(connection, buffer, message, true);
     }
 
@@ -779,7 +780,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    void writeWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, Object message) throws IOException {
+    void writeWithCryptoUdp(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
         write0(connection, buffer, message, true);
     }
 
@@ -793,7 +794,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    Object readWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, int length) throws IOException {
+    Object readWithCryptoTcp(final ConnectionImpl connection, final ByteBuf buffer, final int length) throws IOException {
         return read0(connection, buffer, length, true);
     }
 
@@ -807,7 +808,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public final
-    Object readWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, int length) throws IOException {
+    Object readWithCryptoUdp(final ConnectionImpl connection, final ByteBuf buffer, final int length) throws IOException {
         return read0(connection, buffer, length, true);
     }
 
@@ -1026,7 +1027,4 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
         RESERVED_SKIPPABLE
     }
     // @formatter:on
-
-
-
 }

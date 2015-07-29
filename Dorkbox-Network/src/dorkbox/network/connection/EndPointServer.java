@@ -29,13 +29,13 @@ import java.io.IOException;
 public
 class EndPointServer<C extends Connection> extends EndPoint<C> {
 
-    private final ServerConnectionBridge serverConnections;
+    private final ServerConnectionBridge<C> serverConnections;
 
     public
-    EndPointServer(Configuration options) throws InitializationException, SecurityException, IOException {
+    EndPointServer(final Configuration options) throws InitializationException, SecurityException, IOException {
         super(Server.class, options);
 
-        this.serverConnections = new ServerConnectionBridge(this.connectionManager);
+        this.serverConnections = new ServerConnectionBridge<C>(this.connectionManager);
     }
 
     /**
@@ -43,7 +43,7 @@ class EndPointServer<C extends Connection> extends EndPoint<C> {
      */
     @Override
     public
-    ConnectionBridgeServer send() {
+    ConnectionBridgeServer<C> send() {
         return this.serverConnections;
     }
 
@@ -57,7 +57,7 @@ class EndPointServer<C extends Connection> extends EndPoint<C> {
      * @return a newly created listener manager for the connection
      */
     final
-    ConnectionManager<C> addListenerManager(C connection) {
+    ConnectionManager<C> addListenerManager(final C connection) {
         return this.connectionManager.addListenerManager(connection);
     }
 
@@ -71,7 +71,7 @@ class EndPointServer<C extends Connection> extends EndPoint<C> {
      * This removes the listener manager for that specific connection
      */
     final
-    void removeListenerManager(C connection) {
+    void removeListenerManager(final C connection) {
         this.connectionManager.removeListenerManager(connection);
     }
 }

@@ -53,7 +53,7 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
     @Override
     @SuppressWarnings("rawtypes")
     public
-    void write(Kryo kryo, Output output, InvokeMethod object) {
+    void write(final Kryo kryo, final Output output, final InvokeMethod object) {
         output.writeInt(object.objectID, true);
         output.writeInt(object.cachedMethod.methodClassID, true);
         output.writeByte(object.cachedMethod.methodIndex);
@@ -77,7 +77,7 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
 
     @Override
     public
-    InvokeMethod read(Kryo kryo, Input input, Class<InvokeMethod> type) {
+    InvokeMethod read(final Kryo kryo, final Input input, final Class<InvokeMethod> type) {
         InvokeMethod invokeMethod = new InvokeMethod();
 
         invokeMethod.objectID = input.readInt(true);

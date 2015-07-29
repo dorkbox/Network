@@ -57,23 +57,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public
 class RemoteInvocationHandler implements InvocationHandler {
     private static final Logger logger = LoggerFactory.getLogger(RemoteInvocationHandler.class);
-    private final Connection connection;
-
     public final int objectID;
-    private int timeoutMillis = 3000;
-
-    private boolean nonBlocking = false;
-    private boolean transmitReturnValue = true;
-    private boolean transmitExceptions = true;
-
-    private boolean remoteToString;
-    private boolean udp;
-    private boolean udt;
-
-    private Byte lastResponseID;
-    private byte nextResponseId = 1;
-
-    private final ListenerRaw<Connection, InvokeMethodResult> responseListener;
 
     final ReentrantLock lock = new ReentrantLock();
     final Condition responseCondition = this.lock.newCondition();
@@ -81,8 +65,25 @@ class RemoteInvocationHandler implements InvocationHandler {
     final InvokeMethodResult[] responseTable = new InvokeMethodResult[64];
     final boolean[] pendingResponses = new boolean[64];
 
+    private final Connection connection;
+    private final ListenerRaw<Connection, InvokeMethodResult> responseListener;
+
+    private int timeoutMillis = 3000;
+    private boolean nonBlocking = false;
+
+    private boolean transmitReturnValue = true;
+    private boolean transmitExceptions = true;
+
+    private boolean remoteToString;
+
+    private boolean udp;
+    private boolean udt;
+
+    private Byte lastResponseID;
+    private byte nextResponseId = 1;
+
     public
-    RemoteInvocationHandler(Connection connection, final int objectID) {
+    RemoteInvocationHandler(final Connection connection, final int objectID) {
         super();
         this.connection = connection;
         this.objectID = objectID;
@@ -128,8 +129,8 @@ class RemoteInvocationHandler implements InvocationHandler {
     @SuppressWarnings({"AutoUnboxing", "AutoBoxing"})
     @Override
     public
-    Object invoke(Object proxy, Method method, Object[] args) throws Exception {
-        Class<?> declaringClass = method.getDeclaringClass();
+    Object invoke(final Object proxy, final Method method, final Object[] args) throws Exception {
+        final Class<?> declaringClass = method.getDeclaringClass();
         if (declaringClass == RemoteObject.class) {
             String name = method.getName();
             if (name.equals("close")) {
@@ -295,8 +296,8 @@ class RemoteInvocationHandler implements InvocationHandler {
                 argString = argString.substring(1, argString.length() - 1);
             }
             logger1.trace(this.connection + " sent: " + method.getDeclaringClass()
-                                                             .getSimpleName() +
-                         "#" + method.getName() + "(" + argString + ")");
+                                                              .getSimpleName() +
+                          "#" + method.getName() + "(" + argString + ")");
         }
 
         this.lastResponseID = (byte) (invokeMethod.responseData & RmiBridge.responseIdMask);
@@ -357,7 +358,7 @@ class RemoteInvocationHandler implements InvocationHandler {
      * A timeout of 0 means that we want to disable waiting, otherwise - it waits in milliseconds
      */
     private
-    Object waitForResponse(byte responseID) throws IOException {
+    Object waitForResponse(final byte responseID) throws IOException {
         long endTime = System.currentTimeMillis() + this.timeoutMillis;
         long remaining = this.timeoutMillis;
 

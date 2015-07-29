@@ -21,12 +21,13 @@ import dorkbox.network.connection.bridge.ConnectionExceptSpecifiedBridgeServer;
 import java.util.Collection;
 
 public
-class ServerConnectionBridge implements ConnectionPoint, ConnectionBridgeServer, ConnectionExceptSpecifiedBridgeServer {
+class ServerConnectionBridge<C extends Connection>
+                implements ConnectionPoint, ConnectionBridgeServer<C>, ConnectionExceptSpecifiedBridgeServer<C> {
 
-    private final ConnectionManager connectionManager;
+    private final ConnectionManager<C> connectionManager;
 
     public
-    ServerConnectionBridge(ConnectionManager connectionManager) {
+    ServerConnectionBridge(final  ConnectionManager<C> connectionManager) {
         this.connectionManager = connectionManager;
     }
 
@@ -51,32 +52,32 @@ class ServerConnectionBridge implements ConnectionPoint, ConnectionBridgeServer,
     @Override
     public
     void flush() {
-        Collection<Connection> connections0 = this.connectionManager.getConnections0();
-        for (Connection c : connections0) {
+        Collection<C> connections0 = this.connectionManager.getConnections0();
+        for (C c : connections0) {
             c.send()
              .flush();
         }
     }
 
     /**
-     * Exposes methods to send the object to all server connections (except the specified one)
-     * over the network. (or via LOCAL when it's a local channel).
+     * Exposes methods to send the object to all server connections (except the specified one) over the network. (or via LOCAL when it's a
+     * local channel).
      */
     @Override
     public
-    ConnectionExceptSpecifiedBridgeServer except() {
+    ConnectionExceptSpecifiedBridgeServer<C> except() {
         return this;
     }
 
     /**
-     * Sends the object to all server connections (except the specified one)
-     * over the network using TCP. (or via LOCAL when it's a local channel).
+     * Sends the object to all server connections (except the specified one) over the network using TCP. (or via LOCAL when it's a local
+     * channel).
      */
     @Override
     public
-    void TCP(Connection connection, Object message) {
-        Collection<Connection> connections0 = this.connectionManager.getConnections0();
-        for (Connection c : connections0) {
+    void TCP(final C connection, final Object message) {
+        Collection<C> connections0 = this.connectionManager.getConnections0();
+        for (C c : connections0) {
             if (c != connection) {
                 c.send()
                  .TCP(message);
@@ -85,14 +86,14 @@ class ServerConnectionBridge implements ConnectionPoint, ConnectionBridgeServer,
     }
 
     /**
-     * Sends the object to all server connections (except the specified one)
-     * over the network using UDP (or via LOCAL when it's a local channel).
+     * Sends the object to all server connections (except the specified one) over the network using UDP (or via LOCAL when it's a local
+     * channel).
      */
     @Override
     public
-    void UDP(Connection connection, Object message) {
-        Collection<Connection> connections0 = this.connectionManager.getConnections0();
-        for (Connection c : connections0) {
+    void UDP(final C connection, final Object message) {
+        Collection<C> connections0 = this.connectionManager.getConnections0();
+        for (C c : connections0) {
             if (c != connection) {
                 c.send()
                  .UDP(message);
@@ -101,14 +102,14 @@ class ServerConnectionBridge implements ConnectionPoint, ConnectionBridgeServer,
     }
 
     /**
-     * Sends the object to all server connections (except the specified one)
-     * over the network using UDT. (or via LOCAL when it's a local channel).
+     * Sends the object to all server connections (except the specified one) over the network using UDT. (or via LOCAL when it's a local
+     * channel).
      */
     @Override
     public
-    void UDT(Connection connection, Object message) {
-        Collection<Connection> connections0 = this.connectionManager.getConnections0();
-        for (Connection c : connections0) {
+    void UDT(final C connection, final Object message) {
+        Collection<C> connections0 = this.connectionManager.getConnections0();
+        for (C c : connections0) {
             if (c != connection) {
                 c.send()
                  .UDT(message);
@@ -117,27 +118,25 @@ class ServerConnectionBridge implements ConnectionPoint, ConnectionBridgeServer,
     }
 
     /**
-     * Sends the message to other listeners INSIDE this endpoint for EVERY connection. It does not
-     * send it to a remote address.
+     * Sends the message to other listeners INSIDE this endpoint for EVERY connection. It does not send it to a remote address.
      */
     @Override
     public
-    void self(Object message) {
-        Collection<Connection> connections0 = this.connectionManager.getConnections0();
-        for (Connection c : connections0) {
+    void self(final Object message) {
+        Collection<C> connections0 = this.connectionManager.getConnections0();
+        for (C c : connections0) {
             this.connectionManager.notifyOnMessage(c, message);
         }
     }
 
     /**
-     * Sends the object all server connections over the network using TCP. (or
-     * via LOCAL when it's a local channel).
+     * Sends the object all server connections over the network using TCP. (or via LOCAL when it's a local channel).
      */
     @Override
     public
-    ConnectionPoint TCP(Object message) {
-        Collection<Connection> connections0 = this.connectionManager.getConnections0();
-        for (Connection c : connections0) {
+    ConnectionPoint TCP(final Object message) {
+        Collection<C> connections0 = this.connectionManager.getConnections0();
+        for (C c : connections0) {
             c.send()
              .TCP(message);
         }
@@ -146,14 +145,13 @@ class ServerConnectionBridge implements ConnectionPoint, ConnectionBridgeServer,
     }
 
     /**
-     * Sends the object all server connections over the network using UDP. (or
-     * via LOCAL when it's a local channel).
+     * Sends the object all server connections over the network using UDP. (or via LOCAL when it's a local channel).
      */
     @Override
     public
-    ConnectionPoint UDP(Object message) {
-        Collection<Connection> connections0 = this.connectionManager.getConnections0();
-        for (Connection c : connections0) {
+    ConnectionPoint UDP(final Object message) {
+        Collection<C> connections0 = this.connectionManager.getConnections0();
+        for (C c : connections0) {
             c.send()
              .UDP(message);
         }
@@ -162,14 +160,13 @@ class ServerConnectionBridge implements ConnectionPoint, ConnectionBridgeServer,
     }
 
     /**
-     * Sends the object all server connections over the network using UDT. (or
-     * via LOCAL when it's a local channel).
+     * Sends the object all server connections over the network using UDT. (or via LOCAL when it's a local channel).
      */
     @Override
     public
-    ConnectionPoint UDT(Object message) {
-        Collection<Connection> connections0 = this.connectionManager.getConnections0();
-        for (Connection c : connections0) {
+    ConnectionPoint UDT(final Object message) {
+        Collection<C> connections0 = this.connectionManager.getConnections0();
+        for (C c : connections0) {
             c.send()
              .UDT(message);
         }

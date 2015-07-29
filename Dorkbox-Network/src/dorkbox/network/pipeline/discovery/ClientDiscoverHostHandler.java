@@ -32,7 +32,7 @@ class ClientDiscoverHostHandler extends SimpleChannelInboundHandler<DatagramPack
 
     @Override
     protected
-    void channelRead0(ChannelHandlerContext context, DatagramPacket message) throws Exception {
+    void channelRead0(final ChannelHandlerContext context, final DatagramPacket message) throws Exception {
         ByteBuf data = message.content();
         if (data.readableBytes() == 1 && data.readByte() == Broadcast.broadcastResponseID) {
             context.channel()

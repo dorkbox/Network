@@ -50,7 +50,8 @@ class AsmCachedMethod extends CachedMethod {
         try {
             if (origMethod == null) {
                 return this.methodAccess.invoke(target, this.methodAccessIndex, args);
-            } else {
+            }
+            else {
                 int length = args.length;
                 Object[] newArgs = new Object[length + 1];
                 newArgs[0] = connection;

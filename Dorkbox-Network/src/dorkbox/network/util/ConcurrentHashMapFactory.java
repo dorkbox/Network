@@ -18,20 +18,25 @@ package dorkbox.network.util;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-public abstract class ConcurrentHashMapFactory<K, V> extends ConcurrentHashMap<K, V> implements ConcurrentMap<K, V> {
+public abstract
+class ConcurrentHashMapFactory<K, V> extends ConcurrentHashMap<K, V> implements ConcurrentMap<K, V> {
 
-    private static final long serialVersionUID = -1796263935845885270L;
+    private static final long serialVersionUID = -1L;
 
-    public ConcurrentHashMapFactory() {
+    public
+    ConcurrentHashMapFactory() {
     }
 
-    public abstract V createNewObject(Object... args);
+    public abstract
+    V createNewObject(Object... args);
 
 
-    /** Thread safe method to get the value in the map. If the value doesn't exist,
-     * it will create a new one (and put the new one in the map)
+    /**
+     * Thread safe method to get the value in the map. If the value doesn't exist, it will create a new one (and put the new one in the
+     * map)
      */
-    public final V getOrCreate(K key, Object... args) {
+    public final
+    V getOrCreate(K key, Object... args) {
         V orig = get(key);
 
         if (orig == null) {
@@ -41,7 +46,8 @@ public abstract class ConcurrentHashMapFactory<K, V> extends ConcurrentHashMap<K
             if (putByOtherThreadJustNow != null) {
                 // Some other thread "won"
                 orig = putByOtherThreadJustNow;
-            } else {
+            }
+            else {
                 // This thread was the winner
             }
         }

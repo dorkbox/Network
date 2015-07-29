@@ -22,8 +22,8 @@ import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 
 /**
- * Threads reading/writing, it messes up a single instance.
- * it is possible to use a single kryo with the use of synchronize, however - that defeats the point of multi-threaded
+ * Threads reading/writing, it messes up a single instance. it is possible to use a single kryo with the use of synchronize, however - that
+ * defeats the point of multi-threaded
  */
 public
 interface CryptoSerializationManager extends SerializationManager, RMISerializationManager {
@@ -47,8 +47,10 @@ interface CryptoSerializationManager extends SerializationManager, RMISerializat
      * <p/>
      * Crypto + sequence number
      *
-     * @param connection can be NULL
-     * @param length     should ALWAYS be the length of the expected object!
+     * @param connection
+     *                 can be NULL
+     * @param length
+     *                 should ALWAYS be the length of the expected object!
      */
     Object readWithCryptoTcp(ConnectionImpl connection, ByteBuf buffer, int length) throws IOException;
 
@@ -57,8 +59,10 @@ interface CryptoSerializationManager extends SerializationManager, RMISerializat
      * <p/>
      * Crypto + sequence number
      *
-     * @param connection can be NULL
-     * @param length     should ALWAYS be the length of the expected object!
+     * @param connection
+     *                 can be NULL
+     * @param length
+     *                 should ALWAYS be the length of the expected object!
      */
     Object readWithCryptoUdp(ConnectionImpl connection, ByteBuf buffer, int length) throws IOException;
 }

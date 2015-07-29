@@ -73,9 +73,8 @@ class PingFuture implements Ping {
     }
 
     /**
-     * Adds the specified listener to this future. The specified listener is
-     * notified when this future is done. If this future is already completed,
-     * the specified listener is notified immediately.
+     * Adds the specified listener to this future. The specified listener is notified when this future is done. If this future is already
+     * completed, the specified listener is notified immediately.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -85,10 +84,8 @@ class PingFuture implements Ping {
     }
 
     /**
-     * Removes the specified listener from this future. The specified listener
-     * is no longer notified when this future is done. If the specified listener
-     * is not associated with this future, this method does nothing and returns
-     * silently.
+     * Removes the specified listener from this future. The specified listener is no longer notified when this future is done. If the
+     * specified listener is not associated with this future, this method does nothing and returns silently.
      */
     @Override
     @SuppressWarnings("unchecked")

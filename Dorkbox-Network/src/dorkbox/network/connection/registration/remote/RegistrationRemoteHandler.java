@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection.registration.remote;
 
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
@@ -45,7 +46,7 @@ import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 public abstract
-class RegistrationRemoteHandler extends RegistrationHandler {
+class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandler<C> {
     protected static final String KRYO_ENCODER = "kryoEncoder";
     protected static final String KRYO_DECODER = "kryoDecoder";
 
@@ -88,7 +89,9 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     protected final CryptoSerializationManager serializationManager;
 
     public
-    RegistrationRemoteHandler(String name, RegistrationWrapper registrationWrapper, CryptoSerializationManager serializationManager) {
+    RegistrationRemoteHandler(final String name,
+                              final RegistrationWrapper<C> registrationWrapper,
+                              final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper);
 
         this.serializationManager = serializationManager;
@@ -99,13 +102,14 @@ class RegistrationRemoteHandler extends RegistrationHandler {
      */
     @Override
     protected
-    void initChannel(Channel channel) {
+    void initChannel(final Channel channel) {
         ChannelPipeline pipeline = channel.pipeline();
 
         ///////////////////////
         // DECODE (or upstream)
         ///////////////////////
-        pipeline.addFirst(FRAME_AND_KRYO_DECODER, new KryoDecoder(this.serializationManager)); // cannot be shared because of possible fragmentation.
+        pipeline.addFirst(FRAME_AND_KRYO_DECODER,
+                          new KryoDecoder(this.serializationManager)); // cannot be shared because of possible fragmentation.
 
         int idleTimeout = this.registrationWrapper.getIdleTimeout();
         if (idleTimeout > 0) {
@@ -121,8 +125,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     }
 
     /**
-     * STEP 2: Channel is now active. (if debug is enabled...)
-     * Debug output, so we can tell what direction the connection is in the log
+     * STEP 2: Channel is now active. (if debug is enabled...) Debug output, so we can tell what direction the connection is in the log
      */
     @Override
     public
@@ -220,10 +223,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
                          new KryoDecoderCrypto(this.serializationManager)); // cannot be shared because of possible fragmentation.
 
         if (idleTimeout > 0) {
-            pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0,
-                                                                                   0,
-                                                                                   idleTimeout,
-                                                                                   TimeUnit.MILLISECONDS));
+            pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, idleTimeout, TimeUnit.MILLISECONDS));
         }
 
         pipeline.replace(FRAME_AND_KRYO_ENCODER,
@@ -296,6 +296,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     }
 
     // have to setup AFTER establish connection, data, as we don't want to enable AES until we're ready.
+    @SuppressWarnings("AutoUnboxing")
     protected final
     void setupConnection(MetaChannel metaChannel) {
         boolean registerServer = false;
@@ -355,8 +356,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     /**
      * Registers the metachannel for the UDP server. Default is to do nothing.
      * <p/>
-     * The server will override this.
-     * Only called if we have a UDP channel when we finalize the setup of the TCP connection
+     * The server will override this. Only called if we have a UDP channel when we finalize the setup of the TCP connection
      */
     @SuppressWarnings("unused")
     protected
@@ -364,8 +364,8 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     }
 
     /**
-     * Internal call by the pipeline to notify the "Connection" object that it has "connected", meaning that modifications
-     * to the pipeline are finished.
+     * Internal call by the pipeline to notify the "Connection" object that it has "connected", meaning that modifications to the pipeline
+     * are finished.
      */
     protected final
     void notifyConnection(MetaChannel metaChannel) {

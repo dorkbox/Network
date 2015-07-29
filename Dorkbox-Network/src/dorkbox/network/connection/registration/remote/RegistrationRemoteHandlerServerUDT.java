@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection.registration.remote;
 
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -32,12 +33,12 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 public
-class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandlerServer {
+class RegistrationRemoteHandlerServerUDT<C extends Connection> extends RegistrationRemoteHandlerServer<C> {
 
     public
-    RegistrationRemoteHandlerServerUDT(String name,
-                                       RegistrationWrapper registrationWrapper,
-                                       CryptoSerializationManager serializationManager) {
+    RegistrationRemoteHandlerServerUDT(final String name,
+                                       final RegistrationWrapper<C> registrationWrapper,
+                                       final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }
 
@@ -46,7 +47,7 @@ class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandlerServer
      */
     @Override
     protected
-    void initChannel(Channel channel) {
+    void initChannel(final Channel channel) {
         super.initChannel(channel);
     }
 
@@ -55,7 +56,7 @@ class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandlerServer
      */
     @Override
     public
-    void channelActive(ChannelHandlerContext context) throws Exception {
+    void channelActive(final ChannelHandlerContext context) throws Exception {
         if (this.logger.isDebugEnabled()) {
             super.channelActive(context);
         }
@@ -66,14 +67,15 @@ class RegistrationRemoteHandlerServerUDT extends RegistrationRemoteHandlerServer
     /**
      * STEP 3-XXXXX: We pass registration messages around until we the registration handshake is complete!
      */
+    @SuppressWarnings("AutoUnboxing")
     @Override
     public
-    void channelRead(ChannelHandlerContext context, Object message) throws Exception {
+    void channelRead(final ChannelHandlerContext context, final Object message) throws Exception {
         Channel channel = context.channel();
 
         // only TCP will come across here for the server. (UDP here is called by the UDP handler/wrapper)
 
-        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
+        RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
         Logger logger2 = this.logger;
 
         if (message instanceof Registration) {

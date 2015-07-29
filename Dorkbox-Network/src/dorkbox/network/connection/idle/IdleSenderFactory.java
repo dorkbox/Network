@@ -34,9 +34,12 @@ class IdleSenderFactory<C extends Connection, M> implements IdleBridge {
     public
     void TCP() {
         if (message instanceof IdleSender) {
-            connection.listeners().add((IdleSender)message);
-        } else {
-            connection.listeners().add(new IdleObjectSender(new IdleListenerTCP<C, M>(), message));
+            connection.listeners()
+                      .add((IdleSender) message);
+        }
+        else {
+            connection.listeners()
+                      .add(new IdleObjectSender(new IdleListenerTCP<C, M>(), message));
         }
     }
 
@@ -44,9 +47,12 @@ class IdleSenderFactory<C extends Connection, M> implements IdleBridge {
     public
     void UDP() {
         if (message instanceof IdleSender) {
-            connection.listeners().add((IdleSender)message);
-        } else {
-            connection.listeners().add(new IdleObjectSender(new IdleListenerUDP<C, M>(), message));
+            connection.listeners()
+                      .add((IdleSender) message);
+        }
+        else {
+            connection.listeners()
+                      .add(new IdleObjectSender(new IdleListenerUDP<C, M>(), message));
         }
     }
 
@@ -54,9 +60,12 @@ class IdleSenderFactory<C extends Connection, M> implements IdleBridge {
     public
     void UDT() {
         if (message instanceof IdleSender) {
-            connection.listeners().add((IdleSender)message);
-        } else {
-            connection.listeners().add(new IdleObjectSender(new IdleListenerUDT<C, M>(), message));
+            connection.listeners()
+                      .add((IdleSender) message);
+        }
+        else {
+            connection.listeners()
+                      .add(new IdleObjectSender(new IdleListenerUDT<C, M>(), message));
         }
     }
 }

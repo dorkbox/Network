@@ -35,7 +35,7 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused", "AutoBoxing"})
 public final
 class Broadcast {
     public static final byte broadcastID = (byte) 42;
@@ -44,13 +44,15 @@ class Broadcast {
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger("Broadcast Host Discovery");
 
     /**
-     * Broadcasts a UDP message on the LAN to discover any running servers. The
-     * address of the first server to respond is returned.
+     * Broadcasts a UDP message on the LAN to discover any running servers. The address of the first server to respond is returned.
      * <p/>
      * From KryoNet
      *
-     * @param udpPort               The UDP port of the server.
-     * @param discoverTimeoutMillis The number of milliseconds to wait for a response.
+     * @param udpPort
+     *                 The UDP port of the server.
+     * @param discoverTimeoutMillis
+     *                 The number of milliseconds to wait for a response.
+     *
      * @return the first server found, or null if no server responded.
      */
     public static
@@ -63,11 +65,13 @@ class Broadcast {
     }
 
     /**
-     * Broadcasts a UDP message on the LAN to discover any running servers. The
-     * address of the first server to respond is returned.
+     * Broadcasts a UDP message on the LAN to discover any running servers. The address of the first server to respond is returned.
      *
-     * @param udpPort               The UDP port of the server.
-     * @param discoverTimeoutMillis The number of milliseconds to wait for a response.
+     * @param udpPort
+     *                 The UDP port of the server.
+     * @param discoverTimeoutMillis
+     *                 The number of milliseconds to wait for a response.
+     *
      * @return the first server found, or null if no server responded.
      */
     public static
@@ -84,8 +88,11 @@ class Broadcast {
     /**
      * Broadcasts a UDP message on the LAN to discover all running servers.
      *
-     * @param udpPort               The UDP port of the server.
-     * @param discoverTimeoutMillis The number of milliseconds to wait for a response.
+     * @param udpPort
+     *                 The UDP port of the server.
+     * @param discoverTimeoutMillis
+     *                 The number of milliseconds to wait for a response.
+     *
      * @return the list of found servers (if they responded)
      */
     public static

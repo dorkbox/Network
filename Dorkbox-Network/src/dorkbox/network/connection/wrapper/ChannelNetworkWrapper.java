@@ -25,7 +25,7 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
 import java.net.InetSocketAddress;
 
 public
-class ChannelNetworkWrapper implements ChannelWrapper {
+class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
 
     private final ChannelNetwork tcp;
     private final ChannelNetwork udp;
@@ -150,7 +150,7 @@ class ChannelNetworkWrapper implements ChannelWrapper {
 
     @Override
     public
-    void close(final Connection connection, final ISessionManager sessionManager) {
+    void close(final Connection connection, final ISessionManager<C> sessionManager) {
         long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
         this.tcp.close(maxShutdownWaitTimeInMilliSeconds);
@@ -192,6 +192,7 @@ class ChannelNetworkWrapper implements ChannelWrapper {
             return false;
         }
 
+        @SuppressWarnings("rawtypes")
         ChannelNetworkWrapper other = (ChannelNetworkWrapper) obj;
         if (this.remoteAddress == null) {
             if (other.remoteAddress != null) {

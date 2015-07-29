@@ -22,7 +22,7 @@ import io.netty.channel.EventLoop;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
 public
-interface ChannelWrapper {
+interface ChannelWrapper<C extends Connection> {
 
     ConnectionPointWriter tcp();
 
@@ -49,7 +49,7 @@ interface ChannelWrapper {
      */
     String getRemoteHost();
 
-    void close(final Connection connection, final ISessionManager sessionManager);
+    void close(final Connection connection, final ISessionManager<C> sessionManager);
 
     int id();
 

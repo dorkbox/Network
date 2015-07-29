@@ -1,10 +1,9 @@
 package dorkbox.network;
 
 
-import dorkbox.network.connection.EndPoint;
-import dorkbox.util.exceptions.SecurityException;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.SerializationManager;
+import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.storage.Storage;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
@@ -112,8 +111,7 @@ class ReflectionSecurityTest extends BaseTest {
 
         @Override
         public
-        void init(final Class<? extends EndPoint> type, final SerializationManager serializationManager, final Storage storage)
-                        throws IOException {
+        void init(final SerializationManager serializationManager, final Storage storage) throws IOException {
         }
 
         @Override

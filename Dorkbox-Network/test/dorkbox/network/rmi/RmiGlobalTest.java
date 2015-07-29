@@ -35,7 +35,7 @@ class RmiGlobalTest extends BaseTest {
             public
             void run() {
                 try {
-                    TestObject test = connection.getRemoteObject(remoteObjectID);
+                    TestObject test = connection.getProxyObject(remoteObjectID);
 
                     System.err.println("Starting test for: " + remoteObjectID);
 

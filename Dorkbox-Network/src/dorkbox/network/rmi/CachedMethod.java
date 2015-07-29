@@ -50,8 +50,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public
 class CachedMethod {
+    // not concurrent because they are setup during system initialization
+    public static final Map<Class<?>, Class<?>> overriddenMethods = new HashMap<Class<?>, Class<?>>();
+    public static final Map<Class<?>, Class<?>> overriddenReverseMethods = new HashMap<Class<?>, Class<?>>();
+
     private static final Map<Class<?>, CachedMethod[]> methodCache = new ConcurrentHashMap<Class<?>, CachedMethod[]>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
-    private static final Map<Class<?>, Class<?>> overriddenMethods = new HashMap<Class<?>, Class<?>>();
 
     // type will be likely be the interface
     public static
@@ -128,7 +131,8 @@ class CachedMethod {
             }
             cachedMethod.method = method;
             cachedMethod.origMethod = origMethod;
-            cachedMethod.methodClassID = kryo.getRegistration(method.getDeclaringClass()).getId();
+            cachedMethod.methodClassID = kryo.getRegistration(method.getDeclaringClass())
+                                             .getId();
             cachedMethod.methodIndex = i;
 
             // Store the serializer for each final parameter.
@@ -176,7 +180,7 @@ class CachedMethod {
                     if (ClassHelper.hasInterface(dorkbox.network.connection.Connection.class, checkType)) {
                         // now we check to see if our "check" method is equal to our "cached" method + Connection
                         for (int k = 1; k < checkLength; k++) {
-                            if (types[k-1] == checkTypes[k]) {
+                            if (types[k - 1] == checkTypes[k]) {
                                 overrideMap.put(origMethod, implMethod);
                                 break METHOD_CHECK;
                             }
@@ -186,7 +190,8 @@ class CachedMethod {
             }
 
             return overrideMap;
-        } else {
+        }
+        else {
             return new HashMap<Method, Method>(0);
         }
     }
@@ -253,13 +258,23 @@ class CachedMethod {
         return methods;
     }
 
+    /**
+     * Called by the SerializationManager, so that RMI classes that are overridden for serialization purposes, can check to see if certain
+     * methods need to be overridden.
+     */
+    public static
+    void registerOverridden(final Class<?> ifaceClass, final Class<?> implClass) {
+        overriddenMethods.put(ifaceClass, implClass);
+        overriddenReverseMethods.put(implClass, ifaceClass);
+    }
+
     public Method method;
     public int methodClassID;
     public int methodIndex;
 
     /**
-     * in some cases, we want to override the cached method, with one that supports passing 'Connection' as the first argument.
-     * This is completely OPTIONAL, however - greatly adds functionality to RMI methods.
+     * in some cases, we want to override the cached method, with one that supports passing 'Connection' as the first argument. This is
+     * completely OPTIONAL, however - greatly adds functionality to RMI methods.
      */
     public transient Method origMethod;
 
@@ -271,7 +286,8 @@ class CachedMethod {
         // did we override our cached method?
         if (origMethod == null) {
             return this.method.invoke(target, args);
-        } else {
+        }
+        else {
             int length = args.length;
             Object[] newArgs = new Object[length + 1];
             newArgs[0] = connection;
@@ -279,14 +295,5 @@ class CachedMethod {
 
             return this.method.invoke(target, newArgs);
         }
-    }
-
-    /**
-     * Called by the SerializationManager, so that RMI classes that are overridden for serialization purposes, can check to see if
-     * certain methods need to be overridden.
-     */
-    public static
-    void registerOverridden(final Class<?> ifaceClass, final Class<?> implClass) {
-        overriddenMethods.put(ifaceClass, implClass);
     }
 }

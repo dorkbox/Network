@@ -51,8 +51,8 @@ import org.slf4j.Logger;
 import java.io.IOException;
 
 /**
- * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE
- * to events. If you access the server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
+ * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
+ * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
  * <p/>
  * To put it bluntly, ONLY have the server do work inside of a listener!
  */
@@ -60,8 +60,8 @@ public
 class Server<C extends Connection> extends EndPointServer<C> {
 
     /**
-     * The maximum queue length for incoming connection indications (a request to connect). If a connection indication arrives when
-     * the queue is full, the connection is refused.
+     * The maximum queue length for incoming connection indications (a request to connect). If a connection indication arrives when the
+     * queue is full, the connection is refused.
      */
     public static int backlogConnectionCount = 50;
 
@@ -217,9 +217,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
                              .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                              .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
                              .option(ChannelOption.SO_REUSEADDR, true)
-                             .childHandler(new RegistrationRemoteHandlerServerTCP(threadName,
-                                                                                  this.registrationWrapper,
-                                                                                  this.serializationManager));
+                             .childHandler(new RegistrationRemoteHandlerServerTCP<C>(threadName,
+                                                                                     this.registrationWrapper,
+                                                                                     this.serializationManager));
 
             if (options.host != null) {
                 this.tcpBootstrap.localAddress(options.host, this.tcpPort);
@@ -263,9 +263,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
             this.udpBootstrap.group(worker).option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
                             .localAddress(this.udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
-                            .handler(new RegistrationRemoteHandlerServerUDP(threadName,
-                                                                            this.registrationWrapper,
-                                                                            this.serializationManager));
+                            .handler(new RegistrationRemoteHandlerServerUDP<C>(threadName,
+                                                                               this.registrationWrapper,
+                                                                               this.serializationManager));
 
 
             // Enable to READ from MULTICAST data (ie, 192.168.1.0)
@@ -296,9 +296,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
                                                                                               PooledByteBufAllocator.DEFAULT)
                             // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
                             .localAddress(this.udtPort)
-                            .childHandler(new RegistrationRemoteHandlerServerUDT(threadName,
-                                                                                 this.registrationWrapper,
-                                                                                 this.serializationManager));
+                            .childHandler(new RegistrationRemoteHandlerServerUDT<C>(threadName,
+                                                                                    this.registrationWrapper,
+                                                                                    this.serializationManager));
 
             manageForShutdown(boss);
             manageForShutdown(worker);
@@ -308,8 +308,8 @@ class Server<C extends Connection> extends EndPointServer<C> {
     /**
      * Binds the server to the configured, underlying protocols.
      * <p/>
-     * This method will also BLOCK until the stop method is called, and if
-     * you want to continue running code after this method invocation, bind should be called in a separate, non-daemon thread.
+     * This method will also BLOCK until the stop method is called, and if you want to continue running code after this method invocation,
+     * bind should be called in a separate, non-daemon thread.
      */
     public
     void bind() {
@@ -321,9 +321,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
      * <p/>
      * This is a more advanced method, and you should consider calling <code>bind()</code> instead.
      *
-     * @param blockUntilTerminate will BLOCK until the server stop method is called, and if
-     *                            you want to continue running code after this method invocation, bind should be called in a separate,
-     *                            non-daemon thread - or with false as the parameter.
+     * @param blockUntilTerminate
+     *                 will BLOCK until the server stop method is called, and if you want to continue running code after this method
+     *                 invocation, bind should be called in a separate, non-daemon thread - or with false as the parameter.
      */
     @SuppressWarnings("AutoBoxing")
     public

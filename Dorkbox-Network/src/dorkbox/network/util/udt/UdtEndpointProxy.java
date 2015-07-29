@@ -22,12 +22,10 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 
 /**
- * This 'proxy' class exists in order to permit the client/server/endpoint classes from barfing when
- * loading (ie, the JVM classloader), since the classloader only checks ONE level deep for deps, not TWO
- * levels deep.
+ * This 'proxy' class exists in order to permit the client/server/endpoint classes from barfing when loading (ie, the JVM classloader),
+ * since the classloader only checks ONE level deep for deps, not TWO levels deep.
  * <p/>
- * This is an abuse of this, but it does nicely permit us to choose if we want to use UDT or not, without
- * strange complications
+ * This is an abuse of this, but it does nicely permit us to choose if we want to use UDT or not, without strange complications
  */
 public
 class UdtEndpointProxy {

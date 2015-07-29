@@ -24,7 +24,7 @@ class RegisterRmiSystemListener extends ListenerRaw<ConnectionImpl, RmiRegistrat
 
     @Override
     public
-    void received(ConnectionImpl connection, RmiRegistration registerClass) {
+    void received(final ConnectionImpl connection, final RmiRegistration registerClass) {
         // register this into the RmiBridge
         connection.registerInternal(connection, registerClass);
     }

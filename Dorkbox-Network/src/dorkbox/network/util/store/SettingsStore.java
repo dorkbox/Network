@@ -15,9 +15,8 @@
  */
 package dorkbox.network.util.store;
 
-import dorkbox.network.connection.EndPoint;
-import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.SerializationManager;
+import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.storage.Storage;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
@@ -31,7 +30,7 @@ import java.io.IOException;
  * <p/>
  * A static "create" method, with any number of parameters, is required to create this class (which is done via reflection)
  */
-@SuppressWarnings("deprecation")
+@SuppressWarnings({"deprecation", "unused"})
 public abstract
 class SettingsStore {
 
@@ -39,7 +38,7 @@ class SettingsStore {
      * Initialize the settingsStore with the provided serialization manager.
      */
     public abstract
-    void init(Class<? extends EndPoint> type, SerializationManager serializationManager, Storage storage) throws IOException;
+    void init(SerializationManager serializationManager, Storage storage) throws IOException;
 
 
     /**
@@ -81,7 +80,6 @@ class SettingsStore {
         if (callerClass != null) {
             String callerClassName = callerClass.getName();
             ok = callerClassName.startsWith(callingClass1.getName()) || callerClassName.startsWith(callingClass2.getName());
-            ok = true;
         }
 
         if (!ok) {

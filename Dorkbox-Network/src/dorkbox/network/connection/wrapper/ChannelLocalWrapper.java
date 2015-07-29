@@ -28,7 +28,7 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public
-class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
+class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, ConnectionPointWriter {
 
     private final Channel channel;
     private final AtomicBoolean shouldFlush = new AtomicBoolean(false);
@@ -114,7 +114,7 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
 
     @Override
     public
-    void close(Connection connection, ISessionManager sessionManager) {
+    void close(Connection connection, ISessionManager<C> sessionManager) {
         long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
         this.shouldFlush.set(false);
@@ -148,7 +148,7 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        ChannelLocalWrapper other = (ChannelLocalWrapper) obj;
+        ChannelLocalWrapper<C> other = (ChannelLocalWrapper<C>) obj;
         if (this.remoteAddress == null) {
             if (other.remoteAddress != null) {
                 return false;

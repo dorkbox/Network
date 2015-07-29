@@ -55,7 +55,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 
 /**
- * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's ASYNC.
+ * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
+ * ASYNC.
  */
 @SuppressWarnings("unused")
 public
@@ -125,7 +126,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
             localBootstrap.group(boss)
                           .channel(LocalChannel.class)
                           .remoteAddress(new LocalAddress(options.localChannelName))
-                          .handler(new RegistrationLocalHandlerClient(threadName, this.registrationWrapper));
+                          .handler(new RegistrationLocalHandlerClient<C>(threadName, this.registrationWrapper));
 
             manageForShutdown(boss);
         }
@@ -162,9 +163,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                 tcpBootstrap.group(boss)
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .remoteAddress(options.host, options.tcpPort)
-                            .handler(new RegistrationRemoteHandlerClientTCP(threadName,
-                                                                            this.registrationWrapper,
-                                                                            this.serializationManager));
+                            .handler(new RegistrationRemoteHandlerClientTCP<C>(threadName,
+                                                                               this.registrationWrapper,
+                                                                               this.serializationManager));
 
 
                 manageForShutdown(boss);
@@ -200,9 +201,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .localAddress(new InetSocketAddress(0))
                             .remoteAddress(new InetSocketAddress(options.host, options.udpPort))
-                            .handler(new RegistrationRemoteHandlerClientUDP(threadName,
-                                                                            this.registrationWrapper,
-                                                                            this.serializationManager));
+                            .handler(new RegistrationRemoteHandlerClientUDP<C>(threadName,
+                                                                               this.registrationWrapper,
+                                                                               this.serializationManager));
 
                 manageForShutdown(boss);
 
@@ -243,9 +244,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                     udtBootstrap.group(boss)
                                 .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                                 .remoteAddress(options.host, options.udtPort)
-                                .handler(new RegistrationRemoteHandlerClientUDT(threadName,
-                                                                                this.registrationWrapper,
-                                                                                this.serializationManager));
+                                .handler(new RegistrationRemoteHandlerClientUDT<C>(threadName,
+                                                                                   this.registrationWrapper,
+                                                                                   this.serializationManager));
 
                     manageForShutdown(boss);
                 }
@@ -256,7 +257,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     /**
      * Allows the client to reconnect to the last connected server
      *
-     * @throws IOException if the client is unable to reconnect in the previously requested connection-timeout
+     * @throws IOException
+     *                 if the client is unable to reconnect in the previously requested connection-timeout
      */
     public
     void reconnect() throws IOException {
@@ -266,7 +268,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     /**
      * Allows the client to reconnect to the last connected server
      *
-     * @throws IOException if the client is unable to reconnect in the requested time
+     * @throws IOException
+     *                 if the client is unable to reconnect in the requested time
      */
     public
     void reconnect(int connectionTimeout) throws IOException {
@@ -280,7 +283,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     /**
      * will attempt to connect to the server, with a 30 second timeout.
      *
-     * @throws IOException if the client is unable to connect in 30 seconds
+     * @throws IOException
+     *                 if the client is unable to connect in 30 seconds
      */
     public
     void connect() throws IOException {
@@ -292,8 +296,11 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * <p/>
      * will BLOCK until completed
      *
-     * @param connectionTimeout wait for x milliseconds. 0 will wait indefinitely
-     * @throws IOException if the client is unable to connect in the requested time
+     * @param connectionTimeout
+     *                 wait for x milliseconds. 0 will wait indefinitely
+     *
+     * @throws IOException
+     *                 if the client is unable to connect in the requested time
      */
     public
     void connect(int connectionTimeout) throws IOException {
@@ -334,6 +341,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         return this.connection.getRemoteHost();
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public
     EndPoint getEndPoint() {
@@ -389,25 +397,20 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     }
 
     /**
-     * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be
-     * invoked remotely on the object with the specified ID in the ObjectSpace for the current connection.
+     * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be invoked remotely on the
+     * object with the specified ID in the ObjectSpace for the current connection.
      * <p/>
-     * This will request a registration ID from the remote endpoint, <b>and will block</b> until the object
-     * has been returned.
+     * This will request a registration ID from the remote endpoint, <b>and will block</b> until the object has been returned.
      * <p/>
-     * Methods that return a value will throw {@link TimeoutException} if the
-     * response is not received with the
-     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
+     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
+     * RemoteObject#setResponseTimeout(int) response timeout}.
      * <p/>
-     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
-     * (the default), then methods that return a value must not be called from
-     * the update thread for the connection. An exception will be thrown if this
-     * occurs. Methods with a void return value can be called on the update
-     * thread.
+     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false (the default), then methods that return a value must not be
+     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
+     * called on the update thread.
      * <p/>
-     * If a proxy returned from this method is part of an object graph sent over
-     * the network, the object graph on the receiving side will have the proxy
-     * object replaced with the registered (non-proxy) object.
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
+     * have the proxy object replaced with the registered (non-proxy) object.
      *
      * @see RemoteObject
      */
@@ -419,25 +422,20 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     }
 
     /**
-     * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be
-     * invoked remotely on the object with the specified ID in the ObjectSpace for the current connection.
+     * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be invoked remotely on the
+     * object with the specified ID in the ObjectSpace for the current connection.
      * <p/>
-     * This will REUSE a registration ID from the remote endpoint, <b>and will block</b> until the object
-     * has been returned.
+     * This will REUSE a registration ID from the remote endpoint, <b>and will block</b> until the object has been returned.
      * <p/>
-     * Methods that return a value will throw {@link TimeoutException} if the
-     * response is not received with the
-     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
+     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
+     * RemoteObject#setResponseTimeout(int) response timeout}.
      * <p/>
-     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
-     * (the default), then methods that return a value must not be called from
-     * the update thread for the connection. An exception will be thrown if this
-     * occurs. Methods with a void return value can be called on the update
-     * thread.
+     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false (the default), then methods that return a value must not be
+     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
+     * called on the update thread.
      * <p/>
-     * If a proxy returned from this method is part of an object graph sent over
-     * the network, the object graph on the receiving side will have the proxy
-     * object replaced with the registered (non-proxy) object.
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
+     * have the proxy object replaced with the registered (non-proxy) object.
      *
      * @see RemoteObject
      */

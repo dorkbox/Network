@@ -95,7 +95,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     private final RmiBridge rmiBridge;
 
     private final Map<Integer, RemoteObject> proxyIdCache = Collections.synchronizedMap(new WeakHashMap<Integer, RemoteObject>(8));
-    private final Map<Object, RemoteObject> proxyObjectCache = Collections.synchronizedMap(new WeakHashMap<Object, RemoteObject>(8));
 
 
     /**
@@ -956,28 +955,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         }
     }
 
-
-    /**
-     * Used by the LOCAL side, to get the proxy object from an implementation, as an interface
-     *
-     * @param type must be the interface the proxy will bind to
-     */
-    public
-    RemoteObject getProxyObject(final Object object, final Class<?> type) {
-        // we want to have a connection specific cache of IDs, using weak references.
-        RemoteObject remoteObject = proxyObjectCache.get(object);
-
-        if (remoteObject == null) {
-            // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-            int registeredId = getRegisteredId(object);
-
-            remoteObject = getProxyObject(registeredId, type); // has to be the interface
-            proxyObjectCache.put(object, remoteObject);
-        }
-
-        return remoteObject;
-    }
-
     /**
      * Used by the LOCAL side, to get the proxy object as an interface
      * @param type must be the interface the proxy will bind to
@@ -985,6 +962,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     public
     RemoteObject getProxyObject(final int objectID, final Class<?> type) {
         // we want to have a connection specific cache of IDs, using weak references.
+        // because this is PER CONNECTION, this is safe.
         RemoteObject remoteObject = proxyIdCache.get(objectID);
 
         if (remoteObject == null) {

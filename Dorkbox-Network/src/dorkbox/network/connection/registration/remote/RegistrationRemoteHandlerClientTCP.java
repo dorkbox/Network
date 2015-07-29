@@ -17,14 +17,15 @@ package dorkbox.network.connection.registration.remote;
 
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.Crypto;
+import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -45,16 +46,16 @@ import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 public
-class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient {
+class RegistrationRemoteHandlerClientTCP<C extends Connection> extends RegistrationRemoteHandlerClient<C> {
 
     private static final String DELETE_IP = "eleteIP"; // purposefully missing the "D", since that is a system parameter, which starts with "-D"
     private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(Crypto.ECC.p521_curve);
     private final ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
 
     public
-    RegistrationRemoteHandlerClientTCP(String name,
-                                       RegistrationWrapper registrationWrapper,
-                                       CryptoSerializationManager serializationManager) {
+    RegistrationRemoteHandlerClientTCP(final String name,
+                                       final RegistrationWrapper<C> registrationWrapper,
+                                       final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
 
         // check to see if we need to delete an IP address as commanded from the user prompt
@@ -108,7 +109,7 @@ class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient
      */
     @Override
     protected
-    void initChannel(Channel channel) {
+    void initChannel(final Channel channel) {
         this.logger.trace("Channel registered: {}",
                           channel.getClass()
                                  .getSimpleName());
@@ -125,7 +126,7 @@ class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient
      */
     @Override
     public
-    void channelActive(ChannelHandlerContext context) throws Exception {
+    void channelActive(final ChannelHandlerContext context) throws Exception {
         Logger logger2 = this.logger;
         if (logger2.isDebugEnabled()) {
             super.channelActive(context);
@@ -159,12 +160,13 @@ class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient
         channel.writeAndFlush(registration);
     }
 
+    @SuppressWarnings({"AutoUnboxing", "AutoBoxing"})
     @Override
     public
-    void channelRead(ChannelHandlerContext context, Object message) throws Exception {
+    void channelRead(final ChannelHandlerContext context, final Object message) throws Exception {
         Channel channel = context.channel();
 
-        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
+        RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
         Logger logger2 = this.logger;
         if (message instanceof Registration) {
             // make sure this connection was properly registered in the map. (IT SHOULD BE)

@@ -17,6 +17,7 @@ package dorkbox.network.connection.registration.remote;
 
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -46,7 +47,7 @@ import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 
 public
-class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer {
+class RegistrationRemoteHandlerServerTCP<C extends Connection> extends RegistrationRemoteHandlerServer<C> {
 
     private static final long ECDH_TIMEOUT = 10L * 60L * 60L * 1000L * 1000L * 1000L; // 10 minutes in nanoseconds
 
@@ -58,9 +59,9 @@ class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer
 
 
     public
-    RegistrationRemoteHandlerServerTCP(String name,
-                                       RegistrationWrapper registrationWrapper,
-                                       CryptoSerializationManager serializationManager) {
+    RegistrationRemoteHandlerServerTCP(final String name,
+                                       final RegistrationWrapper<C> registrationWrapper,
+                                       final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }
 
@@ -78,7 +79,7 @@ class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer
      * Rotates the ECDH key every 10 minutes, as this is a VERY expensive calculation to keep on doing for every connection.
      */
     private
-    AsymmetricCipherKeyPair getEchdKeyOnRotate(SecureRandom secureRandom) {
+    AsymmetricCipherKeyPair getEchdKeyOnRotate(final SecureRandom secureRandom) {
         if (System.nanoTime() - this.ecdhTimeout > ECDH_TIMEOUT) {
             synchronized (this.ecdhKeyLock) {
                 this.ecdhTimeout = System.nanoTime();

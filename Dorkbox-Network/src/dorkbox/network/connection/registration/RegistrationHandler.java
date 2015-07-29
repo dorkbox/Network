@@ -35,7 +35,7 @@ class RegistrationHandler<C extends Connection> extends ChannelInboundHandlerAda
 
 
     public
-    RegistrationHandler(String name, RegistrationWrapper<C> registrationWrapper) {
+    RegistrationHandler(final String name, RegistrationWrapper<C> registrationWrapper) {
         this.name = name + " Discovery/Registration";
         this.logger = org.slf4j.LoggerFactory.getLogger(this.name);
         this.registrationWrapper = registrationWrapper;
@@ -43,12 +43,12 @@ class RegistrationHandler<C extends Connection> extends ChannelInboundHandlerAda
 
     @SuppressWarnings("unused")
     protected
-    void initChannel(Channel channel) {
+    void initChannel(final Channel channel) {
     }
 
     @Override
     public final
-    void channelRegistered(ChannelHandlerContext context) throws Exception {
+    void channelRegistered(final ChannelHandlerContext context) throws Exception {
         boolean success = false;
         try {
             initChannel(context.channel());
@@ -65,28 +65,28 @@ class RegistrationHandler<C extends Connection> extends ChannelInboundHandlerAda
 
     @Override
     public
-    void channelActive(ChannelHandlerContext context) throws Exception {
+    void channelActive(final ChannelHandlerContext context) throws Exception {
         this.logger.error("ChannelActive NOT IMPLEMENTED!");
     }
 
     @Override
     public
-    void channelRead(ChannelHandlerContext context, Object message) throws Exception {
+    void channelRead(final ChannelHandlerContext context, Object message) throws Exception {
         this.logger.error("MessageReceived NOT IMPLEMENTED!");
     }
 
     @Override
     public
-    void channelReadComplete(ChannelHandlerContext context) throws Exception {
+    void channelReadComplete(final ChannelHandlerContext context) throws Exception {
         context.flush();
     }
 
     @Override
     public abstract
-    void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception;
+    void exceptionCaught(final ChannelHandlerContext context, final Throwable cause) throws Exception;
 
     public
-    MetaChannel shutdown(RegistrationWrapper<C> registrationWrapper, Channel channel) {
+    MetaChannel shutdown(final RegistrationWrapper<C> registrationWrapper, final Channel channel) {
         this.logger.error("SHUTDOWN HANDLER REACHED! SOMETHING MESSED UP! TRYING TO ABORT");
 
         // shutdown. Something messed up. Only reach this is something messed up.
