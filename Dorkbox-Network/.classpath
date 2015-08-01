@@ -5,7 +5,6 @@
 	<classpathentry excluding="src/|test/" kind="src" path=""/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/jsonbeans-0.2.jar"/>
-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="lib" path="/Dependencies/javassist/javassist.jar" sourcepath="/Dependencies/javassist/javassist-src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/logging/slf4j-api-1.7.5.jar" sourcepath="/Dependencies/logging/slf4j-api-1.7.5-sources.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/logging/logback-classic-1.0.13.jar" sourcepath="/Dependencies/logging/logback-classic-1.0.13-sources.zip"/>
@@ -23,8 +22,9 @@
 	<classpathentry kind="lib" path="/Dependencies/kryo/objenesis-2.1.jar" sourcepath="/Dependencies/kryo/objenesis-2.1-srcs.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/asm/asm-5.0.4.jar"/>
 	<classpathentry kind="lib" path="/Dependencies/JCTools/JCTools-v1.1-alpha-MTAQ.jar" sourcepath="/Dependencies/JCTools/JCTools-v1.1-alpha-MTAQ-src.zip"/>
-	<classpathentry kind="lib" path="/Dependencies/kryo/kryo3-debug.jar" sourcepath="/Dependencies/kryo/kryo3_src.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/kryo/reflectasm-1.11.0.jar" sourcepath="/Dependencies/kryo/reflectasm-1.11.0-sources.zip"/>
 	<classpathentry kind="lib" path="/Dependencies/dorkbox/object_pool/ObjectPool_v1.2.jar" sourcepath="/Dependencies/dorkbox/object_pool/ObjectPool_v1.2_src.zip"/>
+	<classpathentry kind="lib" path="/Dependencies/kryo/kryo-3.0.3.jar" sourcepath="/Dependencies/kryo/kryo-3.0.3-sources.zip"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.7"/>
 	<classpathentry kind="output" path="classes"/>
 </classpath>
