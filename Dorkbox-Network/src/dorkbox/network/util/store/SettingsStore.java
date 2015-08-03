@@ -15,6 +15,7 @@
  */
 package dorkbox.network.util.store;
 
+import dorkbox.util.OS;
 import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.storage.Storage;
@@ -41,6 +42,33 @@ class SettingsStore {
     void init(SerializationManager serializationManager, Storage storage) throws IOException;
 
 
+    private static String getCallingClass() {
+        // java < 8, it is SIGNIFICANTLY faster to call sun.reflect.Reflection.getCallerClass
+        // java >= 8, Thread.stackTrace was fixed, so it is the now preferred method
+        if (OS.javaVersion < 8) {
+            Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+
+            if (callerClass == null) {
+                return null;
+
+            }
+            return callerClass.getName();
+        } else {
+            StackTraceElement[] cause = Thread.currentThread().getStackTrace();
+            if (cause == null || cause.length < 4) {
+                return null;
+            }
+
+            StackTraceElement stackTraceElement = cause[4];
+            if (stackTraceElement == null) {
+                return null;
+            }
+
+            return stackTraceElement.getClassName();
+        }
+    }
+
+
     /**
      * the specified class (or AdminActions directly) MUST be the one that is calling our admin action
      * <p/>
@@ -50,12 +78,12 @@ class SettingsStore {
      */
     protected static
     void checkAccess(Class<?> callingClass) throws SecurityException {
-        Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+        String callerClass = getCallingClass();
 
         // starts with will allow for anonymous inner classes.
-        if (callerClass == null || !callerClass.getName()
+        if (callerClass == null || !callerClass
                                                .startsWith(callingClass.getName())) {
-            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass.getName());
+            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
             throw new SecurityException(message);
@@ -73,17 +101,16 @@ class SettingsStore {
      */
     protected static
     void checkAccess(Class<?> callingClass1, Class<?> callingClass2) throws SecurityException {
-        Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+        String callerClass = getCallingClass();
 
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            String callerClassName = callerClass.getName();
-            ok = callerClassName.startsWith(callingClass1.getName()) || callerClassName.startsWith(callingClass2.getName());
+            ok = callerClass.startsWith(callingClass1.getName()) || callerClass.startsWith(callingClass2.getName());
         }
 
         if (!ok) {
-            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass.getName());
+            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
             throw new SecurityException(message);
@@ -99,19 +126,18 @@ class SettingsStore {
      */
     protected static
     void checkAccess(Class<?> callingClass1, Class<?> callingClass2, Class<?> callingClass3) throws SecurityException {
-        Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+        String callerClass = getCallingClass();
 
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            String callerClassName = callerClass.getName();
-            ok = callerClassName.startsWith(callingClass1.getName()) ||
-                 callerClassName.startsWith(callingClass2.getName()) ||
-                 callerClassName.startsWith(callingClass3.getName());
+            ok = callerClass.startsWith(callingClass1.getName()) ||
+                 callerClass.startsWith(callingClass2.getName()) ||
+                 callerClass.startsWith(callingClass3.getName());
         }
 
         if (!ok) {
-            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass.getName());
+            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
             throw new SecurityException(message);
@@ -127,23 +153,21 @@ class SettingsStore {
      */
     protected static
     void checkAccess(Class<?>... callingClasses) throws SecurityException {
-        Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+        String callerClass = getCallingClass();
 
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            String callerClassName = callerClass.getName();
             for (Class<?> clazz : callingClasses) {
-                if (callerClassName.startsWith(clazz.getName())) {
+                if (callerClass.startsWith(clazz.getName())) {
                     ok = true;
                     break;
                 }
             }
         }
 
-
         if (!ok) {
-            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass.getName());
+            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
             throw new SecurityException(message);
@@ -163,12 +187,12 @@ class SettingsStore {
      */
     protected static
     boolean checkAccessNoExit(Class<?> callingClass) {
-        Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+        String callerClass = getCallingClass();
 
         // starts with will allow for anonymous inner classes.
-        if (callerClass == null || !callerClass.getName()
+        if (callerClass == null || !callerClass
                                                .startsWith(callingClass.getName())) {
-            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass.getName());
+            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
             return false;
@@ -190,17 +214,16 @@ class SettingsStore {
      */
     protected static
     boolean checkAccessNoExit(Class<?> callingClass1, Class<?> callingClass2) {
-        Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+        String callerClass = getCallingClass();
 
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            String callerClassName = callerClass.getName();
-            ok = callerClassName.startsWith(callingClass1.getName()) || callerClassName.startsWith(callingClass2.getName());
+            ok = callerClass.startsWith(callingClass1.getName()) || callerClass.startsWith(callingClass2.getName());
         }
 
         if (!ok) {
-            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass.getName());
+            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
             return false;
@@ -222,19 +245,18 @@ class SettingsStore {
      */
     protected static
     boolean checkAccessNoExit(Class<?> callingClass1, Class<?> callingClass2, Class<?> callingClass3) {
-        Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+        String callerClass = getCallingClass();
 
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            String callerClassName = callerClass.getName();
-            ok = callerClassName.startsWith(callingClass1.getName()) ||
-                 callerClassName.startsWith(callingClass2.getName()) ||
-                 callerClassName.startsWith(callingClass3.getName());
+            ok = callerClass.startsWith(callingClass1.getName()) ||
+                 callerClass.startsWith(callingClass2.getName()) ||
+                 callerClass.startsWith(callingClass3.getName());
         }
 
         if (!ok) {
-            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass.getName());
+            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
             return false;
@@ -252,14 +274,13 @@ class SettingsStore {
      */
     protected static
     boolean checkAccessNoExit(Class<?>... callingClasses) {
-        Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+        String callerClass = getCallingClass();
 
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            String callerClassName = callerClass.getName();
             for (Class<?> clazz : callingClasses) {
-                if (callerClassName.startsWith(clazz.getName())) {
+                if (callerClass.startsWith(clazz.getName())) {
                     ok = true;
                     break;
                 }
@@ -267,7 +288,7 @@ class SettingsStore {
         }
 
         if (!ok) {
-            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass.getName());
+            String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
             return false;
