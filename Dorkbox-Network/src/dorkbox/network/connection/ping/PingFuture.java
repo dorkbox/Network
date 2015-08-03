@@ -18,7 +18,6 @@ package dorkbox.network.connection.ping;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Ping;
 import dorkbox.network.connection.PingListener;
-import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.Promise;
 
@@ -77,10 +76,10 @@ class PingFuture implements Ping {
      * completed, the specified listener is notified immediately.
      */
     @Override
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public
     <C extends Connection> void addListener(PingListener<C> listener) {
-        this.promise.addListener((GenericFutureListener<? extends Future<? super PingTuple<? extends Connection>>>) listener);
+        this.promise.addListener((GenericFutureListener) listener);
     }
 
     /**
@@ -88,10 +87,10 @@ class PingFuture implements Ping {
      * specified listener is not associated with this future, this method does nothing and returns silently.
      */
     @Override
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public
     <C extends Connection> void removeListener(PingListener<C> listener) {
-        this.promise.removeListener((GenericFutureListener<? extends Future<? super PingTuple<? extends Connection>>>) listener);
+        this.promise.removeListener((GenericFutureListener) listener);
     }
 
     /**
