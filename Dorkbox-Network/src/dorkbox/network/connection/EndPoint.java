@@ -103,10 +103,16 @@ class EndPoint<C extends Connection> {
      * truncate and IPv6 routers drop a large packet.  That's why it is
      * safe to send small packets in UDP.
      * <p/>
-     * 512 is recommended to prevent fragmentation.
-     * This can be set higher on an internal lan! (or use UDT to make UDP transfers easy)
+     * To fit into that magic 576-byte MTU and avoid fragmentation, your
+     * UDP payload should be restricted by 576-60-8=508 bytes.
+     *
+     * This can be set higher on an internal lan! (or use UDT to make UDP
+     * transfers easy)
+     *
+     * DON'T go higher that 1400 over the internet, but 9k is possible
+     * with jumbo frames on a local network (if it's supported)
      */
-    public static int udpMaxSize = 512;
+    public static int udpMaxSize = 508;
 
 
     static {
