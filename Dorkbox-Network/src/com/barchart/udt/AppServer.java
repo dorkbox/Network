@@ -7,17 +7,16 @@
  */
 package com.barchart.udt;
 
+import com.barchart.udt.net.NetServerSocketUDT;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.barchart.udt.net.NetServerSocketUDT;
 
 public class AppServer {
 
@@ -44,10 +43,9 @@ public class AppServer {
 		final NetServerSocketUDT acceptorSocket = new NetServerSocketUDT();
 		acceptorSocket.bind(new InetSocketAddress("0.0.0.0", port), 256);
 
-		System.out.printf("server is ready at port: %d\n", port);
+		System.out.println("Server is ready at port: " + port);
 
 		while (true) {
-
 			final Socket clientSocket = acceptorSocket.accept();
 
 			// Start the read ahead background task
