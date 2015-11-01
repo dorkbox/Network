@@ -24,7 +24,6 @@ import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerS
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
-import dorkbox.util.Sys;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
@@ -95,7 +94,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
         super(options);
 
         Logger logger2 = this.logger;
-        if (Sys.isAndroid && options.udtPort > 0) {
+        if (OS.isAndroid() && options.udtPort > 0) {
             // Android does not support UDT.
             if (logger2.isInfoEnabled()) {
                 logger2.info("Android does not support UDT.");
@@ -187,7 +186,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
             EventLoopGroup boss;
             EventLoopGroup worker;
 
-            if (Sys.isAndroid) {
+            if (OS.isAndroid()) {
                 // android ONLY supports OIO (not NIO)
                 boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-boss-TCP", nettyGroup));
                 worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-worker-TCP", nettyGroup));
@@ -230,8 +229,8 @@ class Server<C extends Connection> extends EndPointServer<C> {
 
 
             // android screws up on this!!
-            this.tcpBootstrap.option(ChannelOption.TCP_NODELAY, !Sys.isAndroid);
-            this.tcpBootstrap.childOption(ChannelOption.TCP_NODELAY, !Sys.isAndroid);
+            this.tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid());
+            this.tcpBootstrap.childOption(ChannelOption.TCP_NODELAY, !OS.isAndroid());
 
             this.tcpBootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
         }
@@ -240,7 +239,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
         if (this.udpBootstrap != null) {
             EventLoopGroup worker;
 
-            if (Sys.isAndroid) {
+            if (OS.isAndroid()) {
                 // android ONLY supports OIO (not NIO)
                 worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-worker-UDP", nettyGroup));
                 this.udpBootstrap.channel(OioDatagramChannel.class);
