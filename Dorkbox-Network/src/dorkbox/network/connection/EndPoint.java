@@ -517,7 +517,7 @@ class EndPoint<C extends Connection> {
 
         EndPointTool put = this.toolMap.put(toolClass.getClass(), toolClass);
         if (put != null) {
-            throw new IllegalArgumentException("Tool must be unique! Unable to add tool");
+            throw new IllegalArgumentException("Tool must be unique! Unable to add tool '" + toolClass + "'");
         }
     }
 
