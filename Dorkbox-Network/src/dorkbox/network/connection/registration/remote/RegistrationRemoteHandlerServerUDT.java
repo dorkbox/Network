@@ -23,7 +23,7 @@ import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
-import dorkbox.util.crypto.Crypto;
+import dorkbox.util.crypto.CryptoAES;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
@@ -127,11 +127,11 @@ class RegistrationRemoteHandlerServerUDT<C extends Connection> extends Registrat
                 optimizeUtils.writeInt(idAsBytes, metaChannel.connectionID, true);
 
                 // now encrypt payload via AES
-                register.payload = Crypto.AES.encrypt(RegistrationRemoteHandler.getAesEngine(),
-                                                      metaChannel.aesKey,
-                                                      metaChannel.aesIV,
-                                                      idAsBytes,
-                                                      logger);
+                register.payload = CryptoAES.encrypt(RegistrationRemoteHandler.getAesEngine(),
+                                                     metaChannel.aesKey,
+                                                     metaChannel.aesIV,
+                                                     idAsBytes,
+                                                     logger);
 
                 // send back, so the client knows that UDP was ok. We include the encrypted connection ID, so the client knows it's a legit server
                 channel.writeAndFlush(register);

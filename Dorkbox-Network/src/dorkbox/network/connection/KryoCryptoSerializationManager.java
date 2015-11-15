@@ -15,7 +15,11 @@
  */
 package dorkbox.network.connection;
 
-import com.esotericsoftware.kryo.*;
+import com.esotericsoftware.kryo.ClassResolver;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoException;
+import com.esotericsoftware.kryo.Registration;
+import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory;
 import com.esotericsoftware.kryo.factories.SerializerFactory;
 import com.esotericsoftware.kryo.io.Input;
@@ -24,13 +28,26 @@ import com.esotericsoftware.kryo.serializers.CollectionSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
 import dorkbox.network.connection.ping.PingMessage;
-import dorkbox.network.rmi.*;
+import dorkbox.network.rmi.CachedMethod;
+import dorkbox.network.rmi.InvokeMethod;
+import dorkbox.network.rmi.InvokeMethodResult;
+import dorkbox.network.rmi.InvokeMethodSerializer;
+import dorkbox.network.rmi.RemoteInvocationHandler;
+import dorkbox.network.rmi.RemoteObjectSerializer;
+import dorkbox.network.rmi.RmiRegistration;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.crypto.Crypto;
+import dorkbox.util.crypto.CryptoAES;
 import dorkbox.util.objectPool.ObjectPool;
 import dorkbox.util.objectPool.ObjectPoolFactory;
 import dorkbox.util.objectPool.PoolableObject;
-import dorkbox.util.serialization.*;
+import dorkbox.util.serialization.ArraysAsListSerializer;
+import dorkbox.util.serialization.EccPrivateKeySerializer;
+import dorkbox.util.serialization.EccPublicKeySerializer;
+import dorkbox.util.serialization.FieldAnnotationAwareSerializer;
+import dorkbox.util.serialization.IesParametersSerializer;
+import dorkbox.util.serialization.IesWithCipherParametersSerializer;
+import dorkbox.util.serialization.IgnoreSerialization;
+import dorkbox.util.serialization.UnmodifiableCollectionsSerializer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.handler.codec.compression.CompressionException;
@@ -887,7 +904,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
                     logger2.trace("Encrypting data with - AES {}", connection);
                 }
 
-                Crypto.AES.encrypt(kryo.aesEngine, connection.getCryptoParameters(), bufferWithData, bufferTempData, length, logger);
+                CryptoAES.encrypt(kryo.aesEngine, connection.getCryptoParameters(), bufferWithData, bufferTempData, length, logger);
 
                 // swap buffers
                 ByteBuf tmp = bufferWithData;
@@ -962,7 +979,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
                 }
 
                 // length-1 to adjust for the magic byte
-                Crypto.AES.decrypt(kryo.aesEngine, connection.getCryptoParameters(), bufferWithData, bufferTempData, length - 1, logger);
+                CryptoAES.decrypt(kryo.aesEngine, connection.getCryptoParameters(), bufferWithData, bufferTempData, length - 1, logger);
 
                 // correct which buffers are used
                 bufferWithData = bufferTempData;

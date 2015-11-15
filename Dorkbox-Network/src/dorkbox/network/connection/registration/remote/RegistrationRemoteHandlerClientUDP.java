@@ -25,7 +25,7 @@ import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
-import dorkbox.util.crypto.Crypto;
+import dorkbox.util.crypto.CryptoAES;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -149,7 +149,7 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
                 Registration registration = (Registration) message;
 
                 // now decrypt channelID using AES
-                byte[] payload = Crypto.AES.decrypt(getAesEngine(), metaChannel.aesKey, metaChannel.aesIV, registration.payload, logger);
+                byte[] payload = CryptoAES.decrypt(getAesEngine(), metaChannel.aesKey, metaChannel.aesIV, registration.payload, logger);
 
                 OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
                 if (!optimizeUtils.canReadInt(payload)) {

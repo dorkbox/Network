@@ -19,7 +19,7 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.util.collections.IntMap;
-import dorkbox.util.crypto.Crypto;
+import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.exceptions.SecurityException;
 import org.bouncycastle.crypto.CipherParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
@@ -188,7 +188,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         }
         else {
             // COMPARE!
-            if (!Crypto.ECC.compare(publicKey, savedPublicKey)) {
+            if (!CryptoECC.compare(publicKey, savedPublicKey)) {
                 String byAddress;
                 try {
                     byAddress = InetAddress.getByAddress(hostAddress)

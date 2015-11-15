@@ -25,7 +25,8 @@ import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.MathUtil;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
-import dorkbox.util.crypto.Crypto;
+import dorkbox.util.crypto.CryptoAES;
+import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -51,10 +52,10 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
 
     private static final long ECDH_TIMEOUT = 10L * 60L * 60L * 1000L * 1000L * 1000L; // 10 minutes in nanoseconds
 
-    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(Crypto.ECC.p521_curve);
+    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.p521_curve);
     private final Object ecdhKeyLock = new Object();
     private final ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
-    private AsymmetricCipherKeyPair ecdhKeyPair = Crypto.ECC.generateKeyPair(eccSpec, new SecureRandom());
+    private AsymmetricCipherKeyPair ecdhKeyPair = CryptoECC.generateKeyPair(eccSpec, new SecureRandom());
     private volatile long ecdhTimeout = System.nanoTime();
 
 
@@ -69,7 +70,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
     IESEngine getEccEngine() {
         IESEngine iesEngine = this.eccEngineLocal.get();
         if (iesEngine == null) {
-            iesEngine = Crypto.ECC.createEngine();
+            iesEngine = CryptoECC.createEngine();
             this.eccEngineLocal.set(iesEngine);
         }
         return iesEngine;
@@ -83,7 +84,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
         if (System.nanoTime() - this.ecdhTimeout > ECDH_TIMEOUT) {
             synchronized (this.ecdhKeyLock) {
                 this.ecdhTimeout = System.nanoTime();
-                this.ecdhKeyPair = Crypto.ECC.generateKeyPair(eccSpec, secureRandom);
+                this.ecdhKeyPair = CryptoECC.generateKeyPair(eccSpec, secureRandom);
             }
         }
 
@@ -239,12 +240,12 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                     IESEngine encrypt = getEccEngine();
 
                     register.publicKey = registrationWrapper2.getPublicKey();
-                    register.eccParameters = Crypto.ECC.generateSharedParameters(secureRandom);
+                    register.eccParameters = CryptoECC.generateSharedParameters(secureRandom);
 
                     // now we have to ENCRYPT the AES key!
-                    register.eccParameters = Crypto.ECC.generateSharedParameters(secureRandom);
+                    register.eccParameters = CryptoECC.generateSharedParameters(secureRandom);
                     register.aesIV = metaChannel.aesIV;
-                    register.aesKey = Crypto.ECC.encrypt(encrypt,
+                    register.aesKey = CryptoECC.encrypt(encrypt,
                                                          registrationWrapper2.getPrivateKey(),
                                                          metaChannel.publicKey,
                                                          register.eccParameters,
@@ -253,7 +254,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
 
 
                     // now encrypt payload via AES
-                    register.payload = Crypto.AES.encrypt(getAesEngine(), metaChannel.aesKey, register.aesIV, combinedBytes, logger);
+                    register.payload = CryptoAES.encrypt(getAesEngine(), metaChannel.aesKey, register.aesIV, combinedBytes, logger);
 
                     channel.writeAndFlush(register);
 
@@ -276,7 +277,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                         if (metaChannel.ecdhKey != null) {
                             // now we have to decrypt the ECDH key using our TEMP AES keys
 
-                            byte[] payload = Crypto.AES.decrypt(getAesEngine(),
+                            byte[] payload = CryptoAES.decrypt(getAesEngine(),
                                                                 metaChannel.aesKey,
                                                                 metaChannel.aesIV,
                                                                 registration.payload,

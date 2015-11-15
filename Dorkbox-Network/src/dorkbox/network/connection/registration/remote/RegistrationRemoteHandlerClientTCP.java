@@ -24,7 +24,8 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.collections.IntMap;
-import dorkbox.util.crypto.Crypto;
+import dorkbox.util.crypto.CryptoAES;
+import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
@@ -49,7 +50,7 @@ public
 class RegistrationRemoteHandlerClientTCP<C extends Connection> extends RegistrationRemoteHandlerClient<C> {
 
     private static final String DELETE_IP = "eleteIP"; // purposefully missing the "D", since that is a system parameter, which starts with "-D"
-    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(Crypto.ECC.p521_curve);
+    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.p521_curve);
     private final ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
 
     public
@@ -98,7 +99,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
     IESEngine getEccEngine() {
         IESEngine iesEngine = this.eccEngineLocal.get();
         if (iesEngine == null) {
-            iesEngine = Crypto.ECC.createEngine();
+            iesEngine = CryptoECC.createEngine();
             this.eccEngineLocal.set(iesEngine);
         }
         return iesEngine;
@@ -207,12 +208,12 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     // setup crypto state
                     IESEngine decrypt = getEccEngine();
 
-                    byte[] aesKeyBytes = Crypto.ECC.decrypt(decrypt,
-                                                            registrationWrapper2.getPrivateKey(),
-                                                            registration.publicKey,
-                                                            registration.eccParameters,
-                                                            registration.aesKey,
-                                                            logger);
+                    byte[] aesKeyBytes = CryptoECC.decrypt(decrypt,
+                                                           registrationWrapper2.getPrivateKey(),
+                                                           registration.publicKey,
+                                                           registration.eccParameters,
+                                                           registration.aesKey,
+                                                           logger);
 
                     if (aesKeyBytes.length != 32) {
                         logger2.error("Invalid decryption of aesKey. Aborting.");
@@ -223,7 +224,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     }
 
                     // now decrypt payload using AES
-                    byte[] payload = Crypto.AES.decrypt(getAesEngine(), aesKeyBytes, registration.aesIV, registration.payload, logger);
+                    byte[] payload = CryptoAES.decrypt(getAesEngine(), aesKeyBytes, registration.aesIV, registration.payload, logger);
 
                     if (payload.length == 0) {
                         logger2.error("Invalid decryption of payload. Aborting.");
@@ -262,7 +263,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
 
                     // It is OK that we generate a new ECC keypair for ECDHE everytime that we connect. The server rotates keys every XXXX
                     // seconds, since this step is expensive.
-                    metaChannel.ecdhKey = Crypto.ECC.generateKeyPair(eccSpec, new SecureRandom());
+                    metaChannel.ecdhKey = CryptoECC.generateKeyPair(eccSpec, new SecureRandom());
 
                     // register the channel!
                     try {
@@ -307,7 +308,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     Output output = new Output(1024);
                     EccPublicKeySerializer.write(output, (ECPublicKeyParameters) metaChannel.ecdhKey.getPublic());
                     byte[] pubKeyAsBytes = output.toBytes();
-                    register.payload = Crypto.AES.encrypt(getAesEngine(), aesKeyBytes, registration.aesIV, pubKeyAsBytes, logger);
+                    register.payload = CryptoAES.encrypt(getAesEngine(), aesKeyBytes, registration.aesIV, pubKeyAsBytes, logger);
 
                     channel.writeAndFlush(register);
 

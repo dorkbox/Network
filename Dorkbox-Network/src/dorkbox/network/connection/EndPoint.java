@@ -31,7 +31,7 @@ import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
-import dorkbox.util.crypto.Crypto;
+import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -230,8 +230,8 @@ class EndPoint<C extends Connection> {
                     SecureRandom secureRandom = new SecureRandom(seedBytes);
                     secureRandom.nextBytes(seedBytes);
 
-                    this.logger.debug("Now generating ECC (" + Crypto.ECC.p521_curve + ") keys. Please wait!");
-                    AsymmetricCipherKeyPair generateKeyPair = Crypto.ECC.generateKeyPair(Crypto.ECC.p521_curve, secureRandom);
+                    this.logger.debug("Now generating ECC (" + CryptoECC.p521_curve + ") keys. Please wait!");
+                    AsymmetricCipherKeyPair generateKeyPair = CryptoECC.generateKeyPair(CryptoECC.p521_curve, secureRandom);
 
                     privateKey = (ECPrivateKeyParameters) generateKeyPair.getPrivate();
                     publicKey = (ECPublicKeyParameters) generateKeyPair.getPublic();
@@ -759,7 +759,7 @@ class EndPoint<C extends Connection> {
                 return false;
             }
         }
-        else if (!Crypto.ECC.compare(this.privateKey, other.privateKey)) {
+        else if (!CryptoECC.compare(this.privateKey, other.privateKey)) {
             return false;
         }
         if (this.publicKey == null) {
@@ -767,7 +767,7 @@ class EndPoint<C extends Connection> {
                 return false;
             }
         }
-        else if (!Crypto.ECC.compare(this.publicKey, other.publicKey)) {
+        else if (!CryptoECC.compare(this.publicKey, other.publicKey)) {
             return false;
         }
         return true;
