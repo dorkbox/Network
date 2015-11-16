@@ -806,6 +806,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             // this means we are creating a NEW object on the server, bound access to only this connection
             TCP(new RmiRegistration(remoteImplementationClass.getName())).flush();
 
+            //noinspection Duplicates
             try {
                 if (!objectRegistrationLatch.latch.await(2, TimeUnit.SECONDS)) {
                     final String errorMessage = "Timed out getting registration ID for: " + remoteImplementationClass;
@@ -842,6 +843,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             // this means that we are ACCESSING a remote object on the server, the server checks GLOBAL, then LOCAL for this object
             TCP(new RmiRegistration(objectId)).flush();
 
+            //noinspection Duplicates
             try {
                 if (!objectRegistrationLatch.latch.await(2, TimeUnit.SECONDS)) {
                     final String errorMessage = "Timed out getting registration for ID: " + objectId;
@@ -947,7 +949,13 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     public
     <T> int getRegisteredId(final T object) {
         // always check local before checking global, because less contention on the synchronization
-        int object1 = endPoint.globalRmiBridge.getRegisteredId(object);
+        RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
+
+        if (globalRmiBridge == null) {
+            throw new NullPointerException("Unable to call 'getRegisteredId' when the gloablRmiBridge is null!");
+        }
+
+        int object1 = globalRmiBridge.getRegisteredId(object);
         if (object1 == Integer.MAX_VALUE) {
             return rmiBridge.getRegisteredId(object);
         } else {
@@ -980,7 +988,13 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     public
     Object getImplementationObject(final int objectID) {
         if (RmiBridge.isGlobal(objectID)) {
-            return endPoint.globalRmiBridge.getRegisteredObject(objectID);
+            RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
+
+            if (globalRmiBridge == null) {
+                throw new NullPointerException("Unable to call 'getRegisteredId' when the gloablRmiBridge is null!");
+            }
+
+            return globalRmiBridge.getRegisteredObject(objectID);
         } else {
             return rmiBridge.getRegisteredObject(objectID);
         }
