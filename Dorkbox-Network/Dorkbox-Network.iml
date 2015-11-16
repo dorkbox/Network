@@ -22,7 +22,7 @@
       <src_folder value="file://$MODULE_DIR$/" expected_position="2" />
     </src_description>
   </component>
-  <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_1_6" inherit-compiler-output="true">
+  <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_1_7" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
@@ -35,8 +35,6 @@
     <orderEntry type="jdk" jdkName="1.7" jdkType="JavaSDK" />
     <orderEntry type="module" module-name="Dorkbox-Util" />
     <orderEntry type="module" module-name="JavaLauncher-Util" />
-    <orderEntry type="library" name="bouncyCastle bcpkix-jdk15on (1.51)" level="application" />
-    <orderEntry type="library" name="bouncyCastle bcprov-jdk15on (1.51)" level="application" />
     <orderEntry type="library" name="dorkbox annotations" level="application" />
     <orderEntry type="library" name="dorkbox object_pool" level="application" />
     <orderEntry type="library" name="asm (5.0.4)" level="application" />
@@ -50,6 +48,8 @@
     <orderEntry type="library" name="objenesis (2.1)" level="application" />
     <orderEntry type="library" name="JCTools (1.4 alpha MTAQ)" level="application" />
     <orderEntry type="library" name="junit-4.12" level="application" />
+    <orderEntry type="library" name="bouncyCastle bcpkix-jdk15on (1.53)" level="application" />
+    <orderEntry type="library" name="bouncyCastle bcprov-jdk15on (1.53)" level="application" />
   </component>
   <component name="org.twodividedbyzero.idea.findbugs">
     <option name="_basePreferences">
