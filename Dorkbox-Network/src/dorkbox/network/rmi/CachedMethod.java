@@ -41,6 +41,8 @@ import com.esotericsoftware.reflectasm.MethodAccess;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.util.ClassHelper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -50,10 +52,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public
 class CachedMethod {
+    private static final Logger logger = LoggerFactory.getLogger(CachedMethod.class);
+
     // not concurrent because they are setup during system initialization
     public static final Map<Class<?>, Class<?>> overriddenMethods = new HashMap<Class<?>, Class<?>>();
     public static final Map<Class<?>, Class<?>> overriddenReverseMethods = new HashMap<Class<?>, Class<?>>();
 
+    // the purpose of the method cache, is to accelerate looking up methods for specific class
     private static final Map<Class<?>, CachedMethod[]> methodCache = new ConcurrentHashMap<Class<?>, CachedMethod[]>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
 
     // type will be likely be the interface
@@ -81,8 +86,12 @@ class CachedMethod {
         // This MUST hold valid for both remote and local connection types.
 
         // To facilitate this functionality, for methods with the same name, the "overriding" method is the one that inherits the Connection
-        // interface as the first parameter.
+        // interface as the first parameter, and  .registerRemote(ifaceClass, implClass)  must be called.
+
+
+
         Map<Method, Method> overriddenMethods = getOverriddenMethods(type, methods);
+        final boolean hasOverriddenMethods = !overriddenMethods.isEmpty();
 
 
         MethodAccess methodAccess = null;
@@ -99,30 +108,36 @@ class CachedMethod {
             Class<?>[] parameterTypes = method.getParameterTypes();
             Class<?>[] asmParameterTypes = parameterTypes;
 
-            Method overriddenMethod = overriddenMethods.remove(method);
-            boolean overridden = overriddenMethod != null;
-            if (overridden) {
-                // we can override the details of this method BECAUSE (and only because) our kryo registration override will return
-                // the correct object for this overridden method to be called on.
-                method = overriddenMethod;
+            if (hasOverriddenMethods) {
+                Method overriddenMethod = overriddenMethods.remove(method);
+                boolean overridden = overriddenMethod != null;
+                if (overridden) {
+                    // we can override the details of this method BECAUSE (and only because) our kryo registration override will return
+                    // the correct object for this overridden method to be called on.
+                    method = overriddenMethod;
 
-                Class<?> overrideType = method.getDeclaringClass();
+                    Class<?> overrideType = method.getDeclaringClass();
 
-                if (kryo.getAsmEnabled() && !Util.isAndroid && Modifier.isPublic(overrideType.getModifiers())) {
-                    localMethodAccess = MethodAccess.get(overrideType);
-                    asmParameterTypes = method.getParameterTypes();
+                    if (kryo.getAsmEnabled() && !Util.isAndroid && Modifier.isPublic(overrideType.getModifiers())) {
+                        localMethodAccess = MethodAccess.get(overrideType);
+                        asmParameterTypes = method.getParameterTypes();
+                    }
                 }
             }
 
             CachedMethod cachedMethod = null;
             if (localMethodAccess != null) {
                 try {
+                    final int index = localMethodAccess.getIndex(method.getName(), asmParameterTypes);
+
                     AsmCachedMethod asmCachedMethod = new AsmCachedMethod();
-                    asmCachedMethod.methodAccessIndex = localMethodAccess.getIndex(method.getName(), asmParameterTypes);
+                    asmCachedMethod.methodAccessIndex = index;
                     asmCachedMethod.methodAccess = localMethodAccess;
                     cachedMethod = asmCachedMethod;
-                } catch (RuntimeException ignored) {
-                    ignored.printStackTrace();
+                } catch (RuntimeException e) {
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("Unable to use ReflectAsm for {}:{}", method.getDeclaringClass(), method.getName(), e);
+                    }
                 }
             }
 
@@ -162,8 +177,8 @@ class CachedMethod {
 
             for (Method origMethod : origMethods) {
                 String name = origMethod.getName();
-                Class<?>[] types = origMethod.getParameterTypes();
-                int modLength = types.length + 1;
+                Class<?>[] origTypes = origMethod.getParameterTypes();
+                int origLength = origTypes.length + 1;
 
                 METHOD_CHECK:
                 for (Method implMethod : implMethods) {
@@ -171,18 +186,24 @@ class CachedMethod {
                     Class<?>[] checkTypes = implMethod.getParameterTypes();
                     int checkLength = checkTypes.length;
 
-                    if (modLength != checkLength || !(name.equals(checkName))) {
+                    if (origLength != checkLength || !(name.equals(checkName))) {
                         continue;
                     }
 
                     // checkLength > 0
-                    Class<?> checkType = checkTypes[0];
-                    if (ClassHelper.hasInterface(dorkbox.network.connection.Connection.class, checkType)) {
+                    Class<?> shouldBeConnectionType = checkTypes[0];
+                    if (ClassHelper.hasInterface(dorkbox.network.connection.Connection.class, shouldBeConnectionType)) {
                         // now we check to see if our "check" method is equal to our "cached" method + Connection
-                        for (int k = 1; k < checkLength; k++) {
-                            if (types[k - 1] == checkTypes[k]) {
-                                overrideMap.put(origMethod, implMethod);
-                                break METHOD_CHECK;
+                        if (checkLength == 1) {
+                            overrideMap.put(origMethod, implMethod);
+                            break;
+                        }
+                        else {
+                            for (int k = 1; k < checkLength; k++) {
+                                if (origTypes[k - 1] == checkTypes[k]) {
+                                    overrideMap.put(origMethod, implMethod);
+                                    break METHOD_CHECK;
+                                }
                             }
                         }
                     }
@@ -284,7 +305,7 @@ class CachedMethod {
     public
     Object invoke(final Connection connection, Object target, Object[] args) throws IllegalAccessException, InvocationTargetException {
         // did we override our cached method?
-        if (origMethod == null) {
+        if (method == origMethod) {
             return this.method.invoke(target, args);
         }
         else {

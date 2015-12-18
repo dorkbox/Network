@@ -48,7 +48,7 @@ class AsmCachedMethod extends CachedMethod {
     public
     Object invoke(final Connection connection, Object target, Object[] args) throws IllegalAccessException, InvocationTargetException {
         try {
-            if (origMethod == null) {
+            if (origMethod == method) {
                 return this.methodAccess.invoke(target, this.methodAccessIndex, args);
             }
             else {

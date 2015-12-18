@@ -70,10 +70,16 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
  * the connection reference. The remote side (that initiates the RMI calls), MUST use the interface, and the implementation may override the
  * method, so that we add the connection as the first in the list of parameters.
  * <p/>
- * for example: Interface: foo(String x) Impl: foo(Connection c, String x)
+ * for example:
+ *   Interface: foo(String x)
+ *   Impl: foo(Connection c, String x)
  * <p/>
  * The implementation (if it exists, with the same name, and with the same signature+connection) will be called from the interface. This
  * MUST hold valid for both remote and local connection types.
+ *
+ * To facilitate this functionality, for methods with the same name, the "overriding" method is the one that inherits the Connection
+ * interface as the first parameter, and  CachedMethod.registerOverridden(ifaceClass, implClass)  must be called.
+ *
  *
  * @author Nathan Sweet <misc@n4te.com>, Nathan Robinson
  */
@@ -227,6 +233,7 @@ class RmiBridge {
      * @param connection
      *                 The remote side of this connection requested the invocation.
      */
+    @SuppressWarnings("NumericCastThatLosesPrecision")
     protected
     void invoke(final Connection connection, final Object target, final InvokeMethod invokeMethod) throws IOException {
         CachedMethod cachedMethod = invokeMethod.cachedMethod;

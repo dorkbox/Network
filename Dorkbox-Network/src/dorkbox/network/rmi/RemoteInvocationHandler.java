@@ -80,7 +80,7 @@ class RemoteInvocationHandler implements InvocationHandler {
     private boolean udt;
 
     private Byte lastResponseID;
-    private byte nextResponseId = 1;
+    private byte nextResponseId = (byte) 1;
 
     public
     RemoteInvocationHandler(final Connection connection, final int objectID) {
@@ -126,7 +126,7 @@ class RemoteInvocationHandler implements InvocationHandler {
                   .add(this.responseListener);
     }
 
-    @SuppressWarnings({"AutoUnboxing", "AutoBoxing"})
+    @SuppressWarnings({"AutoUnboxing", "AutoBoxing", "NumericCastThatLosesPrecision"})
     @Override
     public
     Object invoke(final Object proxy, final Method method, final Object[] args) throws Exception {
@@ -196,7 +196,7 @@ class RemoteInvocationHandler implements InvocationHandler {
 
         final Logger logger1 = RemoteInvocationHandler.logger;
 
-        EndPoint<Connection> endPoint = this.connection.getEndPoint();
+        EndPoint endPoint = this.connection.getEndPoint();
         final CryptoSerializationManager serializationManager = endPoint.getSerialization();
 
         InvokeMethod invokeMethod = new InvokeMethod();
@@ -224,16 +224,19 @@ class RemoteInvocationHandler implements InvocationHandler {
 
             // In situations where we want to pass in the Connection (to an RMI method), we have to be able to override method A, with method B.
             // This is to support calling RMI methods from an interface (that does pass the connection reference) to
-            // an implementation, that DOES pass the connection reference. The remote side (that initiates the RMI calls), MUST use
-            // the interface, and the implementation may override the method, so that we add the connection as the first in
+            // an implType, that DOES pass the connection reference. The remote side (that initiates the RMI calls), MUST use
+            // the interface, and the implType may override the method, so that we add the connection as the first in
             // the list of parameters.
             //
             // for example:
             // Interface: foo(String x)
             //      Impl: foo(Connection c, String x)
             //
-            // The implementation (if it exists, with the same name, and with the same signature+connection) will be called from the interface.
+            // The implType (if it exists, with the same name, and with the same signature+connection) will be called from the interface.
             // This MUST hold valid for both remote and local connection types.
+
+            // To facilitate this functionality, for methods with the same name, the "overriding" method is the one that inherits the Connection
+            // interface as the first parameter, and  .registerRemote(ifaceClass, implClass)  must be called.
 
             if (checkMethod.equals(method)) {
                 invokeMethod.cachedMethod = cachedMethod;
@@ -249,28 +252,28 @@ class RemoteInvocationHandler implements InvocationHandler {
 
         // An invocation doesn't need a response is if it's async and no return values or exceptions are wanted back.
         boolean needsResponse = !this.udp && (this.transmitReturnValue || this.transmitExceptions || !this.nonBlocking);
-        byte responseID = 0;
+        byte responseID = (byte) 0;
         if (needsResponse) {
             synchronized (this) {
                 // Increment the response counter and put it into the low bits of the responseID.
                 responseID = this.nextResponseId++;
                 if (this.nextResponseId > RmiBridge.responseIdMask) {
-                    this.nextResponseId = 1;
+                    this.nextResponseId = (byte) 1;
                 }
                 this.pendingResponses[responseID] = true;
             }
             // Pack other data into the high bits.
             byte responseData = responseID;
             if (this.transmitReturnValue) {
-                responseData |= RmiBridge.returnValueMask;
+                responseData |= (byte) RmiBridge.returnValueMask;
             }
             if (this.transmitExceptions) {
-                responseData |= RmiBridge.returnExceptionMask;
+                responseData |= (byte) RmiBridge.returnExceptionMask;
             }
             invokeMethod.responseData = responseData;
         }
         else {
-            invokeMethod.responseData = 0; // A response data of 0 means to not respond.
+            invokeMethod.responseData = (byte) 0; // A response data of 0 means to not respond.
         }
 
         if (this.udp) {
@@ -314,13 +317,13 @@ class RemoteInvocationHandler implements InvocationHandler {
                     return Boolean.FALSE;
                 }
                 if (returnType == float.class) {
-                    return 0f;
+                    return 0.0f;
                 }
                 if (returnType == char.class) {
                     return (char) 0;
                 }
                 if (returnType == long.class) {
-                    return 0l;
+                    return 0L;
                 }
                 if (returnType == short.class) {
                     return (short) 0;
@@ -329,7 +332,7 @@ class RemoteInvocationHandler implements InvocationHandler {
                     return (byte) 0;
                 }
                 if (returnType == double.class) {
-                    return 0d;
+                    return 0.0d;
                 }
             }
             return null;
