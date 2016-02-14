@@ -31,7 +31,7 @@ import java.io.IOException;
  * <p/>
  * A static "create" method, with any number of parameters, is required to create this class (which is done via reflection)
  */
-@SuppressWarnings({"deprecation", "unused"})
+@SuppressWarnings({"deprecation", "unused", "Duplicates"})
 public abstract
 class SettingsStore {
 
@@ -46,7 +46,7 @@ class SettingsStore {
         // java < 8, it is SIGNIFICANTLY faster to call sun.reflect.Reflection.getCallerClass
         // java >= 8, Thread.stackTrace was fixed, so it is the now preferred method
         if (OS.javaVersion < 8) {
-            Class<?> callerClass = sun.reflect.Reflection.getCallerClass(3);
+            Class<?> callerClass = sun.reflect.Reflection.getCallerClass(4);
 
             if (callerClass == null) {
                 return null;
@@ -81,8 +81,7 @@ class SettingsStore {
         String callerClass = getCallingClass();
 
         // starts with will allow for anonymous inner classes.
-        if (callerClass == null || !callerClass
-                                               .startsWith(callingClass.getName())) {
+        if (callerClass == null || !callerClass.equals(callingClass.getName())) {
             String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
@@ -106,7 +105,7 @@ class SettingsStore {
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            ok = callerClass.startsWith(callingClass1.getName()) || callerClass.startsWith(callingClass2.getName());
+            ok = callerClass.equals(callingClass1.getName()) || callerClass.equals(callingClass2.getName());
         }
 
         if (!ok) {
@@ -131,9 +130,9 @@ class SettingsStore {
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            ok = callerClass.startsWith(callingClass1.getName()) ||
-                 callerClass.startsWith(callingClass2.getName()) ||
-                 callerClass.startsWith(callingClass3.getName());
+            ok = callerClass.equals(callingClass1.getName()) ||
+                 callerClass.equals(callingClass2.getName()) ||
+                 callerClass.equals(callingClass3.getName());
         }
 
         if (!ok) {
@@ -159,7 +158,7 @@ class SettingsStore {
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
             for (Class<?> clazz : callingClasses) {
-                if (callerClass.startsWith(clazz.getName())) {
+                if (callerClass.equals(clazz.getName())) {
                     ok = true;
                     break;
                 }
@@ -190,8 +189,7 @@ class SettingsStore {
         String callerClass = getCallingClass();
 
         // starts with will allow for anonymous inner classes.
-        if (callerClass == null || !callerClass
-                                               .startsWith(callingClass.getName())) {
+        if (callerClass == null || !callerClass.equals(callingClass.getName())) {
             String message = "Security violation by: " + (callerClass == null ? "???" : callerClass);
             Logger logger = LoggerFactory.getLogger(SettingsStore.class);
             logger.error(message);
@@ -219,7 +217,7 @@ class SettingsStore {
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            ok = callerClass.startsWith(callingClass1.getName()) || callerClass.startsWith(callingClass2.getName());
+            ok = callerClass.equals(callingClass1.getName()) || callerClass.equals(callingClass2.getName());
         }
 
         if (!ok) {
@@ -250,9 +248,9 @@ class SettingsStore {
         boolean ok = false;
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
-            ok = callerClass.startsWith(callingClass1.getName()) ||
-                 callerClass.startsWith(callingClass2.getName()) ||
-                 callerClass.startsWith(callingClass3.getName());
+            ok = callerClass.equals(callingClass1.getName()) ||
+                 callerClass.equals(callingClass2.getName()) ||
+                 callerClass.equals(callingClass3.getName());
         }
 
         if (!ok) {
@@ -280,7 +278,7 @@ class SettingsStore {
         // starts with will allow for anonymous inner classes.
         if (callerClass != null) {
             for (Class<?> clazz : callingClasses) {
-                if (callerClass.startsWith(clazz.getName())) {
+                if (callerClass.equals(clazz.getName())) {
                     ok = true;
                     break;
                 }
