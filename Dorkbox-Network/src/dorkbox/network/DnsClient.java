@@ -35,6 +35,7 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.handler.codec.dns.*;
 import io.netty.resolver.dns.DnsNameResolver;
+import io.netty.resolver.dns.DnsServerAddresses;
 import io.netty.util.concurrent.Future;
 import io.netty.util.internal.PlatformDependent;
 import org.slf4j.Logger;
@@ -155,8 +156,9 @@ class DnsClient {
             channelType = NioDatagramChannel.class;
         }
 
-        resolver = new DnsNameResolver(group.next(), channelType, nameServerAddresses);
-        resolver.setMaxTriesPerQuery(nameServerAddresses.size());
+
+
+        resolver = new DnsNameResolver(group.next(), channelType, DnsServerAddresses.sequential(nameServerAddresses));
         // for now, we only support ipv4
         resolver.setResolveAddressTypes(InternetProtocolFamily.IPv4);
 
@@ -219,16 +221,13 @@ class DnsClient {
         // we can use the included DNS resolver.
         if (value == DnsRecordType.A.intValue() || value == DnsRecordType.AAAA.intValue()) {
             // use "resolve", since it handles A/AAAA records
-            final Future<InetSocketAddress> resolve = resolver.resolve(hostname, 1025); // made up port, because it doesn't matter
-            final Future<InetSocketAddress> result = resolve.awaitUninterruptibly();
+            final Future<InetAddress> resolve = resolver.resolve(hostname); // made up port, because it doesn't matter
+            final Future<InetAddress> result = resolve.awaitUninterruptibly();
 
             // now return whatever value we had
             if (result.isSuccess() && result.isDone()) {
                 try {
-                    final InetAddress address = result.getNow()
-                                                      .getAddress();
-
-                    return (T) address.getHostAddress();
+                    return (T) result.getNow().getHostAddress();
                 } catch (Exception e) {
                     logger.error("Could not ask question to DNS server", e);
                     return null;
