@@ -80,6 +80,12 @@ class EndPoint<C extends Connection> {
     protected static final String stopTreadName = "::STOP_THREAD::";
 
     /**
+     * The HIGH and LOW watermark points for connections
+     */
+    protected static final int WRITE_BUFF_HIGH = 32 * 1024;
+    protected static final int WRITE_BUFF_LOW = 8 * 1024;
+
+    /**
      * this can be changed to a more specialized value, if necessary
      */
     public static int DEFAULT_THREAD_POOL_SIZE = Runtime.getRuntime()
