@@ -26,14 +26,12 @@ import java.util.List;
 
 public
 class KryoDecoder extends ByteToMessageDecoder {
-    private final OptimizeUtilsByteBuf optimize;
     private final CryptoSerializationManager serializationManager;
 
     public
     KryoDecoder(CryptoSerializationManager serializationManager) {
         super();
         this.serializationManager = serializationManager;
-        this.optimize = OptimizeUtilsByteBuf.get();
     }
 
     @SuppressWarnings("unused")
@@ -51,11 +49,10 @@ class KryoDecoder extends ByteToMessageDecoder {
     @Override
     protected
     void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-        OptimizeUtilsByteBuf optimize = this.optimize;
 
         // Make sure if the length field was received,
         // and read the length of the next object from the socket.
-        int lengthLength = optimize.canReadInt(in);
+        int lengthLength = OptimizeUtilsByteBuf.canReadInt(in);
         int readableBytes = in.readableBytes();  // full length of available bytes.
 
         if (lengthLength == 0 || readableBytes < 2 || readableBytes < lengthLength) {
@@ -78,7 +75,7 @@ class KryoDecoder extends ByteToMessageDecoder {
 
 
         // Read the length field.
-        int length = optimize.readInt(in, true);
+        int length = OptimizeUtilsByteBuf.readInt(in, true);
         readableBytes = in.readableBytes(); // have to adjust readable bytes, since we just read an int off the buffer.
 
 
@@ -119,8 +116,8 @@ class KryoDecoder extends ByteToMessageDecoder {
             // how many more objects?? The first time, it can be off, because we already KNOW it's > 0.
             //  (That's how we got here to begin with)
             while (readableBytes > 0) {
-                if (optimize.canReadInt(in) > 0) {
-                    length = optimize.readInt(in, true);
+                if (OptimizeUtilsByteBuf.canReadInt(in) > 0) {
+                    length = OptimizeUtilsByteBuf.readInt(in, true);
 
                     if (length <= 0) {
                         // throw new IllegalStateException("Kryo DecoderTCP had a read length of 0");
@@ -153,7 +150,7 @@ class KryoDecoder extends ByteToMessageDecoder {
             // NOW add each one of the NEW objects to the array!
 
             for (int i = 0; i < objectCount; i++) {
-                length = optimize.readInt(in, true); // object LENGTH
+                length = OptimizeUtilsByteBuf.readInt(in, true); // object LENGTH
 
                 // however many we need to
                 out.add(readObject(this.serializationManager, ctx, in, length));

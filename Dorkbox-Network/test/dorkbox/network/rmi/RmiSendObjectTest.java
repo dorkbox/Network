@@ -54,7 +54,7 @@ class RmiSendObjectTest extends BaseTest {
                   public
                   void received(Connection connection, OtherObjectImpl object) {
                       // The test is complete when the client sends the OtherObject instance.
-                      if (object.value() == 12.34f) {
+                      if (object.value() == 12.34F) {
                           stopEndPoints();
                       } else {
                           fail("Incorrect object value");
@@ -86,14 +86,14 @@ class RmiSendObjectTest extends BaseTest {
 
                                   test.setOther(43.21f);
                                   // Normal remote method call.
-                                  assertEquals(43.21f, test.other(), .0001f);
+                                  assertEquals(43.21f, test.other(), 0.0001F);
 
                                   // Make a remote method call that returns another remote proxy object.
                                   OtherObject otherObject = test.getOtherObject();
                                   // Normal remote method call on the second object.
                                   otherObject.setValue(12.34f);
                                   float value = otherObject.value();
-                                  assertEquals(12.34f, value, .0001f);
+                                  assertEquals(12.34f, value, 0.0001F);
 
                                   // When a remote proxy object is sent, the other side receives its actual remote object.
                                   // we have to manually flush, since we are in a separate thread that does not auto-flush.

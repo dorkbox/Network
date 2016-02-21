@@ -71,6 +71,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     for (int i = 0; i < split.length; i++) {
                         int asInt = Integer.parseInt(split[i]);
                         if (asInt >= 0 && asInt <= 255) {
+                            //noinspection NumericCastThatLosesPrecision
                             address[i] = (byte) Integer.parseInt(split[i]);
                         }
                         else {
@@ -234,8 +235,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                         return;
                     }
 
-                    OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
-                    if (!optimizeUtils.canReadInt(payload)) {
+                    if (!OptimizeUtilsByteArray.canReadInt(payload)) {
                         logger2.error("Invalid decryption of connection ID. Aborting.");
                         shutdown(registrationWrapper2, channel);
 
@@ -243,8 +243,8 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                         return;
                     }
 
-                    metaChannel.connectionID = optimizeUtils.readInt(payload, true);
-                    int intLength = optimizeUtils.intLength(metaChannel.connectionID, true);
+                    metaChannel.connectionID = OptimizeUtilsByteArray.readInt(payload, true);
+                    int intLength = OptimizeUtilsByteArray.intLength(metaChannel.connectionID, true);
 
                     /*
                      * Diffie-Hellman-Merkle key exchange for the AES key

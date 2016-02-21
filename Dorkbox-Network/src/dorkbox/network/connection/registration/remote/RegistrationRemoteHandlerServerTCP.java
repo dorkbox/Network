@@ -206,7 +206,6 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                     // save off encryption handshake info
                     metaChannel.publicKey = registration.publicKey;
 
-                    OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
                     // use ECC to create an AES key, which is used to encrypt the ECDH public key and the connectionID
 
                     /*
@@ -224,9 +223,9 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
 
                     // save off the connectionID as a byte array
 
-                    int intLength = optimizeUtils.intLength(connectionID, true);
+                    int intLength = OptimizeUtilsByteArray.intLength(connectionID, true);
                     byte[] idAsBytes = new byte[intLength];
-                    optimizeUtils.writeInt(idAsBytes, connectionID, true);
+                    OptimizeUtilsByteArray.writeInt(idAsBytes, connectionID, true);
 
                     byte[] combinedBytes = Arrays.concatenate(idAsBytes, pubKeyAsBytes);
 

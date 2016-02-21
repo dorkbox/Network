@@ -251,10 +251,9 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
                     Registration register = new Registration();
 
                     // save off the connectionID as a byte array, then encrypt it
-                    OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
-                    int intLength = optimizeUtils.intLength(metaChannel.connectionID, true);
+                    int intLength = OptimizeUtilsByteArray.intLength(metaChannel.connectionID, true);
                     byte[] idAsBytes = new byte[intLength];
-                    optimizeUtils.writeInt(idAsBytes, metaChannel.connectionID, true);
+                    OptimizeUtilsByteArray.writeInt(idAsBytes, metaChannel.connectionID, true);
 
                     // now encrypt payload via AES
                     register.payload = CryptoAES.encrypt(RegistrationRemoteHandler.getAesEngine(),

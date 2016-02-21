@@ -151,8 +151,7 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
                 // now decrypt channelID using AES
                 byte[] payload = CryptoAES.decrypt(getAesEngine(), metaChannel.aesKey, metaChannel.aesIV, registration.payload, logger);
 
-                OptimizeUtilsByteArray optimizeUtils = OptimizeUtilsByteArray.get();
-                if (!optimizeUtils.canReadInt(payload)) {
+                if (!OptimizeUtilsByteArray.canReadInt(payload)) {
                     this.logger.error("Invalid decryption of connection ID. Aborting.");
                     shutdown(registrationWrapper2, channel);
 
@@ -160,7 +159,7 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
                     return;
                 }
 
-                Integer connectionID = optimizeUtils.readInt(payload, true);
+                Integer connectionID = OptimizeUtilsByteArray.readInt(payload, true);
 
                 MetaChannel metaChannel2 = null;
                 try {

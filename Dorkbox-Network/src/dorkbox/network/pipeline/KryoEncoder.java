@@ -30,14 +30,12 @@ public
 class KryoEncoder extends MessageToByteEncoder<Object> {
     private static final int reservedLengthIndex = 4;
     private final CryptoSerializationManager serializationManager;
-    private final OptimizeUtilsByteBuf optimize;
 
 
     public
     KryoEncoder(final CryptoSerializationManager serializationManager) {
-        super();
+        super(false); // just use direct buffers anyways. When using Heap buffers, they because chunked and the backing array is invalid.
         this.serializationManager = serializationManager;
-        this.optimize = OptimizeUtilsByteBuf.get();
     }
 
     // the crypto writer will override this
@@ -72,12 +70,11 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
                 writeObject(this.serializationManager, context, msg, out);
 
                 // now set the frame (if it's TCP)!
-                int length = out.readableBytes() - startIndex -
-                             reservedLengthIndex; // (reservedLengthLength) 4 is the reserved space for the integer.
+                // (reservedLengthLength) 4 is the reserved space for the integer.
+                int length = out.readableBytes() - startIndex - reservedLengthIndex;
 
                 // specify the header.
-                OptimizeUtilsByteBuf optimize = this.optimize;
-                int lengthOfTheLength = optimize.intLength(length, true);
+                int lengthOfTheLength = OptimizeUtilsByteBuf.intLength(length, true);
 
                 // 4 was the position specified by the kryoEncoder. It was to make room for the integer. DOES NOT SUPPORT NEGATIVE NUMBERS!
                 int newIndex = startIndex + reservedLengthIndex - lengthOfTheLength;
@@ -86,7 +83,7 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
                 out.writerIndex(newIndex);
 
                 // do the optimized length thing!
-                optimize.writeInt(out, length, true);
+                OptimizeUtilsByteBuf.writeInt(out, length, true);
                 out.setIndex(newIndex, oldIndex);
             } catch (KryoException ex) {
                 context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass()
