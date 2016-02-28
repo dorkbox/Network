@@ -78,6 +78,7 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
         // AES key & IV (only for networked connections)
         this.cryptoAesKeyAndIV = new ParametersWithIV(new KeyParameter(metaChannel.aesKey), metaChannel.aesIV);
         // TODO: have to be able to get a NEW IV, so we can rotate keys!
+        // NOTE: IV's must be a NONCE! (ie: one time use only!!!)
     }
 
     public final
