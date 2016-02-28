@@ -19,9 +19,9 @@ public
 interface ConnectionPoint {
 
     /**
-     * Waits for the last write to complete. Useful when sending large amounts of data at once.
+     * @return true if the channel is writable. Useful when sending large amounts of data at once.
      */
-    void waitForWriteToComplete();
+    boolean isWritable();
 
     /**
      * Flushes the contents of the TCP/UDP/UDT/etc pipes to the wire.

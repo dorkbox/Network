@@ -34,11 +34,11 @@ class ServerConnectionBridge<C extends Connection>
     /**
      * Not implemented, since this would cause horrendous problems.
      *
-     * @see dorkbox.network.connection.ConnectionPoint#waitForWriteToComplete()
+     * @see dorkbox.network.connection.ConnectionPoint#isWritable()
      */
     @Override
     public
-    void waitForWriteToComplete() {
+    boolean isWritable() {
         throw new UnsupportedOperationException("Method not implemented");
     }
 

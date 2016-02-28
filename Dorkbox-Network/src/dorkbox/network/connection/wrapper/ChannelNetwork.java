@@ -17,7 +17,7 @@ package dorkbox.network.connection.wrapper;
 
 import dorkbox.network.connection.ConnectionPointWriter;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelPromise;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -26,60 +26,51 @@ class ChannelNetwork implements ConnectionPointWriter {
 
     private final Channel channel;
     private final AtomicBoolean shouldFlush = new AtomicBoolean(false);
-
-    private volatile ChannelFuture lastWriteFuture;
-
+    private final ChannelPromise voidPromise;
 
     public
     ChannelNetwork(Channel channel) {
         this.channel = channel;
+        voidPromise = channel.voidPromise();
     }
 
     /**
-     * Write an object to the underlying channel
+     * Write an object to the underlying channel. If the underlying channel is NOT writable, this will block unit it is writable
      */
     @Override
     public
     void write(Object object) {
-        this.lastWriteFuture = this.channel.write(object);
-        this.shouldFlush.set(true);
+        // we don't care, or want to save the future. This is so GC is less.
+        channel.write(object, voidPromise);
+        shouldFlush.set(true);
     }
 
     /**
-     * Waits for the last write to complete. Useful when sending large amounts of data at once.
-     * <b>DO NOT use this in the same thread as receiving messages! It will deadlock.</b>
+     * @return true if the channel is writable. Useful when sending large amounts of data at once.
      */
     @Override
     public
-    void waitForWriteToComplete() {
-        if (this.lastWriteFuture != null) {
-            this.lastWriteFuture.awaitUninterruptibly();
-        }
+    boolean isWritable() {
+        return channel.isWritable();
     }
 
     @Override
     public
     void flush() {
-        if (this.shouldFlush.compareAndSet(true, false)) {
-            this.channel.flush();
+        if (shouldFlush.compareAndSet(true, false)) {
+            channel.flush();
         }
     }
 
     public
     void close(long maxShutdownWaitTimeInMilliSeconds) {
-        // Wait until all messages are flushed before closing the channel.
-        if (this.lastWriteFuture != null) {
-            this.lastWriteFuture.awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
-            this.lastWriteFuture = null;
-        }
-
-        this.shouldFlush.set(false);
-        this.channel.close()
-                    .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+        shouldFlush.set(false);
+        channel.close()
+               .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
     }
 
     public
     int id() {
-        return this.channel.hashCode();
+        return channel.hashCode();
     }
 }

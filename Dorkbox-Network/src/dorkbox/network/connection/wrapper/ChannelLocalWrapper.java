@@ -50,10 +50,14 @@ class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, Co
         this.shouldFlush.set(true);
     }
 
+    /**
+     * @return true if the channel is writable. Useful when sending large amounts of data at once.
+     */
     @Override
     public
-    void waitForWriteToComplete() {
+    boolean isWritable() {
         // it's immediate, since it's in the same JVM.
+        return true;
     }
 
     @Override

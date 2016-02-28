@@ -41,12 +41,12 @@ class ChannelNull implements ConnectionPointWriter {
     }
 
     /**
-     * Waits for the last write to complete. Useful when sending large amounts of data at once.
-     * <b>DO NOT use this in the same thread as receiving messages! It will deadlock.</b>
+     * @return true if the channel is writable. Useful when sending large amounts of data at once.
      */
     @Override
     public
-    void waitForWriteToComplete() {
+    boolean isWritable() {
+        return true;
     }
 
     @Override

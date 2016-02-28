@@ -66,6 +66,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
     private final org.slf4j.Logger logger;
 
+    private final AtomicBoolean writableSignalNeeded = new AtomicBoolean(false);
+    private final Object writableLock = new Object();
+
     private final AtomicBoolean closeInProgress = new AtomicBoolean(false);
     private final AtomicBoolean alreadyClosed = new AtomicBoolean(false);
     private final Object closeInProgressLock = new Object();
@@ -275,6 +278,39 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         return this.channelWrapper.udt() != null;
     }
 
+    @Override
+    public
+    void channelWritabilityChanged(final ChannelHandlerContext ctx) throws Exception {
+        super.channelWritabilityChanged(ctx);
+
+        // needed to place back-pressure when writing too much data to the connection
+        if (writableSignalNeeded.getAndSet(false)) {
+            synchronized (writableLock) {
+                writableLock.notifyAll();
+            }
+        }
+    }
+
+    /**
+     * needed to place back-pressure when writing too much data to the connection.
+     *
+     * This blocks until we are writable again
+     */
+    private
+    void controlBackPressure(ConnectionPointWriter c) {
+        if (!c.isWritable()) {
+            writableSignalNeeded.set(true);
+
+            synchronized (writableLock) {
+                try {
+                    writableLock.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
     /**
      * Expose methods to send objects to a destination.
      */
@@ -309,6 +345,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                 logger2.trace("Sending TCP {}", message);
             }
             ConnectionPointWriter tcp = this.channelWrapper.tcp();
+
+            // needed to place back-pressure when writing too much data to the connection
+            controlBackPressure(tcp);
             tcp.write(message);
             return tcp;
         }
@@ -319,7 +358,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             // we have to return something, otherwise dependent code will throw a null pointer exception
             return ChannelNull.get();
         }
-
     }
 
     /**
@@ -334,6 +372,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                 logger2.trace("Sending UDP {}", message);
             }
             ConnectionPointWriter udp = this.channelWrapper.udp();
+
+            // needed to place back-pressure when writing too much data to the connection
+            controlBackPressure(udp);
             udp.write(message);
             return udp;
         }
@@ -358,6 +399,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                 logger2.trace("Sending UDT {}", message);
             }
             ConnectionPointWriter udt = this.channelWrapper.udt();
+            // needed to place back-pressure when writing too much data to the connection
+            controlBackPressure(udt);
             udt.write(message);
             return udt;
         }
