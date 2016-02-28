@@ -15,7 +15,12 @@
  */
 package dorkbox.network;
 
-import dorkbox.network.dns.decoder.*;
+import dorkbox.network.dns.decoder.DomainDecoder;
+import dorkbox.network.dns.decoder.MailExchangerDecoder;
+import dorkbox.network.dns.decoder.RecordDecoder;
+import dorkbox.network.dns.decoder.ServiceDecoder;
+import dorkbox.network.dns.decoder.StartOfAuthorityDecoder;
+import dorkbox.network.dns.decoder.TextDecoder;
 import dorkbox.network.dns.record.MailExchangerRecord;
 import dorkbox.network.dns.record.ServiceRecord;
 import dorkbox.network.dns.record.StartOfAuthorityRecord;
@@ -25,6 +30,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -33,8 +39,14 @@ import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.InternetProtocolFamily;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
-import io.netty.handler.codec.dns.*;
+import io.netty.handler.codec.dns.DefaultDnsQuestion;
+import io.netty.handler.codec.dns.DnsRecord;
+import io.netty.handler.codec.dns.DnsRecordType;
+import io.netty.handler.codec.dns.DnsResponse;
+import io.netty.handler.codec.dns.DnsResponseCode;
+import io.netty.handler.codec.dns.DnsSection;
 import io.netty.resolver.dns.DnsNameResolver;
+import io.netty.resolver.dns.DnsNameResolverBuilder;
 import io.netty.resolver.dns.DnsServerAddresses;
 import io.netty.util.concurrent.Future;
 import io.netty.util.internal.PlatformDependent;
@@ -44,7 +56,12 @@ import java.net.IDN;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.security.AccessControlException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * for now, we only support ipv4
@@ -103,7 +120,7 @@ class DnsClient {
     private final Map<DnsRecordType, RecordDecoder<?>> customDecoders = new HashMap<DnsRecordType, RecordDecoder<?>>();
 
     /**
-     * Creates a new DNS client, using the provided server (default port 53) for DNS query resolution
+     * Creates a new DNS client, using the provided server (default port 53) for DNS query resolution, with a cache that will obey the TTL of the response
      *
      * @param nameServerAddresses the server to receive your DNS questions.
      */
@@ -113,7 +130,7 @@ class DnsClient {
     }
 
     /**
-     * Creates a new DNS client, using the provided server for DNS query resolution
+     * Creates a new DNS client, using the provided server for DNS query resolution, with a cache that will obey the TTL of the response
      *
      * @param nameServerAddresses the server to receive your DNS questions.
      */
@@ -123,12 +140,27 @@ class DnsClient {
     }
 
     /**
-     * Creates a new DNS client.
+     * Creates a new DNS client, with a cache that will obey the TTL of the response
      *
      * @param nameServerAddresses the list of servers to receive your DNS questions, until it succeeds
      */
     public
     DnsClient(Collection<InetSocketAddress> nameServerAddresses) {
+        this(nameServerAddresses, 0, Integer.MAX_VALUE);
+    }
+
+    /**
+     * Creates a new DNS client.
+     *
+     * The default TTL value is {@code 0} and {@link Integer#MAX_VALUE}, which practically tells this resolver to
+     * respect the TTL from the DNS server.
+     *
+     * @param nameServerAddresses the list of servers to receive your DNS questions, until it succeeds
+     * @param minTtl the minimum TTL
+     * @param maxTtl the maximum TTL
+     */
+    public
+    DnsClient(Collection<InetSocketAddress> nameServerAddresses, int minTtl, int maxTtl) {
         EventLoopGroup group;
         Class<? extends DatagramChannel> channelType;
 
@@ -140,6 +172,7 @@ class DnsClient {
                                                  ? s.getThreadGroup()
                                                  : Thread.currentThread()
                                                          .getThreadGroup(), threadName);
+        nettyGroup.setDaemon(true);
 
         if (PlatformDependent.isAndroid()) {
             // android ONLY supports OIO (not NIO)
@@ -156,11 +189,15 @@ class DnsClient {
             channelType = NioDatagramChannel.class;
         }
 
+        DnsNameResolverBuilder builder = new DnsNameResolverBuilder(group.next());
+        builder.channelFactory(new ReflectiveChannelFactory<DatagramChannel>(channelType))
+               .channelType(channelType)
+               .localAddress(null)
+               .ttl(minTtl, maxTtl)
+               .resolvedAddressTypes(InternetProtocolFamily.IPv4) // for now, we only support ipv4
+               .nameServerAddresses(DnsServerAddresses.sequential(nameServerAddresses));
 
-
-        resolver = new DnsNameResolver(group.next(), channelType, DnsServerAddresses.sequential(nameServerAddresses));
-        // for now, we only support ipv4
-        resolver.setResolveAddressTypes(InternetProtocolFamily.IPv4);
+        resolver = builder.build();
 
         // A/AAAA use the built-in decoder
 
@@ -175,16 +212,6 @@ class DnsClient {
         customDecoders.put(DnsRecordType.SOA, new StartOfAuthorityDecoder());
     }
 
-    public
-    void reset() {
-        resolver.clearCache();
-    }
-
-    public
-    void setTtl(int min, int max) {
-        resolver.setTtl(min, max);
-    }
-
     /**
      * Resolves a specific hostname A record
      *
@@ -192,7 +219,7 @@ class DnsClient {
      */
     public
     String resolve(String hostname) {
-        if (resolver.resolveAddressTypes()
+        if (resolver.resolvedAddressTypes()
                     .get(0) == InternetProtocolFamily.IPv4) {
             return resolve(hostname, DnsRecordType.A);
         }
@@ -290,6 +317,15 @@ class DnsClient {
         return null;
     }
 
+
+    /**
+     * Clears the DNS resolver cache
+     */
+    public
+    void reset() {
+        resolver.resolveCache()
+                .clear();
+    }
 
 
     /**

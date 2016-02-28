@@ -34,7 +34,6 @@ public class DnsTests {
         String answer = dnsClient.resolvePTR("204.228.150.3");
         dnsClient.stop();
 
-
         if (answer == null) {
             fail("Error fetching answer for DNS");
         }
@@ -45,7 +44,6 @@ public class DnsTests {
         DnsClient dnsClient = new DnsClient(DnsClient.DNS_SERVER_LIST);
         String answer = dnsClient.resolveCNAME("www.atmos.org");
         dnsClient.stop();
-
 
         if (answer == null) {
             fail("Error fetching answer for DNS");
