@@ -93,7 +93,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
         // you have to make sure to use this.serialization
         super(options);
 
-        Logger logger2 = this.logger;
+        Logger logger2 = logger;
         if (OS.isAndroid() && options.udtPort > 0) {
             // Android does not support UDT.
             if (logger2.isInfoEnabled()) {
@@ -102,55 +102,55 @@ class Server<C extends Connection> extends EndPointServer<C> {
             options.udtPort = -1;
         }
 
-        this.tcpPort = options.tcpPort;
-        this.udpPort = options.udpPort;
-        this.udtPort = options.udtPort;
+        tcpPort = options.tcpPort;
+        udpPort = options.udpPort;
+        udtPort = options.udtPort;
 
-        this.localChannelName = options.localChannelName;
+        localChannelName = options.localChannelName;
 
-        if (this.localChannelName != null) {
-            this.localBootstrap = new ServerBootstrap();
+        if (localChannelName != null) {
+            localBootstrap = new ServerBootstrap();
         }
         else {
-            this.localBootstrap = null;
+            localBootstrap = null;
         }
 
-        if (this.tcpPort > 0) {
-            this.tcpBootstrap = new ServerBootstrap();
+        if (tcpPort > 0) {
+            tcpBootstrap = new ServerBootstrap();
         }
         else {
-            this.tcpBootstrap = null;
+            tcpBootstrap = null;
         }
 
-        if (this.udpPort > 0) {
-            this.udpBootstrap = new Bootstrap();
+        if (udpPort > 0) {
+            udpBootstrap = new Bootstrap();
         }
         else {
-            this.udpBootstrap = null;
+            udpBootstrap = null;
         }
 
 
         String threadName = Server.class.getSimpleName();
 
-        if (this.udtPort > 0) {
+        if (udtPort > 0) {
             // check to see if we have UDT available!
             boolean udtAvailable = false;
             try {
                 Class.forName("com.barchart.udt.nio.SelectorProviderUDT");
                 udtAvailable = true;
             } catch (Throwable e) {
-                logger2.error("Requested a UDT service on port {}, but the barchart UDT libraries are not loaded.", this.udtPort);
+                logger2.error("Requested a UDT service on port {}, but the barchart UDT libraries are not loaded.", udtPort);
             }
 
             if (udtAvailable) {
-                this.udtBootstrap = new ServerBootstrap();
+                udtBootstrap = new ServerBootstrap();
             }
             else {
-                this.udtBootstrap = null;
+                udtBootstrap = null;
             }
         }
         else {
-            this.udtBootstrap = null;
+            udtBootstrap = null;
         }
 
         // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
@@ -160,111 +160,116 @@ class Server<C extends Connection> extends EndPointServer<C> {
                                                  : Thread.currentThread()
                                                          .getThreadGroup(), threadName + " (Netty)");
 
+        final EventLoopGroup boss;
+        final EventLoopGroup worker;
+
+        if (OS.isAndroid()) {
+            // android ONLY supports OIO (not NIO)
+            boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-boss", nettyGroup));
+            worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName, nettyGroup));
+        }
+        else if (OS.isLinux()) {
+            // JNI network stack is MUCH faster (but only on linux)
+            boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", nettyGroup));
+            worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, nettyGroup));
+        }
+        else {
+            boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", nettyGroup));
+            worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, nettyGroup));
+        }
+
+        manageForShutdown(boss);
+        manageForShutdown(worker);
 
         // always use local channels on the server.
         {
-            EventLoopGroup boss;
-            EventLoopGroup worker;
+            EventLoopGroup localBoss;
+            EventLoopGroup localWorker;
 
-            if (this.localBootstrap != null) {
-                boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-LOCAL", nettyGroup));
-                worker = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-LOCAL",
+            if (localBootstrap != null) {
+                localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-LOCAL", nettyGroup));
+                localWorker = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-LOCAL",
                                                                                                     nettyGroup));
 
-                this.localBootstrap.group(boss, worker)
-                                   .channel(LocalServerChannel.class)
-                                   .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                                   .localAddress(new LocalAddress(this.localChannelName))
-                                   .childHandler(new RegistrationLocalHandlerServer<C>(threadName, this.registrationWrapper));
+                localBootstrap.group(localBoss, localWorker)
+                              .channel(LocalServerChannel.class)
+                              .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                              .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
+                              .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                              .localAddress(new LocalAddress(localChannelName))
+                              .childHandler(new RegistrationLocalHandlerServer<C>(threadName, registrationWrapper));
 
-                manageForShutdown(boss);
-                manageForShutdown(worker);
+                manageForShutdown(localBoss);
+                manageForShutdown(localWorker);
             }
         }
 
-        if (this.tcpBootstrap != null) {
-            EventLoopGroup boss;
-            EventLoopGroup worker;
-
+        if (tcpBootstrap != null) {
             if (OS.isAndroid()) {
                 // android ONLY supports OIO (not NIO)
-                boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-boss-TCP", nettyGroup));
-                worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-worker-TCP", nettyGroup));
-                this.tcpBootstrap.channel(OioServerSocketChannel.class);
+                tcpBootstrap.channel(OioServerSocketChannel.class);
             }
             else if (OS.isLinux()) {
                 // JNI network stack is MUCH faster (but only on linux)
-                boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-TCP", nettyGroup));
-                worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-TCP", nettyGroup));
-
-                this.tcpBootstrap.channel(EpollServerSocketChannel.class);
+                tcpBootstrap.channel(EpollServerSocketChannel.class);
             }
             else {
-                boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-TCP", nettyGroup));
-                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-TCP", nettyGroup));
-
-                this.tcpBootstrap.channel(NioServerSocketChannel.class);
+                tcpBootstrap.channel(NioServerSocketChannel.class);
             }
 
             // TODO: If we use netty for an HTTP server,
             // Beside the usual ChannelOptions the Native Transport allows to enable TCP_CORK which may come in handy if you implement a HTTP Server.
 
-            manageForShutdown(boss);
-            manageForShutdown(worker);
-
-            this.tcpBootstrap.group(boss, worker)
-                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                             .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
-                             .option(ChannelOption.SO_REUSEADDR, true)
-                             .childHandler(new RegistrationRemoteHandlerServerTCP<C>(threadName,
-                                                                                     this.registrationWrapper,
-                                                                                     this.serializationManager));
+            tcpBootstrap.group(boss, worker)
+                        .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
+                        .option(ChannelOption.SO_REUSEADDR, true)
+                        .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                        .childOption(ChannelOption.SO_KEEPALIVE, true)
+                        .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
+                        .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                        .childHandler(new RegistrationRemoteHandlerServerTCP<C>(threadName,
+                                                                                registrationWrapper,
+                                                                                serializationManager));
 
             if (options.host != null) {
-                this.tcpBootstrap.localAddress(options.host, this.tcpPort);
+                tcpBootstrap.localAddress(options.host, tcpPort);
             }
             else {
-                this.tcpBootstrap.localAddress(this.tcpPort);
+                tcpBootstrap.localAddress(tcpPort);
             }
 
 
             // android screws up on this!!
-            this.tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid());
-            this.tcpBootstrap.childOption(ChannelOption.TCP_NODELAY, !OS.isAndroid());
-
-            this.tcpBootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
+            tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid())
+                        .childOption(ChannelOption.TCP_NODELAY, !OS.isAndroid());
         }
 
 
-        if (this.udpBootstrap != null) {
-            EventLoopGroup worker;
+        if (udpBootstrap != null) {
 
             if (OS.isAndroid()) {
                 // android ONLY supports OIO (not NIO)
-                worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-worker-UDP", nettyGroup));
-                this.udpBootstrap.channel(OioDatagramChannel.class);
+                udpBootstrap.channel(OioDatagramChannel.class);
             }
             else if (OS.isLinux()) {
                 // JNI network stack is MUCH faster (but only on linux)
-                worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-UDP", nettyGroup));
-
-                this.udpBootstrap.channel(EpollDatagramChannel.class)
-                                 .option(EpollChannelOption.SO_REUSEPORT, true);
+                udpBootstrap.channel(EpollDatagramChannel.class)
+                            .option(EpollChannelOption.SO_REUSEPORT, true);
             }
             else {
-                worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-UDP", nettyGroup));
-
-                this.udpBootstrap.channel(NioDatagramChannel.class);
+                udpBootstrap.channel(NioDatagramChannel.class);
             }
 
-            manageForShutdown(worker);
+            udpBootstrap.group(worker)
+                        .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                        .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
+                        .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
 
-            this.udpBootstrap.group(worker).option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                            // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                            .localAddress(this.udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
-                            .handler(new RegistrationRemoteHandlerServerUDP<C>(threadName,
-                                                                               this.registrationWrapper,
-                                                                               this.serializationManager));
+                        // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
+                        .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
+                        .handler(new RegistrationRemoteHandlerServerUDP<C>(threadName,
+                                                                           registrationWrapper,
+                                                                           serializationManager));
 
 
             // Enable to READ from MULTICAST data (ie, 192.168.1.0)
@@ -275,32 +280,34 @@ class Server<C extends Connection> extends EndPointServer<C> {
             // THEN once done
             //    socket.leaveGroup(group), close the socket
             // Enable to WRITE to MULTICAST data (ie, 192.168.1.0)
-            this.udpBootstrap.option(ChannelOption.SO_BROADCAST, false);
-            this.udpBootstrap.option(ChannelOption.SO_SNDBUF, udpMaxSize);
+            udpBootstrap.option(ChannelOption.SO_BROADCAST, false)
+                        .option(ChannelOption.SO_SNDBUF, udpMaxSize);
         }
 
 
-        if (this.udtBootstrap != null) {
-            EventLoopGroup boss;
-            EventLoopGroup worker;
+        if (udtBootstrap != null) {
+            EventLoopGroup udtBoss;
+            EventLoopGroup udtWorker;
 
             // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
             // Annoying and abusing the classloader, but it works well.
-            boss = UdtEndpointProxy.getServerBoss(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
-            worker = UdtEndpointProxy.getServerWorker(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
+            udtBoss = UdtEndpointProxy.getServerBoss(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
+            udtWorker = UdtEndpointProxy.getServerWorker(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
 
-            UdtEndpointProxy.setChannelFactory(this.udtBootstrap);
-            this.udtBootstrap.group(boss, worker)
-                             .option(ChannelOption.SO_BACKLOG, backlogConnectionCount).option(ChannelOption.ALLOCATOR,
-                                                                                              PooledByteBufAllocator.DEFAULT)
-                            // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                            .localAddress(this.udtPort)
-                            .childHandler(new RegistrationRemoteHandlerServerUDT<C>(threadName,
-                                                                                    this.registrationWrapper,
-                                                                                    this.serializationManager));
+            UdtEndpointProxy.setChannelFactory(udtBootstrap);
+            udtBootstrap.group(udtBoss, udtWorker)
+                        .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
+                        .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                        .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
+                        .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                        // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
+                        .localAddress(udtPort)
+                        .childHandler(new RegistrationRemoteHandlerServerUDT<C>(threadName,
+                                                                                registrationWrapper,
+                                                                                serializationManager));
 
-            manageForShutdown(boss);
-            manageForShutdown(worker);
+            manageForShutdown(udtBoss);
+            manageForShutdown(udtWorker);
         }
     }
 
@@ -329,7 +336,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
     void bind(boolean blockUntilTerminate) {
         // make sure we are not trying to connect during a close or stop event.
         // This will wait until we have finished starting up/shutting down.
-        synchronized (this.shutdownInProgress) {
+        synchronized (shutdownInProgress) {
         }
 
 
@@ -337,10 +344,10 @@ class Server<C extends Connection> extends EndPointServer<C> {
         ChannelFuture future;
 
         // LOCAL
-        Logger logger2 = this.logger;
-        if (this.localBootstrap != null) {
+        Logger logger2 = logger;
+        if (localBootstrap != null) {
             try {
-                future = this.localBootstrap.bind();
+                future = localBootstrap.bind();
                 future.await();
             } catch (InterruptedException e) {
                 String errorMessage = stopWithErrorMessage(logger2, "Could not bind to LOCAL address on the server.", e);
@@ -352,74 +359,74 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on LOCAL address: '{}'", this.localChannelName);
+            logger2.info("Listening on LOCAL address: '{}'", localChannelName);
             manageForShutdown(future);
         }
 
 
         // TCP
-        if (this.tcpBootstrap != null) {
+        if (tcpBootstrap != null) {
             // Wait until the connection attempt succeeds or fails.
             try {
-                future = this.tcpBootstrap.bind();
+                future = tcpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to TCP port " + this.tcpPort + " on the server.", e);
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to TCP port " + tcpPort + " on the server.", e);
                 throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
                 String errorMessage = stopWithErrorMessage(logger2,
-                                                           "Could not bind to TCP port " + this.tcpPort + " on the server.",
+                                                           "Could not bind to TCP port " + tcpPort + " on the server.",
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on TCP port: {}", this.tcpPort);
+            logger2.info("Listening on TCP port: {}", tcpPort);
             manageForShutdown(future);
         }
 
         // UDP
-        if (this.udpBootstrap != null) {
+        if (udpBootstrap != null) {
             // Wait until the connection attempt succeeds or fails.
             try {
-                future = this.udpBootstrap.bind();
+                future = udpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDP port " + this.udpPort + " on the server.", e);
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDP port " + udpPort + " on the server.", e);
                 throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
                 String errorMessage = stopWithErrorMessage(logger2,
-                                                           "Could not bind to UDP port " + this.udpPort + " on the server.",
+                                                           "Could not bind to UDP port " + udpPort + " on the server.",
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on UDP port: {}", this.udpPort);
+            logger2.info("Listening on UDP port: {}", udpPort);
             manageForShutdown(future);
         }
 
         // UDT
-        if (this.udtBootstrap != null) {
+        if (udtBootstrap != null) {
             // Wait until the connection attempt succeeds or fails.
             try {
-                future = this.udtBootstrap.bind();
+                future = udtBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDT port " + this.udtPort + " on the server.", e);
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDT port " + udtPort + " on the server.", e);
                 throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
                 String errorMessage = stopWithErrorMessage(logger2,
-                                                           "Could not bind to UDT port " + this.udtPort + " on the server.",
+                                                           "Could not bind to UDT port " + udtPort + " on the server.",
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on UDT port: {}", this.udtPort);
+            logger2.info("Listening on UDT port: {}", udtPort);
             manageForShutdown(future);
         }
 

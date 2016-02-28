@@ -114,21 +114,35 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                                                  : Thread.currentThread()
                                                          .getThreadGroup(), threadName + " (Netty)");
 
+        final EventLoopGroup boss;
+
+        if (isAndroid) {
+            // android ONLY supports OIO (not NIO)
+            boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName, nettyGroup));
+        }
+        else if (OS.isLinux()) {
+            // JNI network stack is MUCH faster (but only on linux)
+            boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, nettyGroup));
+        }
+        else {
+            boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, nettyGroup));
+        }
+
+        manageForShutdown(boss);
+
         if (options.localChannelName != null && options.tcpPort < 0 && options.udpPort < 0 && options.udtPort < 0) {
             // no networked bootstraps. LOCAL connection only
             Bootstrap localBootstrap = new Bootstrap();
             this.bootstraps.add(new BootstrapWrapper("LOCAL", -1, localBootstrap));
 
-            EventLoopGroup boss;
+            EventLoopGroup localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-LOCAL", nettyGroup));
 
-            boss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-LOCAL", nettyGroup));
-
-            localBootstrap.group(boss)
+            localBootstrap.group(localBoss)
                           .channel(LocalChannel.class)
                           .remoteAddress(new LocalAddress(options.localChannelName))
-                          .handler(new RegistrationLocalHandlerClient<C>(threadName, this.registrationWrapper));
+                          .handler(new RegistrationLocalHandlerClient<C>(threadName, registrationWrapper));
 
-            manageForShutdown(boss);
+            manageForShutdown(localBoss);
         }
         else {
             if (options.host == null) {
@@ -143,36 +157,30 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                 Bootstrap tcpBootstrap = new Bootstrap();
                 this.bootstraps.add(new BootstrapWrapper("TCP", options.tcpPort, tcpBootstrap));
 
-                EventLoopGroup boss;
-
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
-                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-TCP", nettyGroup));
                     tcpBootstrap.channel(OioSocketChannel.class);
                 }
                 else if (OS.isLinux()) {
                     // JNI network stack is MUCH faster (but only on linux)
-                    boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-TCP", nettyGroup));
                     tcpBootstrap.channel(EpollSocketChannel.class);
                 }
                 else {
-                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-TCP", nettyGroup));
                     tcpBootstrap.channel(NioSocketChannel.class);
                 }
 
                 tcpBootstrap.group(boss)
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                            .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
+                            .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
                             .remoteAddress(options.host, options.tcpPort)
                             .handler(new RegistrationRemoteHandlerClientTCP<C>(threadName,
-                                                                               this.registrationWrapper,
-                                                                               this.serializationManager));
-
-
-                manageForShutdown(boss);
+                                                                               registrationWrapper,
+                                                                               serializationManager));
 
                 // android screws up on this!!
-                tcpBootstrap.option(ChannelOption.TCP_NODELAY, !isAndroid);
-                tcpBootstrap.option(ChannelOption.SO_KEEPALIVE, true);
+                tcpBootstrap.option(ChannelOption.TCP_NODELAY, !isAndroid)
+                            .option(ChannelOption.SO_KEEPALIVE, true);
             }
 
 
@@ -180,32 +188,27 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                 Bootstrap udpBootstrap = new Bootstrap();
                 this.bootstraps.add(new BootstrapWrapper("UDP", options.udpPort, udpBootstrap));
 
-                EventLoopGroup boss;
-
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
-                    boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-UDP", nettyGroup));
                     udpBootstrap.channel(OioDatagramChannel.class);
                 }
                 else if (OS.isLinux()) {
                     // JNI network stack is MUCH faster (but only on linux)
-                    boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-UDP", nettyGroup));
                     udpBootstrap.channel(EpollDatagramChannel.class);
                 }
                 else {
-                    boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-UDP", nettyGroup));
                     udpBootstrap.channel(NioDatagramChannel.class);
                 }
 
                 udpBootstrap.group(boss)
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                            .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
+                            .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
                             .localAddress(new InetSocketAddress(0))
                             .remoteAddress(new InetSocketAddress(options.host, options.udpPort))
                             .handler(new RegistrationRemoteHandlerClientUDP<C>(threadName,
-                                                                               this.registrationWrapper,
-                                                                               this.serializationManager));
-
-                manageForShutdown(boss);
+                                                                               registrationWrapper,
+                                                                               serializationManager));
 
                 // Enable to READ and WRITE MULTICAST data (ie, 192.168.1.0)
                 // in order to WRITE: write as normal, just make sure it ends in .255
@@ -214,8 +217,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                 //    NioDatagramChannel.joinGroup(group);
                 // THEN once done
                 //    NioDatagramChannel.leaveGroup(group), close the socket
-                udpBootstrap.option(ChannelOption.SO_BROADCAST, false);
-                udpBootstrap.option(ChannelOption.SO_SNDBUF, udpMaxSize);
+                udpBootstrap.option(ChannelOption.SO_BROADCAST, false)
+                            .option(ChannelOption.SO_SNDBUF, udpMaxSize);
             }
 
 
@@ -235,20 +238,20 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                     Bootstrap udtBootstrap = new Bootstrap();
                     this.bootstraps.add(new BootstrapWrapper("UDT", options.udtPort, udtBootstrap));
 
-                    EventLoopGroup boss;
-
-                    boss = UdtEndpointProxy.getClientWorker(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
+                    EventLoopGroup udtBoss = UdtEndpointProxy.getClientWorker(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
 
                     UdtEndpointProxy.setChannelFactory(udtBootstrap);
 
-                    udtBootstrap.group(boss)
+                    udtBootstrap.group(udtBoss)
                                 .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                                .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
+                                .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
                                 .remoteAddress(options.host, options.udtPort)
                                 .handler(new RegistrationRemoteHandlerClientUDT<C>(threadName,
-                                                                                   this.registrationWrapper,
-                                                                                   this.serializationManager));
+                                                                                   registrationWrapper,
+                                                                                   serializationManager));
 
-                    manageForShutdown(boss);
+                    manageForShutdown(udtBoss);
                 }
             }
         }
@@ -390,6 +393,10 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         return this.connection.sendOnIdle(message);
     }
 
+    /**
+     * Marks the connection to be closed as soon as possible. This is evaluated when the current
+     * thread execution returns to the network stack.
+     */
     @Override
     public
     void closeAsap() {
