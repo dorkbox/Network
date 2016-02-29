@@ -15,6 +15,7 @@
  */
 package dorkbox.network;
 
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.dns.decoder.DomainDecoder;
 import dorkbox.network.dns.decoder.MailExchangerDecoder;
 import dorkbox.network.dns.decoder.RecordDecoder;
@@ -60,8 +61,10 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * for now, we only support ipv4
@@ -69,6 +72,7 @@ import java.util.Map;
 @SuppressWarnings("unused")
 public
 class DnsClient {
+
     static {
         try {
             // doesn't work in eclipse.
@@ -118,6 +122,9 @@ class DnsClient {
     private final DnsNameResolver resolver;
 
     private final Map<DnsRecordType, RecordDecoder<?>> customDecoders = new HashMap<DnsRecordType, RecordDecoder<?>>();
+    private ThreadGroup threadGroup;
+    public static final String THREAD_NAME = "DnsClient";
+    private EventLoopGroup eventLoopGroup;
 
     /**
      * Creates a new DNS client, using the provided server (default port 53) for DNS query resolution, with a cache that will obey the TTL of the response
@@ -161,38 +168,34 @@ class DnsClient {
      */
     public
     DnsClient(Collection<InetSocketAddress> nameServerAddresses, int minTtl, int maxTtl) {
-        EventLoopGroup group;
         Class<? extends DatagramChannel> channelType;
-
-        final String threadName = "DnsClient";
 
         // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
         SecurityManager s = System.getSecurityManager();
-        ThreadGroup nettyGroup = new ThreadGroup(s != null
-                                                 ? s.getThreadGroup()
-                                                 : Thread.currentThread()
-                                                         .getThreadGroup(), threadName);
-        nettyGroup.setDaemon(true);
+        threadGroup = new ThreadGroup(s != null
+                                      ? s.getThreadGroup()
+                                      : Thread.currentThread()
+                                              .getThreadGroup(), THREAD_NAME);
+        threadGroup.setDaemon(true);
 
         if (PlatformDependent.isAndroid()) {
             // android ONLY supports OIO (not NIO)
-            group = new OioEventLoopGroup(1, new NamedThreadFactory(threadName + "-UDP", nettyGroup));
+            eventLoopGroup = new OioEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-UDP", threadGroup));
             channelType = OioDatagramChannel.class;
         }
         else if (OS.isLinux()) {
             // JNI network stack is MUCH faster (but only on linux)
-            group = new EpollEventLoopGroup(1, new NamedThreadFactory(threadName + "-UDP", nettyGroup));
+            eventLoopGroup = new EpollEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-UDP", threadGroup));
             channelType = EpollDatagramChannel.class;
         }
         else {
-            group = new NioEventLoopGroup(1, new NamedThreadFactory(threadName + "-UDP", nettyGroup));
+            eventLoopGroup = new NioEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-UDP", threadGroup));
             channelType = NioDatagramChannel.class;
         }
 
-        DnsNameResolverBuilder builder = new DnsNameResolverBuilder(group.next());
+        DnsNameResolverBuilder builder = new DnsNameResolverBuilder(eventLoopGroup.next());
         builder.channelFactory(new ReflectiveChannelFactory<DatagramChannel>(channelType))
                .channelType(channelType)
-               .localAddress(null)
                .ttl(minTtl, maxTtl)
                .resolvedAddressTypes(InternetProtocolFamily.IPv4) // for now, we only support ipv4
                .nameServerAddresses(DnsServerAddresses.sequential(nameServerAddresses));
@@ -335,6 +338,45 @@ class DnsClient {
     void stop() {
         reset();
         resolver.close();
+
+
+        // we also want to stop the thread group (but NOT in our current thread!)
+        if (Thread.currentThread()
+                  .getThreadGroup()
+                  .getName()
+                  .equals(THREAD_NAME)) {
+
+            Thread thread = new Thread(new Runnable() {
+                @Override
+                public
+                void run() {
+                    DnsClient.this.stopInThread();
+                }
+            });
+            thread.setDaemon(false);
+            thread.setName("DnsClient Shutdown");
+            thread.start();
+        }
+        else {
+            stopInThread();
+        }
+    }
+
+
+    private
+    void stopInThread() {
+        // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
+        long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
+
+        // we want to WAIT until after the event executors have completed shutting down.
+        List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
+
+        // now wait it them to finish!
+        // It can take a few seconds to shut down the executor. This will affect unit testing, where connections are quickly created/stopped
+        eventLoopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds, maxShutdownWaitTimeInMilliSeconds * 4, TimeUnit.MILLISECONDS)
+                      .syncUninterruptibly();
+
+        threadGroup.interrupt();
     }
 
     public
