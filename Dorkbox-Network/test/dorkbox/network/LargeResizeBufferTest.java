@@ -16,8 +16,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.fail;
 
 public
-class LargeBufferTest extends BaseTest {
-    private static final int OBJ_SIZE = 1024 * 10;
+class LargeResizeBufferTest extends BaseTest {
+    private static final int OBJ_SIZE = 1024 * 100;
 
     private volatile int finalCheckAmount = 0;
     private volatile int serverCheck = -1;
@@ -58,8 +58,8 @@ class LargeBufferTest extends BaseTest {
                       if (this.received.incrementAndGet() == messageCount) {
                           System.out.println("Server received all " + messageCount + " messages!");
                           System.out.println("Server received and sent " + this.receivedBytes.get() + " bytes.");
-                          LargeBufferTest.this.serverCheck = LargeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
-                          System.out.println("Server missed " + LargeBufferTest.this.serverCheck + " bytes.");
+                          LargeResizeBufferTest.this.serverCheck = LargeResizeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
+                          System.out.println("Server missed " + LargeResizeBufferTest.this.serverCheck + " bytes.");
                           stopEndPoints();
                       }
                   }
@@ -85,8 +85,8 @@ class LargeBufferTest extends BaseTest {
                       if (count == messageCount) {
                           System.out.println("Client received all " + messageCount + " messages!");
                           System.out.println("Client received and sent " + this.receivedBytes.get() + " bytes.");
-                          LargeBufferTest.this.clientCheck = LargeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
-                          System.out.println("Client missed " + LargeBufferTest.this.clientCheck + " bytes.");
+                          LargeResizeBufferTest.this.clientCheck = LargeResizeBufferTest.this.finalCheckAmount - this.receivedBytes.get();
+                          System.out.println("Client missed " + LargeResizeBufferTest.this.clientCheck + " bytes.");
                       }
                   }
               });
@@ -96,13 +96,21 @@ class LargeBufferTest extends BaseTest {
 
         System.err.println("  Client sending " + messageCount + " messages");
         for (int i = 0; i < messageCount; i++) {
-            this.finalCheckAmount += OBJ_SIZE;
+            this.finalCheckAmount += OBJ_SIZE; // keep increasing size
 
             byte[] b = new byte[OBJ_SIZE];
             random.nextBytes(b);
+
+            // set some of the bytes to be all `244`, just so some compression can occur (to test that as well)
+            for (int j = 0; j < 400; j++) {
+                b[j] = (byte) 244;
+            }
+
+//            System.err.println("Sending " + b.length + " bytes");
             client.send()
                   .TCP(new LargeMessage(b));
         }
+
         System.err.println("Client has queued " + messageCount + " messages.");
 
         waitForThreads();
