@@ -153,29 +153,22 @@ class Server<C extends Connection> extends EndPointServer<C> {
             udtBootstrap = null;
         }
 
-        // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
-        SecurityManager s = System.getSecurityManager();
-        ThreadGroup nettyGroup = new ThreadGroup(s != null
-                                                 ? s.getThreadGroup()
-                                                 : Thread.currentThread()
-                                                         .getThreadGroup(), threadName + " (Netty)");
-
         final EventLoopGroup boss;
         final EventLoopGroup worker;
 
         if (OS.isAndroid()) {
             // android ONLY supports OIO (not NIO)
-            boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-boss", nettyGroup));
-            worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName, nettyGroup));
+            boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName, threadGroup));
         }
         else if (OS.isLinux()) {
             // JNI network stack is MUCH faster (but only on linux)
-            boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", nettyGroup));
-            worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, nettyGroup));
+            boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else {
-            boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", nettyGroup));
-            worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, nettyGroup));
+            boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
 
         manageForShutdown(boss);
@@ -187,9 +180,10 @@ class Server<C extends Connection> extends EndPointServer<C> {
             EventLoopGroup localWorker;
 
             if (localBootstrap != null) {
-                localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-LOCAL", nettyGroup));
+                localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-LOCAL",
+                                                                                                       threadGroup));
                 localWorker = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-LOCAL",
-                                                                                                    nettyGroup));
+                                                                                                         threadGroup));
 
                 localBootstrap.group(localBoss, localWorker)
                               .channel(LocalServerChannel.class)
@@ -291,8 +285,8 @@ class Server<C extends Connection> extends EndPointServer<C> {
 
             // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
             // Annoying and abusing the classloader, but it works well.
-            udtBoss = UdtEndpointProxy.getServerBoss(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
-            udtWorker = UdtEndpointProxy.getServerWorker(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
+            udtBoss = UdtEndpointProxy.getServerBoss(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
+            udtWorker = UdtEndpointProxy.getServerWorker(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
 
             UdtEndpointProxy.setChannelFactory(udtBootstrap);
             udtBootstrap.group(udtBoss, udtWorker)

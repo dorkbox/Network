@@ -107,25 +107,18 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
             options.udtPort = -1;
         }
 
-        // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
-        SecurityManager s = System.getSecurityManager();
-        ThreadGroup nettyGroup = new ThreadGroup(s != null
-                                                 ? s.getThreadGroup()
-                                                 : Thread.currentThread()
-                                                         .getThreadGroup(), threadName + " (Netty)");
-
         final EventLoopGroup boss;
 
         if (isAndroid) {
             // android ONLY supports OIO (not NIO)
-            boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName, nettyGroup));
+            boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName, threadGroup));
         }
         else if (OS.isLinux()) {
             // JNI network stack is MUCH faster (but only on linux)
-            boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, nettyGroup));
+            boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else {
-            boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, nettyGroup));
+            boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
 
         manageForShutdown(boss);
@@ -135,7 +128,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
             Bootstrap localBootstrap = new Bootstrap();
             this.bootstraps.add(new BootstrapWrapper("LOCAL", -1, localBootstrap));
 
-            EventLoopGroup localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-LOCAL", nettyGroup));
+            EventLoopGroup localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-LOCAL",
+                                                                                                                  threadGroup));
 
             localBootstrap.group(localBoss)
                           .channel(LocalChannel.class)
@@ -238,7 +232,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                     Bootstrap udtBootstrap = new Bootstrap();
                     this.bootstraps.add(new BootstrapWrapper("UDT", options.udtPort, udtBootstrap));
 
-                    EventLoopGroup udtBoss = UdtEndpointProxy.getClientWorker(DEFAULT_THREAD_POOL_SIZE, threadName, nettyGroup);
+                    EventLoopGroup udtBoss = UdtEndpointProxy.getClientWorker(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
 
                     UdtEndpointProxy.setChannelFactory(udtBootstrap);
 

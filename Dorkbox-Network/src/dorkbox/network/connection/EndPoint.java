@@ -85,6 +85,8 @@ class EndPoint<C extends Connection> {
     protected static final int WRITE_BUFF_HIGH = 32 * 1024;
     protected static final int WRITE_BUFF_LOW = 8 * 1024;
 
+    public static final String THREADGROUP_NAME = "(Netty)";
+
     /**
      * this can be changed to a more specialized value, if necessary
      */
@@ -132,6 +134,8 @@ class EndPoint<C extends Connection> {
     }
 
     protected final org.slf4j.Logger logger;
+
+    protected final ThreadGroup threadGroup;
     protected final Class<? extends EndPoint<C>> type;
 
     protected final ConnectionManager<C> connectionManager;
@@ -180,6 +184,14 @@ class EndPoint<C extends Connection> {
     public
     EndPoint(Class<? extends EndPoint> type, final Configuration options) throws InitializationException, SecurityException, IOException {
         this.type = (Class<? extends EndPoint<C>>) type;
+
+        // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
+        SecurityManager s = System.getSecurityManager();
+        threadGroup = new ThreadGroup(s != null
+                                           ? s.getThreadGroup()
+                                           : Thread.currentThread()
+                                                   .getThreadGroup(), type.getSimpleName() + " " + THREADGROUP_NAME);
+        threadGroup.setDaemon(true);
 
         this.logger = org.slf4j.LoggerFactory.getLogger(type.getSimpleName());
 
@@ -709,6 +721,9 @@ class EndPoint<C extends Connection> {
 
             // when the eventloop closes, the associated selectors are ALSO closed!
             stopExtraActions();
+
+            // we also want to stop the thread group
+            threadGroup.interrupt();
         }
 
         // tell the blocked "bind" method that it may continue (and exit)
