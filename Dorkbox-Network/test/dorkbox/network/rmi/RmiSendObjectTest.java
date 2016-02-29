@@ -78,8 +78,6 @@ class RmiSendObjectTest extends BaseTest {
                           @Override
                           public
                           void run() {
-
-
                               TestObject test = null;
                               try {
                                   test = connection.createProxyObject(TestObjectImpl.class);

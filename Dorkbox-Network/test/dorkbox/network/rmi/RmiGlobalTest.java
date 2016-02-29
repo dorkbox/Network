@@ -197,7 +197,6 @@ class RmiGlobalTest extends BaseTest {
 
                       stopEndPoints(2000);
                   }
-
               });
 
 

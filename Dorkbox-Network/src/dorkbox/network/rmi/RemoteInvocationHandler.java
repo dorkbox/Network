@@ -35,7 +35,6 @@
 package dorkbox.network.rmi;
 
 
-import com.esotericsoftware.kryo.Kryo;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ListenerRaw;
@@ -204,17 +203,8 @@ class RemoteInvocationHandler implements InvocationHandler {
         invokeMethod.args = args;
 
 
-        // thread safe access.
-        final Kryo kryo = serializationManager.take();
-        if (kryo == null) {
-            String msg = "Interrupted during kryo pool.take()";
-            logger1.error(msg);
-            return msg;
-        }
-
         // which method do we access?
-        CachedMethod[] cachedMethods = CachedMethod.getMethods(kryo, method.getDeclaringClass());
-        serializationManager.release(kryo);
+        CachedMethod[] cachedMethods = CachedMethod.getMethods(serializationManager.getKryo(), method.getDeclaringClass());
         for (int i = 0, n = cachedMethods.length; i < n; i++) {
             CachedMethod cachedMethod = cachedMethods[i];
             Method checkMethod = cachedMethod.origMethod;
