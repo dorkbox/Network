@@ -18,7 +18,6 @@ package dorkbox.network.connection;
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.connection.bridge.ConnectionBridge;
-import dorkbox.network.connection.bridge.ConnectionBridgeFlushAlways;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.channel.ChannelFuture;
@@ -44,7 +43,7 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
     protected volatile int connectionTimeout = 5000; // default
     protected volatile boolean registrationComplete = false;
 
-    private volatile ConnectionBridgeFlushAlways connectionBridgeFlushAlways;
+    private volatile ConnectionBridge connectionBridgeFlushAlways;
 
 
     public
@@ -134,9 +133,57 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
      */
     @Override
     final
-    void connectionConnected0(ConnectionImpl connection) {
+    void connectionConnected0(final ConnectionImpl connection) {
         // invokes the listener.connection() method, and initialize the connection channels with whatever extra info they might need.
         super.connectionConnected0(connection);
+
+        this.connectionBridgeFlushAlways = new ConnectionBridge() {
+            @Override
+            public
+            void self(Object message) {
+                connection.self(message);
+                flush();
+            }
+
+            @Override
+            public
+            ConnectionPoint TCP(Object message) {
+                ConnectionPoint tcp = connection.TCP_backpressure(message);
+                tcp.flush();
+                return tcp;
+            }
+
+            @Override
+            public
+            ConnectionPoint UDP(Object message) {
+                ConnectionPoint udp = connection.UDP_backpressure(message);
+                udp.flush();
+                return udp;
+            }
+
+            @Override
+            public
+            ConnectionPoint UDT(Object message) {
+                ConnectionPoint udt = connection.UDT_backpressure(message);
+                udt.flush();
+                return udt;
+            }
+
+            @Override
+            public
+            Ping ping() {
+                Ping ping = connection.ping();
+                flush();
+                return ping;
+            }
+
+            @Override
+            public
+            void flush() {
+                connection.flush();
+            }
+        };
+
 
         // notify the registration we are done!
         synchronized (this.registrationLock) {
@@ -153,12 +200,6 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
     @Override
     public
     ConnectionBridge send() {
-        ConnectionBridgeFlushAlways connectionBridgeFlushAlways2 = this.connectionBridgeFlushAlways;
-        if (connectionBridgeFlushAlways2 == null) {
-            ConnectionBridge clientBridge = this.connection.send();
-            this.connectionBridgeFlushAlways = new ConnectionBridgeFlushAlways(clientBridge);
-        }
-
         return this.connectionBridgeFlushAlways;
     }
 

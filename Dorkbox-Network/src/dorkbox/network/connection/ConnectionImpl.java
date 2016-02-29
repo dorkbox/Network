@@ -66,8 +66,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
     private final org.slf4j.Logger logger;
 
-    private final AtomicBoolean writableSignalNeeded = new AtomicBoolean(false);
-    private final Object writableLock = new Object();
+    private final AtomicBoolean needsLock = new AtomicBoolean(false);
+    private final AtomicBoolean writeSignalNeeded = new AtomicBoolean(false);
+    private final Object writeLock = new Object();
 
     private final AtomicBoolean closeInProgress = new AtomicBoolean(false);
     private final AtomicBoolean alreadyClosed = new AtomicBoolean(false);
@@ -284,9 +285,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         super.channelWritabilityChanged(ctx);
 
         // needed to place back-pressure when writing too much data to the connection
-        if (writableSignalNeeded.getAndSet(false)) {
-            synchronized (writableLock) {
-                writableLock.notifyAll();
+        if (writeSignalNeeded.getAndSet(false)) {
+            synchronized (writeLock) {
+                needsLock.set(false);
+                writeLock.notifyAll();
             }
         }
     }
@@ -297,15 +299,20 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
      * This blocks until we are writable again
      */
     private
-    void controlBackPressure(ConnectionPointWriter c) {
-        if (!c.isWritable()) {
-            writableSignalNeeded.set(true);
+    void controlBackPressure(ConnectionPoint c) {
+        while (!c.isWritable()) {
+            needsLock.set(true);
+            writeSignalNeeded.set(true);
 
-            synchronized (writableLock) {
-                try {
-                    writableLock.wait();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+            synchronized (writeLock) {
+                if (needsLock.get()) {
+                    try {
+                        // waits 1 second maximum per check. This is to guarantee that eventually (in the case of deadlocks, which i've seen)
+                        // it will get released. The while loop makes sure it will exit when the channel is writable
+                        writeLock.wait(1000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
         }
@@ -336,18 +343,18 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     /**
      * Sends the object over the network using TCP. (LOCAL channels do not care if its TCP or UDP)
      */
-    @Override
-    public final
-    ConnectionPoint TCP(Object message) {
+    final
+    ConnectionPoint TCP_backpressure(Object message) {
         Logger logger2 = this.logger;
         if (!this.closeInProgress.get()) {
             if (logger2.isTraceEnabled()) {
                 logger2.trace("Sending TCP {}", message);
             }
             ConnectionPointWriter tcp = this.channelWrapper.tcp();
-
-            // needed to place back-pressure when writing too much data to the connection
+            // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
+            // INSIDE the event loop
             controlBackPressure(tcp);
+
             tcp.write(message);
             return tcp;
         }
@@ -361,7 +368,58 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     }
 
     /**
-     * Sends the object over the network using UDP (or via LOCAL when it's a local channel).
+     * Sends the object over the network using TCP. (LOCAL channels do not care if its TCP or UDP)
+     */
+    @Override
+    public final
+    ConnectionPoint TCP(Object message) {
+        Logger logger2 = this.logger;
+        if (!this.closeInProgress.get()) {
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("Sending TCP {}", message);
+            }
+            ConnectionPointWriter tcp = this.channelWrapper.tcp();
+            tcp.write(message);
+            return tcp;
+        }
+        else {
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("writing TCP while closed: {}", message);
+            }
+            // we have to return something, otherwise dependent code will throw a null pointer exception
+            return ChannelNull.get();
+        }
+    }
+
+    /**
+     * Sends the object over the network using UDP (LOCAL channels do not care if its TCP or UDP)
+     */
+    final
+    ConnectionPoint UDP_backpressure(Object message) {
+        Logger logger2 = this.logger;
+        if (!this.closeInProgress.get()) {
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("Sending UDP {}", message);
+            }
+            ConnectionPointWriter udp = this.channelWrapper.udp();
+            // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
+            // INSIDE the event loop
+            controlBackPressure(udp);
+
+            udp.write(message);
+            return udp;
+        }
+        else {
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("writing UDP while closed: {}", message);
+            }
+            // we have to return something, otherwise dependent code will throw a null pointer exception
+            return ChannelNull.get();
+        }
+    }
+
+    /**
+     * Sends the object over the network using UDP (LOCAL channels do not care if its TCP or UDP)
      */
     @Override
     public
@@ -372,15 +430,39 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                 logger2.trace("Sending UDP {}", message);
             }
             ConnectionPointWriter udp = this.channelWrapper.udp();
-
-            // needed to place back-pressure when writing too much data to the connection
-            controlBackPressure(udp);
             udp.write(message);
             return udp;
         }
         else {
             if (logger2.isDebugEnabled()) {
                 logger2.debug("writing UDP while closed: {}", message);
+            }
+            // we have to return something, otherwise dependent code will throw a null pointer exception
+            return ChannelNull.get();
+        }
+    }
+
+    /**
+     * Sends the object over the network using TCP. (LOCAL channels do not care if its TCP or UDP)
+     */
+    final
+    ConnectionPoint UDT_backpressure(Object message) {
+        Logger logger2 = this.logger;
+        if (!this.closeInProgress.get()) {
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("Sending UDT {}", message);
+            }
+            ConnectionPointWriter udt = this.channelWrapper.udt();
+            // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
+            // INSIDE the event loop
+            controlBackPressure(udt);
+
+            udt.write(message);
+            return udt;
+        }
+        else {
+            if (logger2.isDebugEnabled()) {
+                logger2.debug("writing UDT while closed: {}", message);
             }
             // we have to return something, otherwise dependent code will throw a null pointer exception
             return ChannelNull.get();
@@ -399,8 +481,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
                 logger2.trace("Sending UDT {}", message);
             }
             ConnectionPointWriter udt = this.channelWrapper.udt();
-            // needed to place back-pressure when writing too much data to the connection
-            controlBackPressure(udt);
             udt.write(message);
             return udt;
         }
