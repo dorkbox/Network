@@ -16,7 +16,6 @@ import dorkbox.util.exceptions.InitializationException;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Timer;
 import java.util.TimerTask;
 
 import static org.junit.Assert.fail;
@@ -38,9 +37,8 @@ class BaseTest {
         }
     }
 
-    boolean fail_check;
+    volatile boolean fail_check;
     private final ArrayList<EndPoint> endPoints = new ArrayList<EndPoint>();
-    private volatile Timer timer;
 
     public
     BaseTest() {
@@ -108,32 +106,46 @@ class BaseTest {
     }
 
     public
-    void stopEndPoints(int stopAfterMillis) {
+    void stopEndPoints(final int stopAfterMillis) {
         if (stopAfterMillis > 0) {
-            if (this.timer == null) {
-                this.timer = new Timer("UnitTest timeout timer");
-            }
-
-            // We have to ALWAYS run this in a new timer, BECAUSE if stopEndPoints() is called from a client/server thread, it will DEADLOCK
-            this.timer.schedule(new TimerTask() {
+            // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will
+            // DEADLOCK
+            final Thread thread = new Thread(getThreadGroup(), new Runnable() {
                 @Override
                 public
                 void run() {
-                    synchronized (BaseTest.this.endPoints) {
-                        for (EndPoint endPoint : BaseTest.this.endPoints) {
-                            endPoint.stop();
-                            endPoint.waitForShutdown();
+                    try {
+                        // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
+                        // ARE NOT in the same thread group as netty!
+                        Thread.sleep(stopAfterMillis);
+
+                        synchronized (BaseTest.this.endPoints) {
+                            for (EndPoint endPoint : BaseTest.this.endPoints) {
+                                endPoint.stop();
+                                endPoint.waitForShutdown();
+                            }
+                            BaseTest.this.endPoints.clear();
                         }
-                        BaseTest.this.endPoints.clear();
-                    }
-                    if (BaseTest.this.timer != null) {
-                        BaseTest.this.timer.cancel();
-                        BaseTest.this.timer.purge();
-                        BaseTest.this.timer = null;
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
                     }
                 }
-            }, stopAfterMillis);
+            }, "UnitTest timeout");
+
+            thread.setDaemon(true);
+            thread.start();
         }
+    }
+
+    private
+    ThreadGroup getThreadGroup() {
+        ThreadGroup threadGroup = Thread.currentThread()
+                                        .getThreadGroup();
+        final String name = threadGroup.getName();
+        if (name.contains(EndPoint.THREADGROUP_NAME)) {
+            threadGroup = threadGroup.getParent();
+        }
+        return threadGroup;
     }
 
     public
@@ -154,7 +166,7 @@ class BaseTest {
     }
 
     private
-    void waitForThreads0(int stopAfterMillis) {
+    void waitForThreads0(final int stopAfterMillis) {
         this.fail_check = false;
 
         TimerTask failTask = null;
@@ -162,14 +174,26 @@ class BaseTest {
         if (stopAfterMillis > 0L) {
             stopEndPoints(stopAfterMillis);
 
-            failTask = new TimerTask() {
+            // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will
+            // DEADLOCK
+            final Thread thread = new Thread(getThreadGroup(), new Runnable() {
                 @Override
                 public
                 void run() {
-                    BaseTest.this.fail_check = true;
+                    try {
+                        // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
+                        // ARE NOT in the same thread group as netty!
+                        Thread.sleep(stopAfterMillis + 120000L); // test must run in 2 minutes or it fails
+
+                        BaseTest.this.fail_check = true;
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
-            };
-            this.timer.schedule(failTask, stopAfterMillis + 10000L);
+            }, "UnitTest timeout");
+
+            thread.setDaemon(true);
+            thread.start();
         }
 
         while (true) {
