@@ -1088,6 +1088,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
     /**
      * Used by the LOCAL side, to get the proxy object as an interface
+     *
      * @param type must be the interface the proxy will bind to
      */
     public
@@ -1098,7 +1099,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
         if (remoteObject == null) {
             // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-            remoteObject = RmiBridge.createProxyObject(this, objectID, type);
+            remoteObject = rmiBridge.createProxyObject(this, objectID, type);
             proxyIdCache.put(objectID, remoteObject);
         }
 

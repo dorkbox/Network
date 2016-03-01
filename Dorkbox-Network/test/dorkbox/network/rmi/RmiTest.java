@@ -51,10 +51,16 @@ class RmiTest extends BaseTest {
 
 
                     // UDP calls that ignore the return value
-                    remoteObject.setUDP(true);
+                    remoteObject.setUDP();
+                    remoteObject.setAsync(true);
+                    remoteObject.setTransmitReturnValue(false);
+                    remoteObject.setTransmitExceptions(false);
                     test.moo("Meow");
                     assertEquals(0, test.id());
-                    remoteObject.setUDP(false);
+                    remoteObject.setAsync(false);
+                    remoteObject.setTransmitReturnValue(true);
+                    remoteObject.setTransmitExceptions(true);
+                    remoteObject.setTCP();
 
 
                     // Test that RMI correctly waits for the remotely invoked method to exit
@@ -87,7 +93,7 @@ class RmiTest extends BaseTest {
                     assertTrue(caught);
 
                     // Non-blocking call that ignores the return value
-                    remoteObject.setNonBlocking(true);
+                    remoteObject.setAsync(true);
                     remoteObject.setTransmitReturnValue(false);
                     test.moo("Meow");
                     assertEquals(0, test.id());
@@ -117,12 +123,13 @@ class RmiTest extends BaseTest {
 
                     // should wait for a small time
                     remoteObject.setTransmitReturnValue(true);
-                    remoteObject.setNonBlocking(false);
+                    remoteObject.setAsync(false);
                     remoteObject.setResponseTimeout(6000);
                     System.out.println("You should see this 2 seconds before");
                     float slow = test.slow();
                     System.out.println("...This");
                     assertEquals(slow, 123, .0001D);
+
 
                     // Test sending a reference to a remote object.
                     MessageWithTestObject m = new MessageWithTestObject();

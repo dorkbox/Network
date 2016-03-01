@@ -42,10 +42,10 @@ class Configuration {
     public SettingsStore settingsStore = null;
 
     /**
-     * Enable remote method invocation (RMI) for this connection. This is additional overhead to using RMI.
+     * Enable remote method invocation (RMI) for this connection. There is additional overhead to using RMI.
      * <p/>
      * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
-     * return value which is not {@link dorkbox.network.rmi.RemoteObject#setNonBlocking(boolean) ignored}, an extra byte is written. If the
+     * return value which is not {@link dorkbox.network.rmi.RemoteObject#setAsync(boolean) ignored}, an extra byte is written. If the
      * type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
      */
     public boolean rmiEnabled = false;

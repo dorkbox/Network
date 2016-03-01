@@ -108,7 +108,7 @@ interface Connection {
      * response is not received with the
      * {@link RemoteObject#setResponseTimeout(int) response timeout}.
      * <p/>
-     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
+     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false
      * (the default), then methods that return a value must not be called from
      * the update thread for the connection. An exception will be thrown if this
      * occurs. Methods with a void return value can be called on the update
@@ -134,7 +134,7 @@ interface Connection {
      * response is not received with the
      * {@link RemoteObject#setResponseTimeout(int) response timeout}.
      * <p/>
-     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false
+     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false
      * (the default), then methods that return a value must not be called from
      * the update thread for the connection. An exception will be thrown if this
      * occurs. Methods with a void return value can be called on the update

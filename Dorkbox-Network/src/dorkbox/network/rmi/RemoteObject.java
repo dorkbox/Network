@@ -34,8 +34,6 @@
  */
 package dorkbox.network.rmi;
 
-import dorkbox.network.connection.Connection;
-
 /**
  * Provides access to various settings on a remote object.
  *
@@ -44,30 +42,32 @@ import dorkbox.network.connection.Connection;
 public
 interface RemoteObject {
     /**
-     * Sets the milliseconds to wait for a method to return value. Default is 3000, 0 disables (ie: waits forever)
+     * Sets the milliseconds to wait for a method to return a value. Default is 3000, 0 disables (waits forever)
+     *
+     * @param timeoutMillis how long to wait for a method to return a value.
      */
     void setResponseTimeout(int timeoutMillis);
 
     /**
-     * Sets the blocking behavior when invoking a remote method. Default is false.
+     * Sets the blocking behavior when invoking a remote method. Default is false (blocking)
      *
-     * @param nonBlocking
+     * @param enable
      *                 If false, the invoking thread will wait for the remote method to return or timeout (default). If true, the invoking
      *                 thread will not wait for a response. The method will return immediately and the return value should be ignored. If
-     *                 they are being transmitted, the return value or any thrown exception can later be retrieved with {@link
+     *                 return values are being transmitted, the return value or any thrown exception can later be retrieved with {@link
      *                 #waitForLastResponse()} or {@link #waitForResponse(byte)}. The responses will be stored until retrieved, so each
      *                 method call should have a matching retrieve.
      */
-    void setNonBlocking(boolean nonBlocking);
+    void setAsync(boolean enable);
 
     /**
      * Sets whether return values are sent back when invoking a remote method. Default is true.
      *
      * @param transmit
-     *                 If true, then the return value for non-blocking method invocations can be retrieved with {@link
+     *                 If true, then the return value for async method invocations can be retrieved with {@link
      *                 #waitForLastResponse()} or {@link #waitForResponse(byte)}. If false, then non-primitive return values for remote
      *                 method invocations are not sent by the remote side of the connection and the response can never be retrieved. This
-     *                 can also be used to save bandwidth if you will not check the return value of a blocking remote invocation. Note that
+     *                 can also be used to save bandwidth if you will not check the return value of a blocking remote invocations. Note that
      *                 an exception could still be returned by {@link #waitForLastResponse()} or {@link #waitForResponse(byte)} if {@link
      *                 #setTransmitExceptions(boolean)} is true.
      */
@@ -78,7 +78,7 @@ interface RemoteObject {
      *
      * @param transmit
      *                 If false, exceptions will be unhandled and rethrown as RuntimeExceptions inside the invoking thread. This is the
-     *                 legacy behavior. If true, behavior is dependent on whether {@link #setNonBlocking(boolean)}. If non-blocking is true,
+     *                 legacy behavior. If true, behavior is dependent on whether {@link #setAsync(boolean)}. If non-blocking is true,
      *                 the exception will be serialized and sent back to the call site of the remotely invoked method, where it will be
      *                 re-thrown. If non-blocking is false, an exception will not be thrown in the calling thread but instead can be
      *                 retrieved with {@link #waitForLastResponse()} or {@link #waitForResponse(byte)}, similar to a return value.
@@ -86,32 +86,50 @@ interface RemoteObject {
     void setTransmitExceptions(boolean transmit);
 
     /**
-     * If true, UDP will be used to send the remote method invocation. UDP remote method invocations will never return a response and the
-     * invoking thread will not wait for a response.
+     * Specifies that remote method invocation will happen over TCP. This is the default.
+     * <p>
+     * TCP remote method invocations <b>will</b> return a response and the invoking thread <b>will</b> wait for a response. See {@link
+     * #setAsync(boolean)} if you do not want to wait for a response, which can be retrieved later with {@link #waitForLastResponse()} or
+     * {@link #waitForResponse(byte)}.
      */
-    void setUDP(boolean udp);
+    void setTCP();
 
     /**
-     * If true, UDT will be used to send the remote method invocation. UDT remote method invocations <b>will</b> return a response and the
-     * invoking thread <b>will</b> wait for a response.
+     * Specifies that remote method invocation will happen over UDP. Default is {@link #setTCP()}
+     * <p>
+     * UDP remote method invocations <b>will</b> return a response and the invoking thread <b>will</b> wait for a response. See {@link
+     * #setAsync(boolean)} if you do not want to wait for a response, which can be retrieved later with {@link #waitForLastResponse()} or
+     * {@link #waitForResponse(byte)}.
      */
-    void setUDT(boolean udt);
+    void setUDP();
 
     /**
-     * If false, calls to {@link Object#toString()} will return "<proxy #id>" (where `id` is the remote object ID) instead of invoking
-     * the remote `toString()` method on the object.
+     * Specifies that remote method invocation will happen over UDT. Default is {@link #setTCP()}
+     * <p>
+     * UDT remote method invocations <b>will</b> return a response and the invoking thread <b>will</b> wait for a response. See {@link
+     * #setAsync(boolean)} if you do not want to wait for a response, which can be retrieved later with {@link #waitForLastResponse()} or
+     * {@link #waitForResponse(byte)}.
+     */
+    void setUDT();
+
+    /**
+     * Permits calls to {@link Object#toString()} to actually return the `toString()` method on the object.
+     *
+     * @param enableDetailedToString
+     *                 If false, calls to {@link Object#toString()} will return "<proxy #id>" (where `id` is the remote object ID) instead
+     *                 of invoking the remote `toString()` method on the object.
      */
     void enableToString(boolean enableDetailedToString);
 
     /**
      * Waits for the response to the last method invocation to be received or the response timeout to be reached.
      *
-     * @see RmiBridge#createProxyObject(Connection, int, Class)
+     * @return the response of the last method invocation
      */
     Object waitForLastResponse();
 
     /**
-     * Gets the ID of response for the last method invocation.
+     * @return the ID of response for the last method invocation.
      */
     byte getLastResponseID();
 
@@ -122,7 +140,9 @@ interface RemoteObject {
      * this method should be called to get the result for a non-blocking call before an additional 63 non-blocking calls are made, or risk
      * undefined behavior due to identical IDs.
      *
-     * @see RmiBridge#createProxyObject(Connection, int, Class)
+     * @param responseID this is the response ID obtained via {@link #getLastResponseID()}
+     *
+     * @return the response of the last method invocation
      */
     Object waitForResponse(byte responseID);
 
@@ -130,9 +150,4 @@ interface RemoteObject {
      * Causes this RemoteObject to stop listening to the connection for method invocation response messages.
      */
     void close();
-
-    /**
-     * Returns the local connection for this remote object.
-     */
-    Connection getConnection();
 }

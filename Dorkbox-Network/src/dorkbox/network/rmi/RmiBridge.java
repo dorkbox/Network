@@ -60,7 +60,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
  * Connection#createProxyObject(Class)} for the registered objects.
  * <p/>
  * It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a return value which
- * is not {@link RemoteObject#setNonBlocking(boolean) ignored}, an extra byte is written. If the type of a parameter is not final (note that
+ * is not {@link RemoteObject#setAsync(boolean) ignored}, an extra byte is written. If the type of a parameter is not final (note that
  * primitives are final) then an extra byte is written for that parameter.
  * <p/>
  * <p/>
@@ -83,7 +83,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
  *
  * @author Nathan Sweet <misc@n4te.com>, Nathan Robinson
  */
-public
+public final
 class RmiBridge {
     public static final int INVALID_RMI = 0;
     static final int returnValueMask = 1 << 7;
@@ -100,40 +100,6 @@ class RmiBridge {
     public static
     boolean isGlobal(final int objectId) {
         return (objectId & 1) != 0;
-    }
-
-    /**
-     * Returns a proxy object that implements the specified interfaces. Methods invoked on the proxy object will be invoked remotely on the
-     * object with the specified ID in the ObjectSpace for the specified connection. If the remote end of the connection has not {@link
-     * RmiBridge#register(int, Object)} added the connection to the ObjectSpace, the remote method invocations will be ignored.
-     * <p/>
-     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
-     * RemoteObject#setResponseTimeout(int) response timeout}.
-     * <p/>
-     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false (the default), then methods that return a value must not be
-     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
-     * called on the update thread.
-     * <p/>
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
-     * have the proxy object replaced with the registered object.
-     *
-     * @see RemoteObject
-     */
-    public static
-    RemoteObject createProxyObject(Connection connection, int objectID, Class<?> iface) {
-        if (connection == null) {
-            throw new IllegalArgumentException("connection cannot be null.");
-        }
-        if (iface == null) {
-            throw new IllegalArgumentException("iface cannot be null.");
-        }
-
-        Class<?>[] temp = new Class<?>[2];
-        temp[0] = RemoteObject.class;
-        temp[1] = iface;
-
-        return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(), temp, new RemoteInvocationHandler(connection,
-                                                                                                                         objectID));
     }
 
     // the name of who created this RmiBridge
@@ -440,5 +406,43 @@ class RmiBridge {
         readLock.unlock();
 
         return id;
+    }
+
+    /**
+     * Warning. This is an advanced method. You should probably be using {@link Connection#createProxyObject(Class)}.
+     * <p>
+     * <p>
+     * Returns a proxy object that implements the specified interfaces. Methods invoked on the proxy object will be invoked remotely on the
+     * object with the specified ID in the ObjectSpace for the specified connection. If the remote end of the connection has not {@link
+     * RmiBridge#register(int, Object)} added the connection to the ObjectSpace, the remote method invocations will be ignored.
+     * <p/>
+     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
+     * RemoteObject#setResponseTimeout(int) response timeout}.
+     * <p/>
+     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must not be
+     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
+     * called on the update thread.
+     * <p/>
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
+     * have the proxy object replaced with the registered object.
+     *
+     * @see RemoteObject
+     */
+    public
+    RemoteObject createProxyObject(Connection connection, int objectID, Class<?> iface) {
+        if (connection == null) {
+            throw new IllegalArgumentException("connection cannot be null.");
+        }
+        if (iface == null) {
+            throw new IllegalArgumentException("iface cannot be null.");
+        }
+
+        Class<?>[] temp = new Class<?>[2];
+        temp[0] = RemoteObject.class;
+        temp[1] = iface;
+
+        return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(),
+                                                     temp,
+                                                     new RemoteObjectInvocationHandler(connection, objectID));
     }
 }

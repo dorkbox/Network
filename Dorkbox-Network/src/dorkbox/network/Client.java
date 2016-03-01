@@ -406,7 +406,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
      * RemoteObject#setResponseTimeout(int) response timeout}.
      * <p/>
-     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false (the default), then methods that return a value must not be
+     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must not be
      * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
      * called on the update thread.
      * <p/>
@@ -431,7 +431,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
      * RemoteObject#setResponseTimeout(int) response timeout}.
      * <p/>
-     * If {@link RemoteObject#setNonBlocking(boolean) non-blocking} is false (the default), then methods that return a value must not be
+     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must not be
      * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
      * called on the update thread.
      * <p/>
