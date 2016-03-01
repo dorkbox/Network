@@ -128,7 +128,7 @@ class RmiTest extends BaseTest {
                     System.out.println("You should see this 2 seconds before");
                     float slow = test.slow();
                     System.out.println("...This");
-                    assertEquals(slow, 123, .0001D);
+                    assertEquals(slow, 123, 0.0001D);
 
 
                     // Test sending a reference to a remote object.
@@ -304,7 +304,7 @@ class RmiTest extends BaseTest {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            return 123f;
+            return 123.0F;
         }
 
         @Override
