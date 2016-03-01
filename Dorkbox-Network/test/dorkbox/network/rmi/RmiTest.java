@@ -35,6 +35,12 @@ class RmiTest extends BaseTest {
                     //TestObject test = connection.getRemoteObject(id, TestObject.class);
                     RemoteObject remoteObject = (RemoteObject) test;
 
+                    final String s = remoteObject.toString();
+                    remoteObject.enableToString(true);
+                    assertFalse(s.equals(remoteObject.toString()));
+
+
+
                     // Default behavior. RMI is transparent, method calls behave like normal
                     // (return values and exceptions are returned, call is synchronous)
                     System.err.println("hashCode: " + test.hashCode());
@@ -314,6 +320,12 @@ class RmiTest extends BaseTest {
         public
         int hashCode() {
             return id;
+        }
+
+        @Override
+        public
+        String toString() {
+            return "Tada! This is a remote object!";
         }
     }
 

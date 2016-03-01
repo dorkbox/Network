@@ -56,7 +56,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public
 class RemoteInvocationHandler implements InvocationHandler {
     private static final Logger logger = LoggerFactory.getLogger(RemoteInvocationHandler.class);
-    public final int objectID;
 
     final ReentrantLock lock = new ReentrantLock();
     final Condition responseCondition = this.lock.newCondition();
@@ -65,6 +64,8 @@ class RemoteInvocationHandler implements InvocationHandler {
     final boolean[] pendingResponses = new boolean[64];
 
     private final Connection connection;
+    public final int objectID;
+    private final String proxyString;
     private final ListenerRaw<Connection, InvokeMethodResult> responseListener;
 
     private int timeoutMillis = 3000;
@@ -73,7 +74,7 @@ class RemoteInvocationHandler implements InvocationHandler {
     private boolean transmitReturnValue = true;
     private boolean transmitExceptions = true;
 
-    private boolean remoteToString;
+    private boolean enableToString;
 
     private boolean udp;
     private boolean udt;
@@ -86,6 +87,7 @@ class RemoteInvocationHandler implements InvocationHandler {
         super();
         this.connection = connection;
         this.objectID = objectID;
+        this.proxyString = "<proxy #" + objectID + ">";
 
         this.responseListener = new ListenerRaw<Connection, InvokeMethodResult>() {
             @Override
@@ -160,8 +162,8 @@ class RemoteInvocationHandler implements InvocationHandler {
                 this.udt = (Boolean) args[0];
                 return null;
             }
-            else if (name.equals("setRemoteToString")) {
-                this.remoteToString = (Boolean) args[0];
+            else if (name.equals("enableToString")) {
+                this.enableToString = (Boolean) args[0];
                 return null;
             }
             else if (name.equals("waitForLastResponse")) {
@@ -185,12 +187,12 @@ class RemoteInvocationHandler implements InvocationHandler {
             else if (name.equals("getConnection")) {
                 return this.connection;
             }
-            // Should never happen, for debugging purposes only
+            // Should never happen, for debugging purposes only!
             throw new Exception("Invocation handler could not find RemoteObject method.");
         }
-        else if (!this.remoteToString && declaringClass == Object.class && method.getName()
+        else if (!this.enableToString && declaringClass == Object.class && method.getName()
                                                                                  .equals("toString")) {
-            return "<proxy>";
+            return proxyString;
         }
 
         final Logger logger1 = RemoteInvocationHandler.logger;
@@ -294,7 +296,6 @@ class RemoteInvocationHandler implements InvocationHandler {
         }
 
         this.lastResponseID = (byte) (invokeMethod.responseData & RmiBridge.responseIdMask);
-
 
 
         if (this.nonBlocking || this.udp || this.udt) {

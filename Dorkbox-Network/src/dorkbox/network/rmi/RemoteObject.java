@@ -98,15 +98,15 @@ interface RemoteObject {
     void setUDT(boolean udt);
 
     /**
-     * If false, calls to {@link Object#toString()} will return "<proxy>" instead of being invoking the remote method. Default is false.
+     * If false, calls to {@link Object#toString()} will return "<proxy #id>" (where `id` is the remote object ID) instead of invoking
+     * the remote `toString()` method on the object.
      */
-    void setRemoteToString(boolean remoteToString);
+    void enableToString(boolean enableDetailedToString);
 
     /**
-     * Waits for the response to the last method invocation to be received or the response timeout to be reached. Must not be called from
-     * the connection's update thread.
+     * Waits for the response to the last method invocation to be received or the response timeout to be reached.
      *
-     * @see RmiBridge#getRemoteObject(dorkbox.Connection.connection.interfaces.IConnection.Connection, int, Class...)
+     * @see RmiBridge#createProxyObject(Connection, int, Class)
      */
     Object waitForLastResponse();
 
@@ -116,12 +116,13 @@ interface RemoteObject {
     byte getLastResponseID();
 
     /**
-     * Waits for the specified method invocation response to be received or the response timeout to be reached. Must not be called from the
-     * connection's update thread. Response IDs use a six bit identifier, with one identifier reserved for "no response". This means that
+     * Waits for the specified method invocation response to be received or the response timeout to be reached.
+     * <p>
+     * Response IDs use a six bit identifier, with one identifier reserved for "no response". This means that
      * this method should be called to get the result for a non-blocking call before an additional 63 non-blocking calls are made, or risk
      * undefined behavior due to identical IDs.
      *
-     * @see RmiBridge#getRemoteObject(dorkbox.Connection.connection.interfaces.IConnection.Connection, int, Class...)
+     * @see RmiBridge#createProxyObject(Connection, int, Class)
      */
     Object waitForResponse(byte responseID);
 
