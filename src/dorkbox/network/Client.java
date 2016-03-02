@@ -315,10 +315,12 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         // have to BLOCK
         // don't want the client to run before registration is complete
         synchronized (this.registrationLock) {
-            try {
-                this.registrationLock.wait(connectionTimeout);
-            } catch (InterruptedException e) {
-                throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds", e);
+            if (!registrationComplete) {
+                try {
+                    this.registrationLock.wait(connectionTimeout);
+                } catch (InterruptedException e) {
+                    throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds", e);
+                }
             }
         }
 
