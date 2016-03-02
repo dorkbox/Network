@@ -54,12 +54,43 @@ public
 class CachedMethod {
     private static final Logger logger = LoggerFactory.getLogger(CachedMethod.class);
 
+    private static final Comparator<Method> METHOD_COMPARATOR = new Comparator<Method>() {
+        @Override
+        public
+        int compare(Method o1, Method o2) {
+            // Methods are sorted so they can be represented as an index.
+            int diff = o1.getName()
+                         .compareTo(o2.getName());
+            if (diff != 0) {
+                return diff;
+            }
+            Class<?>[] argTypes1 = o1.getParameterTypes();
+            Class<?>[] argTypes2 = o2.getParameterTypes();
+            if (argTypes1.length > argTypes2.length) {
+                return 1;
+            }
+            if (argTypes1.length < argTypes2.length) {
+                return -1;
+            }
+            for (int i = 0; i < argTypes1.length; i++) {
+                diff = argTypes1[i].getName()
+                                   .compareTo(argTypes2[i].getName());
+                if (diff != 0) {
+                    return diff;
+                }
+            }
+            throw new RuntimeException("Two methods with same signature!"); // Impossible.
+        }
+    };
+
     // not concurrent because they are setup during system initialization
     public static final Map<Class<?>, Class<?>> overriddenMethods = new HashMap<Class<?>, Class<?>>();
     public static final Map<Class<?>, Class<?>> overriddenReverseMethods = new HashMap<Class<?>, Class<?>>();
 
     // the purpose of the method cache, is to accelerate looking up methods for specific class
     private static final Map<Class<?>, CachedMethod[]> methodCache = new ConcurrentHashMap<Class<?>, CachedMethod[]>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
+
+
 
     // type will be likely be the interface
     public static
@@ -92,10 +123,10 @@ class CachedMethod {
 
         Map<Method, Method> overriddenMethods = getOverriddenMethods(type, methods);
         final boolean hasOverriddenMethods = !overriddenMethods.isEmpty();
-
+        final boolean asmEnabled = kryo.getAsmEnabled();
 
         MethodAccess methodAccess = null;
-        if (kryo.getAsmEnabled() && !Util.isAndroid && Modifier.isPublic(type.getModifiers())) {
+        if (asmEnabled && !Util.isAndroid && Modifier.isPublic(type.getModifiers())) {
             methodAccess = MethodAccess.get(type);
         }
 
@@ -117,8 +148,7 @@ class CachedMethod {
                     method = overriddenMethod;
 
                     Class<?> overrideType = method.getDeclaringClass();
-
-                    if (kryo.getAsmEnabled() && !Util.isAndroid && Modifier.isPublic(overrideType.getModifiers())) {
+                    if (asmEnabled && !Util.isAndroid && Modifier.isPublic(overrideType.getModifiers())) {
                         localMethodAccess = MethodAccess.get(overrideType);
                         asmParameterTypes = method.getParameterTypes();
                     }
@@ -146,8 +176,7 @@ class CachedMethod {
             }
             cachedMethod.method = method;
             cachedMethod.origMethod = origMethod;
-            cachedMethod.methodClassID = kryo.getRegistration(method.getDeclaringClass())
-                                             .getId();
+            cachedMethod.methodClassID = kryo.getRegistration(method.getDeclaringClass()).getId();
             cachedMethod.methodIndex = i;
 
             // Store the serializer for each final parameter.
@@ -248,34 +277,7 @@ class CachedMethod {
             methods.add(method);
         }
 
-        Collections.sort(methods, new Comparator<Method>() {
-            @Override
-            public
-            int compare(Method o1, Method o2) {
-                // Methods are sorted so they can be represented as an index.
-                int diff = o1.getName()
-                             .compareTo(o2.getName());
-                if (diff != 0) {
-                    return diff;
-                }
-                Class<?>[] argTypes1 = o1.getParameterTypes();
-                Class<?>[] argTypes2 = o2.getParameterTypes();
-                if (argTypes1.length > argTypes2.length) {
-                    return 1;
-                }
-                if (argTypes1.length < argTypes2.length) {
-                    return -1;
-                }
-                for (int i = 0; i < argTypes1.length; i++) {
-                    diff = argTypes1[i].getName()
-                                       .compareTo(argTypes2[i].getName());
-                    if (diff != 0) {
-                        return diff;
-                    }
-                }
-                throw new RuntimeException("Two methods with same signature!"); // Impossible.
-            }
-        });
+        Collections.sort(methods, METHOD_COMPARATOR);
         return methods;
     }
 
