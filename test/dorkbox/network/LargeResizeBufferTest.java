@@ -49,7 +49,7 @@ class LargeResizeBufferTest extends BaseTest {
                   @Override
                   public
                   void received(Connection connection, LargeMessage object) {
-                      //System.err.println("Server ack message: " + received.get());
+                      // System.err.println("Server ack message: " + received.get());
 
                       connection.send()
                                 .TCP(object);
@@ -79,8 +79,8 @@ class LargeResizeBufferTest extends BaseTest {
                   void received(Connection connection, LargeMessage object) {
                       this.receivedBytes.addAndGet(object.bytes.length);
 
-                      int count = this.received.incrementAndGet();
-                      //System.out.println("Client received " + count + " messages.");
+                      int count = this.received.getAndIncrement();
+                      // System.out.println("Client received message: " + count);
 
                       if (count == messageCount) {
                           System.out.println("Client received all " + messageCount + " messages!");
