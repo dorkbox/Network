@@ -8,7 +8,6 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
 import ch.qos.logback.classic.joran.JoranConfigurator;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.ConsoleAppender;
-import com.esotericsoftware.minlog.Log;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.entropy.SimpleEntropy;
@@ -16,7 +15,6 @@ import dorkbox.util.exceptions.InitializationException;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.TimerTask;
 
 import static org.junit.Assert.fail;
 
@@ -44,9 +42,6 @@ class BaseTest {
     BaseTest() {
         System.out.println("---- " + getClass().getSimpleName());
 
-        // set the minlog logging level
-        Log.DEBUG();
-
         // assume SLF4J is bound to logback in the current environment
         Logger rootLogger = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
         LoggerContext context = rootLogger.getLoggerContext();
@@ -61,14 +56,10 @@ class BaseTest {
 //        rootLogger.setLevel(Level.TRACE);
 //        rootLogger.setLevel(Level.ALL);
 
+
         // we only want error messages
         Logger nettyLogger = (Logger) LoggerFactory.getLogger("io.netty");
         nettyLogger.setLevel(Level.ERROR);
-
-        // let the netty wrapper have debug messages.
-        Logger nettyWrapperLogger = (Logger) LoggerFactory.getLogger("io.netty.wrapper");
-        nettyWrapperLogger.setLevel(Level.DEBUG);
-
 
         // we only want error messages
         Logger kryoLogger = (Logger) LoggerFactory.getLogger("com.esotericsoftware");
@@ -169,14 +160,14 @@ class BaseTest {
     void waitForThreads0(final int stopAfterMillis) {
         this.fail_check = false;
 
-        TimerTask failTask = null;
+        Thread thread = null;
 
         if (stopAfterMillis > 0L) {
             stopEndPoints(stopAfterMillis);
 
             // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will
             // DEADLOCK
-            final Thread thread = new Thread(getThreadGroup(), new Runnable() {
+            thread = new Thread(getThreadGroup(), new Runnable() {
                 @Override
                 public
                 void run() {
@@ -186,8 +177,7 @@ class BaseTest {
                         Thread.sleep(stopAfterMillis + 120000L); // test must run in 2 minutes or it fails
 
                         BaseTest.this.fail_check = true;
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                    } catch (InterruptedException ignored) {
                     }
                 }
             }, "UnitTest timeout");
@@ -208,12 +198,12 @@ class BaseTest {
             }
         }
 
-        if (failTask != null) {
-            failTask.cancel();
-        }
-
         if (this.fail_check) {
             fail("Test did not complete in a timely manner.");
+        }
+
+        if (thread != null) {
+            thread.interrupt();
         }
 
         // Give sockets a chance to close before starting the next test.
