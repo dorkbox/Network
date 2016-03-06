@@ -38,7 +38,7 @@ package dorkbox.network.rmi;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ListenerRaw;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.network.util.RMISerializationManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -127,6 +127,8 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
                   .add(this.responseListener);
     }
 
+
+
     @SuppressWarnings({"AutoUnboxing", "AutoBoxing", "NumericCastThatLosesPrecision", "IfCanBeSwitch"})
     @Override
     public
@@ -205,7 +207,7 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
         final Logger logger1 = RemoteObjectInvocationHandler.logger;
 
         EndPoint endPoint = this.connection.getEndPoint();
-        final CryptoSerializationManager serializationManager = endPoint.getSerialization();
+        final RMISerializationManager serializationManager = endPoint.getSerialization();
 
         InvokeMethod invokeMethod = new InvokeMethod();
         invokeMethod.objectID = this.objectID;
@@ -213,7 +215,8 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
 
 
         // which method do we access?
-        CachedMethod[] cachedMethods = CachedMethod.getMethods(serializationManager.getKryo(), method.getDeclaringClass());
+        CachedMethod[] cachedMethods = CachedMethod.getMethods(serializationManager, method.getDeclaringClass());
+
         for (int i = 0, n = cachedMethods.length; i < n; i++) {
             CachedMethod cachedMethod = cachedMethods[i];
             Method checkMethod = cachedMethod.origMethod;
@@ -242,6 +245,7 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
                 break;
             }
         }
+
         if (invokeMethod.cachedMethod == null) {
             String msg = "Method not found: " + method;
             logger1.error(msg);
