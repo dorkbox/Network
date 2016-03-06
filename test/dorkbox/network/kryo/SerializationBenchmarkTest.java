@@ -1,6 +1,21 @@
 
 package dorkbox.network.kryo;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.joran.JoranConfigurator;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.FastInput;
+import com.esotericsoftware.kryo.io.FastOutput;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.io.UnsafeInput;
+import com.esotericsoftware.kryo.io.UnsafeOutput;
+import com.esotericsoftware.kryo.serializers.FieldSerializer;
+import org.slf4j.LoggerFactory;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Externalizable;
@@ -11,17 +26,6 @@ import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
-
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.KryoSerializable;
-import com.esotericsoftware.kryo.io.FastInput;
-import com.esotericsoftware.kryo.io.FastOutput;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-import com.esotericsoftware.kryo.io.UnsafeInput;
-import com.esotericsoftware.kryo.io.UnsafeOutput;
-import com.esotericsoftware.kryo.serializers.FieldSerializer;
-import com.esotericsoftware.minlog.Log;
 
 /*** This test was originally taken from a GridGain blog. It is a compares the speed of serialization using Java serialization,
  * Kryo, Kryo with Unsafe patches and GridGain's serialization.
@@ -750,7 +754,16 @@ public class SerializationBenchmarkTest extends KryoTestCase {
 	@Override
     protected void setUp () throws Exception {
 		super.setUp();
-		Log.WARN();
+
+        // assume SLF4J is bound to logback in the current environment
+        Logger rootLogger = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        LoggerContext context = rootLogger.getLoggerContext();
+
+        JoranConfigurator jc = new JoranConfigurator();
+        jc.setContext(context);
+        context.reset(); // override default configuration
+
+        rootLogger.setLevel(Level.WARN);
 	}
 
 	private static class SampleObject implements Externalizable, KryoSerializable {

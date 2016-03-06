@@ -1,29 +1,22 @@
 package dorkbox.network.kryo;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.joran.JoranConfigurator;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.io.*;
+import junit.framework.TestCase;
+import org.junit.Assert;
+import org.slf4j.LoggerFactory;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
-
-import junit.framework.TestCase;
-
-import org.junit.Assert;
-
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
-import com.esotericsoftware.kryo.io.ByteBufferInput;
-import com.esotericsoftware.kryo.io.ByteBufferOutput;
-import com.esotericsoftware.kryo.io.FastInput;
-import com.esotericsoftware.kryo.io.FastOutput;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-import com.esotericsoftware.kryo.io.UnsafeInput;
-import com.esotericsoftware.kryo.io.UnsafeMemoryInput;
-import com.esotericsoftware.kryo.io.UnsafeMemoryOutput;
-import com.esotericsoftware.kryo.io.UnsafeOutput;
-import com.esotericsoftware.minlog.Log;
 
 /**
  * Convenience methods for round tripping objects.
@@ -34,8 +27,10 @@ import com.esotericsoftware.minlog.Log;
 @SuppressWarnings({"rawtypes", "unchecked"})
 abstract public class KryoTestCase extends TestCase {
 
+    public static final int ORIGINAL_PACKAGE_LENGTH = "com.esotericsoftware.kryo".length();
+
     // HACK offset by 5 from original because of changes in package name + 5 because it has ANOTHER subclass
-    protected int packageOffset = "com.esotericsoftware.kryo".length() - this.getClass().getPackage().getName().length();
+    protected int packageOffset = ORIGINAL_PACKAGE_LENGTH - this.getClass().getPackage().getName().length();
 
 	protected Kryo kryo;
 	protected Output output;
@@ -57,7 +52,15 @@ abstract public class KryoTestCase extends TestCase {
 
 	@Override
     protected void setUp() throws Exception {
-		Log.TRACE();
+        // assume SLF4J is bound to logback in the current environment
+        Logger rootLogger = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        LoggerContext context = rootLogger.getLoggerContext();
+
+        JoranConfigurator jc = new JoranConfigurator();
+        jc.setContext(context);
+        context.reset(); // override default configuration
+
+        rootLogger.setLevel(Level.TRACE);
 
 		kryo = new Kryo();
 		kryo.setReferences(false);
