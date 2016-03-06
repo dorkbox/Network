@@ -37,15 +37,10 @@ class KryoEncoderCrypto extends KryoEncoder {
     void writeObject(final CryptoSerializationManager serializationManager,
                      final ChannelHandlerContext context,
                      final Object msg,
-                     final ByteBuf buffer) {
+                     final ByteBuf buffer) throws IOException {
 
         ConnectionImpl connection = (ConnectionImpl) context.pipeline()
                                                             .last();
-        try {
-            serializationManager.writeWithCryptoTcp(connection, buffer, msg);
-        } catch (IOException ex) {
-            context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass()
-                                                                                                    .getName(), ex));
-        }
+        serializationManager.writeWithCrypto(connection, buffer, msg);
     }
 }

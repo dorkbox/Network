@@ -36,19 +36,14 @@ class KryoDecoder extends ByteToMessageDecoder {
 
     @SuppressWarnings("unused")
     protected
-    Object readObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) {
+    Object readObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) throws IOException {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-        try {
-            return serializationManager.read(in, length);
-        } catch (IOException e) {
-            context.fireExceptionCaught(e);
-            return null;
-        }
+        return serializationManager.read(in, length);
     }
 
     @Override
     protected
-    void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+    void decode(ChannelHandlerContext context, ByteBuf in, List<Object> out) throws Exception {
 
         // Make sure if the length field was received,
         // and read the length of the next object from the socket.
@@ -73,20 +68,21 @@ class KryoDecoder extends ByteToMessageDecoder {
         // there's not enough bytes in the buffer.
         in.markReaderIndex();
 
-
         // Read the length field.
         int length = OptimizeUtilsByteBuf.readInt(in, true);
         readableBytes = in.readableBytes(); // have to adjust readable bytes, since we just read an int off the buffer.
 
 
         if (length == 0) {
-            ctx.fireExceptionCaught(new IllegalStateException("Kryo DecoderTCP had a read length of 0"));
+            context.fireExceptionCaught(new IllegalStateException("Kryo DecoderTCP had a read length of 0"));
             return;
         }
 
 
         // we can't test against a single "max size", since objects can back-up on the buffer.
         // we must ABSOLUTELY follow a "max size" rule when encoding objects, however.
+
+        final CryptoSerializationManager serializationManager = this.serializationManager;
 
         // Make sure if there's enough bytes in the buffer.
         if (length > readableBytes) {
@@ -99,6 +95,7 @@ class KryoDecoder extends ByteToMessageDecoder {
             in.resetReaderIndex();
 
             // wait for the rest of the object to come in.
+            // System.err.println(Thread.currentThread().getName() + " waiting for more of the object to arrive");
         }
 
         // how many objects are on this buffer?
@@ -153,13 +150,25 @@ class KryoDecoder extends ByteToMessageDecoder {
                 length = OptimizeUtilsByteBuf.readInt(in, true); // object LENGTH
 
                 // however many we need to
-                out.add(readObject(this.serializationManager, ctx, in, length));
+                Object object;
+                try {
+                    object = readObject(serializationManager, context, in, length);
+                    out.add(object);
+                } catch (Exception ex) {
+                    context.fireExceptionCaught(new IOException("Unable to deserialize object!", ex));
+                }
             }
             // the buffer reader index will be at the correct location, since the read object method advances it.
         }
         else {
             // exactly one!
-            out.add(readObject(this.serializationManager, ctx, in, length));
+            Object object;
+            try {
+                object = readObject(serializationManager, context, in, length);
+                out.add(object);
+            } catch (Exception ex) {
+                context.fireExceptionCaught(new IOException("Unable to deserialize object!", ex));
+            }
         }
     }
 }

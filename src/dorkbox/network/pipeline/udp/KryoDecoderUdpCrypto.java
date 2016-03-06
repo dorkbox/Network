@@ -48,7 +48,7 @@ class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
 
         try {
             ByteBuf data = in.content();
-            Object object = serializationManager.readWithCryptoUdp((ConnectionImpl) last, data, data.readableBytes());
+            Object object = serializationManager.readWithCrypto((ConnectionImpl) last, data, data.readableBytes());
             out.add(object);
         } catch (IOException e) {
             String message = "Unable to deserialize object";

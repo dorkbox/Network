@@ -39,6 +39,6 @@ class KryoEncoderUdpCrypto extends KryoEncoderUdp {
         ChannelHandler last = ctx.pipeline()
                                  .last();
 
-        serializationManager.writeWithCryptoUdp((ConnectionImpl) last, buffer, msg);
+        serializationManager.writeWithCrypto((ConnectionImpl) last, buffer, msg);
     }
 }

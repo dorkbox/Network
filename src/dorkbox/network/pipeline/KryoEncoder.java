@@ -15,7 +15,6 @@
  */
 package dorkbox.network.pipeline;
 
-import com.esotericsoftware.kryo.KryoException;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 import io.netty.buffer.ByteBuf;
@@ -28,7 +27,8 @@ import java.io.IOException;
 @Sharable
 public
 class KryoEncoder extends MessageToByteEncoder<Object> {
-    private static final int reservedLengthIndex = 4;
+    // maximum size of length field. Un-optimized will always be 4, but optimized version can take from 1 - 5 (for Integer.MAX_VALUE).
+    private static final int reservedLengthIndex = 5;
     private final CryptoSerializationManager serializationManager;
 
 
@@ -44,50 +44,44 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
     void writeObject(final CryptoSerializationManager kryoWrapper,
                      final ChannelHandlerContext context,
                      final Object msg,
-                     final ByteBuf buffer) {
+                     final ByteBuf buffer) throws IOException {
+
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-        try {
-            kryoWrapper.write(buffer, msg);
-        } catch (IOException ex) {
-            context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass()
-                                                                                                    .getName(), ex));
-        }
+        kryoWrapper.write(buffer, msg);
     }
 
     @Override
     protected
     void encode(final ChannelHandlerContext context, final Object msg, final ByteBuf out) throws Exception {
         // we don't necessarily start at 0!!
-        int startIndex = out.writerIndex();
+        // START at index = 5. This is to make room for the integer placed by the frameEncoder for TCP.
+        int startIndex = out.writerIndex() + reservedLengthIndex;
 
         if (msg != null) {
-
-            // Write data. START at index = 4. This is to make room for the integer placed by the frameEncoder for TCP.
-            // DOES NOT SUPPORT NEGATIVE NUMBERS!
-            out.writeInt(0);  // put an int in, which is the same size as reservedLengthIndex
+            out.writerIndex(startIndex);
 
             try {
                 writeObject(this.serializationManager, context, msg, out);
+                int index = out.writerIndex();
 
-                // now set the frame (if it's TCP)!
-                // (reservedLengthLength) 4 is the reserved space for the integer.
-                int length = out.readableBytes() - startIndex - reservedLengthIndex;
+                // now set the frame length (if it's TCP)!
+                // (reservedLengthLength) 5 is the reserved space for the integer.
+                int length = index - startIndex;
 
                 // specify the header.
                 int lengthOfTheLength = OptimizeUtilsByteBuf.intLength(length, true);
 
-                // 4 was the position specified by the kryoEncoder. It was to make room for the integer. DOES NOT SUPPORT NEGATIVE NUMBERS!
-                int newIndex = startIndex + reservedLengthIndex - lengthOfTheLength;
-                int oldIndex = out.writerIndex();
-
-                out.writerIndex(newIndex);
+                // make it so the location we write out our length is aligned to the end.
+                int indexForLength = startIndex - lengthOfTheLength;
+                out.writerIndex(indexForLength);
 
                 // do the optimized length thing!
                 OptimizeUtilsByteBuf.writeInt(out, length, true);
-                out.setIndex(newIndex, oldIndex);
-            } catch (KryoException ex) {
-                context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass()
-                                                                                                        .getName(), ex));
+
+                // newIndex is actually where we want to start reading the data as well when written to the socket
+                out.setIndex(indexForLength, index);
+            } catch (Exception ex) {
+                context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass().getName(), ex));
             }
         }
     }

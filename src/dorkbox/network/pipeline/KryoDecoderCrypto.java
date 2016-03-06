@@ -24,7 +24,6 @@ import java.io.IOException;
 
 // on client this is MessageToMessage (because of the UdpDecoder in the pipeline!)
 
-
 public
 class KryoDecoderCrypto extends KryoDecoder {
 
@@ -38,15 +37,10 @@ class KryoDecoderCrypto extends KryoDecoder {
     Object readObject(final CryptoSerializationManager serializationManager,
                       final ChannelHandlerContext context,
                       final ByteBuf in,
-                      final int length) {
+                      final int length) throws IOException {
 
         ConnectionImpl connection = (ConnectionImpl) context.pipeline()
                                                             .last();
-        try {
-            return serializationManager.readWithCryptoTcp(connection, in, length);
-        } catch (IOException e) {
-            context.fireExceptionCaught(e);
-            return null;
-        }
+        return serializationManager.readWithCrypto(connection, in, length);
     }
 }
