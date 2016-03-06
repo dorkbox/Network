@@ -39,6 +39,7 @@ class RmiGlobalTest extends BaseTest {
 
                     System.err.println("Starting test for: " + remoteObjectID);
 
+
                     //TestObject test = connection.getRemoteObject(id, TestObject.class);
                     assertEquals(remoteObject.hashCode(), test.hashCode());
                     RemoteObject remoteObject = (RemoteObject) test;
@@ -47,6 +48,13 @@ class RmiGlobalTest extends BaseTest {
                     // (return values and exceptions are returned, call is synchronous)
                     System.err.println("hashCode: " + test.hashCode());
                     System.err.println("toString: " + test);
+
+                    // see what the "remote" toString() method is
+                    final String s = remoteObject.toString();
+                    remoteObject.enableToString(true);
+                    assertFalse(s.equals(remoteObject.toString()));
+
+
                     test.moo();
                     test.moo("Cow");
                     assertEquals(remoteObjectID, test.id());

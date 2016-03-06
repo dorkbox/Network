@@ -16,7 +16,10 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public
 class RmiTest extends BaseTest {
@@ -35,16 +38,16 @@ class RmiTest extends BaseTest {
                     //TestObject test = connection.getRemoteObject(id, TestObject.class);
                     RemoteObject remoteObject = (RemoteObject) test;
 
-                    final String s = remoteObject.toString();
-                    remoteObject.enableToString(true);
-                    assertFalse(s.equals(remoteObject.toString()));
-
-
-
                     // Default behavior. RMI is transparent, method calls behave like normal
                     // (return values and exceptions are returned, call is synchronous)
                     System.err.println("hashCode: " + test.hashCode());
                     System.err.println("toString: " + test);
+
+                    // see what the "remote" toString() method is
+                    final String s = remoteObject.toString();
+                    remoteObject.enableToString(true);
+                    assertFalse(s.equals(remoteObject.toString()));
+
                     test.moo();
                     test.moo("Cow");
                     assertEquals(remoteObjectID, test.id());
@@ -163,7 +166,6 @@ class RmiTest extends BaseTest {
     void rmi() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
         register(KryoCryptoSerializationManager.DEFAULT);
-
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
