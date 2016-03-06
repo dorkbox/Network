@@ -82,8 +82,8 @@ class RmiTest extends BaseTest {
                     }
                     assertTrue(caught);
 
-                    // Return values are ignored, but exceptions are still dealt with properly
 
+                    // Return values are ignored, but exceptions are still dealt with properly
                     remoteObject.setTransmitReturnValue(false);
                     test.moo("Baa");
                     test.id();
