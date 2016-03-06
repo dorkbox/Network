@@ -15,9 +15,7 @@
  */
 package dorkbox.network.util;
 
-import com.esotericsoftware.kryo.ClassResolver;
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Registration;
+import dorkbox.network.connection.KryoExtra;
 
 public
 interface RMISerializationManager {
@@ -28,14 +26,14 @@ interface RMISerializationManager {
     void initRmiSerialization();
 
     /**
-     * If the class is not registered and {@link Kryo#setRegistrationRequired(boolean)} is false, it is automatically registered using the
-     * {@link Kryo#addDefaultSerializer(Class, Class) default serializer}.
-     *
-     * @throws IllegalArgumentException
-     *                 if the class is not registered and registration is required.
-     * @see ClassResolver#getRegistration(Class)
+     * @return takes a kryo instance from the pool.
      */
-    Registration getRegistration(Class<?> clazz);
+    KryoExtra takeKryo();
+
+    /**
+     * Returns a kryo instance to the pool.
+     */
+    void returnKryo(KryoExtra object);
 
     /**
      * Objects that we want to use RMI with, must be accessed via an interface. This method configures the serialization of an

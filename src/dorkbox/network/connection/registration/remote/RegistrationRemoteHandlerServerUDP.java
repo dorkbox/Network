@@ -105,7 +105,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
                 ConnectionImpl networkConnection = this.registrationWrapper.getServerUDP(remoteAddress);
                 if (networkConnection != null) {
                     // try to write data! (IT SHOULD ALWAYS BE ENCRYPTED HERE!)
-                    this.serializationManager.writeWithCryptoUdp(networkConnection, buffer, object);
+                    this.serializationManager.writeWithCrypto(networkConnection, buffer, object);
                 }
                 else {
                     // this means we are still in the REGISTRATION phase.
@@ -182,7 +182,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
                 Object object;
 
                 try {
-                    object = serializationManager2.readWithCryptoUdp(connection, data, data.writerIndex());
+                    object = serializationManager2.readWithCrypto(connection, data, data.writerIndex());
                 } catch (Exception e) {
                     logger2.error("UDP unable to deserialize buffer", e);
                     shutdown(registrationWrapper2, channel);
