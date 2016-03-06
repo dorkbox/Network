@@ -23,7 +23,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -34,31 +33,7 @@ public
 class LocalRmiEncoder extends MessageToMessageEncoder<Object> {
 
     private static final Map<Class<?>, Boolean> transformObjectCache = new ConcurrentHashMap<Class<?>, Boolean>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
-    private static final Map<Class<?>, Field[]> fieldCache = new ConcurrentHashMap<Class<?>, Field[]>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
-
-    static
-    Field[] getRmiFields(final Class<?> clazz) {
-        // duplicates are OK, because they will contain the same information
-        Field[] rmiFields = fieldCache.get(clazz);
-        if (rmiFields != null) {
-            return rmiFields;
-        }
-
-        final ArrayList<Field> fields = new ArrayList<Field>();
-
-        for (Field field : clazz.getDeclaredFields()) {
-            if (field.getAnnotation(RMI.class) != null) {
-                fields.add(field);
-            }
-        }
-
-
-        rmiFields = new Field[fields.size()];
-        fields.toArray(rmiFields);
-
-        fieldCache.put(clazz, rmiFields);
-        return rmiFields;
-    }
+    private static final RmiFieldCache fieldCache = RmiFieldCache.INSTANCE();
 
     private final ThreadLocal<Map<Object, Integer>> threadLocal = new ThreadLocal<Map<Object, Integer>>() {
         @Override
@@ -115,7 +90,7 @@ class LocalRmiEncoder extends MessageToMessageEncoder<Object> {
 
     private
     Object replaceFieldObjects(final ConnectionImpl connection, final Object object, final Class<?> implClass) {
-        Field[] rmiFields = getRmiFields(implClass);
+        Field[] rmiFields = fieldCache.get(implClass);
         int length = rmiFields.length;
 
         Object rmiObject = null;

@@ -16,47 +16,19 @@
 package dorkbox.network.pipeline;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.rmi.CachedMethod;
-import dorkbox.network.rmi.RMI;
+import dorkbox.network.rmi.OverriddenMethods;
 import dorkbox.network.rmi.RemoteObject;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageDecoder;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public
 class LocalRmiDecoder extends MessageToMessageDecoder<Object> {
 
-    private static final Map<Class<?>, Field[]> fieldCache = new ConcurrentHashMap<Class<?>, Field[]>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
-
-    static
-    Field[] getRmiFields(final Class<?> clazz) {
-        // duplicates are OK, because they will contain the same information
-        Field[] rmiFields = fieldCache.get(clazz);
-        if (rmiFields != null) {
-            return rmiFields;
-        }
-
-        final ArrayList<Field> fields = new ArrayList<Field>();
-
-        for (Field field : clazz.getDeclaredFields()) {
-            if (field.getAnnotation(RMI.class) != null) {
-                fields.add(field);
-            }
-        }
-
-
-        rmiFields = new Field[fields.size()];
-        fields.toArray(rmiFields);
-
-        fieldCache.put(clazz, rmiFields);
-        return rmiFields;
-    }
+    private static final RmiFieldCache fieldCache = RmiFieldCache.INSTANCE();
+    private static final OverriddenMethods overriddenMethods = OverriddenMethods.INSTANCE();
 
     public
     LocalRmiDecoder() {
@@ -79,7 +51,7 @@ class LocalRmiDecoder extends MessageToMessageDecoder<Object> {
             Object localRmiObject = null;
             Field field;
             int registeredId;
-            final Field[] rmiFields = getRmiFields(messageClass);
+            final Field[] rmiFields = fieldCache.get(messageClass);
             for (int i = 0; i < rmiFields.length; i++) {
                 field = rmiFields[i];
                 registeredId = rmiFieldIds[i];
@@ -94,11 +66,14 @@ class LocalRmiDecoder extends MessageToMessageDecoder<Object> {
                         e.printStackTrace();
                     }
 
-                    final Class<?> iface = CachedMethod.overriddenReverseMethods.get(localRmiObject.getClass());
+                    if (localRmiObject == null) {
+                        throw new RuntimeException("Unable to get RMI interface object for RMI implementation");
+                    }
+
+                    final Class<?> iface = overriddenMethods.getReverse(localRmiObject.getClass());
                     if (iface == null) {
                         throw new RuntimeException("Unable to get interface for RMI implementation");
                     }
-
 
                     RemoteObject remoteObject = connection.getProxyObject(registeredId, iface);
                     field.set(messageObject, remoteObject);
