@@ -36,10 +36,13 @@ package dorkbox.network.rmi;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.util.IdentityMap;
 import com.esotericsoftware.kryo.util.Util;
 import com.esotericsoftware.reflectasm.MethodAccess;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.KryoExtra;
+import dorkbox.network.util.RMISerializationManager;
 import dorkbox.util.ClassHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +50,10 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public
@@ -64,14 +70,17 @@ class CachedMethod {
             if (diff != 0) {
                 return diff;
             }
+
             Class<?>[] argTypes1 = o1.getParameterTypes();
             Class<?>[] argTypes2 = o2.getParameterTypes();
             if (argTypes1.length > argTypes2.length) {
                 return 1;
             }
+
             if (argTypes1.length < argTypes2.length) {
                 return -1;
             }
+
             for (int i = 0; i < argTypes1.length; i++) {
                 diff = argTypes1[i].getName()
                                    .compareTo(argTypes2[i].getName());
@@ -79,17 +88,13 @@ class CachedMethod {
                     return diff;
                 }
             }
-            throw new RuntimeException("Two methods with same signature!"); // Impossible.
+            throw new RuntimeException("Two methods with same signature!"); // Impossible, should never happen
         }
     };
 
-    // not concurrent because they are setup during system initialization
-    public static final Map<Class<?>, Class<?>> overriddenMethods = new HashMap<Class<?>, Class<?>>();
-    public static final Map<Class<?>, Class<?>> overriddenReverseMethods = new HashMap<Class<?>, Class<?>>();
-
     // the purpose of the method cache, is to accelerate looking up methods for specific class
     private static final Map<Class<?>, CachedMethod[]> methodCache = new ConcurrentHashMap<Class<?>, CachedMethod[]>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
-
+    private static final OverriddenMethods overriddenMethods = OverriddenMethods.INSTANCE();
 
 
     // type will be likely be the interface
@@ -100,8 +105,38 @@ class CachedMethod {
             return cachedMethods;
         }
 
+        cachedMethods = getCachedMethods(kryo, type);
+        methodCache.put(type, cachedMethods);
+
+        return cachedMethods;
+    }
+
+
+    // type will be likely be the interface
+    public static
+    CachedMethod[] getMethods(final RMISerializationManager serializationManager, final Class<?> type) {
+        CachedMethod[] cachedMethods = methodCache.get(type);
+        if (cachedMethods != null) {
+            return cachedMethods;
+        }
+
+        final KryoExtra kryo = serializationManager.takeKryo();
+        try {
+            cachedMethods = getCachedMethods(kryo, type);
+            methodCache.put(type, cachedMethods);
+        } finally {
+            serializationManager.returnKryo(kryo);
+        }
+
+        return cachedMethods;
+    }
+
+    private static
+    CachedMethod[] getCachedMethods(final Kryo kryo, final Class<?> type) {
         // race-conditions are OK, because we just recreate the same thing.
-        ArrayList<Method> methods = getMethods(type);
+        final ArrayList<Method> methods = getMethods(type);
+        final int size = methods.size();
+        final CachedMethod[] cachedMethods = new CachedMethod[size];
 
         // In situations where we want to pass in the Connection (to an RMI method), we have to be able to override method A, with method B.
         // This is to support calling RMI methods from an interface (that does pass the connection reference) to
@@ -118,31 +153,31 @@ class CachedMethod {
 
         // To facilitate this functionality, for methods with the same name, the "overriding" method is the one that inherits the Connection
         // interface as the first parameter, and  .registerRemote(ifaceClass, implClass)  must be called.
-
-
-
-        Map<Method, Method> overriddenMethods = getOverriddenMethods(type, methods);
-        final boolean hasOverriddenMethods = !overriddenMethods.isEmpty();
+        final IdentityMap<Method, Method> overriddenMethods = getOverriddenMethods(type, methods);
         final boolean asmEnabled = kryo.getAsmEnabled();
 
         MethodAccess methodAccess = null;
-        if (asmEnabled && !Util.isAndroid && Modifier.isPublic(type.getModifiers())) {
+        // reflectASM can't get any method from the 'Object' object, and it MUST be public
+        if (asmEnabled && type != Object.class && !Util.isAndroid && Modifier.isPublic(type.getModifiers())) {
             methodAccess = MethodAccess.get(type);
+            if (methodAccess.getMethodNames().length == 0 && methodAccess.getParameterTypes().length == 0 &&
+                methodAccess.getReturnTypes().length == 0) {
+
+                // there was NOTHING reflectASM found, so trying to use it doesn't do us any good
+                methodAccess = null;
+            }
         }
 
-        int n = methods.size();
-        cachedMethods = new CachedMethod[n];
-        for (int i = 0; i < n; i++) {
-            Method origMethod = methods.get(i);
-            Method method = origMethod;
-            MethodAccess localMethodAccess = methodAccess;
+        for (int i = 0; i < size; i++) {
+            final Method origMethod = methods.get(i);
+            Method method = origMethod; // copy because one or more can be overridden
+            MethodAccess localMethodAccess = methodAccess; // copy because one or more can be overridden
             Class<?>[] parameterTypes = method.getParameterTypes();
             Class<?>[] asmParameterTypes = parameterTypes;
 
-            if (hasOverriddenMethods) {
+            if (overriddenMethods != null) {
                 Method overriddenMethod = overriddenMethods.remove(method);
-                boolean overridden = overriddenMethod != null;
-                if (overridden) {
+                if (overriddenMethod != null) {
                     // we can override the details of this method BECAUSE (and only because) our kryo registration override will return
                     // the correct object for this overridden method to be called on.
                     method = overriddenMethod;
@@ -164,9 +199,9 @@ class CachedMethod {
                     asmCachedMethod.methodAccessIndex = index;
                     asmCachedMethod.methodAccess = localMethodAccess;
                     cachedMethod = asmCachedMethod;
-                } catch (RuntimeException e) {
+                } catch (Exception e) {
                     if (logger.isTraceEnabled()) {
-                        logger.trace("Unable to use ReflectAsm for {}:{}", method.getDeclaringClass(), method.getName(), e);
+                        logger.trace("Unable to use ReflectAsm for {}.{}", method.getDeclaringClass(), method.getName(), e);
                     }
                 }
             }
@@ -191,18 +226,16 @@ class CachedMethod {
             cachedMethods[i] = cachedMethod;
         }
 
-        methodCache.put(type, cachedMethods);
         return cachedMethods;
     }
 
     private static
-    Map<Method, Method> getOverriddenMethods(final Class<?> type, final ArrayList<Method> origMethods) {
+    IdentityMap<Method, Method> getOverriddenMethods(final Class<?> type, final ArrayList<Method> origMethods) {
         final Class<?> implType = overriddenMethods.get(type);
 
         if (implType != null) {
-            ArrayList<Method> implMethods = getMethods(implType);
-
-            HashMap<Method, Method> overrideMap = new HashMap<Method, Method>(implMethods.size());
+            final ArrayList<Method> implMethods = getMethods(implType);
+            final IdentityMap<Method, Method> overrideMap = new IdentityMap<Method, Method>(implMethods.size());
 
             for (Method origMethod : origMethods) {
                 String name = origMethod.getName();
@@ -242,15 +275,13 @@ class CachedMethod {
             return overrideMap;
         }
         else {
-            return new HashMap<Method, Method>(0);
+            return null;
         }
     }
 
-
-
     private static
     ArrayList<Method> getMethods(final Class<?> type) {
-        ArrayList<Method> allMethods = new ArrayList<Method>();
+        final ArrayList<Method> allMethods = new ArrayList<Method>();
 
         Class<?> nextClass = type;
         while (nextClass != null) {
@@ -261,7 +292,7 @@ class CachedMethod {
             }
         }
 
-        ArrayList<Method> methods = new ArrayList<Method>(Math.max(1, allMethods.size()));
+        final ArrayList<Method> methods = new ArrayList<Method>(Math.max(1, allMethods.size()));
         for (int i = 0, n = allMethods.size(); i < n; i++) {
             Method method = allMethods.get(i);
             int modifiers = method.getModifiers();
@@ -287,8 +318,7 @@ class CachedMethod {
      */
     public static
     void registerOverridden(final Class<?> ifaceClass, final Class<?> implClass) {
-        overriddenMethods.put(ifaceClass, implClass);
-        overriddenReverseMethods.put(implClass, ifaceClass);
+        overriddenMethods.set(ifaceClass, implClass);
     }
 
     public Method method;
