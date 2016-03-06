@@ -326,7 +326,7 @@ class RmiBridge {
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
-            logger2.trace("Object registered with ObjectSpace as {}:{}", objectID, object);
+            logger2.trace("Object <proxy #{}> registered with ObjectSpace with .toString() = '{}'", objectID, object);
         }
     }
 
@@ -348,7 +348,7 @@ class RmiBridge {
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
-            logger2.trace("Object {} removed from ObjectSpace: {}", objectID, object);
+            logger2.trace("Object <proxy #{}> removed from ObjectSpace with .toString() = '{}'", objectID, object);
         }
     }
 
