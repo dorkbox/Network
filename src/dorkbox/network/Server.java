@@ -24,6 +24,7 @@ import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerS
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
+import dorkbox.util.Property;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
@@ -57,11 +58,19 @@ import java.io.IOException;
  */
 public
 class Server<C extends Connection> extends EndPointServer<C> {
+    /**
+     * Gets the version number.
+     */
+    public static
+    String getVersion() {
+        return "1.0";
+    }
 
     /**
      * The maximum queue length for incoming connection indications (a request to connect). If a connection indication arrives when the
      * queue is full, the connection is refused.
      */
+    @Property
     public static int backlogConnectionCount = 50;
 
     private final ServerBootstrap localBootstrap;

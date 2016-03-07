@@ -44,6 +44,14 @@ class Broadcast {
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger("Broadcast Host Discovery");
 
     /**
+     * Gets the version number.
+     */
+    public static
+    String getVersion() {
+        return "1.0";
+    }
+
+    /**
      * Broadcasts a UDP message on the LAN to discover any running servers. The address of the first server to respond is returned.
      * <p/>
      * From KryoNet

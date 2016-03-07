@@ -61,6 +61,13 @@ import java.net.InetSocketAddress;
 @SuppressWarnings("unused")
 public
 class Client<C extends Connection> extends EndPointClient<C> implements Connection {
+    /**
+     * Gets the version number.
+     */
+    public static
+    String getVersion() {
+        return "1.0";
+    }
 
     /**
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme

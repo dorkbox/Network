@@ -27,6 +27,7 @@ import dorkbox.network.dns.record.ServiceRecord;
 import dorkbox.network.dns.record.StartOfAuthorityRecord;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
+import dorkbox.util.Property;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.AddressedEnvelope;
@@ -84,7 +85,8 @@ class DnsClient {
     }
 
     // @formatter:off
-    public static final List<InetSocketAddress> DNS_SERVER_LIST = Arrays.asList(
+    @Property
+    public static List<InetSocketAddress> DNS_SERVER_LIST = Arrays.asList(
         new InetSocketAddress("8.8.8.8", 53), // Google Public DNS
         new InetSocketAddress("8.8.4.4", 53),
         new InetSocketAddress("208.67.222.222", 53), // OpenDNS
@@ -96,6 +98,14 @@ class DnsClient {
 
 
     private static final String ptrSuffix = ".in-addr.arpa";
+
+    /**
+     * Gets the version number.
+     */
+    public static
+    String getVersion() {
+        return "1.0";
+    }
 
     /**
      * Retrieve the public facing IP address of this system using DNS.
