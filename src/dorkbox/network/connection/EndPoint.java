@@ -26,9 +26,9 @@ import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.network.util.EndPointTool;
 import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
+import dorkbox.util.Property;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.CryptoECC;
@@ -52,7 +52,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -82,7 +81,9 @@ class EndPoint<C extends Connection> {
     /**
      * The HIGH and LOW watermark points for connections
      */
+    @Property
     protected static final int WRITE_BUFF_HIGH = 32 * 1024;
+    @Property
     protected static final int WRITE_BUFF_LOW = 8 * 1024;
 
     public static final String THREADGROUP_NAME = "(Netty)";
@@ -90,12 +91,14 @@ class EndPoint<C extends Connection> {
     /**
      * this can be changed to a more specialized value, if necessary
      */
+    @Property
     public static int DEFAULT_THREAD_POOL_SIZE = Runtime.getRuntime()
                                                         .availableProcessors() * 2;
     /**
      * The amount of time in milli-seconds to wait for this endpoint to close all
      * {@link Channel}s and shutdown gracefully.
      */
+    @Property
     public static long maxShutdownWaitTimeInMilliSeconds = 2000L; // in milliseconds
 
     /**
@@ -120,6 +123,7 @@ class EndPoint<C extends Connection> {
      * DON'T go higher that 1400 over the internet, but 9k is possible
      * with jumbo frames on a local network (if it's supported)
      */
+    @Property
     public static int udpMaxSize = 508;
 
 
@@ -157,7 +161,6 @@ class EndPoint<C extends Connection> {
     // the eventLoop groups are used to track and manage the event loops for startup/shutdown
     private final List<EventLoopGroup> eventLoopGroups = new ArrayList<EventLoopGroup>(8);
     private final List<ChannelFuture> shutdownChannelList = new ArrayList<ChannelFuture>();
-    private final ConcurrentHashMap<Class<?>, EndPointTool> toolMap = new ConcurrentHashMap<Class<?>, EndPointTool>();
 
     // make sure that the endpoint is closed on JVM shutdown (if it's still open at that point in time)
     protected Thread shutdownHook;
@@ -523,35 +526,6 @@ class EndPoint<C extends Connection> {
      */
     public abstract
     ConnectionBridgeBase send();
-
-    /**
-     * Registers a tool with the server, to be used by other services.
-     */
-    public
-    <Tool extends EndPointTool> void registerTool(Tool toolClass) {
-        if (toolClass == null) {
-            throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
-        }
-
-        EndPointTool put = this.toolMap.put(toolClass.getClass(), toolClass);
-        if (put != null) {
-            throw new IllegalArgumentException("Tool must be unique! Unable to add tool '" + toolClass + "'");
-        }
-    }
-
-    /**
-     * Only get the tools in the ModuleStart (ie: load) methods. If done in the constructor, the tool might not be available yet
-     */
-    public
-    <Tool extends EndPointTool> Tool getTool(Class<Tool> toolClass) {
-        if (toolClass == null) {
-            throw new IllegalArgumentException("Tool must not be null! Unable to add tool");
-        }
-
-        @SuppressWarnings("unchecked")
-        Tool tool = (Tool) this.toolMap.get(toolClass);
-        return tool;
-    }
 
     /**
      * Closes all connections ONLY (keeps the server/client running).
