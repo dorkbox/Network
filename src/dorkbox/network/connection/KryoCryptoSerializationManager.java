@@ -71,11 +71,6 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
 
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(KryoCryptoSerializationManager.class);
 
-    // compression options
-    @Property
-    static final int compressionLevel = 6;
-
-
     /**
      * Specify if we want KRYO to use unsafe memory for serialization, or to use the ASM backend. Unsafe memory use is WAY faster, but is
      * limited to the "same endianess" on all endpoints, and unsafe DOES NOT work on android.
