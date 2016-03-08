@@ -694,9 +694,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     @Override
     public
     void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
-        if (!(cause instanceof IOException)) {
-            Channel channel = context.channel();
+        final Channel channel = context.channel();
 
+        if (!(cause instanceof IOException)) {
             // safe to ignore, since it's thrown when we try to interact with a closed socket. Race conditions cause this, and
             // it is still safe to ignore.
             this.logger.error("Unexpected exception while receiving data from {}", channel.remoteAddress(), cause);
@@ -709,6 +709,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             if (channel.isOpen()) {
                 channel.close();
             }
+        } else {
+            // it's an IOException, just log it!
+            this.logger.error("Unexpected exception while communicating with {}!", channel.remoteAddress(), cause);
         }
     }
 
@@ -996,7 +999,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
 
         if (implementationClassName != null) {
-            // THIS IS ON THE SERVER SIDE
+            // THIS IS ON THE REMOTE CONNECTION (where the object will really exist)
             //
             // CREATE a new ID, and register the ID and new object (must create a new one) in the object maps
 
@@ -1042,7 +1045,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             }
         }
         else if (remoteRegistration.remoteObjectId > RmiBridge.INVALID_RMI) {
-            // THIS IS ON THE SERVER SIDE
+            // THIS IS ON THE REMOTE CONNECTION (where the object will really exist)
             //
             // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
             Object object = getImplementationObject(remoteRegistration.remoteObjectId);
@@ -1054,7 +1057,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
             }
         }
         else {
-            // THIS IS ON THE CLIENT SIDE
+            // THIS IS ON THE LOCAL CONNECTION (that sent the 'create proxy object') SIDE
 
             // the next two use a local var, so that there isn't a double hit for volatile access
             final ObjectRegistrationLatch latch = this.objectRegistrationLatch;
@@ -1075,7 +1078,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
 
         if (globalRmiBridge == null) {
-            throw new NullPointerException("Unable to call 'getRegisteredId' when the gloablRmiBridge is null!");
+            throw new NullPointerException("Unable to call 'getRegisteredId' when the globalRmiBridge is null!");
         }
 
         int object1 = globalRmiBridge.getRegisteredId(object);
