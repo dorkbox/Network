@@ -470,7 +470,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     void write(final ByteBuf buffer, final Object message) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            kryo.write(null, buffer, message, logger);
+            kryo.write(null, buffer, message);
         } finally {
             kryoPool.put(kryo);
         }
@@ -486,7 +486,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     void writeWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            kryo.write(connection, buffer, message, logger);
+            kryo.writeCrypto(connection, buffer, message, logger);
         } finally {
             kryoPool.put(kryo);
         }
@@ -504,7 +504,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     Object read(final ByteBuf buffer, final int length) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            return kryo.read(null, buffer, length, logger);
+            return kryo.read(null, buffer);
         } finally {
             kryoPool.put(kryo);
         }
@@ -524,7 +524,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     Object readWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final int length) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            return kryo.read(connection, buffer, length, logger);
+            return kryo.readCrypto(connection, buffer, length, logger);
         } finally {
             kryoPool.put(kryo);
         }
