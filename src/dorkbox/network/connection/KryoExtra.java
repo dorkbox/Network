@@ -122,9 +122,7 @@ class KryoExtra extends Kryo {
 
     public synchronized
     void writeCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message, final Logger logger) throws IOException {
-        // connection will ALWAYS be of type Connection
-        // used by RMI/some serializers to determine which connection wrote this object
-        // NOTE: this is only valid in the context of this thread, which RMI stuff is accessed in -- so this is SAFE for RMI
+        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
 
 
@@ -173,7 +171,7 @@ class KryoExtra extends Kryo {
             inputOffset = 0;
         }
 
-        // we AWALYS compress our data stream -- because of how AES-GCM pads data out, the small input (that would result in a larger
+        // we ALWAYS compress our data stream -- because of how AES-GCM pads data out, the small input (that would result in a larger
         // output), will be negated by the increase in size by the encryption
 
         if (traceEnabled) {
@@ -258,9 +256,7 @@ class KryoExtra extends Kryo {
 
     public
     Object readCrypto(final ConnectionImpl connection, final ByteBuf buffer, int length, final Logger logger) throws IOException {
-        // connection will ALWAYS be of type IConnection
-        // used by RMI/some serializers to determine which connection read this object
-        // NOTE: this is only valid in the context of this thread, which RMI stuff is accessed in -- so this is SAFE for RMI
+        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
 
 
