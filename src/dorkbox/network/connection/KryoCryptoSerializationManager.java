@@ -470,23 +470,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     void write(final ByteBuf buffer, final Object message) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            kryo.write(null, buffer, message);
-        } finally {
-            kryoPool.put(kryo);
-        }
-    }
-
-    /**
-     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
-     * <p>
-     * There is a small speed penalty if there were no kryo's available to use.
-     */
-    @Override
-    public final
-    void writeWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
-        final KryoExtra kryo = kryoPool.take();
-        try {
-            kryo.writeCrypto(connection, buffer, message, logger);
+            kryo.write(buffer, message);
         } finally {
             kryoPool.put(kryo);
         }
@@ -504,7 +488,23 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     Object read(final ByteBuf buffer, final int length) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            return kryo.read(null, buffer);
+            return kryo.read(buffer);
+        } finally {
+            kryoPool.put(kryo);
+        }
+    }
+
+    /**
+     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
+     * <p>
+     * There is a small speed penalty if there were no kryo's available to use.
+     */
+    @Override
+    public final
+    void writeWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
+        final KryoExtra kryo = kryoPool.take();
+        try {
+            kryo.writeCrypto(connection, buffer, message, logger);
         } finally {
             kryoPool.put(kryo);
         }

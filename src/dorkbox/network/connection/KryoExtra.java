@@ -35,13 +35,9 @@ import java.io.IOException;
  */
 public
 class KryoExtra extends Kryo {
-    // this is the minimum size that LZ4 can compress. Anything smaller than this will result in an output LARGER than the input.
-    private static final int LZ4_COMPRESSION_MIN_SIZE = 32;
-
     /**
      * bit masks
      */
-    private static final byte compress = (byte) 1;
     static final byte crypto = (byte) (1 << 1);
 
     // snappycomp   :       7.534 micros/op;  518.5 MB/s (output: 55.1%)
@@ -88,11 +84,9 @@ class KryoExtra extends Kryo {
     }
 
     public synchronized
-    void write(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
-        // connection will ALWAYS be of type Connection or NULL.
-        // used by RMI/some serializers to determine which connection wrote this object
-        // NOTE: this is only valid in the context of this thread, which RMI stuff is accessed in -- so this is SAFE for RMI
-        this.connection = connection;
+    void write(final ByteBuf buffer, final Object message) throws IOException {
+        // connection will always be NULL during connection initialization
+        this.connection = null;
 
         // during INIT and handshake, we don't use connection encryption/compression
         // magic byte
@@ -105,11 +99,9 @@ class KryoExtra extends Kryo {
     }
 
     public synchronized
-    Object read(final ConnectionImpl connection, final ByteBuf buffer) throws IOException {
-        // connection will ALWAYS be of type IConnection or NULL.
-        // used by RMI/some serializers to determine which connection read this object
-        // NOTE: this is only valid in the context of this thread, which RMI stuff is accessed in -- so this is SAFE for RMI
-        this.connection = connection;
+    Object read(final ByteBuf buffer) throws IOException {
+        // connection will always be NULL during connection initialization
+        this.connection = null;
 
 
         ////////////////
@@ -131,7 +123,6 @@ class KryoExtra extends Kryo {
     public synchronized
     void writeCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message, final Logger logger) throws IOException {
         final boolean traceEnabled = logger.isTraceEnabled();
-        byte magicByte = (byte) 0x00000000;
 
         ByteBuf objectOutputBuffer = this.tempBuffer;
         objectOutputBuffer.clear(); // always have to reset everything
@@ -176,46 +167,42 @@ class KryoExtra extends Kryo {
             inputOffset = 0;
         }
 
-        if (length > LZ4_COMPRESSION_MIN_SIZE) {
-            if (traceEnabled) {
-                logger.trace("Compressing data {}", connection);
-            }
+        // we AWALYS compress our data stream -- because of how AES-GCM pads data out, the small input (that would result in a larger
+        // output), will be negated by the increase in size by the encryption
 
-            byte[] compressOutput = this.compressOutput;
-
-            int maxCompressedLength = compressor.maxCompressedLength(length);
-
-            // add 4 so there is room to write the compressed size to the buffer
-            int maxCompressedLengthWithOffset = maxCompressedLength + 4;
-
-            // lazy initialize the compression output buffer
-            if (maxCompressedLengthWithOffset > compressOutputLength) {
-                compressOutputLength = maxCompressedLengthWithOffset;
-                compressOutput = new byte[maxCompressedLengthWithOffset];
-                this.compressOutput = compressOutput;
-            }
-
-
-            // LZ4 compress. output offset 4 to leave room for length of tempOutput data
-            int compressedLength = compressor.compress(inputArray, inputOffset, length, compressOutput, 4, maxCompressedLength);
-
-            // bytes can now be written to, because our compressed data is stored in a temp array.
-            // ONLY do this if our compressed length is LESS than our uncompressed length.
-            if (compressedLength < length) {
-                // now write the ORIGINAL (uncompressed) length to the front of the byte array. This is so we can use the FAST
-                // decompress version
-                BigEndian.Int_.toBytes(length, compressOutput);
-
-                magicByte |= compress;
-
-                // corrected length
-                length = compressedLength + 4; // +4 for the uncompressed size bytes
-
-                // correct input.  compression output is now encryption input
-                inputArray = compressOutput;
-                inputOffset = 0;
-            }
+        if (traceEnabled) {
+            logger.trace("Compressing data {}", connection);
         }
+
+        byte[] compressOutput = this.compressOutput;
+
+        int maxCompressedLength = compressor.maxCompressedLength(length);
+
+        // add 4 so there is room to write the compressed size to the buffer
+        int maxCompressedLengthWithOffset = maxCompressedLength + 4;
+
+        // lazy initialize the compression output buffer
+        if (maxCompressedLengthWithOffset > compressOutputLength) {
+            compressOutputLength = maxCompressedLengthWithOffset;
+            compressOutput = new byte[maxCompressedLengthWithOffset];
+            this.compressOutput = compressOutput;
+        }
+
+
+        // LZ4 compress. output offset 4 to leave room for length of tempOutput data
+        int compressedLength = compressor.compress(inputArray, inputOffset, length, compressOutput, 4, maxCompressedLength);
+
+        // bytes can now be written to, because our compressed data is stored in a temp array.
+
+        // now write the ORIGINAL (uncompressed) length to the front of the byte array. This is so we can use the FAST decompress version
+        BigEndian.Int_.toBytes(length, compressOutput);
+
+        // corrected length
+        length = compressedLength + 4; // +4 for the uncompressed size bytes
+
+        // correct input.  compression output is now encryption input
+        inputArray = compressOutput;
+        inputOffset = 0;
 
         if (traceEnabled) {
             logger.trace("AES encrypting data {}", connection);
@@ -251,10 +238,8 @@ class KryoExtra extends Kryo {
             throw new IOException("Unable to AES encrypt the data", e);
         }
 
-        magicByte |= crypto;
-
         // write out the "magic" byte.
-        buffer.writeByte(magicByte);
+        buffer.writeByte(crypto);
 
         // have to copy over the orig data, because we used the temp buffer
         buffer.writeBytes(cryptoOutput, 0, encryptedLength);
@@ -281,10 +266,6 @@ class KryoExtra extends Kryo {
 
         // have to adjust for the magic byte
         length -= 1;
-
-        // it's ALWAYS encrypted, but MAYBE compressed
-        final boolean isCompressed = (magicByte & compress) == compress;
-
 
         if (logger.isTraceEnabled()) {
             logger.trace("AES decrypting data {}", connection);
@@ -350,32 +331,27 @@ class KryoExtra extends Kryo {
             throw new IOException("Unable to AES decrypt the data", e);
         }
 
-        if (isCompressed) {
-            inputArray = decryptOutputArray;
-            inputOffset = 4; // because 4 bytes for the decompressed size
+        // decompress -- as it's ALWAYS compressed
+        inputArray = decryptOutputArray;
+        inputOffset = 4; // because 4 bytes for the decompressed size
 
-            // get the decompressed length (at the beginning of the array)
-            final int uncompressedLength = BigEndian.Int_.from(inputArray);
+        // get the decompressed length (at the beginning of the array)
+        final int uncompressedLength = BigEndian.Int_.from(inputArray);
 
-            byte[] decompressOutputArray = this.decompressOutput;
-            if (uncompressedLength > decompressOutputLength) {
-                decompressOutputLength = uncompressedLength;
-                decompressOutputArray = new byte[uncompressedLength];
-                this.decompressOutput = decompressOutputArray;
+        byte[] decompressOutputArray = this.decompressOutput;
+        if (uncompressedLength > decompressOutputLength) {
+            decompressOutputLength = uncompressedLength;
+            decompressOutputArray = new byte[uncompressedLength];
+            this.decompressOutput = decompressOutputArray;
 
-                decompressBuf = Unpooled.wrappedBuffer(decompressOutputArray);  // so we can read via kryo
-            }
-
-            // LZ4 decompress, requires the size of the ORIGINAL length (because we use the FAST decompressor
-            decompressor.decompress(inputArray, inputOffset, decompressOutputArray, 0, uncompressedLength);
-
-            decompressBuf.setIndex(0, uncompressedLength);
-            inputBuf = decompressBuf;
+            decompressBuf = Unpooled.wrappedBuffer(decompressOutputArray);  // so we can read via kryo
         }
-        else {
-            decryptBuf.setIndex(0, decryptedLength);
-            inputBuf = decryptBuf;
-        }
+
+        // LZ4 decompress, requires the size of the ORIGINAL length (because we use the FAST decompressor
+        decompressor.decompress(inputArray, inputOffset, decompressOutputArray, 0, uncompressedLength);
+
+        decompressBuf.setIndex(0, uncompressedLength);
+        inputBuf = decompressBuf;
 
         // read the object from the buffer.
         reader.setBuffer(inputBuf);
