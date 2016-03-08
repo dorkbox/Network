@@ -74,7 +74,7 @@ class KryoDecoder extends ByteToMessageDecoder {
 
 
         if (length == 0) {
-            context.fireExceptionCaught(new IllegalStateException("Kryo DecoderTCP had a read length of 0"));
+            context.fireExceptionCaught(new IllegalStateException("KryoDecoder had a read length of 0"));
             return;
         }
 
