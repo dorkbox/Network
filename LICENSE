@@ -1,0 +1,76 @@
+    - Dorkbox Network - Apache 2.0 License
+      https://github.com/dorkbox
+      Copyright 2010, dorkbox, llc
+
+
+    - Barchart UDT/UDTv4 - BSD 3-clause License
+      https://github.com/barchart/barchart-udt
+      http://udt.sourceforge.net
+      http://www.barchart.com
+      Copyright 2009-2013, Barchart, Inc.
+      Copyright 2001 - 2011, The Board of Trustees of the University of Illinois
+
+
+    - BouncyCastle - MIT License
+      http://www.bouncycastle.org
+      Copyright 2000-2009, The Legion Of The Bouncy Castle
+
+
+    - Dorkbox ObjectPool - Apache 2.0 License
+      https://github.com/dorkbox
+      Copyright 2014, dorkbox, llc
+        Fast and compatible java object pool
+
+
+    - Dorkbox Utils - Apache 2.0 License
+      https://github.com/dorkbox
+      Copyright 2010, dorkbox, llc
+
+
+    - Kryo - BSD 3-clause License
+      https://github.com/EsotericSoftware/kryo
+      Copyright 2008, Nathan Sweet
+
+
+    - kryo-serializers - Apache 2.0 License
+      https://github.com/magro/kryo-serializers
+      Copyright 2010, Martin Grotzke
+       Rafael Winterhalter
+
+
+    - KryoNet RMI - BSD 3-clause License
+      https://github.com/EsotericSoftware/kryonet
+      Copyright 2008, Nathan Sweet
+
+
+    - LAN HostDiscovery from Apache Commons JCS - Apache 2.0 License
+      https://issues.apache.org/jira/browse/JCS-40
+      Copyright 2001-2014, The Apache Software Foundation
+
+
+    - LZ4 and XXhash - Apache 2.0 License
+      https://github.com/jpountz/lz4-java
+      Copyright 2011, Yann Collet
+      Copyright 2012, Adrien Grand
+
+
+    - MathUtils, IntArray, IntMap - Apache 2.0 License
+      http://github.com/libgdx/libgdx/
+      Copyright 2013
+       Mario Zechner <badlogicgames@gmail.com>
+       Nathan Sweet <nathan.sweet@gmail.com>
+
+
+    - Netty - Apache 2.0 License
+      http://netty.io
+      Copyright 2013, The Netty Project
+
+
+    - Netty DNS - Apache 2.0 License
+      http://netty.io
+      Copyright 2013, The Netty Project
+
+
+    - SLF4J - MIT License
+      http://www.slf4j.org
+      Copyright 2004-2008, QOS.ch
