@@ -18,7 +18,7 @@ package dorkbox.network.connection;
 import com.esotericsoftware.kryo.Kryo;
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
-import dorkbox.util.bytes.BigEndian;
+import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import net.jpountz.lz4.LZ4Compressor;
@@ -122,6 +122,12 @@ class KryoExtra extends Kryo {
 
     public synchronized
     void writeCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message, final Logger logger) throws IOException {
+        // connection will ALWAYS be of type Connection
+        // used by RMI/some serializers to determine which connection wrote this object
+        // NOTE: this is only valid in the context of this thread, which RMI stuff is accessed in -- so this is SAFE for RMI
+        this.connection = connection;
+
+
         final boolean traceEnabled = logger.isTraceEnabled();
 
         ByteBuf objectOutputBuffer = this.tempBuffer;
@@ -176,10 +182,11 @@ class KryoExtra extends Kryo {
 
         byte[] compressOutput = this.compressOutput;
 
+        int maxLengthLengthOffset = 5;
         int maxCompressedLength = compressor.maxCompressedLength(length);
 
-        // add 4 so there is room to write the compressed size to the buffer
-        int maxCompressedLengthWithOffset = maxCompressedLength + 4;
+        // add 5 so there is room to write the compressed size to the buffer
+        int maxCompressedLengthWithOffset = maxCompressedLength + maxLengthLengthOffset;
 
         // lazy initialize the compression output buffer
         if (maxCompressedLengthWithOffset > compressOutputLength) {
@@ -189,20 +196,24 @@ class KryoExtra extends Kryo {
         }
 
 
-        // LZ4 compress. output offset 4 to leave room for length of tempOutput data
-        int compressedLength = compressor.compress(inputArray, inputOffset, length, compressOutput, 4, maxCompressedLength);
+
+        // LZ4 compress. output offset max 5 bytes to leave room for length of tempOutput data
+        int compressedLength = compressor.compress(inputArray, inputOffset, length, compressOutput, maxLengthLengthOffset, maxCompressedLength);
 
         // bytes can now be written to, because our compressed data is stored in a temp array.
 
-        // now write the ORIGINAL (uncompressed) length to the front of the byte array. This is so we can use the FAST decompress version
-        BigEndian.Int_.toBytes(length, compressOutput);
-
-        // corrected length
-        length = compressedLength + 4; // +4 for the uncompressed size bytes
+        final int lengthLength = OptimizeUtilsByteArray.intLength(length, true);
 
         // correct input.  compression output is now encryption input
         inputArray = compressOutput;
-        inputOffset = 0;
+        inputOffset = maxLengthLengthOffset - lengthLength;
+
+
+        // now write the ORIGINAL (uncompressed) length to the front of the byte array. This is so we can use the FAST decompress version
+        OptimizeUtilsByteArray.writeInt(inputArray, length, true, inputOffset);
+
+        // correct length for encryption
+        length = compressedLength + lengthLength; // +1 to +5 for the uncompressed size bytes
 
         if (traceEnabled) {
             logger.trace("AES encrypting data {}", connection);
@@ -247,7 +258,7 @@ class KryoExtra extends Kryo {
 
     public
     Object readCrypto(final ConnectionImpl connection, final ByteBuf buffer, int length, final Logger logger) throws IOException {
-        // connection will ALWAYS be of type IConnection or NULL.
+        // connection will ALWAYS be of type IConnection
         // used by RMI/some serializers to determine which connection read this object
         // NOTE: this is only valid in the context of this thread, which RMI stuff is accessed in -- so this is SAFE for RMI
         this.connection = connection;
@@ -279,6 +290,7 @@ class KryoExtra extends Kryo {
         byte[] inputArray;
         int inputOffset;
 
+        //noinspection Duplicates
         if (inputBuf.hasArray()) {
             // Even if a ByteBuf has a backing array (i.e. buf.hasArray() returns true), the following isn't necessarily true because
             // the buffer might be a slice of other buffer or a pooled buffer:
@@ -332,11 +344,12 @@ class KryoExtra extends Kryo {
         }
 
         // decompress -- as it's ALWAYS compressed
-        inputArray = decryptOutputArray;
-        inputOffset = 4; // because 4 bytes for the decompressed size
 
         // get the decompressed length (at the beginning of the array)
-        final int uncompressedLength = BigEndian.Int_.from(inputArray);
+        inputArray = decryptOutputArray;
+        final int uncompressedLength = OptimizeUtilsByteArray.readInt(inputArray, true);
+        inputOffset = OptimizeUtilsByteArray.intLength(uncompressedLength, true); // because 1-5 bytes for the decompressed size
+
 
         byte[] decompressOutputArray = this.decompressOutput;
         if (uncompressedLength > decompressOutputLength) {
@@ -346,18 +359,17 @@ class KryoExtra extends Kryo {
 
             decompressBuf = Unpooled.wrappedBuffer(decompressOutputArray);  // so we can read via kryo
         }
+        inputBuf = decompressBuf;
 
         // LZ4 decompress, requires the size of the ORIGINAL length (because we use the FAST decompressor
         decompressor.decompress(inputArray, inputOffset, decompressOutputArray, 0, uncompressedLength);
 
-        decompressBuf.setIndex(0, uncompressedLength);
-        inputBuf = decompressBuf;
+        inputBuf.setIndex(0, uncompressedLength);
 
         // read the object from the buffer.
         reader.setBuffer(inputBuf);
 
         return readClassAndObject(reader); // this properly sets the readerIndex, but only if it's the correct buffer
-
     }
 
     @Override
