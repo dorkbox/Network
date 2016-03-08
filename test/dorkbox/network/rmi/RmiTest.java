@@ -66,8 +66,6 @@ class RmiTest extends BaseTest {
                 try {
                     TestObject test = connection.createProxyObject(TestObjectImpl.class);
 
-                    System.err.println("Starting test for: " + remoteObjectID);
-
                     //TestObject test = connection.getRemoteObject(id, TestObject.class);
                     RemoteObject remoteObject = (RemoteObject) test;
 
@@ -218,6 +216,7 @@ class RmiTest extends BaseTest {
                   @Override
                   public
                   void connected(final Connection connection) {
+                      System.err.println("Starting test for: Server -> Client");
                       RmiTest.runTest(connection, 1);
                   }
 
@@ -227,7 +226,7 @@ class RmiTest extends BaseTest {
                       TestObject object = m.testObject;
                       final int id = object.id();
                       assertEquals(2, id);
-                      System.err.println("Client/Server Finished!");
+                      System.err.println("Client -> Server Finished!");
 
                       stopEndPoints(2000);
                   }
@@ -251,8 +250,9 @@ class RmiTest extends BaseTest {
                       TestObject object = m.testObject;
                       final int id = object.id();
                       assertEquals(1, id);
-                      System.err.println("Server/Client Finished!");
+                      System.err.println("Server -> Client Finished!");
 
+                      System.err.println("Starting test for: Client -> Server");
                       // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
                       runTest(connection, 2);
                   }

@@ -140,7 +140,7 @@ class BaseTest {
                         e.printStackTrace();
                     }
                 }
-            }, "UnitTest timeout");
+            }, "UnitTest shutdown");
 
             thread.setDaemon(true);
             thread.start();
