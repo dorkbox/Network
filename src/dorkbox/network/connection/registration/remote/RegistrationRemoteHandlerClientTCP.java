@@ -260,8 +260,8 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                         return;
                     }
 
-                    // It is OK that we generate a new ECC keypair for ECDHE everytime that we connect. The server rotates keys every XXXX
-                    // seconds, since this step is expensive.
+                    // It is OK that we generate a new ECC keypair for ECDHE every time that we connect from the client.
+                    // The server rotates keys every XXXX seconds, since this step is expensive (and the server is the 'trusted' endpoint).
                     metaChannel.ecdhKey = CryptoECC.generateKeyPair(eccSpec, new SecureRandom());
 
                     // register the channel!
