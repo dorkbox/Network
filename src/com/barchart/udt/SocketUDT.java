@@ -144,17 +144,11 @@ class SocketUDT {
             final Logger logger = LoggerFactory.getLogger(SocketUDT.class);
 
             String moduleDir = System.getProperty("user.dir");
-            String libraryDir = FileUtil.getParentRelativeToDir(moduleDir, "dorkbox");
-            File file = new File(libraryDir);
-            if (file.getName()
-                    .equals("dorkbox")) {
-                file = file.getParentFile();
-            }
-            libraryDir = FileUtil.normalizeAsFile(file.getAbsolutePath() + "/dorkbox/dorkbox/Dorkbox-Network/natives");
+            File libraryDir = FileUtil.normalize(new File(moduleDir, "natives"));
 
 
-            if (libraryDir == null || libraryDir.length() == 0) {
-                throw new IllegalStateException("Invalid library location.");
+            if (!libraryDir.isDirectory()) {
+                throw new IllegalStateException("Invalid library location '" + libraryDir.getAbsolutePath() + "'");
             }
 
             boolean loaded = false;
