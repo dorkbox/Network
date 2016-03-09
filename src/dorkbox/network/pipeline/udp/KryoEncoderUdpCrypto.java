@@ -36,9 +36,9 @@ class KryoEncoderUdpCrypto extends KryoEncoderUdp {
     @Override
     void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext ctx, Object msg, ByteBuf buffer)
                     throws IOException {
+
         ChannelHandler last = ctx.pipeline()
                                  .last();
-
         serializationManager.writeWithCrypto((ConnectionImpl) last, buffer, msg);
     }
 }
