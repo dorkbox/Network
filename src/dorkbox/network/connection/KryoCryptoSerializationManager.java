@@ -60,6 +60,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Threads reading/writing, it messes up a single instance. it is possible to use a single kryo with the use of synchronize, however - that
@@ -84,6 +85,12 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      * The default serialization manager. This is static, since serialization must be consistent within the JVM. This can be changed.
      */
     public static KryoCryptoSerializationManager DEFAULT = DEFAULT();
+
+
+    // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
+    // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
+    // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
+    private final AtomicLong aes_gcm_iv = new AtomicLong(0);
 
 
     public static
@@ -504,7 +511,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     void writeWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            kryo.writeCrypto(connection, buffer, message, logger);
+            kryo.writeCrypto(connection, buffer, message, aes_gcm_iv.getAndIncrement());
         } finally {
             kryoPool.put(kryo);
         }
@@ -524,7 +531,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     Object readWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final int length) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            return kryo.readCrypto(connection, buffer, length, logger);
+            return kryo.readCrypto(connection, buffer, length);
         } finally {
             kryoPool.put(kryo);
         }

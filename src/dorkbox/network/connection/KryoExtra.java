@@ -18,7 +18,9 @@ package dorkbox.network.connection;
 import com.esotericsoftware.kryo.Kryo;
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
+import dorkbox.util.bytes.BigEndian;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
+import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import net.jpountz.lz4.LZ4Compressor;
@@ -26,7 +28,7 @@ import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
 import org.bouncycastle.crypto.engines.AESFastEngine;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
-import org.slf4j.Logger;
+import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import java.io.IOException;
 
@@ -121,12 +123,10 @@ class KryoExtra extends Kryo {
 
 
     public synchronized
-    void writeCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message, final Logger logger) throws IOException {
+    void writeCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message, final long gcmIVCounter) throws IOException {
+
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
-
-
-        final boolean traceEnabled = logger.isTraceEnabled();
 
         ByteBuf objectOutputBuffer = this.tempBuffer;
         objectOutputBuffer.clear(); // always have to reset everything
@@ -171,12 +171,10 @@ class KryoExtra extends Kryo {
             inputOffset = 0;
         }
 
+
+        ////////// compressing data
         // we ALWAYS compress our data stream -- because of how AES-GCM pads data out, the small input (that would result in a larger
         // output), will be negated by the increase in size by the encryption
-
-        if (traceEnabled) {
-            logger.trace("Compressing data {}", connection);
-        }
 
         byte[] compressOutput = this.compressOutput;
 
@@ -213,16 +211,16 @@ class KryoExtra extends Kryo {
         // correct length for encryption
         length = compressedLength + lengthLength; // +1 to +5 for the uncompressed size bytes
 
-        if (traceEnabled) {
-            logger.trace("AES encrypting data {}", connection);
-        }
 
+
+        /////// encrypting data
+
+        final ParametersWithIV cryptoParameters = connection.getCryptoParameters();
+        BigEndian.Long_.toBytes(gcmIVCounter, cryptoParameters.getIV(), 4); // put our counter into the IV
 
         final GCMBlockCipher aes = this.aesEngine;
-
-        // TODO: AES IV must be a NONCE! can use an initial IV, and then have a counter or something with a hash of counter+initialIV to make the new IV
         aes.reset();
-        aes.init(true, connection.getCryptoParameters());
+        aes.init(true, cryptoParameters);
 
         byte[] cryptoOutput;
 
@@ -250,12 +248,17 @@ class KryoExtra extends Kryo {
         // write out the "magic" byte.
         buffer.writeByte(crypto);
 
+        // write out our GCM counter
+        OptimizeUtilsByteBuf.writeLong(buffer, gcmIVCounter, true);
+
+//        System.err.println("out " + gcmIVCounter);
+
         // have to copy over the orig data, because we used the temp buffer
         buffer.writeBytes(cryptoOutput, 0, encryptedLength);
     }
 
     public
-    Object readCrypto(final ConnectionImpl connection, final ByteBuf buffer, int length, final Logger logger) throws IOException {
+    Object readCrypto(final ConnectionImpl connection, final ByteBuf buffer, int length) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
 
@@ -269,14 +272,16 @@ class KryoExtra extends Kryo {
         // read off the magic byte
         final byte magicByte = buffer.readByte();
 
+        final long gcmIVCounter = OptimizeUtilsByteBuf.readLong(buffer, true);
+//        System.err.println("in " + gcmIVCounter);
+
         // compression can ONLY happen if it's ALSO crypto'd
 
-        // have to adjust for the magic byte
-        length -= 1;
+        // have to adjust for the magic byte and the gcmIVCounter
+        length = length - 1 - OptimizeUtilsByteArray.longLength(gcmIVCounter, true);
 
-        if (logger.isTraceEnabled()) {
-            logger.trace("AES decrypting data {}", connection);
-        }
+
+        /////////// decrypting data
 
         // NOTE: compression and encryption MUST work with byte[] because they use JNI!
         // Realistically, it is impossible to get the backing arrays out of a Heap Buffer once they are resized and begin to use
@@ -312,9 +317,12 @@ class KryoExtra extends Kryo {
         // have to make sure to set the position of the buffer, since our conversion to array DOES NOT set the new reader index.
         buffer.readerIndex(buffer.readerIndex() + length);
 
+        final ParametersWithIV cryptoParameters = connection.getCryptoParameters();
+        BigEndian.Long_.toBytes(gcmIVCounter, cryptoParameters.getIV(), 4); // put our counter into the IV
+
         final GCMBlockCipher aes = this.aesEngine;
         aes.reset();
-        aes.init(false, connection.getCryptoParameters());
+        aes.init(false, cryptoParameters);
 
         int cryptoSize = aes.getOutputSize(length);
 
@@ -339,7 +347,7 @@ class KryoExtra extends Kryo {
             throw new IOException("Unable to AES decrypt the data", e);
         }
 
-        // decompress -- as it's ALWAYS compressed
+        ///////// decompress data -- as it's ALWAYS compressed
 
         // get the decompressed length (at the beginning of the array)
         inputArray = decryptOutputArray;
@@ -365,7 +373,11 @@ class KryoExtra extends Kryo {
         // read the object from the buffer.
         reader.setBuffer(inputBuf);
 
-        return readClassAndObject(reader); // this properly sets the readerIndex, but only if it's the correct buffer
+        final Object o = readClassAndObject(reader);
+        if (o == null) {
+            System.err.println("what?");
+        }
+        return o; // this properly sets the readerIndex, but only if it's the correct buffer
     }
 
     @Override
