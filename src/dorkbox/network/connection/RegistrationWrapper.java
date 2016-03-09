@@ -99,12 +99,8 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      */
     public
     IntMap<MetaChannel> getAndLockChannelMap() {
-        // try to lock access
+        // try to lock access, also guarantees that the contents of this map are visible across threads
         this.channelMapLock.lock();
-
-        // guarantee that the contents of this map are visible across threads
-        synchronized (this.channelMap) {
-        }
         return this.channelMap;
     }
 
