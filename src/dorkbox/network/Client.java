@@ -235,11 +235,10 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
                 if (udtAvailable) {
                     // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
-                    // Annoying and abusing the classloader, but it works well.
                     Bootstrap udtBootstrap = new Bootstrap();
                     this.bootstraps.add(new BootstrapWrapper("UDT", options.udtPort, udtBootstrap));
 
-                    EventLoopGroup udtBoss = UdtEndpointProxy.getClientWorker(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
+                    EventLoopGroup udtBoss = UdtEndpointProxy.getWorker(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
 
                     UdtEndpointProxy.setChannelFactory(udtBootstrap);
 

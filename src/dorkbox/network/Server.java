@@ -293,9 +293,8 @@ class Server<C extends Connection> extends EndPointServer<C> {
             EventLoopGroup udtWorker;
 
             // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
-            // Annoying and abusing the classloader, but it works well.
-            udtBoss = UdtEndpointProxy.getServerBoss(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
-            udtWorker = UdtEndpointProxy.getServerWorker(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
+            udtBoss = UdtEndpointProxy.getBoss(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
+            udtWorker = UdtEndpointProxy.getWorker(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
 
             UdtEndpointProxy.setChannelFactory(udtBootstrap);
             udtBootstrap.group(udtBoss, udtWorker)
