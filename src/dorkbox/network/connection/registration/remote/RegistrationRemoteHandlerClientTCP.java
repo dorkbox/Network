@@ -160,7 +160,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
         channel.writeAndFlush(registration);
     }
 
-    @SuppressWarnings({"AutoUnboxing", "AutoBoxing"})
+    @SuppressWarnings({"AutoUnboxing", "AutoBoxing", "Duplicates"})
     @Override
     public
     void channelRead(final ChannelHandlerContext context, final Object message) throws Exception {
@@ -252,7 +252,6 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                      */
                     byte[] ecdhPubKeyBytes = Arrays.copyOfRange(payload, intLength, payload.length);
                     ECPublicKeyParameters ecdhPubKey = EccPublicKeySerializer.read(new Input(ecdhPubKeyBytes));
-
                     if (ecdhPubKey == null) {
                         logger2.error("Invalid decode of ecdh public key. Aborting.");
                         shutdown(registrationWrapper2, channel);
@@ -290,17 +289,12 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     sha384.doFinal(digest, 0);
 
                     metaChannel.aesKey = Arrays.copyOfRange(digest, 0, 32); // 256bit keysize (32 bytes)
-                    metaChannel.aesIV = Arrays.copyOfRange(digest, 32, 48); // 128bit blocksize (16 bytes)
+                    metaChannel.aesIV = Arrays.copyOfRange(digest, 32, 44); // 96bit blocksize (12 bytes) required by AES-GCM
 
                     // abort if something messed up!
-                    if (metaChannel.aesKey.length != 32) {
-                        logger2.error("Fatal error trying to use AES key (wrong key length).");
-                        shutdown(registrationWrapper2, channel);
-
-                        ReferenceCountUtil.release(message);
+                    if (verifyAesInfo(message, channel, registrationWrapper2, metaChannel, logger2)) {
                         return;
                     }
-
 
                     Registration register = new Registration();
 

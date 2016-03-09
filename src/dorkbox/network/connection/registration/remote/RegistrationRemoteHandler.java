@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection.registration.remote;
 
+import com.esotericsoftware.kryo.io.Input;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
@@ -28,6 +29,7 @@ import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
+import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -37,8 +39,11 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.udt.nio.NioUdtByteConnectorChannel;
 import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.util.ReferenceCountUtil;
 import org.bouncycastle.crypto.engines.AESFastEngine;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.slf4j.Logger;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -293,6 +298,59 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
         if (udtPipe != null) {
             udtPipe.addLast(CONNECTION_HANDLER, connection);
         }
+    }
+
+    protected final
+    ECPublicKeyParameters verifyPayload(final Object message,
+                                        final Channel channel,
+                                        final RegistrationWrapper registrationWrapper,
+                                        final Logger logger,
+                                        final byte[] payload) {
+
+        if (payload.length == 0) {
+            logger.error("Invalid decryption of payload. Aborting.");
+            shutdown(registrationWrapper, channel);
+
+            ReferenceCountUtil.release(message);
+            return null;
+        }
+
+        ECPublicKeyParameters ecdhPubKey = EccPublicKeySerializer.read(new Input(payload));
+
+        if (ecdhPubKey == null) {
+            logger.error("Invalid decode of ecdh public key. Aborting.");
+            shutdown(registrationWrapper, channel);
+
+            ReferenceCountUtil.release(message);
+            return null;
+        }
+        return ecdhPubKey;
+    }
+
+    protected final
+    boolean verifyAesInfo(final Object message,
+                          final Channel channel,
+                          final RegistrationWrapper registrationWrapper,
+                          final MetaChannel metaChannel,
+                          final Logger logger) {
+
+        if (metaChannel.aesKey.length != 32) {
+            logger.error("Fatal error trying to use AES key (wrong key length).");
+            shutdown(registrationWrapper, channel);
+
+            ReferenceCountUtil.release(message);
+            return true;
+        }
+        // IV length must == 12 because we are using GCM!
+        else if (metaChannel.aesIV.length != 12) {
+            logger.error("Fatal error trying to use AES IV (wrong IV length).");
+            shutdown(registrationWrapper, channel);
+
+            ReferenceCountUtil.release(message);
+            return true;
+        }
+
+        return false;
     }
 
     // have to setup AFTER establish connection, data, as we don't want to enable AES until we're ready.

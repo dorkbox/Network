@@ -49,6 +49,7 @@ class MetaChannel {
 
     public AsymmetricCipherKeyPair ecdhKey; // used for ECC Diffie-Hellman-Merkle key exchanges: see http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
 
+    // since we are using AES-GCM, the aesIV here **MUST** be exactly 12 bytes
     public byte[] aesKey;
     public byte[] aesIV;
 

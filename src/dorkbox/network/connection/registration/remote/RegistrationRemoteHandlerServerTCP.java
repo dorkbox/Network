@@ -55,7 +55,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
     private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.p521_curve);
     private final Object ecdhKeyLock = new Object();
     private final ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
-    private AsymmetricCipherKeyPair ecdhKeyPair = CryptoECC.generateKeyPair(eccSpec, new SecureRandom());
+    private AsymmetricCipherKeyPair ecdhKeyPair;
     private volatile long ecdhTimeout = System.nanoTime();
 
 
@@ -81,7 +81,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
      */
     private
     AsymmetricCipherKeyPair getEchdKeyOnRotate(final SecureRandom secureRandom) {
-        if (System.nanoTime() - this.ecdhTimeout > ECDH_TIMEOUT) {
+        if (this.ecdhKeyPair == null || System.nanoTime() - this.ecdhTimeout > ECDH_TIMEOUT) {
             synchronized (this.ecdhKeyLock) {
                 this.ecdhTimeout = System.nanoTime();
                 this.ecdhKeyPair = CryptoECC.generateKeyPair(eccSpec, secureRandom);
@@ -132,6 +132,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
     /**
      * STEP 3-XXXXX: We pass registration messages around until we the registration handshake is complete!
      */
+    @SuppressWarnings("Duplicates")
     @Override
     public
     void channelRead(ChannelHandlerContext context, Object message) throws Exception {
@@ -232,7 +233,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
 
                     // now we have to setup the TEMP AES key!
                     metaChannel.aesKey = new byte[32]; // 256bit keysize (32 bytes)
-                    metaChannel.aesIV = new byte[16]; // 128bit blocksize (16 bytes)
+                    metaChannel.aesIV = new byte[12]; // 96bit blocksize (12 bytes) required by AES-GCM
                     secureRandom.nextBytes(metaChannel.aesKey);
                     secureRandom.nextBytes(metaChannel.aesIV);
 
@@ -245,11 +246,11 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                     register.eccParameters = CryptoECC.generateSharedParameters(secureRandom);
                     register.aesIV = metaChannel.aesIV;
                     register.aesKey = CryptoECC.encrypt(encrypt,
-                                                         registrationWrapper2.getPrivateKey(),
-                                                         metaChannel.publicKey,
-                                                         register.eccParameters,
-                                                         metaChannel.aesKey,
-                                                         logger);
+                                                        registrationWrapper2.getPrivateKey(),
+                                                        metaChannel.publicKey,
+                                                        register.eccParameters,
+                                                        metaChannel.aesKey,
+                                                        logger);
 
 
                     // now encrypt payload via AES
@@ -282,6 +283,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                                                                 registration.payload,
                                                                 logger);
 
+                            // abort if we cannot properly get the key info from the payload
                             if (payload.length == 0) {
                                 logger2.error("Invalid decryption of payload. Aborting.");
                                 shutdown(registrationWrapper2, channel);
@@ -290,8 +292,11 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                                 return;
                             }
 
+                            /*
+                             * Diffie-Hellman-Merkle key exchange for the AES key
+                             * see http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
+                             */
                             ECPublicKeyParameters ecdhPubKey = EccPublicKeySerializer.read(new Input(payload));
-
                             if (ecdhPubKey == null) {
                                 logger2.error("Invalid decode of ecdh public key. Aborting.");
                                 shutdown(registrationWrapper2, channel);
@@ -319,7 +324,12 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                             sha384.doFinal(digest, 0);
 
                             metaChannel.aesKey = Arrays.copyOfRange(digest, 0, 32); // 256bit keysize (32 bytes)
-                            metaChannel.aesIV = Arrays.copyOfRange(digest, 32, 48); // 128bit blocksize (16 bytes)
+                            metaChannel.aesIV = Arrays.copyOfRange(digest, 32, 44); // 96bit blocksize (12 bytes) required by AES-GCM
+
+                            // abort if something messed up!
+                            if (verifyAesInfo(message, channel, registrationWrapper2, metaChannel, logger2)) {
+                                return;
+                            }
 
                             // tell the client to continue it's registration process.
                             channel.writeAndFlush(new Registration());
@@ -330,7 +340,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                             channel.writeAndFlush(registration); // causes client to setup network connection & AES
 
                             setupConnectionCrypto(metaChannel);
-                            // AES ENCRPYTION NOW USED
+                            // AES ENCRYPTION NOW USED
 
                             // this sets up the pipeline for the server, so all the necessary handlers are ready to go
                             establishConnection(metaChannel);
