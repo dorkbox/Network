@@ -41,28 +41,11 @@ class ReconnectTest extends BaseTest {
         configuration.host = host;
 
 
-        Server server = null;
+        Server server = new Server(configuration);
+        server.disableRemoteKeyValidation();
 
-        // try to reconnect 10 times
-        boolean success = false;
-        for (int i = 0; i < 10; i++) {
-            try {
-                server = new Server(configuration);
-                server.disableRemoteKeyValidation();
-
-                server.bind(false);
-                addEndPoint(server);
-                success = true;
-                break;
-            } catch (Throwable ignored) {
-                System.out.println("Retrying...");
-                Thread.sleep(4000);
-            }
-        }
-
-        if (!success) {
-            throw new RuntimeException("Unable to bind to TCP port. Aborting.");
-        }
+        server.bind(false);
+        addEndPoint(server);
 
         server.listeners()
               .add(new Listener<Object>() {

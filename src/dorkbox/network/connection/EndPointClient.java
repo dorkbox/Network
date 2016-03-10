@@ -53,6 +53,8 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
 
     protected
     void registerNextProtocol() {
+        this.registrationComplete = false; // always reset.
+
         new Thread(this, "Bootstrap registration").start();
     }
 
