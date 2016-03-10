@@ -15,7 +15,11 @@
  */
 package dorkbox.network.connection.wrapper;
 
-import dorkbox.network.connection.*;
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionPointWriter;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.ISessionManager;
+import dorkbox.network.connection.UdpServer;
 import dorkbox.network.connection.registration.MetaChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
@@ -31,14 +35,17 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
     private final ChannelNetwork udp;
     private final ChannelNetwork udt;
 
-    private final ParametersWithIV cryptoAesKeyAndIV;
-
     // did the remote connection public ECC key change?
     private final boolean remotePublicKeyChanged;
 
     private final String remoteAddress;
     private final EventLoop eventLoop;
 
+    // GCM IV. hacky way to prevent tons of GC and to not clobber the original parameters
+    private final byte[] aesKey; // AES-256 requires 32 bytes
+    private final byte[] aesIV; // AES-GCM requires 12 bytes
+
+    private final ThreadLocal<ParametersWithIV> cryptoParameters;
 
     /**
      * @param udpServer is null when created by the client, non-null when created by the server
@@ -76,9 +83,16 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
         this.remotePublicKeyChanged = metaChannel.changedRemoteKey;
 
         // AES key & IV (only for networked connections)
-        this.cryptoAesKeyAndIV = new ParametersWithIV(new KeyParameter(metaChannel.aesKey), metaChannel.aesIV);
-        // TODO: have to be able to get a NEW IV, so we can rotate keys!
-        // NOTE: IV's must be a NONCE! (ie: one time use only!!!)
+        aesKey = metaChannel.aesKey;
+        aesIV = metaChannel.aesIV;
+
+        cryptoParameters = new ThreadLocal<ParametersWithIV>() {
+            @Override
+            protected
+            ParametersWithIV initialValue() {
+                return new ParametersWithIV(new KeyParameter(aesKey), aesIV);
+            }
+        };
     }
 
     public final
@@ -136,10 +150,16 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
         return this.eventLoop;
     }
 
+
+    /**
+     * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal
+     *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
+     *          clobber each other
+     */
     @Override
     public
     ParametersWithIV cryptoParameters() {
-        return this.cryptoAesKeyAndIV;
+        return this.cryptoParameters.get();
     }
 
     @Override

@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -100,6 +101,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
     private final Map<Integer, RemoteObject> proxyIdCache = Collections.synchronizedMap(new WeakHashMap<Integer, RemoteObject>(8));
 
+    // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
+    // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
+    // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
+    private final AtomicLong aes_gcm_iv = new AtomicLong(0);
 
     /**
      * All of the parameters can be null, when metaChannel wants to get the base class type
@@ -143,12 +148,27 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
 
     /**
-     * @return the AES key/IV, etc associated with this connection
+     * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal
+     *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
+     *          clobber each other
      */
     final
     ParametersWithIV getCryptoParameters() {
         return this.channelWrapper.cryptoParameters();
     }
+
+    /**
+     * This is the per-message sequence number.
+     *
+     *  The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
+     *  The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
+     *  counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
+     */
+    final
+    long getNextGcmSequence() {
+        return aes_gcm_iv.getAndIncrement();
+    }
+
 
     /**
      * Has the remote ECC public key changed. This can be useful if specific actions are necessary when the key has changed.

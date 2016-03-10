@@ -42,6 +42,11 @@ interface ChannelWrapper<C extends Connection> {
 
     EventLoop getEventLoop();
 
+    /**
+     * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal
+     *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
+     *          clobber each other
+     */
     ParametersWithIV cryptoParameters();
 
     /**

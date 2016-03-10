@@ -80,7 +80,6 @@ class KryoExtra extends Kryo {
     private byte[] decompressOutput;
     private ByteBuf decompressBuf;
 
-
     public
     KryoExtra() {
     }
@@ -123,8 +122,7 @@ class KryoExtra extends Kryo {
 
 
     public synchronized
-    void writeCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message, final long gcmIVCounter) throws IOException {
-
+    void writeCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
 
@@ -213,10 +211,12 @@ class KryoExtra extends Kryo {
 
 
 
-        /////// encrypting data
+        /////// encrypting data.
+        final long nextGcmSequence = connection.getNextGcmSequence();
 
+        // this is a threadlocal, so that we don't clobber other threads that are performing crypto on the same connection at the same time
         final ParametersWithIV cryptoParameters = connection.getCryptoParameters();
-        BigEndian.Long_.toBytes(gcmIVCounter, cryptoParameters.getIV(), 4); // put our counter into the IV
+        BigEndian.Long_.toBytes(nextGcmSequence, cryptoParameters.getIV(), 4); // put our counter into the IV
 
         final GCMBlockCipher aes = this.aesEngine;
         aes.reset();
@@ -225,7 +225,7 @@ class KryoExtra extends Kryo {
         byte[] cryptoOutput;
 
         // lazy initialize the crypto output buffer
-        int cryptoSize = aes.getOutputSize(length);
+        int cryptoSize = length + 16;   // from:  aes.getOutputSize(length);
 
         // 'output' is the temp byte array
         if (cryptoSize > cryptoOutputLength) {
@@ -249,7 +249,7 @@ class KryoExtra extends Kryo {
         buffer.writeByte(crypto);
 
         // write out our GCM counter
-        OptimizeUtilsByteBuf.writeLong(buffer, gcmIVCounter, true);
+        OptimizeUtilsByteBuf.writeLong(buffer, nextGcmSequence, true);
 
 //        System.err.println("out " + gcmIVCounter);
 
@@ -317,6 +317,7 @@ class KryoExtra extends Kryo {
         // have to make sure to set the position of the buffer, since our conversion to array DOES NOT set the new reader index.
         buffer.readerIndex(buffer.readerIndex() + length);
 
+        // this is a threadlocal, so that we don't clobber other threads that are performing crypto on the same connection at the same time
         final ParametersWithIV cryptoParameters = connection.getCryptoParameters();
         BigEndian.Long_.toBytes(gcmIVCounter, cryptoParameters.getIV(), 4); // put our counter into the IV
 
@@ -324,7 +325,7 @@ class KryoExtra extends Kryo {
         aes.reset();
         aes.init(false, cryptoParameters);
 
-        int cryptoSize = aes.getOutputSize(length);
+        int cryptoSize = length - 16; // from:  aes.getOutputSize(length);
 
         // lazy initialize the decrypt output buffer
         byte[] decryptOutputArray;
@@ -373,11 +374,7 @@ class KryoExtra extends Kryo {
         // read the object from the buffer.
         reader.setBuffer(inputBuf);
 
-        final Object o = readClassAndObject(reader);
-        if (o == null) {
-            System.err.println("what?");
-        }
-        return o; // this properly sets the readerIndex, but only if it's the correct buffer
+        return readClassAndObject(reader); // this properly sets the readerIndex, but only if it's the correct buffer
     }
 
     @Override
