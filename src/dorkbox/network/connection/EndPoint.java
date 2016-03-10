@@ -251,8 +251,8 @@ class EndPoint<C extends Connection> {
                     SecureRandom secureRandom = new SecureRandom(seedBytes);
                     secureRandom.nextBytes(seedBytes);
 
-                    this.logger.debug("Now generating ECC (" + CryptoECC.p521_curve + ") keys. Please wait!");
-                    AsymmetricCipherKeyPair generateKeyPair = CryptoECC.generateKeyPair(CryptoECC.p521_curve, secureRandom);
+                    this.logger.debug("Now generating ECC (" + CryptoECC.curve25519 + ") keys. Please wait!");
+                    AsymmetricCipherKeyPair generateKeyPair = CryptoECC.generateKeyPair(CryptoECC.curve25519, secureRandom);
 
                     privateKey = (ECPrivateKeyParameters) generateKeyPair.getPrivate();
                     publicKey = (ECPublicKeyParameters) generateKeyPair.getPublic();

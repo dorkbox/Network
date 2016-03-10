@@ -35,6 +35,7 @@ import org.bouncycastle.crypto.BasicAgreement;
 import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
 import org.bouncycastle.crypto.digests.SHA384Digest;
 import org.bouncycastle.crypto.engines.IESEngine;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECParameterSpec;
@@ -50,8 +51,7 @@ public
 class RegistrationRemoteHandlerClientTCP<C extends Connection> extends RegistrationRemoteHandlerClient<C> {
 
     private static final String DELETE_IP = "eleteIP"; // purposefully missing the "D", since that is a system parameter, which starts with "-D"
-    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.p521_curve);
-    private final ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
+    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.curve25519);
 
     public
     RegistrationRemoteHandlerClientTCP(final String name,
@@ -94,16 +94,6 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
             }
         }
         // end command
-    }
-
-    private
-    IESEngine getEccEngine() {
-        IESEngine iesEngine = this.eccEngineLocal.get();
-        if (iesEngine == null) {
-            iesEngine = CryptoECC.createEngine();
-            this.eccEngineLocal.set(iesEngine);
-        }
-        return iesEngine;
     }
 
     /**
@@ -207,7 +197,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     }
 
                     // setup crypto state
-                    IESEngine decrypt = getEccEngine();
+                    IESEngine decrypt = this.eccEngineLocal.get();
 
                     byte[] aesKeyBytes = CryptoECC.decrypt(decrypt,
                                                            registrationWrapper2.getPrivateKey(),
@@ -224,8 +214,10 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                         return;
                     }
 
+                    final GCMBlockCipher gcmAesEngine = aesEngine.get();
+
                     // now decrypt payload using AES
-                    byte[] payload = CryptoAES.decrypt(getAesEngine(), aesKeyBytes, registration.aesIV, registration.payload, logger);
+                    byte[] payload = CryptoAES.decrypt(gcmAesEngine, aesKeyBytes, registration.aesIV, registration.payload, logger);
 
                     if (payload.length == 0) {
                         logger2.error("Invalid decryption of payload. Aborting.");
@@ -302,7 +294,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     Output output = new Output(1024);
                     EccPublicKeySerializer.write(output, (ECPublicKeyParameters) metaChannel.ecdhKey.getPublic());
                     byte[] pubKeyAsBytes = output.toBytes();
-                    register.payload = CryptoAES.encrypt(getAesEngine(), aesKeyBytes, registration.aesIV, pubKeyAsBytes, logger);
+                    register.payload = CryptoAES.encrypt(gcmAesEngine, aesKeyBytes, registration.aesIV, pubKeyAsBytes, logger);
 
                     channel.writeAndFlush(register);
 

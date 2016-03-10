@@ -256,7 +256,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
                     OptimizeUtilsByteArray.writeInt(idAsBytes, metaChannel.connectionID, true);
 
                     // now encrypt payload via AES
-                    register.payload = CryptoAES.encrypt(RegistrationRemoteHandler.getAesEngine(),
+                    register.payload = CryptoAES.encrypt(RegistrationRemoteHandler.aesEngine.get(),
                                                          metaChannel.aesKey,
                                                          metaChannel.aesIV,
                                                          idAsBytes,

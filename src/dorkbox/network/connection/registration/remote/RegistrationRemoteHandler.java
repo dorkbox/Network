@@ -29,6 +29,7 @@ import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
+import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -41,6 +42,7 @@ import io.netty.channel.udt.nio.NioUdtByteConnectorChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.ReferenceCountUtil;
 import org.bouncycastle.crypto.engines.AESFastEngine;
+import org.bouncycastle.crypto.engines.IESEngine;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
@@ -66,17 +68,15 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
     private static final String KRYO_CRYPTO_DECODER = "kryoCryptoDecoder";
 
     private static final String IDLE_HANDLER = "idleHandler";
-    private static final ThreadLocal<GCMBlockCipher> aesEngineLocal = new ThreadLocal<GCMBlockCipher>();
-
-    protected static
-    GCMBlockCipher getAesEngine() {
-        GCMBlockCipher aesEngine = aesEngineLocal.get();
-        if (aesEngine == null) {
-            aesEngine = new GCMBlockCipher(new AESFastEngine());
-            aesEngineLocal.set(aesEngine);
+    protected static final ThreadLocal<GCMBlockCipher> aesEngine = new ThreadLocal<GCMBlockCipher>() {
+        @Override
+        protected
+        GCMBlockCipher initialValue() {
+            return new GCMBlockCipher(new AESFastEngine());
         }
-        return aesEngine;
-    }
+    };
+
+    protected final ThreadLocal<IESEngine> eccEngineLocal;
 
     /**
      * Check to verify if two InetAddresses are equal, by comparing the underlying byte arrays.
@@ -100,6 +100,14 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
         super(name, registrationWrapper);
 
         this.serializationManager = serializationManager;
+
+        eccEngineLocal = new ThreadLocal<IESEngine>() {
+            @Override
+            protected
+            IESEngine initialValue() {
+                return CryptoECC.createEngine();
+            }
+        };
     }
 
     /**

@@ -36,6 +36,7 @@ import org.bouncycastle.crypto.BasicAgreement;
 import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
 import org.bouncycastle.crypto.digests.SHA384Digest;
 import org.bouncycastle.crypto.engines.IESEngine;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECParameterSpec;
@@ -52,9 +53,8 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
 
     private static final long ECDH_TIMEOUT = 10L * 60L * 60L * 1000L * 1000L * 1000L; // 10 minutes in nanoseconds
 
-    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.p521_curve);
+    private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.curve25519);
     private final Object ecdhKeyLock = new Object();
-    private final ThreadLocal<IESEngine> eccEngineLocal = new ThreadLocal<IESEngine>();
     private AsymmetricCipherKeyPair ecdhKeyPair;
     private volatile long ecdhTimeout = System.nanoTime();
 
@@ -64,16 +64,6 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                                        final RegistrationWrapper<C> registrationWrapper,
                                        final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
-    }
-
-    private
-    IESEngine getEccEngine() {
-        IESEngine iesEngine = this.eccEngineLocal.get();
-        if (iesEngine == null) {
-            iesEngine = CryptoECC.createEngine();
-            this.eccEngineLocal.set(iesEngine);
-        }
-        return iesEngine;
     }
 
     /**
@@ -157,6 +147,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
             if (metaChannel != null) {
                 metaChannel.updateTcpRoundTripTime();
                 SecureRandom secureRandom = registrationWrapper2.getSecureRandom();
+                final GCMBlockCipher gcmAesEngine = aesEngine.get();
 
                 // first time we've seen data from this new TCP connection
                 if (metaChannel.connectionID == null) {
@@ -237,7 +228,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                     secureRandom.nextBytes(metaChannel.aesKey);
                     secureRandom.nextBytes(metaChannel.aesIV);
 
-                    IESEngine encrypt = getEccEngine();
+                    IESEngine encrypt = this.eccEngineLocal.get();
 
                     register.publicKey = registrationWrapper2.getPublicKey();
                     register.eccParameters = CryptoECC.generateSharedParameters(secureRandom);
@@ -252,9 +243,8 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                                                         metaChannel.aesKey,
                                                         logger);
 
-
                     // now encrypt payload via AES
-                    register.payload = CryptoAES.encrypt(getAesEngine(), metaChannel.aesKey, register.aesIV, combinedBytes, logger);
+                    register.payload = CryptoAES.encrypt(gcmAesEngine, metaChannel.aesKey, register.aesIV, combinedBytes, logger);
 
                     channel.writeAndFlush(register);
 
@@ -277,11 +267,11 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                         if (metaChannel.ecdhKey != null) {
                             // now we have to decrypt the ECDH key using our TEMP AES keys
 
-                            byte[] payload = CryptoAES.decrypt(getAesEngine(),
-                                                                metaChannel.aesKey,
-                                                                metaChannel.aesIV,
-                                                                registration.payload,
-                                                                logger);
+                            byte[] payload = CryptoAES.decrypt(gcmAesEngine,
+                                                               metaChannel.aesKey,
+                                                               metaChannel.aesIV,
+                                                               registration.payload,
+                                                               logger);
 
                             // abort if we cannot properly get the key info from the payload
                             if (payload.length == 0) {
