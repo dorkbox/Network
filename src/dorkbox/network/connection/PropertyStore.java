@@ -54,7 +54,7 @@ class PropertyStore extends SettingsStore {
         // make sure our custom types are registered
         // only register if not ALREADY initialized, since we can initialize in the server and in the client. This creates problems if
         // running inside the same JVM (we don't permit it)
-        if (!serializationManager.initialized()) {
+        if (serializationManager != null && !serializationManager.initialized()) {
             serializationManager.register(HashMap.class);
             serializationManager.register(ByteArrayWrapper.class);
             serializationManager.register(DB_Server.class);
