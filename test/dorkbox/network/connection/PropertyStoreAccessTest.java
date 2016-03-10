@@ -89,6 +89,6 @@ class PropertyStoreAccessTest extends BaseTest {
         }
 
         store.getSalt(); // should not throw any errors
-        store.shutdown();
+        store.close();
     }
 }

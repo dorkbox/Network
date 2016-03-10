@@ -213,7 +213,7 @@ class PropertyStore extends SettingsStore {
 
     @Override
     public
-    void shutdown() {
+    void close() {
         Store.close(storage);
     }
 }

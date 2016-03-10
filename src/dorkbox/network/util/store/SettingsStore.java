@@ -351,8 +351,8 @@ class SettingsStore {
     boolean removeRegisteredServerKey(byte[] hostAddress) throws SecurityException;
 
     /**
-     * Take the proper steps to shutdown the storage system.
+     * Take the proper steps to close the storage system.
      */
     public abstract
-    void shutdown();
+    void close();
 }

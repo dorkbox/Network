@@ -88,6 +88,6 @@ class NullSettingsStore extends SettingsStore {
 
     @Override
     public
-    void shutdown() {
+    void close() {
     }
 }

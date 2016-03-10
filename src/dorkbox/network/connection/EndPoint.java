@@ -663,7 +663,7 @@ class EndPoint<C extends Connection> {
 
 
             // shutdown the database store
-            this.propertyStore.shutdown();
+            this.propertyStore.close();
 
             // now we stop all of our channels
             for (ChannelFuture f : this.shutdownChannelList) {
