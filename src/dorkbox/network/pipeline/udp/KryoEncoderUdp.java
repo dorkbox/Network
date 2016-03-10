@@ -63,10 +63,9 @@ class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
                 writeObject(this.serializationManager, ctx, msg, outBuffer);
 
                 // have to check to see if we are too big for UDP!
-                if (outBuffer.readableBytes() > EndPoint.udpMaxSize) {
-                    System.err.println("Object larger than MAX udp size!  " + EndPoint.udpMaxSize + "/" + outBuffer.readableBytes());
+                if (outBuffer.readableBytes() > maxSize) {
 
-                    String message = "Object is TOO BIG FOR UDP! " + msg.toString() + " (" + EndPoint.udpMaxSize + "/" +
+                    String message = "Object is TOO BIG FOR UDP! " + msg.toString() + " (Max " + maxSize + ", was " +
                                      outBuffer.readableBytes() + ")";
                     LoggerFactory.getLogger(this.getClass()).error(message);
                     throw new IOException(message);

@@ -45,7 +45,6 @@ class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
         ChannelHandler last = ctx.pipeline()
                                  .last();
 
-
         try {
             ByteBuf data = in.content();
             Object object = serializationManager.readWithCrypto((ConnectionImpl) last, data, data.readableBytes());
