@@ -190,16 +190,16 @@ class DnsClient {
 
         if (PlatformDependent.isAndroid()) {
             // android ONLY supports OIO (not NIO)
-            eventLoopGroup = new OioEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-UDP", threadGroup));
+            eventLoopGroup = new OioEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-DNS", threadGroup));
             channelType = OioDatagramChannel.class;
         }
         else if (OS.isLinux()) {
             // JNI network stack is MUCH faster (but only on linux)
-            eventLoopGroup = new EpollEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-UDP", threadGroup));
+            eventLoopGroup = new EpollEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-DNS", threadGroup));
             channelType = EpollDatagramChannel.class;
         }
         else {
-            eventLoopGroup = new NioEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-UDP", threadGroup));
+            eventLoopGroup = new NioEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-DNS", threadGroup));
             channelType = NioDatagramChannel.class;
         }
 
@@ -292,28 +292,30 @@ class DnsClient {
             if (result.isSuccess() && result.isDone()) {
                 AddressedEnvelope<DnsResponse, InetSocketAddress> envelope = result.getNow();
                 DnsResponse response = envelope.content();
-
-                final DnsResponseCode code = response.code();
-                if (code == DnsResponseCode.NOERROR) {
-                    final RecordDecoder<?> decoder = customDecoders.get(type);
-                    if (decoder != null) {
-                        final int answerCount = response.count(DnsSection.ANSWER);
-                        for (int i = 0; i < answerCount; i++) {
-                            final DnsRecord r = response.recordAt(DnsSection.ANSWER, i);
-                            if (r.type() == type) {
-                                ByteBuf recordContent = ((ByteBufHolder) r).content();
-
-                                return (T) decoder.decode(r, recordContent);
+                try {
+                    final DnsResponseCode code = response.code();
+                    if (code == DnsResponseCode.NOERROR) {
+                        final RecordDecoder<?> decoder = customDecoders.get(type);
+                        if (decoder != null) {
+                            final int answerCount = response.count(DnsSection.ANSWER);
+                            for (int i = 0; i < answerCount; i++) {
+                                final DnsRecord r = response.recordAt(DnsSection.ANSWER, i);
+                                if (r.type() == type) {
+                                    ByteBuf recordContent = ((ByteBufHolder) r).content();
+                                    return (T) decoder.decode(r, recordContent);
+                                }
                             }
                         }
+
+                        logger.error("Could not ask question to DNS server: Issue with decoder for type: {}", type);
+                        return null;
                     }
 
-                    logger.error("Could not ask question to DNS server: Issue with decoder for type: {}", type);
+                    logger.error("Could not ask question to DNS server: Error code {}", code);
                     return null;
+                } finally {
+                    response.release();
                 }
-
-                logger.error("Could not ask question to DNS server: Error code {}", code);
-                return null;
             }
             else {
                 Throwable cause = result.cause();
@@ -346,10 +348,6 @@ class DnsClient {
      */
     public
     void stop() {
-        reset();
-        resolver.close();
-
-
         // we also want to stop the thread group (but NOT in our current thread!)
         if (Thread.currentThread()
                   .getThreadGroup()
@@ -375,8 +373,13 @@ class DnsClient {
 
     private
     void stopInThread() {
+        reset();
+        resolver.close(); // also closes the UDP channel that DNS client uses
+
         // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
         long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
+
+
 
         // we want to WAIT until after the event executors have completed shutting down.
         List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
