@@ -31,6 +31,7 @@ import dorkbox.network.connection.EndPoint;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.entropy.SimpleEntropy;
 import dorkbox.util.exceptions.InitializationException;
+import io.netty.util.ResourceLeakDetector;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
@@ -59,6 +60,8 @@ class BaseTest {
 
     public
     BaseTest() {
+        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
+
         System.out.println("---- " + getClass().getSimpleName());
 
         // assume SLF4J is bound to logback in the current environment
