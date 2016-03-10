@@ -106,7 +106,7 @@ class ReuseTest extends BaseTest {
                 }
             }
 
-            client.close();
+            client.closeConnections();
         }
 
         assertEquals(count * 2 * 2, this.clientCount.get() + this.serverCount.get());
@@ -177,7 +177,7 @@ class ReuseTest extends BaseTest {
                 }
             }
 
-            client.close();
+            client.closeConnections();
         }
 
         assertEquals(count * 2, this.clientCount.get() + this.serverCount.get());

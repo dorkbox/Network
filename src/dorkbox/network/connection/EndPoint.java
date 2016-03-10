@@ -528,12 +528,14 @@ class EndPoint<C extends Connection> {
     ConnectionBridgeBase send();
 
     /**
-     * Closes all connections ONLY (keeps the server/client running).
+     * Closes all connections ONLY (keeps the server/client running).  To STOP the client/server, use stop().
      * <p/>
-     * This is used, for example, when reconnecting to a server. The server should ALWAYS use STOP.
+     * This is used, for example, when reconnecting to a server.
+     * <p/>
+     * The server should ALWAYS use STOP.
      */
     public
-    void close() {
+    void closeConnections() {
         // give a chance to other threads.
         Thread.yield();
 
@@ -621,7 +623,7 @@ class EndPoint<C extends Connection> {
         // make sure we are not trying to stop during a startup procedure.
         // This will wait until we have finished starting up/shutting down.
         synchronized (this.shutdownInProgress) {
-            close();
+            closeConnections();
 
             this.logger.info("Stopping endpoint");
 
