@@ -68,7 +68,7 @@ class PingPongTest extends BaseTest {
         final Data dataTCP = new Data();
         populateData(dataTCP, TYPE.TCP);
         final Data dataUDP = new Data();
-        populateData(dataUDP, TYPE.UDP);
+        populateDataTiny(dataUDP, TYPE.UDP); // UDP has a max size it can send!
         final Data dataUDT = new Data();
         populateData(dataUDT, TYPE.UDT);
 
@@ -93,7 +93,7 @@ class PingPongTest extends BaseTest {
                               throw new RuntimeException("Fail! " + PingPongTest.this.fail);
                           }
                           connection.send()
-                                    .TCP(data);
+                                    .TCP(dataTCP);
                       }
                       else if (data.type == TYPE.UDP) {
                           if (!data.equals(dataUDP)) {
@@ -101,7 +101,7 @@ class PingPongTest extends BaseTest {
                               throw new RuntimeException("Fail! " + PingPongTest.this.fail);
                           }
                           connection.send()
-                                    .UDP(data);
+                                    .UDP(dataUDP);
                       }
                       else if (data.type == TYPE.UDT) {
                           if (!data.equals(dataUDT)) {
@@ -109,7 +109,7 @@ class PingPongTest extends BaseTest {
                               throw new RuntimeException("Fail! " + PingPongTest.this.fail);
                           }
                           connection.send()
-                                    .UDT(data);
+                                    .UDT(dataUDT);
                       }
                       else {
                           PingPongTest.this.fail = "Unknown data type on server.";
@@ -161,7 +161,7 @@ class PingPongTest extends BaseTest {
                           }
                           if (this.checkTCP.getAndIncrement() <= PingPongTest.this.tries) {
                               connection.send()
-                                        .TCP(data);
+                                        .TCP(dataTCP);
                           }
                           else {
                               System.err.println("TCP done.");
@@ -175,7 +175,7 @@ class PingPongTest extends BaseTest {
                           }
                           if (this.checkUDP.getAndIncrement() <= PingPongTest.this.tries) {
                               connection.send()
-                                        .UDP(data);
+                                        .UDP(dataUDP);
                           }
                           else {
                               System.err.println("UDP done.");
@@ -189,7 +189,7 @@ class PingPongTest extends BaseTest {
                           }
                           if (this.checkUDT.getAndIncrement() <= PingPongTest.this.tries) {
                               connection.send()
-                                        .UDT(data);
+                                        .UDT(dataUDT);
                           }
                           else {
                               System.err.println("UDT done.");
@@ -235,19 +235,52 @@ class PingPongTest extends BaseTest {
         data.floats = new float[] {0, -0, 1, -1, 123456, -123456, 0.1f, 0.2f, -0.3f, (float) Math.PI, Float.MAX_VALUE, Float.MIN_VALUE};
 
         data.doubles = new double[] {0, -0, 1, -1, 123456, -123456, 0.1d, 0.2d, -0.3d, Math.PI, Double.MAX_VALUE, Double.MIN_VALUE};
-        data.longs = new long[] {0, -0, 1, -1, 123456, -123456, 99999999999l, -99999999999l, Long.MAX_VALUE, Long.MIN_VALUE};
+        data.longs = new long[] {0, -0, 1, -1, 123456, -123456, 99999999999L, -99999999999L, Long.MAX_VALUE, Long.MIN_VALUE};
         data.bytes = new byte[] {-123, 123, -1, 0, 1, Byte.MAX_VALUE, Byte.MIN_VALUE};
         data.chars = new char[] {32345, 12345, 0, 1, 63, Character.MAX_VALUE, Character.MIN_VALUE};
 
         data.booleans = new boolean[] {true, false};
         data.Ints = new Integer[] {-1234567, 1234567, -1, 0, 1, Integer.MAX_VALUE, Integer.MIN_VALUE};
         data.Shorts = new Short[] {-12345, 12345, -1, 0, 1, Short.MAX_VALUE, Short.MIN_VALUE};
-        data.Floats = new Float[] {0f, -0f, 1f, -1f, 123456f, -123456f, 0.1f, 0.2f, -0.3f, (float) Math.PI, Float.MAX_VALUE,
+        data.Floats = new Float[] {0f, -0f, 1.0f, -1f, 123456f, -123456f, 0.1f, 0.2f, -0.3f, (float) Math.PI, Float.MAX_VALUE,
                                    Float.MIN_VALUE};
         data.Doubles = new Double[] {0d, -0d, 1d, -1d, 123456d, -123456d, 0.1d, 0.2d, -0.3d, Math.PI, Double.MAX_VALUE, Double.MIN_VALUE};
         data.Longs = new Long[] {0l, -0l, 1l, -1l, 123456l, -123456l, 99999999999l, -99999999999l, Long.MAX_VALUE, Long.MIN_VALUE};
         data.Bytes = new Byte[] {-123, 123, -1, 0, 1, Byte.MAX_VALUE, Byte.MIN_VALUE};
         data.Chars = new Character[] {32345, 12345, 0, 1, 63, Character.MAX_VALUE, Character.MIN_VALUE};
+        data.Booleans = new Boolean[] {true, false};
+    }
+
+
+    // ONLY for UDP, since there is a 508 byte hard limit to UDP packets!
+    private static
+    void populateDataTiny(Data data, TYPE type) {
+        data.type = type;
+
+        StringBuilder buffer = new StringBuilder(10);
+        for (int i = 0; i < 10; i++) {
+            buffer.append('a');
+        }
+        data.string = buffer.toString();
+
+        data.strings = new String[] {"abcdefghijklmnopqrstuvwxyz0123456789", "", null, "!@#$", "�����"};
+        data.ints = new int[] {Integer.MAX_VALUE, Integer.MIN_VALUE};
+        data.shorts = new short[] {Short.MAX_VALUE, Short.MIN_VALUE};
+        data.floats = new float[] {Float.MAX_VALUE, Float.MIN_VALUE};
+
+        data.doubles = new double[] {Double.MAX_VALUE, Double.MIN_VALUE};
+        data.longs = new long[] {Long.MAX_VALUE, Long.MIN_VALUE};
+        data.bytes = new byte[] {Byte.MAX_VALUE, Byte.MIN_VALUE};
+        data.chars = new char[] {Character.MAX_VALUE, Character.MIN_VALUE};
+
+        data.booleans = new boolean[] {true, false};
+        data.Ints = new Integer[] {Integer.MAX_VALUE, Integer.MIN_VALUE};
+        data.Shorts = new Short[] {Short.MAX_VALUE, Short.MIN_VALUE};
+        data.Floats = new Float[] {Float.MAX_VALUE, Float.MIN_VALUE};
+        data.Doubles = new Double[] {Double.MAX_VALUE, Double.MIN_VALUE};
+        data.Longs = new Long[] {Long.MAX_VALUE, Long.MIN_VALUE};
+        data.Bytes = new Byte[] {Byte.MAX_VALUE, Byte.MIN_VALUE};
+        data.Chars = new Character[] {Character.MAX_VALUE, Character.MIN_VALUE};
         data.Booleans = new Boolean[] {true, false};
     }
 
