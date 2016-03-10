@@ -197,13 +197,13 @@ class RmiGlobalTest extends BaseTest {
 
 
     public static
-    void register(CryptoSerializationManager kryoMT) {
-        kryoMT.register(Object.class); // Needed for Object#toString, hashCode, etc.
+    void register(CryptoSerializationManager manager) {
+        manager.register(Object.class); // Needed for Object#toString, hashCode, etc.
 
-        kryoMT.registerRemote(TestObject.class, TestObjectImpl.class);
-        kryoMT.register(MessageWithTestObject.class);
+        manager.registerRemote(TestObject.class, TestObjectImpl.class);
+        manager.register(MessageWithTestObject.class);
 
-        kryoMT.register(UnsupportedOperationException.class);
+        manager.register(UnsupportedOperationException.class);
     }
 
     @Test

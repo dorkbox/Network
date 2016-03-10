@@ -285,26 +285,26 @@ class PingPongTest extends BaseTest {
     }
 
     private
-    void register(CryptoSerializationManager kryoMT) {
-        kryoMT.register(int[].class);
-        kryoMT.register(short[].class);
-        kryoMT.register(float[].class);
-        kryoMT.register(double[].class);
-        kryoMT.register(long[].class);
-        kryoMT.register(byte[].class);
-        kryoMT.register(char[].class);
-        kryoMT.register(boolean[].class);
-        kryoMT.register(String[].class);
-        kryoMT.register(Integer[].class);
-        kryoMT.register(Short[].class);
-        kryoMT.register(Float[].class);
-        kryoMT.register(Double[].class);
-        kryoMT.register(Long[].class);
-        kryoMT.register(Byte[].class);
-        kryoMT.register(Character[].class);
-        kryoMT.register(Boolean[].class);
-        kryoMT.register(Data.class);
-        kryoMT.register(TYPE.class);
+    void register(CryptoSerializationManager manager) {
+        manager.register(int[].class);
+        manager.register(short[].class);
+        manager.register(float[].class);
+        manager.register(double[].class);
+        manager.register(long[].class);
+        manager.register(byte[].class);
+        manager.register(char[].class);
+        manager.register(boolean[].class);
+        manager.register(String[].class);
+        manager.register(Integer[].class);
+        manager.register(Short[].class);
+        manager.register(Float[].class);
+        manager.register(Double[].class);
+        manager.register(Long[].class);
+        manager.register(Byte[].class);
+        manager.register(Character[].class);
+        manager.register(Boolean[].class);
+        manager.register(Data.class);
+        manager.register(TYPE.class);
     }
 
     public static

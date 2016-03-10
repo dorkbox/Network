@@ -143,9 +143,9 @@ class LargeResizeBufferTest extends BaseTest {
     }
 
     private
-    void register(CryptoSerializationManager kryoMT) {
-        kryoMT.register(byte[].class);
-        kryoMT.register(LargeMessage.class);
+    void register(CryptoSerializationManager manager) {
+        manager.register(byte[].class);
+        manager.register(LargeMessage.class);
     }
 
     public static

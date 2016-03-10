@@ -89,8 +89,8 @@ class ClientSendTest extends BaseTest {
     }
 
     private static
-    void register(CryptoSerializationManager kryoMT) {
-        kryoMT.register(AMessage.class);
+    void register(CryptoSerializationManager manager) {
+        manager.register(AMessage.class);
     }
 
     public static

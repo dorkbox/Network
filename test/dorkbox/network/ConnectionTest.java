@@ -197,8 +197,8 @@ class ConnectionTest extends BaseTest {
     }
 
     private
-    void register(CryptoSerializationManager kryoMT) {
-        kryoMT.register(BMessage.class);
+    void register(CryptoSerializationManager manager) {
+        manager.register(BMessage.class);
     }
 
     public static
