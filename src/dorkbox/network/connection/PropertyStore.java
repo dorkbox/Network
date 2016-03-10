@@ -35,18 +35,16 @@ import java.util.Map;
  * The property store is the DEFAULT type of store for the network stack.
  * This is package private.
  */
-public
 class PropertyStore extends SettingsStore {
 
     protected Storage storage;
     protected Map<ByteArrayWrapper, DB_Server> servers;
 
-    public
     PropertyStore() {
     }
 
     /**
-     * Method of preference for creating/getting this connection store. package only since only the ConnectionStoreProxy calls this
+     * Method of preference for creating/getting this connection store.
      *
      * @param serializationManager this is the serialization used for saving objects into the storage database
      */
