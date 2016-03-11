@@ -61,6 +61,13 @@
        Nathan Sweet <nathan.sweet@gmail.com>
 
 
+    - MinLogToSLF4j - BSD 3-clause License
+      https://github.com/jdanbrown/minlog-slf4j
+      https://github.com/EsotericSoftware/minlog
+      Copyright 2008, Nathan Sweet
+       Dan Brown
+
+
     - Netty - Apache 2.0 License
       http://netty.io
       Copyright 2013, The Netty Project
