@@ -91,7 +91,7 @@ This project is **kept in sync** with the utilities library, so "jar hell" is no
 <dependency>
   <groupId>com.dorkbox</groupId>
   <artifactId>Network</artifactId>
-  <version>1.1</version>
+  <version>1.4</version>
 </dependency>
 ```
 
@@ -101,6 +101,8 @@ https://oss.sonatype.org/content/repositories/releases/com/dorkbox/Network-Dorkb
 
 
 https://oss.sonatype.org/content/repositories/releases/com/dorkbox/ObjectPool/  
+https://oss.sonatype.org/content/repositories/releases/com/dorkbox/MinLog-SLF4J/  
+
 https://repo1.maven.org/maven2/org/slf4j/slf4j-api/  
 https://repo1.maven.org/maven2/io/netty/netty-all/  (latest 4.1)  
 https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk15on/  
@@ -109,8 +111,6 @@ https://repo1.maven.org/maven2/asm/asm/
 https://repo1.maven.org/maven2/org/javassist/javassist/  
 https://repo1.maven.org/maven2/com/esotericsoftware/jsonbeans/   
 
-
-minlog to slf4j
 
 https://repo1.maven.org/maven2/com/esotericsoftware/reflectasm/  
 https://repo1.maven.org/maven2/net/jpountz/lz4/lz4/    
