@@ -62,10 +62,11 @@
 
 
     - MinLogToSLF4j - BSD 3-clause License
-      https://github.com/jdanbrown/minlog-slf4j
+      https://github.com/dorkbox
       https://github.com/EsotericSoftware/minlog
       Copyright 2008, Nathan Sweet
        Dan Brown
+       dorkbox, llc
 
 
     - Netty - Apache 2.0 License
