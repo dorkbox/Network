@@ -91,7 +91,7 @@ This project is **kept in sync** with the utilities library, so "jar hell" is no
 <dependency>
   <groupId>com.dorkbox</groupId>
   <artifactId>Network</artifactId>
-  <version>1.5</version>
+  <version>1.6</version>
 </dependency>
 ```
 
