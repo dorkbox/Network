@@ -79,6 +79,12 @@ class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler
         }
     }
 
+    @Override
+    public
+    void channelActive(ChannelHandlerContext context) throws Exception {
+        // not used (so we prevent the warnings from the super class)
+    }
+
     // this SHOULDN'T ever happen, but we might shutdown in the middle of registration
     @Override
     public final
