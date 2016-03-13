@@ -17,13 +17,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Method;
+import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
+import java.security.CodeSource;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.ProtectionDomain;
+import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 /**
  * UDT native socket wrapper
@@ -140,35 +158,129 @@ class SocketUDT {
         }
 
         // if we are natively deployed, we automatically load the native libraries as part of the startup procedure
+        // if we are not, we are either from a jar or as source
         if (!isNativeDeployed) {
-            final Logger logger = LoggerFactory.getLogger(SocketUDT.class);
+            ProtectionDomain pDomain = SocketUDT.class.getProtectionDomain();
+            CodeSource cSource = pDomain.getCodeSource();
 
-            String moduleDir = System.getProperty("user.dir");
-            File libraryDir = FileUtil.normalize(new File(moduleDir, "natives"));
+            // file:/X:/workspace/XYZ/classes/  when it's in ide/flat
+            // jar:/X:/workspace/XYZ/jarname.jar  when it's jar
+            URL loc = cSource.getLocation();
+            final String path = loc.getPath();
+            final boolean isJar = path.endsWith(".jar");
 
-
-            if (!libraryDir.isDirectory()) {
-                throw new IllegalStateException("Invalid library location '" + libraryDir.getAbsolutePath() + "'");
-            }
-
+            final OsType os = OS.get();
+            String osName = os.getName();
             boolean loaded = false;
 
-            try {
-                logger.info("Loading release libraries.");
-                final OsType os = OS.get();
+            if (isJar) {
+                // have to extract our correct file to temp then load it, ONLY if we are not already loaded!
 
-                String osName = os.getName();
-                File libPath = new File(libraryDir, osName).getAbsoluteFile();
-                if (libPath.canRead()) {
-                    List<File> libs = FileUtil.parseDir(libPath, os.getLibraryNames());
-                    for (File lib : libs) {
-                        System.load(lib.getAbsolutePath());
+                try {
+                    MessageDigest digest = MessageDigest.getInstance("MD5");
+                    digest.update(TypeUDT.class.getName()
+                                               .getBytes());
+
+                    // convert to alpha-numeric. see https://stackoverflow.com/questions/29183818/why-use-tostring32-and-not-tostring36
+                    final String outputFileName = "UDT_driver_" + new BigInteger(1, digest.digest()).toString(32)
+                                                                                                    .toUpperCase(Locale.US);
+
+                    final String tempDir = System.getProperty("java.io.tmpdir");
+
+                    final File file = new File(tempDir, outputFileName);
+                    if (!file.canRead()) {
+                        // we need to iterate this jar to get the files
+
+                        final String packageName = TypeUDT.class.getPackage()
+                                                                .getName()
+                                                                .replaceAll("\\.", "/");
+
+                        final String prefix = packageName + "/natives/" + osName + "/";
+                        final List<String> list = Arrays.asList(os.getLibraryNames());
+
+                        final String jarFileName = URLDecoder.decode(loc.getPath(), "UTF-8");
+                        JarFile jar = new JarFile(jarFileName);
+                        Enumeration<JarEntry> entries = jar.entries();
+                        JAR_READ:
+                        while (entries.hasMoreElements()) {
+                            final JarEntry jarEntry = entries.nextElement();
+                            String name = jarEntry.getName();
+
+                            if (name.startsWith(prefix)) {
+                                for (String s : list) {
+                                    if (name.endsWith(s)) {
+                                        // there is only one!
+
+                                        // now we copy it out
+                                        final InputStream inputStream = jar.getInputStream(jarEntry);
+
+                                        OutputStream outStream = null;
+                                        try {
+                                            outStream = new FileOutputStream(file);
+
+                                            byte[] buffer = new byte[2048];
+                                            int read;
+                                            while ((read = inputStream.read(buffer)) > 0) {
+                                                outStream.write(buffer, 0, read);
+                                            }
+                                        } catch (IOException e) {
+                                            log.error("Error extracting library from: " + jarFileName, e.getMessage());
+                                        } finally {
+                                            try {
+                                                inputStream.close();
+                                            } catch (Exception ignored) {
+                                            }
+                                            try {
+                                                if (outStream != null) {
+                                                    outStream.close();
+                                                }
+                                            } catch (Exception ignored) {
+                                            }
+                                        }
+                                        break JAR_READ;
+                                    }
+                                }
+                            }
+                        }
+
+                        jar.close();
                     }
-                    logger.info("Release libraries loaded.");
+
+                    log.info("Loading release libraries.");
+
+                    System.load(file.getAbsolutePath());
+                    log.info("Release libraries loaded.");
                     loaded = true;
+                } catch (NoSuchAlgorithmException e) {
+                    log.error("Error loading MD5 checksum.", e.getMessage());
+                } catch (UnsupportedEncodingException e) {
+                    log.error("Error parsing text.", e.getMessage());
+                } catch (IOException e) {
+                    log.error("Error extracting library.", e.getMessage());
                 }
-            } catch (final Throwable e) {
-                logger.error("Release libraries missing: {}", e.getMessage());
+            }
+            else {
+                try {
+                    log.info("Loading release libraries.");
+
+                    final URI uri = TypeUDT.class.getResource("natives/" + osName + "/")
+                                                 .toURI();
+                    final String host = uri.getPath();
+
+                    File libPath = new File(host).getAbsoluteFile();
+                    if (libPath.canRead()) {
+                        List<File> libs = FileUtil.parseDir(libPath, os.getLibraryNames());
+                        for (File lib : libs) {
+                            // load the libs in that dir (there will be only one)
+                            System.load(lib.getAbsolutePath());
+                            break;
+                        }
+                        log.info("Release libraries loaded.");
+                        loaded = true;
+                    }
+                } catch (final Throwable e) {
+                    log.error("Release libraries missing: {}", e.getMessage());
+                }
             }
 
             if (!loaded) {
@@ -911,7 +1023,6 @@ class SocketUDT {
     /**
      * @see #getOption0(int, Class)
      */
-    @SuppressWarnings("unchecked")
     public
     <T> T getOption(final OptionUDT<T> option) throws ExceptionUDT {
 
