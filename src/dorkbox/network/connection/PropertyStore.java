@@ -33,12 +33,13 @@ import java.util.Map;
 
 /**
  * The property store is the DEFAULT type of store for the network stack.
- * This is package private.
+ * This is package private, and not intended to be extended!.
  */
+final
 class PropertyStore extends SettingsStore {
 
-    protected Storage storage;
-    protected Map<ByteArrayWrapper, DB_Server> servers;
+    private  Storage storage;
+    private Map<ByteArrayWrapper, DB_Server> servers;
 
     PropertyStore() {
     }
