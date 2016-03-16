@@ -62,6 +62,9 @@ class KryoExtra extends Kryo {
     private final ByteBuf tempBuffer = Unpooled.buffer(EndPoint.udpMaxSize);
     private LZ4Compressor compressor = factory.fastCompressor();
 
+    private int inputArrayLength = -1;
+    private byte[] inputArray;
+
     private int compressOutputLength = -1;
     private byte[] compressOutput;
 
@@ -146,26 +149,30 @@ class KryoExtra extends Kryo {
         byte[] inputArray;
         int inputOffset;
 
+        // Even if a ByteBuf has a backing array (i.e. buf.hasArray() returns true), the using it isn't always possible because
+        // the buffer might be a slice of other buffer or a pooled buffer:
         //noinspection Duplicates
-        if (objectOutputBuffer.hasArray()) {
-            // Even if a ByteBuf has a backing array (i.e. buf.hasArray() returns true), the following isn't necessarily true because
-            // the buffer might be a slice of other buffer or a pooled buffer:
+        if (objectOutputBuffer.hasArray() &&
+            objectOutputBuffer.array()[0] == objectOutputBuffer.getByte(0) &&
+            objectOutputBuffer.array().length == objectOutputBuffer.capacity()) {
 
-            if (objectOutputBuffer.array()[0] == objectOutputBuffer.getByte(0) &&
-                objectOutputBuffer.array().length == objectOutputBuffer.capacity()) {
-
-                // we can use it...
-                inputArray = objectOutputBuffer.array();
-                inputOffset = objectOutputBuffer.arrayOffset();
-            } else {
-                // we can NOT use it.
+            // we can use it...
+            inputArray = objectOutputBuffer.array();
+            inputArrayLength = -1; // this is so we don't REUSE this array accidentally!
+            inputOffset = objectOutputBuffer.arrayOffset();
+        }
+        else {
+            // we can NOT use it.
+            if (length > inputArrayLength) {
+                inputArrayLength = length;
                 inputArray = new byte[length];
-                objectOutputBuffer.getBytes(objectOutputBuffer.readerIndex(), inputArray);
-                inputOffset = 0;
+                this.inputArray = inputArray;
             }
-        } else {
-            inputArray = new byte[length];
-            objectOutputBuffer.getBytes(objectOutputBuffer.readerIndex(), inputArray);
+            else {
+                inputArray = this.inputArray;
+            }
+
+            objectOutputBuffer.getBytes(objectOutputBuffer.readerIndex(), inputArray, 0, length);
             inputOffset = 0;
         }
 
@@ -291,28 +298,34 @@ class KryoExtra extends Kryo {
         byte[] inputArray;
         int inputOffset;
 
+        // Even if a ByteBuf has a backing array (i.e. buf.hasArray() returns true), the using it isn't always possible because
+        // the buffer might be a slice of other buffer or a pooled buffer:
         //noinspection Duplicates
-        if (inputBuf.hasArray()) {
-            // Even if a ByteBuf has a backing array (i.e. buf.hasArray() returns true), the following isn't necessarily true because
-            // the buffer might be a slice of other buffer or a pooled buffer:
+        if (inputBuf.hasArray() &&
+            inputBuf.array()[0] == inputBuf.getByte(0) &&
+            inputBuf.array().length == inputBuf.capacity()) {
 
-            if (inputBuf.array()[0] == inputBuf.getByte(0) &&
-                inputBuf.array().length == inputBuf.capacity()) {
-
-                // we can use it...
-                inputArray = inputBuf.array();
-                inputOffset = inputBuf.arrayOffset();
-            } else {
-                // we can NOT use it.
+            // we can use it...
+            inputArray = inputBuf.array();
+            inputArrayLength = -1; // this is so we don't REUSE this array accidentally!
+            inputOffset = inputBuf.arrayOffset();
+        }
+        else {
+            // we can NOT use it.
+            if (length > inputArrayLength) {
+                inputArrayLength = length;
                 inputArray = new byte[length];
-                inputBuf.getBytes(inputBuf.readerIndex(), inputArray);
-                inputOffset = 0;
+                this.inputArray = inputArray;
             }
-        } else {
-            inputArray = new byte[length];
-            inputBuf.getBytes(inputBuf.readerIndex(), inputArray);
+            else {
+                inputArray = this.inputArray;
+            }
+
+            inputBuf.getBytes(inputBuf.readerIndex(), inputArray, 0, length);
             inputOffset = 0;
         }
+
+
 
         // have to make sure to set the position of the buffer, since our conversion to array DOES NOT set the new reader index.
         buffer.readerIndex(buffer.readerIndex() + length);
