@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 
+import static dorkbox.network.connection.EndPoint.THREADGROUP_NAME;
 import static org.junit.Assert.fail;
 
 public abstract
@@ -120,6 +121,16 @@ class BaseTest {
 
     public
     void stopEndPoints(final int stopAfterMillis) {
+        final String name = Thread.currentThread().getThreadGroup()
+                                  .getName();
+
+        // no need to run inside another thread if we are not inside the client/server thread
+        if (!name.contains(THREADGROUP_NAME)) {
+            stopEndPoints_outsideThread();
+            return;
+        }
+
+
         if (stopAfterMillis > 0) {
             // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will
             // DEADLOCK
@@ -132,13 +143,7 @@ class BaseTest {
                         // ARE NOT in the same thread group as netty!
                         Thread.sleep(stopAfterMillis);
 
-                        synchronized (BaseTest.this.endPoints) {
-                            for (EndPoint endPoint : BaseTest.this.endPoints) {
-                                endPoint.stop();
-                                endPoint.waitForShutdown();
-                            }
-                            BaseTest.this.endPoints.clear();
-                        }
+                        stopEndPoints_outsideThread();
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -151,11 +156,23 @@ class BaseTest {
     }
 
     private
+    void stopEndPoints_outsideThread() {
+        synchronized (BaseTest.this.endPoints) {
+            for (EndPoint endPoint : BaseTest.this.endPoints) {
+                endPoint.stop();
+                endPoint.waitForShutdown();
+            }
+            BaseTest.this.endPoints.clear();
+        }
+    }
+
+
+    private
     ThreadGroup getThreadGroup() {
         ThreadGroup threadGroup = Thread.currentThread()
                                         .getThreadGroup();
         final String name = threadGroup.getName();
-        if (name.contains(EndPoint.THREADGROUP_NAME)) {
+        if (name.contains(THREADGROUP_NAME)) {
             threadGroup = threadGroup.getParent();
         }
         return threadGroup;

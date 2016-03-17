@@ -167,7 +167,6 @@ class PingTest extends BaseTest {
         ping.addListener(pingListener);
 
         waitForThreads();
-
         if (this.response == -1) {
             fail();
         }
