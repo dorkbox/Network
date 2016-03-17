@@ -104,7 +104,7 @@ class DnsClient {
      */
     public static
     String getVersion() {
-        return "1.8";
+        return "1.15";
     }
 
     /**
