@@ -542,7 +542,41 @@ class EndPoint<C extends Connection> {
         // stop does the same as this + more
         this.connectionManager.closeConnections();
 
+        // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
+        long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
+        RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
+        try {
+            IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
+            Entries<MetaChannel> entries = channelMap.entries();
+            while (entries.hasNext()) {
+                MetaChannel metaChannel = entries.next().value;
+                metaChannel.close(maxShutdownWaitTimeInMilliSeconds);
+                Thread.yield();
+            }
+
+            channelMap.clear();
+
+        } finally {
+            registrationWrapper2.releaseChannelMap();
+        }
+
         this.isConnected.set(false);
+    }
+
+    // server only does this on stop. Client does this on closeConnections
+    protected void shutdownChannels() {
+        synchronized (shutdownChannelList) {
+            // now we stop all of our channels
+            for (ChannelFuture f : this.shutdownChannelList) {
+                Channel channel = f.channel();
+                channel.close()
+                       .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+                Thread.yield();
+            }
+
+            // we have to clear the shutdown list. (
+            this.shutdownChannelList.clear();
+        }
     }
 
     protected final
@@ -643,40 +677,13 @@ class EndPoint<C extends Connection> {
                 }
             }
 
+            // this does a closeConnections + clear_listeners
             this.connectionManager.stop();
 
-            // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
-            long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
-            RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
-            try {
-                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-                Entries<MetaChannel> entries = channelMap.entries();
-                while (entries.hasNext()) {
-                    MetaChannel metaChannel = entries.next().value;
-                    metaChannel.close(maxShutdownWaitTimeInMilliSeconds);
-                    Thread.yield();
-                }
-
-                channelMap.clear();
-
-            } finally {
-                registrationWrapper2.releaseChannelMap();
-            }
-
+            shutdownChannels();
 
             // shutdown the database store
             this.propertyStore.close();
-
-            // now we stop all of our channels
-            for (ChannelFuture f : this.shutdownChannelList) {
-                Channel channel = f.channel();
-                channel.close()
-                       .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
-                Thread.yield();
-            }
-
-            // we have to clear the shutdown list.
-            this.shutdownChannelList.clear();
 
             // we want to WAIT until after the event executors have completed shutting down.
             List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();

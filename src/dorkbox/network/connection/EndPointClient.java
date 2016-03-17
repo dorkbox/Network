@@ -206,6 +206,27 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
     }
 
     /**
+     * Closes all connections ONLY (keeps the client running).  To STOP the client, use stop().
+     * <p/>
+     * This is used, for example, when reconnecting to a server.
+     */
+    @Override
+    public
+    void closeConnections() {
+        super.closeConnections();
+
+        // for the CLIENT only, we clear these connections! (the server only clears them on shutdown)
+        shutdownChannels();
+
+        // make sure we're not waiting on registration
+        registrationComplete = true;
+        synchronized (this.registrationLock) {
+            this.registrationLock.notify();
+        }
+        registrationComplete = false;
+    }
+
+    /**
      * Internal call to abort registration if the shutdown command is issued during channel registration.
      */
     void abortRegistration() {

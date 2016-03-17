@@ -468,19 +468,6 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     }
 
     /**
-     * Closes all connections ONLY (keeps the client running).  To STOP the client, use stop().
-     * <p/>
-     * This is used, for example, when reconnecting to a server.
-     */
-    @Override
-    public
-    void closeConnections() {
-        synchronized (this.registrationLock) {
-            this.registrationLock.notify();
-        }
-    }
-
-    /**
      * Closes all connections ONLY (keeps the client running). To STOP the client, use stop().
      * <p/>
      * This is used, for example, when reconnecting to a server.
