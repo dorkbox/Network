@@ -64,6 +64,8 @@ class RmiSendObjectTest extends BaseTest {
     public
     void rmi() throws InitializationException, SecurityException, IOException, InterruptedException {
         KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
+        KryoCryptoSerializationManager.DEFAULT.register(TestObject.class);
+
         KryoCryptoSerializationManager.DEFAULT.registerRemote(TestObject.class, TestObjectImpl.class);
         KryoCryptoSerializationManager.DEFAULT.registerRemote(OtherObject.class, OtherObjectImpl.class);
 
@@ -143,15 +145,13 @@ class RmiSendObjectTest extends BaseTest {
 
         client.connect(5000);
 
-        waitForThreads(20);
+        waitForThreads();
     }
 
     public
     interface TestObject {
         void setOther(float aFloat);
-
         float other();
-
         OtherObject getOtherObject();
     }
 
