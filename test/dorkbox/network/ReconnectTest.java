@@ -78,23 +78,19 @@ class ReconnectTest extends BaseTest {
                           stopEndPoints();
                           return;
                       }
-                      new Thread() {
-                          @Override
-                          public
-                          void run() {
-                              System.out.println("Reconnecting: " + reconnectCount.get());
-                              try {
-                                  client.reconnect();
-                              } catch (IOException e) {
-                                  e.printStackTrace();
-                              }
-                          }
-                      }.start();
+
+                      System.out.println("Reconnecting: " + reconnectCount.get());
+                      try {
+                          client.reconnect();
+                      } catch (IOException e) {
+                          e.printStackTrace();
+                      }
+
                   }
               });
         client.connect(5000);
 
-        waitForThreads(10);
+        waitForThreads();
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.get());
         assertEquals(3, reconnectCount.get());
     }
