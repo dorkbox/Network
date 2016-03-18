@@ -80,11 +80,6 @@ public class SelectorProviderUDT extends SelectorProvider {
 		throw new UnsupportedOperationException("feature not available");
 	}
 
-    @Override
-    public DatagramChannel openDatagramChannel(final ProtocolFamily family) throws IOException {
-        throw new UnsupportedOperationException("feature not available");
-    }
-
     /**
 	 * Not supported.
 	 */
@@ -143,4 +138,8 @@ public class SelectorProviderUDT extends SelectorProvider {
 		maxSelectorSize = selectorSize;
 	}
 
+    @Override
+    public DatagramChannel openDatagramChannel(final ProtocolFamily family) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
 }

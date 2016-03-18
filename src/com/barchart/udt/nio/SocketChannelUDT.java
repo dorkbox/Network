@@ -243,11 +243,6 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 	}
 
     @Override
-    public SocketAddress getRemoteAddress() throws IOException {
-        throw new UnsupportedOperationException("feature not available");
-    }
-
-    @Override
 	protected void implCloseSelectableChannel() throws IOException {
 		socketUDT.close();
 	}
@@ -529,6 +524,11 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 		return this;
 
 	}
+
+    @Override
+    public SocketAddress getRemoteAddress() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
 
     @Override
     public <T> SocketChannel setOption(final SocketOption<T> name, final T value) throws IOException {
