@@ -28,6 +28,7 @@ import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
+import dorkbox.util.OS;
 import dorkbox.util.Property;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.IntMap.Entries;
@@ -41,12 +42,14 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.util.NetUtil;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
+import io.netty.util.internal.PlatformDependent;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
 
 import java.io.IOException;
+import java.security.AccessControlException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -127,15 +130,26 @@ class EndPoint<C extends Connection> {
     public static int udpMaxSize = 508;
 
 
+    // duplicated in DnsClient
     static {
+        //noinspection Duplicates
         try {
-            // doesn't work in eclipse.
+            // doesn't work when running from inside eclipse.
             // Needed for NIO selectors on Android 2.2, and to force IPv4.
             System.setProperty("java.net.preferIPv4Stack", Boolean.TRUE.toString());
             System.setProperty("java.net.preferIPv6Addresses", Boolean.FALSE.toString());
-        } catch (Throwable ignored) {
+
+            // java6 has stack overflow problems when loading certain classes in it's classloader. The result is a StackOverflow when
+            // loading them normally
+            if (OS.javaVersion == 6) {
+                if (PlatformDependent.hasUnsafe()) {
+                    PlatformDependent.newFixedMpscQueue(8);
+                }
+            }
+        } catch (AccessControlException ignored) {
         }
     }
+
 
     protected final org.slf4j.Logger logger;
 

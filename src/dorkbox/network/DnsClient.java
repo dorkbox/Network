@@ -74,12 +74,22 @@ import java.util.concurrent.TimeUnit;
 public
 class DnsClient {
 
+    // duplicated in EndPoint
     static {
+        //noinspection Duplicates
         try {
-            // doesn't work in eclipse.
+            // doesn't work when running from inside eclipse.
             // Needed for NIO selectors on Android 2.2, and to force IPv4.
             System.setProperty("java.net.preferIPv4Stack", Boolean.TRUE.toString());
             System.setProperty("java.net.preferIPv6Addresses", Boolean.FALSE.toString());
+
+            // java6 has stack overflow problems when loading certain classes in it's classloader. The result is a StackOverflow when
+            // loading them normally
+            if (OS.javaVersion == 6) {
+                if (PlatformDependent.hasUnsafe()) {
+                    PlatformDependent.newFixedMpscQueue(8);
+                }
+            }
         } catch (AccessControlException ignored) {
         }
     }
