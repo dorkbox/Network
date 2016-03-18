@@ -24,10 +24,10 @@ These are the main features:
   - MultiCast Broadcast client and server discovery
   
 
-- Note: There is a maximum packet size for UDP, 508 bytes *to make sure it's unfragmented*
+- Note: There is a maximum packet size for UDP, 508 bytes *to guarantee it's unfragmented*
 
 - This is for cross-platform use, specifically - linux 32/64, mac 32/64, and windows 32/64. Java 6+
-
+    - Please note that Java6 runtimes have issues with their classloader loading classes recursively (you will get a StackOverflow exception). We have taken precautions to mitigate this, but be aware that it is a very real possibility. We recommend using Java7+ to prevent this issue.
 
 ``` java
 public static
@@ -44,7 +44,6 @@ configuration.tcpPort = tcpPort;
 configuration.host = host;
 
 final Server server = new Server(configuration);
-server.disableRemoteKeyValidation();
 addEndPoint(server);
 server.bind(false);
 
