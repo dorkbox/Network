@@ -17,12 +17,14 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.SocketOption;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ConnectionPendingException;
 import java.nio.channels.IllegalBlockingModeException;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.UnresolvedAddressException;
+import java.util.Set;
 
 /**
  * {@link SocketChannel}-like wrapper for {@link SocketUDT}, can be either
@@ -38,7 +40,7 @@ import java.nio.channels.UnresolvedAddressException;
  * {@link SocketChannel#open()};
  * <p>
  * example:
- * 
+ *
  * <pre>
  * SelectorProvider provider = SelectorProviderUDT.DATAGRAM;
  * SocketChannel clientChannel = provider.openSocketChannel();
@@ -73,8 +75,6 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 	protected NioSocketUDT socketAdapter;
 
 	protected final SocketUDT socketUDT;
-
-    private SocketAddress localAddress;
 
     private InetSocketAddress remoteSocket;
 
@@ -242,13 +242,10 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 
 	}
 
-//    @Override
-//    public SocketAddress getRemoteAddress() throws IOException {
-//        if(this.isConnectFinished()) {
-//            return remoteSocket;
-//        }
-//        return null;
-//    }
+    @Override
+    public SocketAddress getRemoteAddress() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
 
     @Override
 	protected void implCloseSelectableChannel() throws IOException {
@@ -292,7 +289,7 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 	/**
 	 * See {@link SocketChannel#read(ByteBuffer)} contract;
 	 * note: this method does not return (-1) as EOS (end of stream flag)
-	 * 
+	 *
 	 * @return <code><0</code> should not happen<br>
 	 *         <code>=0</code> blocking mode: timeout occurred on receive<br>
 	 *         <code>=0</code> non-blocking mode: nothing is received by the
@@ -396,7 +393,7 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 
 	/**
 	 * See {@link SocketChannel#write(ByteBuffer)} contract;
-	 * 
+	 *
 	 * @return <code><0</code> should not happen<br>
 	 *         <code>=0</code> blocking mode: timeout occurred on send<br>
 	 *         <code>=0</code> non-blocking mode: buffer is full in the
@@ -533,11 +530,33 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 
 	}
 
-//    @Override
-//    public SocketAddress getLocalAddress() throws IOException {
-//        if(this.isConnected()) {
-//            return localAddress;
-//        }
-//        return null;
-//    }
+    @Override
+    public <T> SocketChannel setOption(final SocketOption<T> name, final T value) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
+    public <T> T getOption(final SocketOption<T> name) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
+    public Set<SocketOption<?>> supportedOptions() {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
+    public SocketChannel shutdownInput() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
+    public SocketChannel shutdownOutput() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
+    public SocketAddress getLocalAddress() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
 }

@@ -14,7 +14,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.SocketAddress;
+import java.net.SocketOption;
 import java.nio.channels.ServerSocketChannel;
+import java.util.Set;
 
 /**
  * {@link ServerSocketChannel}-like wrapper for {@link SocketUDT} can be either
@@ -25,7 +28,7 @@ import java.nio.channels.ServerSocketChannel;
  * {@link ServerSocketChannel#open()};
  * <p>
  * example:
- * 
+ *
  * <pre>
  * SelectorProvider provider = SelectorProviderUDT.DATAGRAM;
  * ServerSocketChannel acceptChannel = provider.openServerSocketChannel();
@@ -110,6 +113,26 @@ public class ServerSocketChannelUDT extends ServerSocketChannel implements Chann
 	}
 
     @Override
+    public ServerSocketChannel bind(final SocketAddress local, final int backlog) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
+    public <T> ServerSocketChannel setOption(final SocketOption<T> name, final T value) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
+    public <T> T getOption(final SocketOption<T> name) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
+    public Set<SocketOption<?>> supportedOptions() {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
 	public synchronized NioServerSocketUDT socket() {
 		if (socketAdapter == null) {
 			try {
@@ -136,4 +159,9 @@ public class ServerSocketChannelUDT extends ServerSocketChannel implements Chann
 	public TypeUDT typeUDT() {
 		return providerUDT().type();
 	}
+
+    @Override
+    public SocketAddress getLocalAddress() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
 }
