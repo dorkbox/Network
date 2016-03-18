@@ -163,10 +163,10 @@ class EndPoint<C extends Connection> {
     private final List<ChannelFuture> shutdownChannelList = new ArrayList<ChannelFuture>();
 
     // make sure that the endpoint is closed on JVM shutdown (if it's still open at that point in time)
-    protected Thread shutdownHook;
+    private Thread shutdownHook;
 
-    protected AtomicBoolean stopCalled = new AtomicBoolean(false);
-    protected AtomicBoolean isConnected = new AtomicBoolean(false);
+    private AtomicBoolean stopCalled = new AtomicBoolean(false);
+    private AtomicBoolean isConnected = new AtomicBoolean(false);
 
     SettingsStore propertyStore;
     boolean disableRemoteKeyValidation;
@@ -198,10 +198,11 @@ class EndPoint<C extends Connection> {
 
         this.logger = org.slf4j.LoggerFactory.getLogger(type.getSimpleName());
 
-        // make sure that 'localhost' is REALLY our specific IP address
+        // make sure that 'localhost' is ALWAYS our specific loopback IP address
         if (options.host != null && (options.host.equals("localhost") || options.host.startsWith("127."))) {
-            InetAddress localHostLanAddress = InetAddress.getLoopbackAddress();
-            options.host = localHostLanAddress.getHostAddress();
+            byte[] loop = {(byte) 0x7F, (byte) 0x00, (byte) 0x00, (byte) 0x01};
+            final InetAddress loopback = InetAddress.getByAddress("localhost", loop);
+            options.host = loopback.getHostAddress();
         }
 
         // serialization stuff
@@ -317,6 +318,9 @@ class EndPoint<C extends Connection> {
         serializationManager.finishInit();
     }
 
+    /**
+     * Disables remote endpoint public key validation when the connection is established. This is not recommended as it is a security risk
+     */
     public
     void disableRemoteKeyValidation() {
         Logger logger2 = this.logger;
@@ -325,9 +329,7 @@ class EndPoint<C extends Connection> {
             logger2.error("Cannot disable the remote key validation after this endpoint is connected!");
         }
         else {
-            if (logger2.isInfoEnabled()) {
-                logger2.info("WARNING: Disabling remote key validation is a security risk!!");
-            }
+            logger2.info("WARNING: Disabling remote key validation is a security risk!!");
             this.disableRemoteKeyValidation = true;
         }
     }
@@ -657,7 +659,29 @@ class EndPoint<C extends Connection> {
         // make sure we are not trying to stop during a startup procedure.
         // This will wait until we have finished starting up/shutting down.
         synchronized (this.shutdownInProgress) {
+            // we want to WAIT until after the event executors have completed shutting down.
+            List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
+
+            for (EventLoopGroup loopGroup : this.eventLoopGroups) {
+                shutdownThreadList.add(loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds,
+                                                                    maxShutdownWaitTimeInMilliSeconds * 4,
+                                                                    TimeUnit.MILLISECONDS));
+                Thread.yield();
+            }
+
+            // now wait for them to finish!
+            // It can take a few seconds to shut down the executor. This will affect unit testing, where connections are quickly created/stopped
+            for (Future<?> f : shutdownThreadList) {
+                f.syncUninterruptibly();
+                Thread.yield();
+            }
+
             closeConnections();
+
+            // this does a closeConnections + clear_listeners
+            this.connectionManager.stop();
+
+            shutdownChannels();
 
             this.logger.info("Stopping endpoint");
 
@@ -677,30 +701,10 @@ class EndPoint<C extends Connection> {
                 }
             }
 
-            // this does a closeConnections + clear_listeners
-            this.connectionManager.stop();
-
-            shutdownChannels();
 
             // shutdown the database store
             this.propertyStore.close();
 
-            // we want to WAIT until after the event executors have completed shutting down.
-            List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
-
-            for (EventLoopGroup loopGroup : this.eventLoopGroups) {
-                shutdownThreadList.add(loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds,
-                                                                    maxShutdownWaitTimeInMilliSeconds * 4,
-                                                                    TimeUnit.MILLISECONDS));
-                Thread.yield();
-            }
-
-            // now wait for them to finish!
-            // It can take a few seconds to shut down the executor. This will affect unit testing, where connections are quickly created/stopped
-            for (Future<?> f : shutdownThreadList) {
-                f.syncUninterruptibly();
-                Thread.yield();
-            }
 
             // when the eventloop closes, the associated selectors are ALSO closed!
             stopExtraActions();

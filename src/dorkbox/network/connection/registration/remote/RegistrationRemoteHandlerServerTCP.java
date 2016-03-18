@@ -164,7 +164,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                     // against that ip-address::key pair, so we can better protect against MITM/spoof attacks.
                     InetSocketAddress tcpRemoteClient = (InetSocketAddress) channel.remoteAddress();
 
-                    boolean valid = registrationWrapper2.validateRemoteServerAddress(tcpRemoteClient, registration.publicKey);
+                    boolean valid = registrationWrapper2.validateRemoteAddress(tcpRemoteClient, registration.publicKey);
 
                     if (!valid) {
                         //whoa! abort since something messed up! (log happens inside of validate method)

@@ -164,12 +164,15 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         return this.endPoint.privateKey;
     }
 
+
+    /**
+     * @return true if the remote address public key matches the one saved
+     *
+     * @throws SecurityException
+     */
     public
-    boolean validateRemoteServerAddress(final InetSocketAddress tcpRemoteServer, final ECPublicKeyParameters publicKey)
+    boolean validateRemoteAddress(final InetSocketAddress tcpRemoteServer, final ECPublicKeyParameters publicKey)
                     throws SecurityException {
-        if (this.endPoint.disableRemoteKeyValidation) {
-            return true;
-        }
 
         InetAddress address = tcpRemoteServer.getAddress();
         byte[] hostAddress = address.getAddress();
@@ -190,13 +193,18 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
                     byAddress = InetAddress.getByAddress(hostAddress)
                                            .getHostAddress();
                 } catch (UnknownHostException e) {
-                    byAddress = "Unknown";
+                    byAddress = "Unknown Address";
                 }
 
-                //whoa! abort since something messed up!
-                logger2.error("Invalid or non-matching public key from remote server. Their public key has changed. To fix, remove entry for: {}",
-                              byAddress);
-                return false;
+                if (this.endPoint.disableRemoteKeyValidation) {
+                    logger2.warn("Invalid or non-matching public key from remote server. Their public key has changed. To fix, remove entry for: {}", byAddress);
+                    return true;
+                }
+                else {
+                    // keys do not match, abort!
+                    logger2.error("Invalid or non-matching public key from remote server. Their public key has changed. To fix, remove entry for: {}", byAddress);
+                    return false;
+                }
             }
         }
 
@@ -210,7 +218,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         if (savedPublicKey != null) {
             Logger logger2 = this.logger;
             if (logger2.isDebugEnabled()) {
-                logger2.debug("Deleteing remote IP address key {}.{}.{}.{}",
+                logger2.debug("Deleting remote IP address key {}.{}.{}.{}",
                               hostAddress[0],
                               hostAddress[1],
                               hostAddress[2],
