@@ -126,35 +126,30 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     }
 
 
-
-
-    static class ClassSerializer {
+    private static class ClassSerializer {
         final Class<?> clazz;
         final Serializer<?> serializer;
 
-        public
         ClassSerializer(final Class<?> clazz, final Serializer<?> serializer) {
             this.clazz = clazz;
             this.serializer = serializer;
         }
     }
-    static class ClassSerializer2 {
+    private static class ClassSerializer2 {
         final Class<?> clazz;
         final Serializer<?> serializer;
         final int id;
 
-        public
         ClassSerializer2(final Class<?> clazz, final Serializer<?> serializer, final int id) {
             this.clazz = clazz;
             this.serializer = serializer;
             this.id = id;
         }
     }
-    static class RemoteClass<Iface, Impl extends Iface> {
+    private static class RemoteClass<Iface, Impl extends Iface> {
         private final Class<Iface> ifaceClass;
         private final Class<Impl> implClass;
 
-        public
         RemoteClass(final Class<Iface> ifaceClass, final Class<Impl> implClass) {
             this.ifaceClass = ifaceClass;
             this.implClass = implClass;
@@ -165,19 +160,21 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     private final ObjectPool<KryoExtra> kryoPool;
 
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class
-    final List<Class<?>> classesToRegister = new ArrayList<Class<?>>();
-    final List<ClassSerializer> classSerializerToRegister = new ArrayList<ClassSerializer>();
-    final List<ClassSerializer2> classSerializer2ToRegister = new ArrayList<ClassSerializer2>();
-    final List<RemoteClass> remoteClassToRegister = new ArrayList<RemoteClass>();
+    private final List<Class<?>> classesToRegister = new ArrayList<Class<?>>();
+    private final List<ClassSerializer> classSerializerToRegister = new ArrayList<ClassSerializer>();
+    private final List<ClassSerializer2> classSerializer2ToRegister = new ArrayList<ClassSerializer2>();
+    private final List<RemoteClass> remoteClassToRegister = new ArrayList<RemoteClass>();
 
-    boolean shouldInitRMI = false;
-    InvokeMethodSerializer methodSerializer = null;
-    Serializer<Object> invocationSerializer = null;
-    RemoteObjectSerializer remoteObjectSerializer;
+    private boolean shouldInitRMI = false;
+    private InvokeMethodSerializer methodSerializer = null;
+    private Serializer<Object> invocationSerializer = null;
+    private RemoteObjectSerializer remoteObjectSerializer;
 
 
 
     /**
+     * By default, the serialization manager will compress+encrypt data to connections with remote IPs, and only compress on the loopback IP
+     * <p>
      * @param references
      *                 If true, each appearance of an object in the graph after the first is stored as an integer ordinal. When set to true,
      *                 {@link MapReferenceResolver} is used. This enables references to the same object and cyclic graphs to be serialized,
@@ -201,6 +198,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     public
     KryoCryptoSerializationManager(final boolean references, final boolean registrationRequired, final SerializerFactory factory) {
+
         kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra>() {
             @Override
             public
@@ -503,7 +501,13 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     void writeWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            kryo.writeCrypto(connection, buffer, message);
+            // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
+            if (connection.isLoopback()) {
+                kryo.writeCompressed(connection, buffer, message);
+            }
+            else {
+                kryo.writeCrypto(connection, buffer, message);
+            }
         } finally {
             kryoPool.put(kryo);
         }
@@ -523,7 +527,13 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     Object readWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final int length) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            return kryo.readCrypto(connection, buffer, length);
+            // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
+            if (connection.isLoopback()) {
+                return kryo.readCompressed(connection, buffer, length);
+            }
+            else {
+                return kryo.readCrypto(connection, buffer, length);
+            }
         } finally {
             kryoPool.put(kryo);
         }
