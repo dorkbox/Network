@@ -87,9 +87,7 @@ class RegistrationHandler<C extends Connection> extends ChannelInboundHandlerAda
 
     public
     MetaChannel shutdown(final RegistrationWrapper<C> registrationWrapper, final Channel channel) {
-        this.logger.error("SHUTDOWN HANDLER REACHED! SOMETHING MESSED UP! TRYING TO ABORT");
-
-        // shutdown. Something messed up. Only reach this is something messed up.
+        // shutdown. Something messed up or was incorrect
         // properly shutdown the TCP/UDP channels.
         if (channel.isOpen()) {
             channel.close();
