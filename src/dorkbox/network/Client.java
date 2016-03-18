@@ -205,7 +205,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
                             .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
-                            .localAddress(new InetSocketAddress(0))
+                            .localAddress(new InetSocketAddress(0))  // bind to wildcard
                             .remoteAddress(new InetSocketAddress(options.host, options.udpPort))
                             .handler(new RegistrationRemoteHandlerClientUDP<C>(threadName,
                                                                                registrationWrapper,
