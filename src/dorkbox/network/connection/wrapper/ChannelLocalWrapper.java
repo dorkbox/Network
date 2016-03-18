@@ -111,6 +111,12 @@ class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, Co
     }
 
     @Override
+    public
+    boolean isLoopback() {
+        return true;
+    }
+
+    @Override
     public final
     String getRemoteHost() {
         return this.remoteAddress;

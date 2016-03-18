@@ -23,6 +23,7 @@ import dorkbox.network.connection.UdpServer;
 import dorkbox.network.connection.registration.MetaChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
+import io.netty.util.NetUtil;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
@@ -39,6 +40,7 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
     private final boolean remotePublicKeyChanged;
 
     private final String remoteAddress;
+    private final boolean isLoopback;
     private final EventLoop eventLoop;
 
     // GCM IV. hacky way to prevent tons of GC and to not clobber the original parameters
@@ -55,6 +57,8 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
 
         Channel tcpChannel = metaChannel.tcpChannel;
         this.eventLoop = tcpChannel.eventLoop();
+
+        isLoopback = ((InetSocketAddress)tcpChannel.remoteAddress()).getAddress().equals(NetUtil.LOCALHOST);
 
         this.tcp = new ChannelNetwork(tcpChannel);
 
@@ -160,6 +164,12 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
     public
     ParametersWithIV cryptoParameters() {
         return this.cryptoParameters.get();
+    }
+
+    @Override
+    public
+    boolean isLoopback() {
+        return isLoopback;
     }
 
     @Override

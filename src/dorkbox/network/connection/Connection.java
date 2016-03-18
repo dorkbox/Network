@@ -37,6 +37,10 @@ interface Connection {
      */
     String getRemoteHost();
 
+    /**
+     * @return true if this connection is established on the loopback interface
+     */
+    boolean isLoopback();
 
     /**
      * @return the endpoint associated with this connection

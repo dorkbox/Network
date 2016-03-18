@@ -80,6 +80,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
 
     private ISessionManager<Connection> sessionManager;
     private ChannelWrapper channelWrapper;
+    private boolean isLoopback;
 
     private volatile PingFuture pingFuture = null;
 
@@ -133,6 +134,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         else {
             this.remoteKeyChanged = false;
         }
+
+        isLoopback = channelWrapper.isLoopback();
     }
 
     /**
@@ -188,6 +191,15 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         return this.channelWrapper.getRemoteHost();
     }
 
+
+    /**
+     * @return true if this connection is established on the loopback interface
+     */
+    @Override
+    public
+    boolean isLoopback() {
+        return isLoopback;
+    }
 
     /**
      * @return the endpoint associated with this connection

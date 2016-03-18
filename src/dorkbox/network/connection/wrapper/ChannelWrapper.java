@@ -44,10 +44,16 @@ interface ChannelWrapper<C extends Connection> {
 
     /**
      * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal
-     *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
-     *          clobber each other
+     * because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
+     * clobber each other
      */
     ParametersWithIV cryptoParameters();
+
+    /**
+     * @return true if this connection is connection on the loopback interface. This is specifically used to dynamically enable/disable
+     * encryption (it's not required on loopback, it is required on all others)
+     */
+    boolean isLoopback();
 
     /**
      * @return the remote host (can be local, tcp, udp, udt)
