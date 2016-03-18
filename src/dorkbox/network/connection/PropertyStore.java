@@ -33,7 +33,7 @@ import java.util.Map;
 
 /**
  * The property store is the DEFAULT type of store for the network stack.
- * This is package private, and not intended to be extended!.
+ * This is package private, and not intended to be extended.
  */
 final
 class PropertyStore extends SettingsStore {
@@ -71,7 +71,7 @@ class PropertyStore extends SettingsStore {
 
         servers = this.storage.getAndPut(DatabaseStorage.SERVERS, new HashMap<ByteArrayWrapper, DB_Server>(16));
 
-        //use map to keep track of recid, so we can get record info during restarts.
+        //use map to keep track of recordId, so we can get record info during restarts.
         DB_Server localServer = servers.get(DB_Server.IP_LOCALHOST);
         if (localServer == null) {
             localServer = new DB_Server();
