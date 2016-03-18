@@ -55,8 +55,7 @@ interface Connection {
     int id();
 
     /**
-     * @return the connection (TCP or LOCAL) id of this connection as a HEX
-     * string.
+     * @return the connection (TCP or LOCAL) id of this connection as a HEX string.
      */
     String idAsHex();
 

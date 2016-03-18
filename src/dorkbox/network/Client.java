@@ -340,10 +340,22 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         return this.connection.hasRemoteKeyChanged();
     }
 
+    /**
+     * @return the remote address, as a string.
+     */
     @Override
     public
     String getRemoteHost() {
         return this.connection.getRemoteHost();
+    }
+
+    /**
+     * @return true if this connection is established on the loopback interface
+     */
+    @Override
+    public
+    boolean isLoopback() {
+        return this.connection.isLoopback();
     }
 
     @SuppressWarnings("rawtypes")
@@ -353,12 +365,18 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         return this;
     }
 
+    /**
+     * @return the connection (TCP or LOCAL) id of this connection.
+     */
     @Override
     public
     int id() {
         return this.connection.id();
     }
 
+    /**
+     * @return the connection (TCP or LOCAL) id of this connection as a HEX string.
+     */
     @Override
     public
     String idAsHex() {
