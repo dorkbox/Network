@@ -48,7 +48,6 @@ public class PingPongLocalTest extends BaseTest {
         populateData(dataLOCAL);
 
         Server server = new Server();
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
         server.listeners().add(new Listener<Data>() {
@@ -71,7 +70,6 @@ public class PingPongLocalTest extends BaseTest {
         // ----
 
         Client client = new Client();
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners().add(new Listener<Data>() {
             AtomicInteger check = new AtomicInteger(0);

@@ -48,7 +48,6 @@ class ClientSendTest extends BaseTest {
         configuration.host = host;
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
@@ -64,7 +63,6 @@ class ClientSendTest extends BaseTest {
               });
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.connect(5000);
 

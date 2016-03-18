@@ -47,7 +47,6 @@ class ReuseTest extends BaseTest {
         configuration.host = host;
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.listeners()
               .add(new Listener<String>() {
@@ -71,7 +70,6 @@ class ReuseTest extends BaseTest {
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
               .add(new Listener<String>() {
@@ -122,7 +120,6 @@ class ReuseTest extends BaseTest {
         this.clientCount = new AtomicInteger(0);
 
         Server server = new Server();
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.listeners()
               .add(new Listener<String>() {
@@ -144,7 +141,6 @@ class ReuseTest extends BaseTest {
         // ----
 
         Client client = new Client();
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
               .add(new Listener<String>() {

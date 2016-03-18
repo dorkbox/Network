@@ -65,7 +65,6 @@ class MultipleThreadTest extends BaseTest {
         configuration.host = host;
 
         final Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
 
         addEndPoint(server);
         server.bind(false);
@@ -125,8 +124,6 @@ class MultipleThreadTest extends BaseTest {
             final int index = i;
 
             Client client = new Client(configuration);
-            client.disableRemoteKeyValidation();
-
             this.clients.add(client);
 
             addEndPoint(client);

@@ -47,7 +47,6 @@ class MultipleServerTest extends BaseTest {
         configuration1.localChannelName = "chan1";
 
         Server server1 = new Server(configuration1);
-        server1.disableRemoteKeyValidation();
         addEndPoint(server1);
 
         server1.bind(false);
@@ -71,7 +70,6 @@ class MultipleServerTest extends BaseTest {
         configuration2.localChannelName = "chan2";
 
         Server server2 = new Server(configuration2);
-        server2.disableRemoteKeyValidation();
 
         addEndPoint(server2);
         server2.bind(false);
@@ -95,7 +93,6 @@ class MultipleServerTest extends BaseTest {
         configuration1.host = host;
 
         Client client1 = new Client(configuration1);
-        client1.disableRemoteKeyValidation();
         addEndPoint(client1);
         client1.listeners()
                .add(new Listener<String>() {
@@ -113,7 +110,6 @@ class MultipleServerTest extends BaseTest {
         configuration2.host = host;
 
         Client client2 = new Client(configuration2);
-        client2.disableRemoteKeyValidation();
         addEndPoint(client2);
         client2.listeners()
                .add(new Listener<String>() {

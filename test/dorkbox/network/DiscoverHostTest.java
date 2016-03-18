@@ -43,7 +43,6 @@ class DiscoverHostTest extends BaseTest {
         configuration.host = host;
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
@@ -57,7 +56,6 @@ class DiscoverHostTest extends BaseTest {
         }
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
               .add(new Listener<Object>() {

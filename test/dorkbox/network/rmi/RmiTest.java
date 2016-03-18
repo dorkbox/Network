@@ -205,7 +205,6 @@ class RmiTest extends BaseTest {
         configuration.rmiEnabled = true;
 
         final Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         server.setIdleTimeout(0);
 
         addEndPoint(server);
@@ -238,7 +237,6 @@ class RmiTest extends BaseTest {
 
         final Client client = new Client(configuration);
         client.setIdleTimeout(0);
-        client.disableRemoteKeyValidation();
 
         addEndPoint(client);
 

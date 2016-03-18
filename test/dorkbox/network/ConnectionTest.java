@@ -137,7 +137,6 @@ class ConnectionTest extends BaseTest {
     Server startServer(Configuration configuration) throws InitializationException, SecurityException, IOException {
         Server server = new Server(configuration);
 
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
 
         server.bind(false);
@@ -176,7 +175,6 @@ class ConnectionTest extends BaseTest {
         else {
             client = new Client();
         }
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.listeners()

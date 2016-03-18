@@ -42,14 +42,12 @@ class PingTest extends BaseTest {
         configuration.host = host;
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);
@@ -78,14 +76,12 @@ class PingTest extends BaseTest {
         configuration.host = host;
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);
@@ -135,14 +131,12 @@ class PingTest extends BaseTest {
         configuration.host = host;
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);
@@ -185,14 +179,12 @@ class PingTest extends BaseTest {
 
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);
@@ -225,14 +217,12 @@ class PingTest extends BaseTest {
         configuration.host = host;
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
 
         client.connect(5000);

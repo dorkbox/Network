@@ -76,7 +76,6 @@ class RmiSendObjectTest extends BaseTest {
         configuration.rmiEnabled = true;
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         server.setIdleTimeout(0);
 
 
@@ -101,7 +100,6 @@ class RmiSendObjectTest extends BaseTest {
 
         // ----
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         client.setIdleTimeout(0);
 
         addEndPoint(client);

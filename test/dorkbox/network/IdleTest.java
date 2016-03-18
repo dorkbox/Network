@@ -121,7 +121,6 @@ class IdleTest extends BaseTest {
                     throws InitializationException, SecurityException, IOException, InterruptedException {
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.setIdleTimeout(100);
         server.bind(false);
@@ -150,7 +149,6 @@ class IdleTest extends BaseTest {
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
               .add(new Listener<Data>() {
@@ -180,7 +178,6 @@ class IdleTest extends BaseTest {
     void streamSpecificType(final int largeDataSize, Configuration configuration, final ConnectionType type)
                     throws InitializationException, SecurityException, IOException, InterruptedException {
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.setIdleTimeout(100);
         server.bind(false);
@@ -244,7 +241,6 @@ class IdleTest extends BaseTest {
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
               .add(new Listener<byte[]>() {

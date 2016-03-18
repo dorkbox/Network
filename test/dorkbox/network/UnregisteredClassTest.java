@@ -63,7 +63,6 @@ class UnregisteredClassTest extends BaseTest {
         populateData(dataUDP, false);
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
         server.listeners()
@@ -101,7 +100,6 @@ class UnregisteredClassTest extends BaseTest {
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
               .add(new Listener<Data>() {

@@ -82,7 +82,6 @@ public class ChunkedDataIdleTest extends BaseTest {
     private void sendObject(final Data mainData, Configuration configuration, final ConnectionType type)
                     throws InitializationException, SecurityException, IOException, InterruptedException {
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
 
         addEndPoint(server);
         server.setIdleTimeout(10);
@@ -107,7 +106,6 @@ public class ChunkedDataIdleTest extends BaseTest {
         // ----
 
         Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         client.setIdleTimeout(10);
         addEndPoint(client);
         client.listeners().add(new Listener<Data>() {

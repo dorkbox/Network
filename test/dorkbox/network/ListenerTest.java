@@ -92,7 +92,6 @@ class ListenerTest extends BaseTest {
             }
         };
 
-        server.disableRemoteKeyValidation();
         addEndPoint(server);
         server.bind(false);
 
@@ -174,7 +173,6 @@ class ListenerTest extends BaseTest {
 
         Client client = new Client(configuration);
 
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
               .add(new Listener<String>() {

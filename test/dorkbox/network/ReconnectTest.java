@@ -42,7 +42,6 @@ class ReconnectTest extends BaseTest {
 
 
         Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
 
         server.bind(false);
         addEndPoint(server);
@@ -67,7 +66,6 @@ class ReconnectTest extends BaseTest {
 
         final AtomicInteger reconnectCount = new AtomicInteger();
         final Client client = new Client(configuration);
-        client.disableRemoteKeyValidation();
         addEndPoint(client);
         client.listeners()
               .add(new Listener<Object>() {

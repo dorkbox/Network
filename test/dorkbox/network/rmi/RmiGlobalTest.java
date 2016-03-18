@@ -220,7 +220,6 @@ class RmiGlobalTest extends BaseTest {
         configuration.rmiEnabled = true;
 
         final Server server = new Server(configuration);
-        server.disableRemoteKeyValidation();
         server.setIdleTimeout(0);
 
         // register this object as a global object that the client will get
@@ -254,7 +253,6 @@ class RmiGlobalTest extends BaseTest {
 
         final Client client = new Client(configuration);
         client.setIdleTimeout(0);
-        client.disableRemoteKeyValidation();
 
         // register this object as a global object that the server will get
         CLIENT_GLOBAL_OBJECT_ID = client.createGlobalObject(globalRemoteClientObject);
