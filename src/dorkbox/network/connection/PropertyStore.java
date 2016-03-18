@@ -51,7 +51,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public
-    void init(final SerializationManager serializationManager, final Storage storage) throws IOException {
+    void init(final SerializationManager serializationManager, final Storage ignored) throws IOException {
         // make sure our custom types are registered
         // only register if not ALREADY initialized, since we can initialize in the server and in the client. This creates problems if
         // running inside the same JVM (we don't permit it)
@@ -61,17 +61,11 @@ class PropertyStore extends SettingsStore {
             serializationManager.register(DB_Server.class);
         }
 
-        if (storage == null) {
-            this.storage = Store.Memory()
-                                .make();
-        }
-        else {
-            this.storage = storage;
-        }
+        this.storage = Store.Memory()
+                            .make();
 
         servers = this.storage.getAndPut(DatabaseStorage.SERVERS, new HashMap<ByteArrayWrapper, DB_Server>(16));
 
-        //use map to keep track of recordId, so we can get record info during restarts.
         DB_Server localServer = servers.get(DB_Server.IP_LOCALHOST);
         if (localServer == null) {
             localServer = new DB_Server();
