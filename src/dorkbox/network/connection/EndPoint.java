@@ -38,6 +38,7 @@ import dorkbox.util.exceptions.SecurityException;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
+import io.netty.util.NetUtil;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
@@ -46,7 +47,6 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -200,9 +200,8 @@ class EndPoint<C extends Connection> {
 
         // make sure that 'localhost' is ALWAYS our specific loopback IP address
         if (options.host != null && (options.host.equals("localhost") || options.host.startsWith("127."))) {
-            byte[] loop = {(byte) 0x7F, (byte) 0x00, (byte) 0x00, (byte) 0x01};
-            final InetAddress loopback = InetAddress.getByAddress("localhost", loop);
-            options.host = loopback.getHostAddress();
+            // localhost IP might not always be 127.0.0.1
+            options.host = NetUtil.LOCALHOST.getHostAddress();
         }
 
         // serialization stuff
