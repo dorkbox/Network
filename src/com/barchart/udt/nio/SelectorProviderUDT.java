@@ -11,7 +11,6 @@ import com.barchart.udt.SocketUDT;
 import com.barchart.udt.TypeUDT;
 
 import java.io.IOException;
-import java.net.ProtocolFamily;
 import java.nio.channels.DatagramChannel;
 import java.nio.channels.Pipe;
 import java.nio.channels.spi.SelectorProvider;
@@ -137,9 +136,4 @@ public class SelectorProviderUDT extends SelectorProvider {
 	public void setMaxSelectorSize(final int selectorSize) {
 		maxSelectorSize = selectorSize;
 	}
-
-    @Override
-    public DatagramChannel openDatagramChannel(final ProtocolFamily family) throws IOException {
-        throw new UnsupportedOperationException("feature not available");
-    }
 }

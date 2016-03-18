@@ -17,14 +17,12 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.net.SocketOption;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ConnectionPendingException;
 import java.nio.channels.IllegalBlockingModeException;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.UnresolvedAddressException;
-import java.util.Set;
 
 /**
  * {@link SocketChannel}-like wrapper for {@link SocketUDT}, can be either
@@ -524,39 +522,4 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 		return this;
 
 	}
-
-    @Override
-    public SocketAddress getRemoteAddress() throws IOException {
-        throw new UnsupportedOperationException("feature not available");
-    }
-
-    @Override
-    public <T> SocketChannel setOption(final SocketOption<T> name, final T value) throws IOException {
-        throw new UnsupportedOperationException("feature not available");
-    }
-
-    @Override
-    public <T> T getOption(final SocketOption<T> name) throws IOException {
-        throw new UnsupportedOperationException("feature not available");
-    }
-
-    @Override
-    public Set<SocketOption<?>> supportedOptions() {
-        throw new UnsupportedOperationException("feature not available");
-    }
-
-    @Override
-    public SocketChannel shutdownInput() throws IOException {
-        throw new UnsupportedOperationException("feature not available");
-    }
-
-    @Override
-    public SocketChannel shutdownOutput() throws IOException {
-        throw new UnsupportedOperationException("feature not available");
-    }
-
-    @Override
-    public SocketAddress getLocalAddress() throws IOException {
-        throw new UnsupportedOperationException("feature not available");
-    }
 }
