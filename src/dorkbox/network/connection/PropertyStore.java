@@ -66,10 +66,10 @@ class PropertyStore extends SettingsStore {
 
         servers = this.storage.getAndPut(DatabaseStorage.SERVERS, new HashMap<ByteArrayWrapper, DB_Server>(16));
 
-        DB_Server localServer = servers.get(DB_Server.IP_LOCALHOST);
+        DB_Server localServer = servers.get(DB_Server.IP_SELF); // this will always be null and is here to help people that copy/paste code
         if (localServer == null) {
             localServer = new DB_Server();
-            servers.put(DB_Server.IP_LOCALHOST, localServer);
+            servers.put(DB_Server.IP_SELF, localServer);
 
             // have to always specify what we are saving
             this.storage.putAndSave(DatabaseStorage.SERVERS, servers);
@@ -84,7 +84,7 @@ class PropertyStore extends SettingsStore {
     ECPrivateKeyParameters getPrivateKey() throws dorkbox.util.exceptions.SecurityException {
         checkAccess(EndPoint.class);
 
-        return servers.get(DB_Server.IP_LOCALHOST)
+        return servers.get(DB_Server.IP_SELF)
                       .getPrivateKey();
     }
 
@@ -96,7 +96,7 @@ class PropertyStore extends SettingsStore {
     void savePrivateKey(final ECPrivateKeyParameters serverPrivateKey) throws SecurityException {
         checkAccess(EndPoint.class);
 
-        servers.get(DB_Server.IP_LOCALHOST)
+        servers.get(DB_Server.IP_SELF)
                .setPrivateKey(serverPrivateKey);
 
         // have to always specify what we are saving
@@ -111,7 +111,7 @@ class PropertyStore extends SettingsStore {
     ECPublicKeyParameters getPublicKey() throws SecurityException {
         checkAccess(EndPoint.class);
 
-        return servers.get(DB_Server.IP_LOCALHOST)
+        return servers.get(DB_Server.IP_SELF)
                       .getPublicKey();
     }
 
@@ -123,7 +123,7 @@ class PropertyStore extends SettingsStore {
     void savePublicKey(final ECPublicKeyParameters serverPublicKey) throws SecurityException {
         checkAccess(EndPoint.class);
 
-        servers.get(DB_Server.IP_LOCALHOST)
+        servers.get(DB_Server.IP_SELF)
                .setPublicKey(serverPublicKey);
 
         // have to always specify what we are saving
@@ -136,7 +136,7 @@ class PropertyStore extends SettingsStore {
     @Override
     public synchronized
     byte[] getSalt() {
-        final DB_Server localServer = servers.get(DB_Server.IP_LOCALHOST);
+        final DB_Server localServer = servers.get(DB_Server.IP_SELF);
         byte[] salt = localServer.getSalt();
 
         // we don't care who gets the server salt
