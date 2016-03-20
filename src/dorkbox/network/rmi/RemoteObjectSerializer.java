@@ -38,7 +38,6 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.KryoExtra;
 
 /**
@@ -72,8 +71,6 @@ class RemoteObjectSerializer<T> extends Serializer<T> {
     T read(Kryo kryo, Input input, Class type) {
         KryoExtra kryoExtra = (KryoExtra) kryo;
         int objectID = input.readInt(true);
-
-        final ConnectionImpl connection = kryoExtra.connection;
-        return (T) connection.getProxyObject(objectID, type);
+        return (T) kryoExtra.connection.getProxyObject(objectID, type);
     }
 }

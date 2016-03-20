@@ -36,7 +36,7 @@ import java.io.IOException;
  * Nothing in this class is thread safe
  */
 public
-class KryoExtra extends Kryo {
+class KryoExtra<C extends ICryptoConnection> extends Kryo {
     /**
      * bit masks
      */
@@ -53,7 +53,7 @@ class KryoExtra extends Kryo {
     private final ByteBufOutput writer = new ByteBufOutput();
 
     // volatile to provide object visibility for entire class
-    public volatile ConnectionImpl connection;
+    public volatile IRmiConnection connection;
 
     private final GCMBlockCipher aesEngine = new GCMBlockCipher(new AESFastEngine());
 
@@ -124,7 +124,7 @@ class KryoExtra extends Kryo {
     }
 
     public synchronized
-    void writeCompressed(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
+    void writeCompressed(final C connection, final ByteBuf buffer, final Object message) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
 
@@ -217,7 +217,7 @@ class KryoExtra extends Kryo {
     }
 
     public
-    Object readCompressed(final ConnectionImpl connection, final ByteBuf buffer, int length) throws IOException {
+    Object readCompressed(final C connection, final ByteBuf buffer, int length) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
 
@@ -305,7 +305,7 @@ class KryoExtra extends Kryo {
     }
 
     public synchronized
-    void writeCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
+    void writeCrypto(final C connection, final ByteBuf buffer, final Object message) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
 
@@ -443,7 +443,7 @@ class KryoExtra extends Kryo {
     }
 
     public
-    Object readCrypto(final ConnectionImpl connection, final ByteBuf buffer, int length) throws IOException {
+    Object readCrypto(final C connection, final ByteBuf buffer, int length) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
 

@@ -63,7 +63,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @SuppressWarnings("unused")
 @Sharable
 public
-class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection, ListenerBridge, ConnectionBridge {
+class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConnection, Connection, ListenerBridge, ConnectionBridge {
 
     private final org.slf4j.Logger logger;
 
@@ -155,7 +155,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
      *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
      *          clobber each other
      */
-    final
+    public final
     ParametersWithIV getCryptoParameters() {
         return this.channelWrapper.cryptoParameters();
     }
@@ -167,7 +167,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
      *  The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
      *  counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
      */
-    final
+    public final
     long getNextGcmSequence() {
         return aes_gcm_iv.getAndIncrement();
     }
@@ -1104,6 +1104,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
         }
     }
 
+    /**
+     * Used by RMI
+     *
+     * @return the registered ID for a specific object. This is used by the "local" side when setting up the to fetch an object for the
+     * "remote" side for RMI
+     */
     public
     <T> int getRegisteredId(final T object) {
         // always check local before checking global, because less contention on the synchronization
@@ -1122,7 +1128,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     }
 
     /**
-     * Used by the LOCAL side, to get the proxy object as an interface
+     * Used by RMI for the LOCAL side, to get the proxy object as an interface
      *
      * @param type must be the interface the proxy will bind to
      */
@@ -1142,7 +1148,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection,
     }
 
     /**
-     * This is used by the REMOTE side, to get the implementation
+     * This is used by RMI for the REMOTE side, to get the implementation
      */
     public
     Object getImplementationObject(final int objectID) {
