@@ -166,7 +166,7 @@ class SocketUDT {
 
                 sourceFileName = packageName + "/natives/" + osName + "/" + sourceFileName;
 
-                NativeLoader.loadLibrary(sourceFileName, "libnetty-UDT-", TypeUDT.class);
+                NativeLoader.loadLibrary(sourceFileName, "libnetty-UDT", TypeUDT.class);
 
                 log.info("Release libraries loaded.");
                 loaded = true;
