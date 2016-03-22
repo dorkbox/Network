@@ -35,12 +35,7 @@ interface ISessionManager<C extends Connection> {
     void connectionDisconnected(C connection);
 
     /**
-     * Called when there is an error of some kind during the up/down stream process
-     */
-    void connectionError(C connection, Throwable throwable);
-
-    /**
-     * Returns a non-modifiable list of active connections
+     * Returns a non-modifiable list of active connections. This is extremely slow, and not recommended!
      */
     Collection<C> getConnections();
 }

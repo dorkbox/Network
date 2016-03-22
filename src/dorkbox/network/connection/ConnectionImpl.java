@@ -732,7 +732,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             // safe to ignore, since it's thrown when we try to interact with a closed socket. Race conditions cause this, and
             // it is still safe to ignore.
             this.logger.error("Unexpected exception while receiving data from {}", channel.remoteAddress(), cause);
-            this.sessionManager.connectionError(this, cause);
 
             // the ONLY sockets that can call this are:
             // CLIENT TCP or UDP

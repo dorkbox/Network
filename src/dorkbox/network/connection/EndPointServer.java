@@ -29,13 +29,9 @@ import java.io.IOException;
 public
 class EndPointServer<C extends Connection> extends EndPoint<C> {
 
-    private final ServerConnectionBridge<C> serverConnections;
-
     public
     EndPointServer(final Configuration options) throws InitializationException, SecurityException, IOException {
         super(Server.class, options);
-
-        this.serverConnections = new ServerConnectionBridge<C>(this.connectionManager);
     }
 
     /**
@@ -44,7 +40,7 @@ class EndPointServer<C extends Connection> extends EndPoint<C> {
     @Override
     public
     ConnectionBridgeServer<C> send() {
-        return this.serverConnections;
+        return this.connectionManager;
     }
 
     /**
