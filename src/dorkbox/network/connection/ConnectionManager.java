@@ -476,23 +476,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @Override
     public
     void connectionConnected(final C connection) {
-        // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
-        // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
-        // use-case 99% of the time)
-        synchronized (singleWriterLock2) {
-            // access a snapshot of the subscriptions (single-writer-principle)
-            ConcurrentEntry head = connectionsREF.get(this);
-
-            if (!connectionEntries.containsKey(connection)) {
-                head = new ConcurrentEntry<Object>(connection, head);
-
-                connectionEntries.put(connection, head);
-
-                // save this snapshot back to the original (single writer principle)
-                connectionsREF.lazySet(this, head);
-            }
-        }
-
+        addConnection(connection);
 
         final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
 
@@ -593,6 +577,45 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
             removeListenerManager(connection);
         }
 
+        removeConnection(connection);
+    }
+
+    /**
+     * Adds a custom connection to the server.
+     * <p>
+     * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
+     * you want *this* server instance to manage listeners + message dispatch
+     *
+     * @param connection the connection to add
+     */
+    void addConnection(final C connection) {
+        // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
+        // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
+        // use-case 99% of the time)
+        synchronized (singleWriterLock2) {
+            // access a snapshot of the subscriptions (single-writer-principle)
+            ConcurrentEntry head = connectionsREF.get(this);
+
+            if (!connectionEntries.containsKey(connection)) {
+                head = new ConcurrentEntry<Object>(connection, head);
+
+                connectionEntries.put(connection, head);
+
+                // save this snapshot back to the original (single writer principle)
+                connectionsREF.lazySet(this, head);
+            }
+        }
+    }
+
+    /**
+     * Removes a custom connection to the server.
+     * <p>
+     * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
+     * you want *this* server instance to manage listeners + message dispatch
+     *
+     * @param connection the connection to remove
+     */
+    void removeConnection(C connection) {
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
         // use-case 99% of the time)
@@ -618,6 +641,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
             }
         }
     }
+
 
     /**
      * Returns a non-modifiable list of active connections. This is extremely slow, and not recommended!

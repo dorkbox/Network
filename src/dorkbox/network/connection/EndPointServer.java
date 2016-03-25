@@ -70,4 +70,30 @@ class EndPointServer<C extends Connection> extends EndPoint<C> {
     void removeListenerManager(final C connection) {
         this.connectionManager.removeListenerManager(connection);
     }
+
+    /**
+     * Adds a custom connection to the server.
+     * <p>
+     * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
+     * you want *this* server instance to manage listeners + message dispatch
+     *
+     * @param connection the connection to add
+     */
+    public
+    void addConnection(C connection) {
+        connectionManager.addConnection(connection);
+    }
+
+    /**
+     * Removes a custom connection to the server.
+     * <p>
+     * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
+     * you want *this* server instance to manage listeners + message dispatch
+     *
+     * @param connection the connection to remove
+     */
+    public
+    void removeConnection(C connection) {
+        connectionManager.addConnection(connection);
+    }
 }
