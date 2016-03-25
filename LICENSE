@@ -11,6 +11,11 @@
       Copyright 2001 - 2011, The Board of Trustees of the University of Illinois
 
 
+    - Bennidi Iterator - MIT License
+      https://github.com/bennidi/mbassador
+      Copyright 2012, Benjamin Diedrichsen
+
+
     - BouncyCastle - MIT License
       http://www.bouncycastle.org
       Copyright 2000-2009, The Legion Of The Bouncy Castle
@@ -25,6 +30,14 @@
     - Dorkbox Utils - Apache 2.0 License
       https://github.com/dorkbox
       Copyright 2010, dorkbox, llc
+
+
+    - Javassist - Apache 2.0 License
+      http://www.csg.is.titech.ac.jp/~chiba/javassist
+      Copyright 1999, Shigeru Chiba
+       Bill Burke
+       Jason T. Greene
+        Licensed under the MPL/LGPL/Apache triple license
 
 
     - Kryo - BSD 3-clause License
@@ -67,11 +80,6 @@
       Copyright 2008, Nathan Sweet
        Dan Brown
        dorkbox, llc
-
-
-    - Netty - Apache 2.0 License
-      http://netty.io
-      Copyright 2013, The Netty Project
 
 
     - Netty DNS - Apache 2.0 License
