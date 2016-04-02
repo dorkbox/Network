@@ -18,12 +18,18 @@ package dorkbox.network.connection.registration;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.crypto.params.IESParameters;
 
-
 /**
- * Internal message to handle the TCP/UDP registration process
+ * Internal message to handle the TCP/UDP/UDT registration process
  */
 public
 class Registration {
+    public static final byte notAdroid = (byte) 0;
+    public static final byte android = (byte) 1;
+
+
+    // signals which serialization is possible. If they match, then UNSAFE can be used (except android. it always must use ASM)
+    public byte connectionType;
+
     public ECPublicKeyParameters publicKey;
     public IESParameters eccParameters;
     public byte[] aesKey;

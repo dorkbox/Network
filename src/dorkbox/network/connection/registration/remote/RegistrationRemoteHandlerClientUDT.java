@@ -21,8 +21,6 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.CryptoAES;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -73,33 +71,11 @@ class RegistrationRemoteHandlerClientUDT<C extends Connection> extends Registrat
 
         // The ORDER has to be TCP (always) -> UDP (optional) -> UDT (optional)
         // UDT
-        boolean success = false;
         InetSocketAddress udtRemoteAddress = (InetSocketAddress) channel.remoteAddress();
         if (udtRemoteAddress != null) {
             InetAddress udtRemoteServer = udtRemoteAddress.getAddress();
 
-            RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
-            try {
-                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-                Entries<MetaChannel> entries = channelMap.entries();
-                while (entries.hasNext()) {
-                    MetaChannel metaChannel = entries.next().value;
-
-                    // associate TCP and UDP!
-                    InetAddress tcpRemoteServer = ((InetSocketAddress) metaChannel.tcpChannel.remoteAddress()).getAddress();
-                    if (checkEqual(tcpRemoteServer, udtRemoteServer)) {
-                        channelMap.put(channel.hashCode(), metaChannel);
-                        metaChannel.udtChannel = channel;
-                        success = true;
-                        // only allow one server per registration!
-                        break;
-                    }
-                }
-
-            } finally {
-                registrationWrapper2.releaseChannelMap();
-            }
-
+            boolean success = registrationWrapper.associateChannels(channel, udtRemoteServer, true);
             if (!success) {
                 throw new IOException("UDT cannot connect to a remote server before TCP is established!");
             }
@@ -126,15 +102,8 @@ class RegistrationRemoteHandlerClientUDT<C extends Connection> extends Registrat
         Channel channel = context.channel();
 
         // if we also have a UDP channel, we will receive the "connected" message on UDP (otherwise it will be on TCP)
-        MetaChannel metaChannel = null;
-
         RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
-        try {
-            IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-            metaChannel = channelMap.get(channel.hashCode());
-        } finally {
-            registrationWrapper2.releaseChannelMap();
-        }
+        MetaChannel metaChannel = registrationWrapper2.getChannel(channel.hashCode());
 
         Logger logger2 = this.logger;
         if (metaChannel != null) {
@@ -153,14 +122,7 @@ class RegistrationRemoteHandlerClientUDT<C extends Connection> extends Registrat
                 }
 
                 Integer connectionID = OptimizeUtilsByteArray.readInt(payload, true);
-
-                MetaChannel metaChannel2 = null;
-                try {
-                    IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-                    metaChannel2 = channelMap.get(connectionID);
-                } finally {
-                    registrationWrapper2.releaseChannelMap();
-                }
+                MetaChannel metaChannel2 = registrationWrapper2.getChannel(connectionID);
 
                 if (metaChannel2 != null) {
                     // hooray! we are successful

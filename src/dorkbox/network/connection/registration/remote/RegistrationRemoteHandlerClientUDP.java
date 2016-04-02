@@ -23,13 +23,10 @@ import dorkbox.network.pipeline.udp.KryoDecoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.CryptoAES;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -82,33 +79,12 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
 
         // The ORDER has to be TCP (always) -> UDP (optional) -> UDT (optional)
         // UDP
-        boolean success = false;
+
         InetSocketAddress udpRemoteAddress = (InetSocketAddress) channel.remoteAddress();
         if (udpRemoteAddress != null) {
             InetAddress udpRemoteServer = udpRemoteAddress.getAddress();
 
-
-            RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
-            try {
-                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-                Entries<MetaChannel> entries = channelMap.entries();
-                while (entries.hasNext()) {
-                    MetaChannel metaChannel = entries.next().value;
-
-                    // associate TCP and UDP!
-                    InetAddress tcpRemoteServer = ((InetSocketAddress) metaChannel.tcpChannel.remoteAddress()).getAddress();
-                    if (checkEqual(tcpRemoteServer, udpRemoteServer)) {
-                        channelMap.put(channel.hashCode(), metaChannel);
-                        metaChannel.udpChannel = channel;
-                        success = true;
-                        // only allow one server per registration!
-                        break;
-                    }
-                }
-            } finally {
-                registrationWrapper2.releaseChannelMap();
-            }
-
+            boolean success = registrationWrapper.associateChannels(channel, udpRemoteServer, false);
             if (!success) {
                 throw new IOException("UDP cannot connect to a remote server before TCP is established!");
             }
@@ -135,14 +111,8 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
 
         // if we also have a UDP channel, we will receive the "connected" message on UDP (otherwise it will be on TCP)
 
-        MetaChannel metaChannel = null;
         RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
-        try {
-            IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-            metaChannel = channelMap.get(channel.hashCode());
-        } finally {
-            registrationWrapper2.releaseChannelMap();
-        }
+        MetaChannel metaChannel = registrationWrapper2.getChannel(channel.hashCode());
 
         if (metaChannel != null) {
             if (message instanceof Registration) {
@@ -154,20 +124,12 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
                 if (!OptimizeUtilsByteArray.canReadInt(payload)) {
                     this.logger.error("Invalid decryption of connection ID. Aborting.");
                     shutdown(registrationWrapper2, channel);
-
-                    ReferenceCountUtil.release(message);
                     return;
                 }
 
                 Integer connectionID = OptimizeUtilsByteArray.readInt(payload, true);
 
-                MetaChannel metaChannel2 = null;
-                try {
-                    IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-                    metaChannel2 = channelMap.get(connectionID);
-                } finally {
-                    registrationWrapper2.releaseChannelMap();
-                }
+                MetaChannel metaChannel2 = registrationWrapper2.getChannel(connectionID);
 
                 if (metaChannel2 != null) {
                     // hooray! we are successful
@@ -189,7 +151,6 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
                            .remove(this);
 
                     // if we are NOT done, then we will continue registering other protocols, so do nothing else here.
-                    ReferenceCountUtil.release(message);
                     return;
                 }
             }
@@ -199,7 +160,5 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
 
         this.logger.error("Error registering UDP with remote server!");
         shutdown(registrationWrapper2, channel);
-
-        ReferenceCountUtil.release(message);
     }
 }

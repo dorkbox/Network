@@ -19,7 +19,6 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
-import dorkbox.util.collections.IntMap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -77,14 +76,9 @@ class RegistrationLocalHandlerServer<C extends Connection> extends RegistrationL
         }
 
         ConnectionImpl connection = null;
-        try {
-            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
-            MetaChannel metaChannel = channelMap.remove(channel.hashCode());
-            if (metaChannel != null) {
-                connection = metaChannel.connection;
-            }
-        } finally {
-            this.registrationWrapper.releaseChannelMap();
+        MetaChannel metaChannel = this.registrationWrapper.removeChannel(channel.hashCode());
+        if (metaChannel != null) {
+            connection = metaChannel.connection;
         }
 
         if (connection != null) {

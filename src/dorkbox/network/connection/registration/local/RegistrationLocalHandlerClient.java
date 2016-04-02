@@ -20,7 +20,6 @@ import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
-import dorkbox.util.collections.IntMap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -67,13 +66,7 @@ class RegistrationLocalHandlerClient<C extends Connection> extends RegistrationL
 
         Channel channel = context.channel();
 
-        MetaChannel metaChannel = null;
-        try {
-            IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
-            metaChannel = channelMap.remove(channel.hashCode());
-        } finally {
-            registrationWrapper.releaseChannelMap();
-        }
+        MetaChannel metaChannel = this.registrationWrapper.removeChannel(channel.hashCode());
 
         // have to setup new listeners
         if (metaChannel != null) {

@@ -21,12 +21,9 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.CryptoAES;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 
 import java.net.InetAddress;
@@ -80,41 +77,8 @@ class RegistrationRemoteHandlerServerUDT<C extends Connection> extends Registrat
             // find out and make sure that UDP and TCP are talking to the same server
             InetAddress udtRemoteAddress = ((InetSocketAddress) channel.remoteAddress()).getAddress();
 
-            boolean matches = false;
-            MetaChannel metaChannel = null;
-            try {
-                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-                Entries<MetaChannel> entries = channelMap.entries();
-                while (entries.hasNext()) {
-                    metaChannel = entries.next().value;
-
-                    // only look at connections that do not have UDT already setup.
-                    if (metaChannel.udtChannel == null) {
-                        InetSocketAddress tcpRemote = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();
-                        InetAddress tcpRemoteAddress = tcpRemote.getAddress();
-
-                        if (checkEqual(tcpRemoteAddress, udtRemoteAddress)) {
-                            matches = true;
-                        }
-                        else {
-                            if (logger2.isErrorEnabled()) {
-                                logger2.error(this.name,
-                                              "Mismatch UDT and TCP client addresses! UDP: {}  TCP: {}",
-                                              udtRemoteAddress,
-                                              tcpRemoteAddress);
-                            }
-                            shutdown(registrationWrapper2, channel);
-                            ReferenceCountUtil.release(message);
-                            return;
-                        }
-                    }
-                }
-
-            } finally {
-                registrationWrapper2.releaseChannelMap();
-            }
-
-            if (matches) {
+            MetaChannel metaChannel = registrationWrapper2.getAssociatedChannel_UDT(udtRemoteAddress);
+            if (metaChannel != null) {
                 // associate TCP and UDT!
                 metaChannel.udtChannel = channel;
 
@@ -142,15 +106,13 @@ class RegistrationRemoteHandlerServerUDT<C extends Connection> extends Registrat
                 if (logger2.isTraceEnabled()) {
                     logger2.trace("Register UDT connection from {}", udtRemoteAddress);
                 }
-                ReferenceCountUtil.release(message);
             }
             else {
                 // if we get here, there was a failure!
                 if (logger2.isErrorEnabled()) {
-                    logger2.error("Error trying to register UDT without udt specified! UDT: {}", udtRemoteAddress);
+                    logger2.error("Error trying to register UDT with incorrect udt specified! UDT: {}", udtRemoteAddress);
                 }
                 shutdown(registrationWrapper2, channel);
-                ReferenceCountUtil.release(message);
             }
         }
         else {
@@ -158,7 +120,6 @@ class RegistrationRemoteHandlerServerUDT<C extends Connection> extends Registrat
                 logger2.error("UDT attempting to spoof client! Unencrypted packet other than registration received.");
             }
             shutdown(registrationWrapper2, channel);
-            ReferenceCountUtil.release(message);
         }
     }
 }

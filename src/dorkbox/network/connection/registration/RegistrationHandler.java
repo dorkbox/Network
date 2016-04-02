@@ -16,9 +16,8 @@
 package dorkbox.network.connection.registration;
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.collections.IntMap.Entries;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -95,22 +94,10 @@ class RegistrationHandler<C extends Connection> extends ChannelInboundHandlerAda
 
         // also, once we notify, we unregister this.
         if (registrationWrapper != null) {
-            try {
-                IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
-                Entries<MetaChannel> entries = channelMap.entries();
-                while (entries.hasNext()) {
-                    MetaChannel metaChannel = entries.next().value;
-                    if (metaChannel.localChannel == channel || metaChannel.tcpChannel == channel || metaChannel.udpChannel == channel) {
-                        entries.remove();
-                        metaChannel.close();
-                        return metaChannel;
-                    }
-                }
+            MetaChannel metaChannel = registrationWrapper.closeChannel(channel, EndPoint.maxShutdownWaitTimeInMilliSeconds);
+            registrationWrapper.abortRegistrationIfClient();
 
-            } finally {
-                registrationWrapper.releaseChannelMap();
-                registrationWrapper.abortRegistrationIfClient();
-            }
+            return metaChannel;
         }
 
         return null;

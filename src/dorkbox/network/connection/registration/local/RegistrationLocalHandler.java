@@ -16,17 +16,16 @@
 package dorkbox.network.connection.registration.local;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
 import dorkbox.network.pipeline.LocalRmiDecoder;
 import dorkbox.network.pipeline.LocalRmiEncoder;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.collections.IntMap.Entries;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import org.slf4j.Logger;
+
+import static dorkbox.network.connection.EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
 public abstract
 class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler<C> {
@@ -50,12 +49,7 @@ class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler
         MetaChannel metaChannel = new MetaChannel();
         metaChannel.localChannel = channel;
 
-        try {
-            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
-            channelMap.put(channel.hashCode(), metaChannel);
-        } finally {
-            this.registrationWrapper.releaseChannelMap();
-        }
+        this.registrationWrapper.addChannel(channel.hashCode(), metaChannel);
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
@@ -93,25 +87,8 @@ class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler
 
         this.logger.info("Closed LOCAL connection: {}", channel.remoteAddress());
 
-        long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
-
         // also, once we notify, we unregister this.
-
-        try {
-            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
-            Entries<MetaChannel> entries = channelMap.entries();
-            while (entries.hasNext()) {
-                MetaChannel metaChannel = entries.next().value;
-
-                if (metaChannel.localChannel == channel) {
-                    metaChannel.close(maxShutdownWaitTimeInMilliSeconds);
-                    entries.remove();
-                    break;
-                }
-            }
-        } finally {
-            this.registrationWrapper.releaseChannelMap();
-        }
+        registrationWrapper.closeChannel(channel, maxShutdownWaitTimeInMilliSeconds);
 
         super.channelInactive(context);
     }

@@ -15,12 +15,17 @@
  */
 package dorkbox.network.connection;
 
+import com.esotericsoftware.kryo.util.ObjectMap;
 import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.network.connection.registration.remote.RegistrationRemoteHandler;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
+import dorkbox.util.MathUtil;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.exceptions.SecurityException;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelPipeline;
 import org.bouncycastle.crypto.CipherParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
@@ -29,14 +34,15 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.security.SecureRandom;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.concurrent.locks.ReentrantLock;
+
+import static dorkbox.network.connection.registration.remote.RegistrationRemoteHandler.checkEqual;
 
 /**
  * Just wraps common/needed methods of the client/server endpoint by the registration stage/handshake.
  * <p/>
- * This is in the connection package, so it can access the endpoint methods that it needs to.
+ * This is in the connection package, so it can access the endpoint methods that it needs to (without having to publicly expose them)
  */
 public
 class RegistrationWrapper<C extends Connection> implements UdpServer {
@@ -52,8 +58,20 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     private final IntMap<MetaChannel> channelMap = new IntMap<MetaChannel>();
 
     // keeps track of connections (UDP-server)
-    // this is final, because the REFERENCE to these will never change. They ARE NOT immutable objects (meaning their content can change)
-    private final ConcurrentMap<InetSocketAddress, ConnectionImpl> udpRemoteMap;
+    @SuppressWarnings({"FieldCanBeLocal", "unused"})
+    private volatile ObjectMap<InetSocketAddress, ConnectionImpl> udpRemoteMap;
+
+
+    // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
+    // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
+    // use-case 99% of the time)
+    private final Object singleWriterLock1 = new Object();
+
+    // Recommended for best performance while adhering to the "single writer principle". Must be static-final
+    private static final AtomicReferenceFieldUpdater<RegistrationWrapper, ObjectMap> udpRemoteMapREF =
+                    AtomicReferenceFieldUpdater.newUpdater(RegistrationWrapper.class,
+                                                           ObjectMap.class,
+                                                           "udpRemoteMap");
 
 
     public
@@ -67,7 +85,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         this.kryoEncoderCrypto = kryoEncoderCrypto;
 
         if (endPoint instanceof EndPointServer) {
-            this.udpRemoteMap = new ConcurrentHashMap<InetSocketAddress, ConnectionImpl>();
+            this.udpRemoteMap = new ObjectMap<InetSocketAddress, ConnectionImpl>(32, ConnectionManager.LOAD_FACTOR);
         }
         else {
             this.udpRemoteMap = null;
@@ -97,14 +115,14 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      * <p/>
      * Make SURE to use this in a try/finally block with releaseChannelMap in the finally block!
      */
-    public
+    private
     IntMap<MetaChannel> getAndLockChannelMap() {
         // try to lock access, also guarantees that the contents of this map are visible across threads
         this.channelMapLock.lock();
         return this.channelMap;
     }
 
-    public
+    private
     void releaseChannelMap() {
         // try to unlock access
         this.channelMapLock.unlock();
@@ -235,7 +253,18 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     public final
     void registerServerUDP(final MetaChannel metaChannel) {
         if (metaChannel != null && metaChannel.udpRemoteAddress != null) {
-            this.udpRemoteMap.put(metaChannel.udpRemoteAddress, metaChannel.connection);
+            // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
+            // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
+            // use-case 99% of the time)
+            synchronized (singleWriterLock1) {
+                // access a snapshot of the connections (single-writer-principle)
+                final ObjectMap<InetSocketAddress, ConnectionImpl> udpRemoteMap = udpRemoteMapREF.get(this);
+
+                udpRemoteMap.put(metaChannel.udpRemoteAddress, metaChannel.connection);
+
+                // save this snapshot back to the original (single writer principle)
+                udpRemoteMapREF.lazySet(this, udpRemoteMap);
+            }
 
             this.logger.info("Connected to remote UDP connection. [{} <== {}]",
                              metaChannel.udpChannel.localAddress(),
@@ -250,7 +279,19 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     public final
     void unRegisterServerUDP(final InetSocketAddress udpRemoteAddress) {
         if (udpRemoteAddress != null) {
-            this.udpRemoteMap.remove(udpRemoteAddress);
+            // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
+            // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
+            // use-case 99% of the time)
+            synchronized (singleWriterLock1) {
+                // access a snapshot of the connections (single-writer-principle)
+                final ObjectMap<InetSocketAddress, ConnectionImpl> udpRemoteMap = udpRemoteMapREF.get(this);
+
+                udpRemoteMap.remove(udpRemoteAddress);
+
+                // save this snapshot back to the original (single writer principle)
+                udpRemoteMapREF.lazySet(this, udpRemoteMap);
+            }
+
             logger.info("Closed remote UDP connection: {}", udpRemoteAddress);
         }
     }
@@ -262,7 +303,9 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     public
     ConnectionImpl getServerUDP(final InetSocketAddress udpRemoteAddress) {
         if (udpRemoteAddress != null) {
-            return this.udpRemoteMap.get(udpRemoteAddress);
+            // access a snapshot of the connections (single-writer-principle)
+            final ObjectMap<InetSocketAddress, ConnectionImpl> udpRemoteMap = udpRemoteMapREF.get(this);
+            return udpRemoteMap.get(udpRemoteAddress);
         }
         else {
             return null;
@@ -274,5 +317,245 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         if (this.endPoint instanceof EndPointClient) {
             ((EndPointClient<C>) this.endPoint).abortRegistration();
         }
+    }
+
+    public
+    void addChannel(final int channelHashCodeOrId, final MetaChannel metaChannel) {
+        try {
+            IntMap<MetaChannel> channelMap = this.getAndLockChannelMap();
+            channelMap.put(channelHashCodeOrId, metaChannel);
+        } finally {
+            this.releaseChannelMap();
+        }
+
+    }
+
+    public
+    MetaChannel removeChannel(final int channelHashCodeOrId) {
+        try {
+            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
+            return  channelMap.remove(channelHashCodeOrId);
+        } finally {
+            releaseChannelMap();
+        }
+    }
+
+    public
+    MetaChannel getChannel(final int channelHashCodeOrId) {
+        try {
+            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
+            return channelMap.get(channelHashCodeOrId);
+        } finally {
+            releaseChannelMap();
+        }
+    }
+
+    /**
+     * Closes all connections ONLY (keeps the server/client running).
+     *
+     * @param maxShutdownWaitTimeInMilliSeconds
+     *                 The amount of time in milli-seconds to wait for this endpoint to close all {@link Channel}s and shutdown gracefully.
+     */
+    public
+    void closeChannels(final long maxShutdownWaitTimeInMilliSeconds) {
+        try {
+            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
+            IntMap.Entries<MetaChannel> entries = channelMap.entries();
+            while (entries.hasNext()) {
+                MetaChannel metaChannel = entries.next().value;
+                metaChannel.close(maxShutdownWaitTimeInMilliSeconds);
+                Thread.yield();
+            }
+
+            channelMap.clear();
+
+        } finally {
+            releaseChannelMap();
+        }
+    }
+
+    /**
+     * Closes the specified connections ONLY (keeps the server/client running).
+     *
+     * @param maxShutdownWaitTimeInMilliSeconds
+     *                 The amount of time in milli-seconds to wait for this endpoint to close all {@link Channel}s and shutdown gracefully.
+     */
+    public
+    MetaChannel closeChannel(final Channel channel, final long maxShutdownWaitTimeInMilliSeconds) {
+        try {
+            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
+            IntMap.Entries<MetaChannel> entries = channelMap.entries();
+            while (entries.hasNext()) {
+                MetaChannel metaChannel = entries.next().value;
+
+                if (metaChannel.localChannel == channel ||
+                    metaChannel.tcpChannel == channel ||
+                    metaChannel.udpChannel == channel ||
+                    metaChannel.udtChannel == channel) {
+
+                    entries.remove();
+                    metaChannel.close(maxShutdownWaitTimeInMilliSeconds);
+                    return metaChannel;
+                }
+            }
+        } finally {
+            releaseChannelMap();
+        }
+
+        return null;
+    }
+
+    /**
+     * now that we are CONNECTED, we want to remove ourselves (and channel ID's) from the map.
+     * they will be ADDED in another map, in the followup handler!!
+     */
+    public
+    boolean setupChannels(final RegistrationRemoteHandler<C> handler, final MetaChannel metaChannel) {
+        boolean registerServer = false;
+
+        try {
+            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
+
+            channelMap.remove(metaChannel.tcpChannel.hashCode());
+            channelMap.remove(metaChannel.connectionID);
+
+
+            ChannelPipeline pipeline = metaChannel.tcpChannel.pipeline();
+            // The TCP channel is what calls this method, so we can use "this" for TCP, and the others are handled during the registration process
+            pipeline.remove(handler);
+
+            if (metaChannel.udpChannel != null) {
+                // the setup is different between CLIENT / SERVER
+                if (metaChannel.udpRemoteAddress == null) {
+                    // CLIENT RUNS THIS
+                    // don't want to muck with the SERVER udp pipeline, as it NEVER CHANGES.
+                    //  More specifically, the UDP SERVER doesn't use a channelMap, it uses the udpRemoteMap
+                    //  to keep track of UDP connections. This is very different than how the client works
+                    // only the client will have the udp remote address
+                    channelMap.remove(metaChannel.udpChannel.hashCode());
+                }
+                else {
+                    // SERVER RUNS THIS
+                    // don't ALWAYS have UDP on SERVER...
+                    registerServer = true;
+                }
+            }
+        } finally {
+            releaseChannelMap();
+        }
+
+        return registerServer;
+    }
+
+    public
+    Integer initializeChannel(final MetaChannel metaChannel) {
+        Integer connectionID = MathUtil.randomInt();
+        try {
+            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
+            while (channelMap.containsKey(connectionID)) {
+                connectionID = MathUtil.randomInt();
+            }
+
+            metaChannel.connectionID = connectionID;
+            channelMap.put(connectionID, metaChannel);
+
+        } finally {
+            releaseChannelMap();
+        }
+
+        return connectionID;
+    }
+
+    public
+    boolean associateChannels(final Channel channel, final InetAddress remoteAddress, final boolean isUdt) {
+        boolean success = false;
+
+        try {
+            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
+            IntMap.Entries<MetaChannel> entries = channelMap.entries();
+            while (entries.hasNext()) {
+                MetaChannel metaChannel = entries.next().value;
+
+                // associate TCP and UDP!
+                final InetSocketAddress inetSocketAddress = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();
+                InetAddress tcpRemoteServer = inetSocketAddress.getAddress();
+                if (checkEqual(tcpRemoteServer, remoteAddress)) {
+                    channelMap.put(channel.hashCode(), metaChannel);
+                    if (isUdt) {
+                        metaChannel.udtChannel = channel;
+                    }
+                    else {
+                        metaChannel.udpChannel = channel;
+                    }
+                    success = true;
+                    // only allow one server per registration!
+                    break;
+                }
+            }
+        } finally {
+            releaseChannelMap();
+        }
+
+        return success;
+    }
+
+    public
+    MetaChannel getAssociatedChannel_UDT(final InetAddress remoteAddress) {
+        try {
+            MetaChannel metaChannel;
+            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
+            IntMap.Entries<MetaChannel> entries = channelMap.entries();
+
+            while (entries.hasNext()) {
+                metaChannel = entries.next().value;
+
+                // only look at connections that do not have UDP already setup.
+                if (metaChannel.udtChannel == null) {
+                    InetSocketAddress tcpRemote = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();
+                    InetAddress tcpRemoteAddress = tcpRemote.getAddress();
+
+                    if (RegistrationRemoteHandler.checkEqual(tcpRemoteAddress, remoteAddress)) {
+                        return metaChannel;
+                    }
+                    else {
+                        return null;
+                    }
+                }
+            }
+        } finally {
+            releaseChannelMap();
+        }
+
+        return null;
+    }
+
+    public
+    MetaChannel getAssociatedChannel_UDP(final InetAddress remoteAddress) {
+        try {
+            MetaChannel metaChannel;
+            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
+            IntMap.Entries<MetaChannel> entries = channelMap.entries();
+
+            while (entries.hasNext()) {
+                metaChannel = entries.next().value;
+
+                // only look at connections that do not have UDP already setup.
+                if (metaChannel.udpChannel == null) {
+                    InetSocketAddress tcpRemote = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();
+                    InetAddress tcpRemoteAddress = tcpRemote.getAddress();
+
+                    if (RegistrationRemoteHandler.checkEqual(tcpRemoteAddress, remoteAddress)) {
+                        return metaChannel;
+                    }
+                    else {
+                        return null;
+                    }
+                }
+            }
+        } finally {
+            releaseChannelMap();
+        }
+
+        return null;
     }
 }

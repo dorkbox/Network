@@ -18,6 +18,7 @@ package dorkbox.network.connection.registration.remote;
 import dorkbox.network.Broadcast;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -25,8 +26,6 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.wrapper.UdpWrapper;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.CryptoAES;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -165,14 +164,15 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
     private
     void receivedUDP(final ChannelHandlerContext context,
                      final Channel channel,
-                     final ByteBuf data,
+                     final ByteBuf message,
                      final InetSocketAddress udpRemoteAddress) throws Exception {
+
         // registration is the ONLY thing NOT encrypted
         Logger logger2 = this.logger;
         RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
         CryptoSerializationManager serializationManager2 = this.serializationManager;
 
-        if (KryoCryptoSerializationManager.isEncrypted(data)) {
+        if (KryoCryptoSerializationManager.isEncrypted(message)) {
             // we need to FORWARD this message "down the pipeline".
 
             ConnectionImpl connection = registrationWrapper2.getServerUDP(udpRemoteAddress);
@@ -182,7 +182,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
                 Object object;
 
                 try {
-                    object = serializationManager2.readWithCrypto(connection, data, data.writerIndex());
+                    object = serializationManager2.readWithCrypto(connection, message, message.writerIndex());
                 } catch (Exception e) {
                     logger2.error("UDP unable to deserialize buffer", e);
                     shutdown(registrationWrapper2, channel);
@@ -202,7 +202,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
             Object object;
 
             try {
-                object = serializationManager2.read(data, data.writerIndex());
+                object = serializationManager2.read(message, message.writerIndex());
             } catch (Exception e) {
                 logger2.error("UDP unable to deserialize buffer", e);
                 shutdown(registrationWrapper2, channel);
@@ -210,40 +210,11 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
             }
 
             if (object instanceof Registration) {
-                boolean matches = false;
-                MetaChannel metaChannel = null;
+                // find out and make sure that UDP and TCP are talking to the same server
+                InetAddress udpRemoteServer = udpRemoteAddress.getAddress();
+                MetaChannel metaChannel = registrationWrapper2.getAssociatedChannel_UDP(udpRemoteServer);
 
-                try {
-                    // find out and make sure that UDP and TCP are talking to the same server
-                    InetAddress udpRemoteServer = udpRemoteAddress.getAddress();
-                    IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-                    Entries<MetaChannel> entries = channelMap.entries();
-
-                    while (entries.hasNext()) {
-                        metaChannel = entries.next().value;
-
-                        // only look at connections that do not have UDP already setup.
-                        if (metaChannel.udpChannel == null) {
-                            InetSocketAddress tcpRemote = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();
-                            InetAddress tcpRemoteAddress = tcpRemote.getAddress();
-
-                            if (RegistrationRemoteHandler.checkEqual(tcpRemoteAddress, udpRemoteServer)) {
-                                matches = true;
-                                break;
-                            }
-                            else {
-                                logger2.error("Mismatch UDP and TCP client addresses! UDP: {}  TCP: {}", udpRemoteServer, tcpRemoteAddress);
-                                shutdown(registrationWrapper2, channel);
-                                return;
-                            }
-                        }
-                    }
-                } finally {
-                    registrationWrapper2.releaseChannelMap();
-                }
-
-
-                if (matches) {
+                if (metaChannel != null) {
                     // associate TCP and UDP!
                     metaChannel.udpChannel = channel;
                     metaChannel.udpRemoteAddress = udpRemoteAddress;
@@ -269,7 +240,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
                 }
                 else {
                     // if we get here, there was a failure!
-                    logger2.error("Error trying to register UDP without udp specified! UDP: {}", udpRemoteAddress);
+                    logger2.error("Error trying to register UDP with incorrect udp specified! UDP: {}", udpRemoteAddress);
                     shutdown(registrationWrapper2, channel);
                 }
             }
@@ -295,21 +266,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
 
         // also, once we notify, we unregister this.
         if (registrationWrapper != null) {
-            try {
-                IntMap<MetaChannel> channelMap = registrationWrapper.getAndLockChannelMap();
-                Entries<MetaChannel> entries = channelMap.entries();
-                while (entries.hasNext()) {
-                    MetaChannel metaChannel = entries.next().value;
-                    if (metaChannel.localChannel == channel || metaChannel.tcpChannel == channel || metaChannel.udpChannel == channel) {
-                        entries.remove();
-                        metaChannel.close();
-                        return metaChannel;
-                    }
-                }
-
-            } finally {
-                registrationWrapper.releaseChannelMap();
-            }
+            return registrationWrapper.closeChannel(channel, EndPoint.maxShutdownWaitTimeInMilliSeconds);
         }
 
         return null;

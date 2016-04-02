@@ -18,7 +18,6 @@ package dorkbox.network.connection.registration.remote;
 import com.esotericsoftware.kryo.io.Input;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
@@ -27,8 +26,6 @@ import dorkbox.network.pipeline.KryoDecoderCrypto;
 import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
@@ -51,6 +48,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
+
+import static dorkbox.network.connection.EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
 public abstract
 class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandler<C> {
@@ -365,40 +364,9 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
     @SuppressWarnings("AutoUnboxing")
     protected final
     void setupConnection(MetaChannel metaChannel) {
-        boolean registerServer = false;
-
         // now that we are CONNECTED, we want to remove ourselves (and channel ID's) from the map.
         // they will be ADDED in another map, in the followup handler!!
-        try {
-            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
-
-            channelMap.remove(metaChannel.tcpChannel.hashCode());
-            channelMap.remove(metaChannel.connectionID);
-
-
-            ChannelPipeline pipeline = metaChannel.tcpChannel.pipeline();
-            // The TCP channel is what calls this method, so we can use "this" for TCP, and the others are handled during the registration process
-            pipeline.remove(this);
-
-            if (metaChannel.udpChannel != null) {
-                // the setup is different between CLIENT / SERVER
-                if (metaChannel.udpRemoteAddress == null) {
-                    // CLIENT RUNS THIS
-                    // don't want to muck with the SERVER udp pipeline, as it NEVER CHANGES.
-                    //  More specifically, the UDP SERVER doesn't use a channelMap, it uses the udpRemoteMap
-                    //  to keep track of UDP connections. This is very different than how the client works
-                    // only the client will have the udp remote address
-                    channelMap.remove(metaChannel.udpChannel.hashCode());
-                }
-                else {
-                    // SERVER RUNS THIS
-                    // don't ALWAYS have UDP on SERVER...
-                    registerServer = true;
-                }
-            }
-        } finally {
-            this.registrationWrapper.releaseChannelMap();
-        }
+        boolean registerServer = this.registrationWrapper.setupChannels(this, metaChannel);
 
         if (registerServer) {
             // Only called if we have a UDP channel
@@ -445,27 +413,11 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
 
         this.logger.info("Closed connection: {}", channel.remoteAddress());
 
-        long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
         // also, once we notify, we unregister this.
         // SEARCH for our channel!
 
         // on the server, we only get this for TCP events!
-        try {
-            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
-            Entries<MetaChannel> entries = channelMap.entries();
-            while (entries.hasNext()) {
-                MetaChannel metaChannel = entries.next().value;
-
-                if (metaChannel.tcpChannel == channel || metaChannel.udpChannel == channel || metaChannel.udtChannel == channel) {
-                    metaChannel.close(maxShutdownWaitTimeInMilliSeconds);
-                    entries.remove();
-                    break;
-                }
-            }
-
-        } finally {
-            this.registrationWrapper.releaseChannelMap();
-        }
+        this.registrationWrapper.closeChannel(channel, maxShutdownWaitTimeInMilliSeconds);
 
         super.channelInactive(context);
     }

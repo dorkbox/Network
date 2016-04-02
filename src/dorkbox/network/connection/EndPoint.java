@@ -30,8 +30,6 @@ import dorkbox.network.util.store.NullSettingsStore;
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.collections.IntMap.Entries;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.exceptions.InitializationException;
@@ -98,8 +96,7 @@ class EndPoint<C extends Connection> {
     public static int DEFAULT_THREAD_POOL_SIZE = Runtime.getRuntime()
                                                         .availableProcessors() * 2;
     /**
-     * The amount of time in milli-seconds to wait for this endpoint to close all
-     * {@link Channel}s and shutdown gracefully.
+     * The amount of time in milli-seconds to wait for this endpoint to close all {@link Channel}s and shutdown gracefully.
      */
     @Property
     public static long maxShutdownWaitTimeInMilliSeconds = 2000L; // in milliseconds
@@ -558,22 +555,7 @@ class EndPoint<C extends Connection> {
         this.connectionManager.closeConnections();
 
         // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
-        long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
-        RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
-        try {
-            IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-            Entries<MetaChannel> entries = channelMap.entries();
-            while (entries.hasNext()) {
-                MetaChannel metaChannel = entries.next().value;
-                metaChannel.close(maxShutdownWaitTimeInMilliSeconds);
-                Thread.yield();
-            }
-
-            channelMap.clear();
-
-        } finally {
-            registrationWrapper2.releaseChannelMap();
-        }
+        this.registrationWrapper.closeChannels(maxShutdownWaitTimeInMilliSeconds);
 
         this.isConnected.set(false);
     }

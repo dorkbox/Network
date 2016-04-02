@@ -23,7 +23,6 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
-import dorkbox.util.collections.IntMap;
 import dorkbox.util.crypto.CryptoAES;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.exceptions.SecurityException;
@@ -131,12 +130,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
         MetaChannel metaChannel = new MetaChannel();
         metaChannel.tcpChannel = channel;
 
-        try {
-            IntMap<MetaChannel> channelMap = this.registrationWrapper.getAndLockChannelMap();
-            channelMap.put(channel.hashCode(), metaChannel);
-        } finally {
-            this.registrationWrapper.releaseChannelMap();
-        }
+        this.registrationWrapper.addChannel(channel.hashCode(), metaChannel);
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
@@ -160,13 +154,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
         Logger logger2 = this.logger;
         if (message instanceof Registration) {
             // make sure this connection was properly registered in the map. (IT SHOULD BE)
-            MetaChannel metaChannel = null;
-            try {
-                IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-                metaChannel = channelMap.get(channel.hashCode());
-            } finally {
-                registrationWrapper2.releaseChannelMap();
-            }
+            MetaChannel metaChannel = registrationWrapper2.getChannel(channel.hashCode());
 
             //noinspection StatementWithEmptyBody
             if (metaChannel != null) {
@@ -257,12 +245,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                     metaChannel.ecdhKey = CryptoECC.generateKeyPair(eccSpec, new SecureRandom());
 
                     // register the channel!
-                    try {
-                        IntMap<MetaChannel> channelMap = registrationWrapper2.getAndLockChannelMap();
-                        channelMap.put(metaChannel.connectionID, metaChannel);
-                    } finally {
-                        registrationWrapper2.releaseChannelMap();
-                    }
+                    registrationWrapper2.addChannel(metaChannel.connectionID, metaChannel);
 
                     metaChannel.publicKey = registration.publicKey;
 
