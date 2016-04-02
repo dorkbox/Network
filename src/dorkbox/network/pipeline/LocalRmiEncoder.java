@@ -18,6 +18,7 @@ package dorkbox.network.pipeline;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.rmi.RMI;
+import dorkbox.util.FastThreadLocal;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
@@ -35,9 +36,9 @@ class LocalRmiEncoder extends MessageToMessageEncoder<Object> {
     private static final Map<Class<?>, Boolean> transformObjectCache = new ConcurrentHashMap<Class<?>, Boolean>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
     private static final RmiFieldCache fieldCache = RmiFieldCache.INSTANCE();
 
-    private final ThreadLocal<Map<Object, Integer>> threadLocal = new ThreadLocal<Map<Object, Integer>>() {
+    private final FastThreadLocal<Map<Object, Integer>> objectThreadLocals = new FastThreadLocal<Map<Object, Integer>>() {
         @Override
-        protected
+        public
         Map<Object, Integer> initialValue() {
             return new WeakHashMap<Object, Integer>(8);
         }
@@ -109,7 +110,7 @@ class LocalRmiEncoder extends MessageToMessageEncoder<Object> {
                 rmiFieldIds[i] = 0; // 0 means it was null
             }
 
-            final Map<Object, Integer> localWeakCache = threadLocal.get();
+            final Map<Object, Integer> localWeakCache = objectThreadLocals.get();
 
             Integer id = localWeakCache.get(rmiObject);
             if (id == null) {
