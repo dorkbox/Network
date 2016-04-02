@@ -21,6 +21,7 @@ import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.UdpServer;
 import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.util.FastThreadLocal;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
 import io.netty.util.NetUtil;
@@ -47,7 +48,7 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
     private final byte[] aesKey; // AES-256 requires 32 bytes
     private final byte[] aesIV; // AES-GCM requires 12 bytes
 
-    private final ThreadLocal<ParametersWithIV> cryptoParameters;
+    private final FastThreadLocal<ParametersWithIV> cryptoParameters;
 
     /**
      * @param udpServer is null when created by the client, non-null when created by the server
@@ -90,9 +91,9 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
         aesKey = metaChannel.aesKey;
         aesIV = metaChannel.aesIV;
 
-        cryptoParameters = new ThreadLocal<ParametersWithIV>() {
+        cryptoParameters = new FastThreadLocal<ParametersWithIV>() {
             @Override
-            protected
+            public
             ParametersWithIV initialValue() {
                 return new ParametersWithIV(new KeyParameter(aesKey), aesIV);
             }

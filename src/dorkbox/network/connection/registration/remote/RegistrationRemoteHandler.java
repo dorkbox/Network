@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection.registration.remote;
 
-import com.esotericsoftware.kryo.io.Input;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
@@ -26,8 +25,8 @@ import dorkbox.network.pipeline.KryoDecoderCrypto;
 import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
 import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.util.FastThreadLocal;
 import dorkbox.util.crypto.CryptoECC;
-import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -41,7 +40,6 @@ import io.netty.util.ReferenceCountUtil;
 import org.bouncycastle.crypto.engines.AESFastEngine;
 import org.bouncycastle.crypto.engines.IESEngine;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
 
 import java.net.InetAddress;
@@ -53,8 +51,8 @@ import static dorkbox.network.connection.EndPoint.maxShutdownWaitTimeInMilliSeco
 
 public abstract
 class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandler<C> {
-    protected static final String KRYO_ENCODER = "kryoEncoder";
-    protected static final String KRYO_DECODER = "kryoDecoder";
+    static final String KRYO_ENCODER = "kryoEncoder";
+    static final String KRYO_DECODER = "kryoDecoder";
 
     private static final String IDLE_HANDLER_FULL = "idleHandlerFull";
     private static final String FRAME_AND_KRYO_ENCODER = "frameAndKryoEncoder";
@@ -67,15 +65,24 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
     private static final String KRYO_CRYPTO_DECODER = "kryoCryptoDecoder";
 
     private static final String IDLE_HANDLER = "idleHandler";
-    protected static final ThreadLocal<GCMBlockCipher> aesEngine = new ThreadLocal<GCMBlockCipher>() {
+
+    static final
+    FastThreadLocal<GCMBlockCipher> aesEngine = new FastThreadLocal<GCMBlockCipher>() {
         @Override
-        protected
+        public
         GCMBlockCipher initialValue() {
             return new GCMBlockCipher(new AESFastEngine());
         }
     };
 
-    protected final ThreadLocal<IESEngine> eccEngineLocal;
+    final
+    FastThreadLocal<IESEngine> eccEngineLocal = new FastThreadLocal<IESEngine>() {
+        @Override
+        public
+        IESEngine initialValue() {
+            return CryptoECC.createEngine();
+        }
+    };
 
     /**
      * Check to verify if two InetAddresses are equal, by comparing the underlying byte arrays.
@@ -92,21 +99,12 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
 
     protected final CryptoSerializationManager serializationManager;
 
-    public
     RegistrationRemoteHandler(final String name,
                               final RegistrationWrapper<C> registrationWrapper,
                               final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper);
 
         this.serializationManager = serializationManager;
-
-        eccEngineLocal = new ThreadLocal<IESEngine>() {
-            @Override
-            protected
-            IESEngine initialValue() {
-                return CryptoECC.createEngine();
-            }
-        };
     }
 
     /**
@@ -209,7 +207,7 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
     String getConnectionDirection();
 
     // have to setup AFTER establish connection, data, as we don't want to enable AES until we're ready.
-    protected final
+    final
     void setupConnectionCrypto(MetaChannel metaChannel) {
 
         if (this.logger.isDebugEnabled()) {
@@ -266,7 +264,7 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
     /**
      * Setup our meta-channel to migrate to the correct connection handler for all regular data.
      */
-    protected final
+    final
     void establishConnection(MetaChannel metaChannel) {
         ChannelPipeline tcpPipe = metaChannel.tcpChannel.pipeline();
         ChannelPipeline udpPipe;
@@ -307,37 +305,10 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
         }
     }
 
-    protected final
-    ECPublicKeyParameters verifyPayload(final Object message,
-                                        final Channel channel,
-                                        final RegistrationWrapper registrationWrapper,
-                                        final Logger logger,
-                                        final byte[] payload) {
-
-        if (payload.length == 0) {
-            logger.error("Invalid decryption of payload. Aborting.");
-            shutdown(registrationWrapper, channel);
-
-            ReferenceCountUtil.release(message);
-            return null;
-        }
-
-        ECPublicKeyParameters ecdhPubKey = EccPublicKeySerializer.read(new Input(payload));
-
-        if (ecdhPubKey == null) {
-            logger.error("Invalid decode of ecdh public key. Aborting.");
-            shutdown(registrationWrapper, channel);
-
-            ReferenceCountUtil.release(message);
-            return null;
-        }
-        return ecdhPubKey;
-    }
-
-    protected final
+    final
     boolean verifyAesInfo(final Object message,
                           final Channel channel,
-                          final RegistrationWrapper registrationWrapper,
+                          final RegistrationWrapper<C> registrationWrapper,
                           final MetaChannel metaChannel,
                           final Logger logger) {
 
@@ -362,7 +333,7 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
 
     // have to setup AFTER establish connection, data, as we don't want to enable AES until we're ready.
     @SuppressWarnings("AutoUnboxing")
-    protected final
+    final
     void setupConnection(MetaChannel metaChannel) {
         // now that we are CONNECTED, we want to remove ourselves (and channel ID's) from the map.
         // they will be ADDED in another map, in the followup handler!!
@@ -401,7 +372,7 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
      * Internal call by the pipeline to notify the "Connection" object that it has "connected", meaning that modifications to the pipeline
      * are finished.
      */
-    protected final
+    final
     void notifyConnection(MetaChannel metaChannel) {
         this.registrationWrapper.connectionConnected0(metaChannel.connection);
     }
