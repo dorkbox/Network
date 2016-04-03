@@ -32,6 +32,12 @@
       Copyright 2010, dorkbox, llc
 
 
+    - FastThreadLocal - BSD 3-clause License
+      https://github.com/LWJGL/lwjgl3/blob/5819c9123222f6ce51f208e022cb907091dd8023/modules/core/src/main/java/org/lwjgl/system/FastThreadLocal.java
+      Copyright 2012-2014, Lightweight Java Game Library Project
+       Riven
+
+
     - Javassist - Apache 2.0 License
       http://www.csg.is.titech.ac.jp/~chiba/javassist
       Copyright 1999, Shigeru Chiba
