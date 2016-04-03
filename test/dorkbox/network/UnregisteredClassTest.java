@@ -23,6 +23,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerBridge;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -66,13 +67,15 @@ class UnregisteredClassTest extends BaseTest {
         addEndPoint(server);
         server.bind(false);
         server.listeners()
-              .add(new Listener<Data>() {
+              .add(new Listener.OnError<Connection>() {
                   @Override
                   public
                   void error(Connection connection, Throwable throwable) {
                       UnregisteredClassTest.this.fail = "Error during processing. " + throwable;
                   }
-
+              });
+        server.listeners()
+              .add(new Listener.OnMessageReceived<Connection, Data>() {
                   @Override
                   public
                   void received(Connection connection, Data data) {
@@ -101,70 +104,72 @@ class UnregisteredClassTest extends BaseTest {
 
         Client client = new Client(configuration);
         addEndPoint(client);
-        client.listeners()
-              .add(new Listener<Data>() {
-                  AtomicInteger checkTCP = new AtomicInteger(0);
-                  AtomicInteger checkUDP = new AtomicInteger(0);
-                  AtomicBoolean doneTCP = new AtomicBoolean(false);
-                  AtomicBoolean doneUDP = new AtomicBoolean(false);
+        final ListenerBridge listeners = client.listeners();
+        listeners.add(new Listener.OnConnected<Connection>() {
+            @Override
+            public
+            void connected(Connection connection) {
+                UnregisteredClassTest.this.fail = null;
+                connection.send()
+                          .TCP(dataTCP);
+                connection.send()
+                          .UDP(dataUDP); // UDP ping pong stops if a UDP packet is lost.
+            }
+        });
+        listeners.add(new Listener.OnError<Connection>() {
+            @Override
+            public
+            void error(Connection connection, Throwable throwable) {
+                UnregisteredClassTest.this.fail = "Error during processing. " + throwable;
+                System.err.println(UnregisteredClassTest.this.fail);
+            }
+        });
+        listeners.add(new Listener.OnMessageReceived<Connection, Data>() {
+            AtomicInteger checkTCP = new AtomicInteger(0);
+            AtomicInteger checkUDP = new AtomicInteger(0);
+            AtomicBoolean doneTCP = new AtomicBoolean(false);
+            AtomicBoolean doneUDP = new AtomicBoolean(false);
 
-                  @Override
-                  public
-                  void connected(Connection connection) {
-                      UnregisteredClassTest.this.fail = null;
-                      connection.send()
-                                .TCP(dataTCP);
-                      connection.send()
-                                .UDP(dataUDP); // UDP ping pong stops if a UDP packet is lost.
-                  }
+            @Override
+            public
+            void received(Connection connection, Data data) {
+                if (data.isTCP) {
+                    if (!data.equals(dataTCP)) {
+                        UnregisteredClassTest.this.fail = "TCP data is not equal on client.";
+                        throw new RuntimeException("Fail! " + UnregisteredClassTest.this.fail);
+                    }
+                    if (this.checkTCP.getAndIncrement() <= UnregisteredClassTest.this.tries) {
+                        connection.send()
+                                  .TCP(data);
+                        UnregisteredClassTest.this.receivedTCP.incrementAndGet();
+                    }
+                    else {
+                        System.err.println("TCP done.");
+                        this.doneTCP.set(true);
+                    }
+                }
+                else {
+                    if (!data.equals(dataUDP)) {
+                        UnregisteredClassTest.this.fail = "UDP data is not equal on client.";
+                        throw new RuntimeException("Fail! " + UnregisteredClassTest.this.fail);
+                    }
+                    if (this.checkUDP.getAndIncrement() <= UnregisteredClassTest.this.tries) {
+                        connection.send()
+                                  .UDP(data);
+                        UnregisteredClassTest.this.receivedUDP.incrementAndGet();
+                    }
+                    else {
+                        System.err.println("UDP done.");
+                        this.doneUDP.set(true);
+                    }
+                }
 
-                  @Override
-                  public
-                  void error(Connection connection, Throwable throwable) {
-                      UnregisteredClassTest.this.fail = "Error during processing. " + throwable;
-                      System.err.println(UnregisteredClassTest.this.fail);
-                  }
-
-                  @Override
-                  public
-                  void received(Connection connection, Data data) {
-                      if (data.isTCP) {
-                          if (!data.equals(dataTCP)) {
-                              UnregisteredClassTest.this.fail = "TCP data is not equal on client.";
-                              throw new RuntimeException("Fail! " + UnregisteredClassTest.this.fail);
-                          }
-                          if (this.checkTCP.getAndIncrement() <= UnregisteredClassTest.this.tries) {
-                              connection.send()
-                                        .TCP(data);
-                              UnregisteredClassTest.this.receivedTCP.incrementAndGet();
-                          }
-                          else {
-                              System.err.println("TCP done.");
-                              this.doneTCP.set(true);
-                          }
-                      }
-                      else {
-                          if (!data.equals(dataUDP)) {
-                              UnregisteredClassTest.this.fail = "UDP data is not equal on client.";
-                              throw new RuntimeException("Fail! " + UnregisteredClassTest.this.fail);
-                          }
-                          if (this.checkUDP.getAndIncrement() <= UnregisteredClassTest.this.tries) {
-                              connection.send()
-                                        .UDP(data);
-                              UnregisteredClassTest.this.receivedUDP.incrementAndGet();
-                          }
-                          else {
-                              System.err.println("UDP done.");
-                              this.doneUDP.set(true);
-                          }
-                      }
-
-                      if (this.doneTCP.get() && this.doneUDP.get()) {
-                          System.err.println("Ran TCP & UDP " + UnregisteredClassTest.this.tries + " times each");
-                          stopEndPoints();
-                      }
-                  }
-              });
+                if (this.doneTCP.get() && this.doneUDP.get()) {
+                    System.err.println("Ran TCP & UDP " + UnregisteredClassTest.this.tries + " times each");
+                    stopEndPoints();
+                }
+            }
+        });
 
         client.connect(5000);
         waitForThreads();

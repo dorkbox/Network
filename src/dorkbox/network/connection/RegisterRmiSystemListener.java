@@ -17,7 +17,7 @@ package dorkbox.network.connection;
 
 import dorkbox.network.rmi.RmiRegistration;
 
-class RegisterRmiSystemListener extends ListenerRaw<ConnectionImpl, RmiRegistration> {
+class RegisterRmiSystemListener implements Listener.OnMessageReceived<ConnectionImpl, RmiRegistration> {
 
     RegisterRmiSystemListener() {
     }

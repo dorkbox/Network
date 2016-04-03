@@ -772,7 +772,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void add(ListenerRaw listener) {
+    void add(Listener listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -812,7 +812,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void remove(ListenerRaw listener) {
+    void remove(Listener listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --

@@ -22,6 +22,7 @@ package dorkbox.network;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerBridge;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -33,9 +34,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.fail;
 
-public class PingPongLocalTest extends BaseTest {
+public
+class PingPongLocalTest extends BaseTest {
+    int tries = 10000;
     private volatile String fail;
-    int                     tries = 10000;
 
     @Test
     public void pingPongLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
@@ -50,53 +52,73 @@ public class PingPongLocalTest extends BaseTest {
         Server server = new Server();
         addEndPoint(server);
         server.bind(false);
-        server.listeners().add(new Listener<Data>() {
+        final ListenerBridge listeners = server.listeners();
+        listeners.add(new Listener.OnError<Connection>() {
             @Override
-            public void error(Connection connection, Throwable throwable) {
+            public
+            void error(Connection connection, Throwable throwable) {
                 PingPongLocalTest.this.fail = "Error during processing. " + throwable;
             }
-
+        });
+        listeners.add(new Listener.OnMessageReceived<Connection, Data>() {
             @Override
-            public void received(Connection connection, Data data) {
+            public
+            void received(Connection connection, Data data) {
                 connection.id();
                 if (!data.equals(dataLOCAL)) {
                     PingPongLocalTest.this.fail = "data is not equal on server.";
                     throw new RuntimeException("Fail! " + PingPongLocalTest.this.fail);
                 }
-                connection.send().TCP(data);
+                connection.send()
+                          .TCP(data);
             }
         });
 
-        // ----
+            // ----
 
         Client client = new Client();
         addEndPoint(client);
-        client.listeners().add(new Listener<Data>() {
+        final ListenerBridge listeners1 = client.listeners();
+        listeners1.add(new Listener.OnConnected<Connection>() {
             AtomicInteger check = new AtomicInteger(0);
 
             @Override
-            public void connected(Connection connection) {
+            public
+            void connected(Connection connection) {
                 PingPongLocalTest.this.fail = null;
-                connection.send().TCP(dataLOCAL);
+                connection.send()
+                          .TCP(dataLOCAL);
                 // connection.sendUDP(dataUDP); // TCP and UDP are the same for a local channel.
             }
+        });
+
+        listeners1.add(new Listener.OnError<Connection>() {
+            AtomicInteger check = new AtomicInteger(0);
 
             @Override
-            public void error(Connection connection, Throwable throwable) {
+            public
+            void error(Connection connection, Throwable throwable) {
                 PingPongLocalTest.this.fail = "Error during processing. " + throwable;
                 System.err.println(PingPongLocalTest.this.fail);
             }
+        });
+
+        listeners1.add(new Listener.OnMessageReceived<Connection, Data>() {
+            AtomicInteger check = new AtomicInteger(0);
 
             @Override
-            public void received(Connection connection, Data data) {
+            public
+            void received(Connection connection, Data data) {
                 if (!data.equals(dataLOCAL)) {
                     PingPongLocalTest.this.fail = "data is not equal on client.";
                     throw new RuntimeException("Fail! " + PingPongLocalTest.this.fail);
                 }
 
                 if (this.check.getAndIncrement() <= PingPongLocalTest.this.tries) {
-                    connection.send().TCP(data);
-                } else {
+                    connection.send()
+                              .TCP(data);
+                }
+                else {
                     System.err.println("Ran LOCAL " + PingPongLocalTest.this.tries + " times");
                     stopEndPoints();
                 }

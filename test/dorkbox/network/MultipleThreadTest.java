@@ -22,6 +22,7 @@ package dorkbox.network;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerBridge;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -70,53 +71,54 @@ class MultipleThreadTest extends BaseTest {
         server.bind(false);
 
 
-        server.listeners()
-              .add(new Listener<DataClass>() {
+        final ListenerBridge listeners = server.listeners();
+        listeners.add(new Listener.OnConnected<Connection>() {
 
-                  @Override
-                  public
-                  void connected(final Connection connection) {
-                      System.err.println("Client connected to server.");
+            @Override
+            public
+            void connected(final Connection connection) {
+                System.err.println("Client connected to server.");
 
-                      // kickoff however many threads we need, and send data to the client.
-                      for (int i = 1; i <= MultipleThreadTest.this.threadCount; i++) {
-                          final int index = i;
-                          new Thread() {
-                              @Override
-                              public
-                              void run() {
-                                  for (int i = 1; i <= MultipleThreadTest.this.messageCount; i++) {
-                                      int incrementAndGet = MultipleThreadTest.this.sent.getAndIncrement();
-                                      DataClass dataClass = new DataClass(
-                                                      "Server -> client. Thread #" + index + "  message# " + incrementAndGet,
-                                                      incrementAndGet);
+                // kickoff however many threads we need, and send data to the client.
+                for (int i = 1; i <= MultipleThreadTest.this.threadCount; i++) {
+                    final int index = i;
+                    new Thread() {
+                        @Override
+                        public
+                        void run() {
+                            for (int i = 1; i <= MultipleThreadTest.this.messageCount; i++) {
+                                int incrementAndGet = MultipleThreadTest.this.sent.getAndIncrement();
+                                DataClass dataClass = new DataClass("Server -> client. Thread #" + index + "  message# " + incrementAndGet,
+                                                                    incrementAndGet);
 
-                                      //System.err.println(dataClass.data);
-                                      MultipleThreadTest.this.sentStringsToClientDebug.put(incrementAndGet, dataClass);
-                                      connection.send()
-                                                .TCP(dataClass)
-                                                .flush();
-                                  }
-                              }
-                          }.start();
-                      }
-                  }
+                                //System.err.println(dataClass.data);
+                                MultipleThreadTest.this.sentStringsToClientDebug.put(incrementAndGet, dataClass);
+                                connection.send()
+                                          .TCP(dataClass)
+                                          .flush();
+                            }
+                        }
+                    }.start();
+                }
+            }
+        });
 
-                  @Override
-                  public
-                  void received(Connection connection, DataClass object) {
-                      int incrementAndGet = MultipleThreadTest.this.receivedServer.getAndIncrement();
+        listeners.add(new Listener.OnMessageReceived<Connection, DataClass>() {
+            @Override
+            public
+            void received(Connection connection, DataClass object) {
+                int incrementAndGet = MultipleThreadTest.this.receivedServer.getAndIncrement();
 
-                      //System.err.println("server #" + incrementAndGet);
-                      if (incrementAndGet == serverReceiveTotal) {
-                          System.err.println("Server DONE " + incrementAndGet);
-                          stopEndPoints();
-                          synchronized (MultipleThreadTest.this.lock) {
-                              MultipleThreadTest.this.lock.notifyAll();
-                          }
-                      }
-                  }
-              });
+                //System.err.println("server #" + incrementAndGet);
+                if (incrementAndGet == serverReceiveTotal) {
+                    System.err.println("Server DONE " + incrementAndGet);
+                    stopEndPoints();
+                    synchronized (MultipleThreadTest.this.lock) {
+                        MultipleThreadTest.this.lock.notifyAll();
+                    }
+                }
+            }
+        });
 
         // ----
 
@@ -128,7 +130,7 @@ class MultipleThreadTest extends BaseTest {
 
             addEndPoint(client);
             client.listeners()
-                  .add(new Listener<DataClass>() {
+                  .add(new Listener.OnMessageReceived<Connection, DataClass>() {
                       final int clientIndex = index;
                       final AtomicInteger received = new AtomicInteger(1);
 

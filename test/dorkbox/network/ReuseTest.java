@@ -21,6 +21,7 @@ package dorkbox.network;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerBridge;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import org.junit.Test;
@@ -48,47 +49,49 @@ class ReuseTest extends BaseTest {
 
         Server server = new Server(configuration);
         addEndPoint(server);
-        server.listeners()
-              .add(new Listener<String>() {
-                  @Override
-                  public
-                  void connected(Connection connection) {
-                      connection.send()
-                                .TCP("-- TCP from server");
-                      connection.send()
-                                .UDP("-- UDP from server");
-                  }
-
-                  @Override
-                  public
-                  void received(Connection connection, String object) {
-                      int incrementAndGet = ReuseTest.this.serverCount.incrementAndGet();
-                      System.err.println("<S " + connection + "> " + incrementAndGet + " : " + object);
-                  }
-              });
+        final ListenerBridge listeners = server.listeners();
+        listeners.add(new Listener.OnConnected<Connection>() {
+            @Override
+            public
+            void connected(Connection connection) {
+                connection.send()
+                          .TCP("-- TCP from server");
+                connection.send()
+                          .UDP("-- UDP from server");
+            }
+        });
+        listeners.add(new Listener.OnMessageReceived<Connection, String>() {
+            @Override
+            public
+            void received(Connection connection, String object) {
+                int incrementAndGet = ReuseTest.this.serverCount.incrementAndGet();
+                System.err.println("<S " + connection + "> " + incrementAndGet + " : " + object);
+            }
+        });
 
         // ----
 
         Client client = new Client(configuration);
         addEndPoint(client);
-        client.listeners()
-              .add(new Listener<String>() {
-                  @Override
-                  public
-                  void connected(Connection connection) {
-                      connection.send()
-                                .TCP("-- TCP from client");
-                      connection.send()
-                                .UDP("-- UDP from client");
-                  }
-
-                  @Override
-                  public
-                  void received(Connection connection, String object) {
-                      int incrementAndGet = ReuseTest.this.clientCount.incrementAndGet();
-                      System.err.println("<C " + connection + "> " + incrementAndGet + " : " + object);
-                  }
-              });
+        final ListenerBridge listeners1 = client.listeners();
+        listeners1.add(new Listener.OnConnected<Connection>() {
+            @Override
+            public
+            void connected(Connection connection) {
+                connection.send()
+                          .TCP("-- TCP from client");
+                connection.send()
+                          .UDP("-- UDP from client");
+            }
+        });
+        listeners1.add(new Listener.OnMessageReceived<Connection, String>() {
+            @Override
+            public
+            void received(Connection connection, String object) {
+                int incrementAndGet = ReuseTest.this.clientCount.incrementAndGet();
+                System.err.println("<C " + connection + "> " + incrementAndGet + " : " + object);
+            }
+        });
 
         server.bind(false);
         int count = 10;
@@ -122,14 +125,16 @@ class ReuseTest extends BaseTest {
         Server server = new Server();
         addEndPoint(server);
         server.listeners()
-              .add(new Listener<String>() {
+              .add(new Listener.OnConnected<Connection>() {
                   @Override
                   public
                   void connected(Connection connection) {
                       connection.send()
                                 .TCP("-- LOCAL from server");
                   }
-
+              });
+        server.listeners()
+              .add(new Listener.OnMessageReceived<Connection, String>() {
                   @Override
                   public
                   void received(Connection connection, String object) {
@@ -143,14 +148,17 @@ class ReuseTest extends BaseTest {
         Client client = new Client();
         addEndPoint(client);
         client.listeners()
-              .add(new Listener<String>() {
+              .add(new Listener.OnConnected<Connection>() {
                   @Override
                   public
                   void connected(Connection connection) {
                       connection.send()
                                 .TCP("-- LOCAL from client");
                   }
+              });
 
+        client.listeners()
+              .add(new Listener.OnMessageReceived<Connection, String>() {
                   @Override
                   public
                   void received(Connection connection, String object) {

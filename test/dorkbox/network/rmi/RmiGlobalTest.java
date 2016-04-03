@@ -229,13 +229,16 @@ class RmiGlobalTest extends BaseTest {
         server.bind(false);
 
         server.listeners()
-              .add(new Listener<MessageWithTestObject>() {
+              .add(new Listener.OnConnected<Connection>() {
                   @Override
                   public
                   void connected(final Connection connection) {
                       RmiGlobalTest.runTest(connection, globalRemoteClientObject, CLIENT_GLOBAL_OBJECT_ID);
                   }
+              });
 
+        server.listeners()
+              .add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
                   @Override
                   public
                   void received(Connection connection, MessageWithTestObject m) {
@@ -260,7 +263,7 @@ class RmiGlobalTest extends BaseTest {
         addEndPoint(client);
 
         client.listeners()
-              .add(new Listener<MessageWithTestObject>() {
+              .add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
                   @Override
                   public
                   void received(Connection connection, MessageWithTestObject m) {

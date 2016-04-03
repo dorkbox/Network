@@ -51,7 +51,7 @@ class MultipleServerTest extends BaseTest {
 
         server1.bind(false);
         server1.listeners()
-               .add(new Listener<String>() {
+               .add(new Listener.OnMessageReceived<Connection, String>() {
                    @Override
                    public
                    void received(Connection connection, String object) {
@@ -74,7 +74,7 @@ class MultipleServerTest extends BaseTest {
         addEndPoint(server2);
         server2.bind(false);
         server2.listeners()
-               .add(new Listener<String>() {
+               .add(new Listener.OnMessageReceived<Connection, String>() {
                    @Override
                    public
                    void received(Connection connection, String object) {
@@ -95,7 +95,7 @@ class MultipleServerTest extends BaseTest {
         Client client1 = new Client(configuration1);
         addEndPoint(client1);
         client1.listeners()
-               .add(new Listener<String>() {
+               .add(new Listener.OnConnected<Connection>() {
                    @Override
                    public
                    void connected(Connection connection) {
@@ -112,7 +112,7 @@ class MultipleServerTest extends BaseTest {
         Client client2 = new Client(configuration2);
         addEndPoint(client2);
         client2.listeners()
-               .add(new Listener<String>() {
+               .add(new Listener.OnConnected<Connection>() {
                    @Override
                    public
                    void connected(Connection connection) {

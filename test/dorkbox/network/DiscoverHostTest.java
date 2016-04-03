@@ -58,7 +58,7 @@ class DiscoverHostTest extends BaseTest {
         Client client = new Client(configuration);
         addEndPoint(client);
         client.listeners()
-              .add(new Listener<Object>() {
+              .add(new Listener.OnConnected<Connection>() {
                   @Override
                   public
                   void connected(Connection connection) {

@@ -37,7 +37,6 @@ package dorkbox.network.rmi;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.ListenerRaw;
 import dorkbox.network.util.RMISerializationManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,20 +52,19 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Handles network communication when methods are invoked on a proxy.
  */
-public
 class RemoteObjectInvocationHandler implements InvocationHandler {
     private static final Logger logger = LoggerFactory.getLogger(RemoteObjectInvocationHandler.class);
 
-    final ReentrantLock lock = new ReentrantLock();
-    final Condition responseCondition = this.lock.newCondition();
+    private final ReentrantLock lock = new ReentrantLock();
+    private final Condition responseCondition = this.lock.newCondition();
 
-    final InvokeMethodResult[] responseTable = new InvokeMethodResult[64];
-    final boolean[] pendingResponses = new boolean[64];
+    private final InvokeMethodResult[] responseTable = new InvokeMethodResult[64];
+    private final boolean[] pendingResponses = new boolean[64];
 
     private final Connection connection;
     public final int objectID;
     private final String proxyString;
-    private final ListenerRaw<Connection, InvokeMethodResult> responseListener;
+    private final RemoteInvocationResponse<Connection> responseListener;
 
     private int timeoutMillis = 3000;
     private boolean isAsync = false;
@@ -82,14 +80,13 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
     private Byte lastResponseID;
     private byte nextResponseId = (byte) 1;
 
-    public
     RemoteObjectInvocationHandler(final Connection connection, final int objectID) {
         super();
         this.connection = connection;
         this.objectID = objectID;
         this.proxyString = "<proxy #" + objectID + ">";
 
-        this.responseListener = new ListenerRaw<Connection, InvokeMethodResult>() {
+        this.responseListener = new RemoteInvocationResponse<Connection>() {
             @Override
             public
             void disconnected(Connection connection) {
@@ -433,7 +430,7 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
         throw new TimeoutException("Response timed out.");
     }
 
-
+    private
     void close() {
         this.connection.listeners()
                        .remove(this.responseListener);

@@ -23,6 +23,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerBridge;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -75,136 +76,142 @@ class PingPongTest extends BaseTest {
         Server server = new Server(configuration);
         addEndPoint(server);
         server.bind(false);
-        server.listeners()
-              .add(new Listener<Data>() {
-                  @Override
-                  public
-                  void error(Connection connection, Throwable throwable) {
-                      PingPongTest.this.fail = "Error during processing. " + throwable;
-                  }
+        final ListenerBridge listeners1 = server.listeners();
+        listeners1.add(new Listener.OnError<Connection>() {
+            @Override
+            public
+            void error(Connection connection, Throwable throwable) {
+                PingPongTest.this.fail = "Error during processing. " + throwable;
+            }
+        });
 
-                  @Override
-                  public
-                  void received(Connection connection, Data data) {
-                      if (data.type == TYPE.TCP) {
-                          if (!data.equals(dataTCP)) {
-                              PingPongTest.this.fail = "TCP data is not equal on server.";
-                              throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                          }
-                          connection.send()
-                                    .TCP(dataTCP);
-                      }
-                      else if (data.type == TYPE.UDP) {
-                          if (!data.equals(dataUDP)) {
-                              PingPongTest.this.fail = "UDP data is not equal on server.";
-                              throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                          }
-                          connection.send()
-                                    .UDP(dataUDP);
-                      }
-                      else if (data.type == TYPE.UDT) {
-                          if (!data.equals(dataUDT)) {
-                              PingPongTest.this.fail = "UDT data is not equal on server.";
-                              throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                          }
-                          connection.send()
-                                    .UDT(dataUDT);
-                      }
-                      else {
-                          PingPongTest.this.fail = "Unknown data type on server.";
-                          throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                      }
-                  }
-              });
+        listeners1.add(new Listener.OnMessageReceived<Connection, Data>() {
+            @Override
+            public
+            void received(Connection connection, Data data) {
+                if (data.type == TYPE.TCP) {
+                    if (!data.equals(dataTCP)) {
+                        PingPongTest.this.fail = "TCP data is not equal on server.";
+                        throw new RuntimeException("Fail! " + PingPongTest.this.fail);
+                    }
+                    connection.send()
+                              .TCP(dataTCP);
+                }
+                else if (data.type == TYPE.UDP) {
+                    if (!data.equals(dataUDP)) {
+                        PingPongTest.this.fail = "UDP data is not equal on server.";
+                        throw new RuntimeException("Fail! " + PingPongTest.this.fail);
+                    }
+                    connection.send()
+                              .UDP(dataUDP);
+                }
+                else if (data.type == TYPE.UDT) {
+                    if (!data.equals(dataUDT)) {
+                        PingPongTest.this.fail = "UDT data is not equal on server.";
+                        throw new RuntimeException("Fail! " + PingPongTest.this.fail);
+                    }
+                    connection.send()
+                              .UDT(dataUDT);
+                }
+                else {
+                    PingPongTest.this.fail = "Unknown data type on server.";
+                    throw new RuntimeException("Fail! " + PingPongTest.this.fail);
+                }
+            }
+        });
 
         // ----
 
         Client client = new Client(configuration);
         addEndPoint(client);
-        client.listeners()
-              .add(new Listener<Data>() {
-                  AtomicInteger checkTCP = new AtomicInteger(0);
-                  AtomicInteger checkUDP = new AtomicInteger(0);
-                  AtomicInteger checkUDT = new AtomicInteger(0);
-                  AtomicBoolean doneTCP = new AtomicBoolean(false);
-                  AtomicBoolean doneUDP = new AtomicBoolean(false);
-                  AtomicBoolean doneUDT = new AtomicBoolean(false);
+        final ListenerBridge listeners = client.listeners();
+        listeners.add(new Listener.OnConnected<Connection>() {
+            @Override
+            public
+            void connected(Connection connection) {
+                PingPongTest.this.fail = null;
+                connection.send()
+                          .TCP(dataTCP);
+                connection.send()
+                          .UDP(dataUDP); // UDP ping pong stops if a UDP packet is lost.
+                connection.send()
+                          .UDT(dataUDT);
+            }
+        });
 
-                  @Override
-                  public
-                  void connected(Connection connection) {
-                      PingPongTest.this.fail = null;
-                      connection.send()
-                                .TCP(dataTCP);
-                      connection.send()
-                                .UDP(dataUDP); // UDP ping pong stops if a UDP packet is lost.
-                      connection.send()
-                                .UDT(dataUDT);
-                  }
+        listeners.add(new Listener.OnError<Connection>() {
+            @Override
+            public
+            void error(Connection connection, Throwable throwable) {
+                PingPongTest.this.fail = "Error during processing. " + throwable;
+                throwable.printStackTrace();
+            }
+        });
 
-                  @Override
-                  public
-                  void error(Connection connection, Throwable throwable) {
-                      PingPongTest.this.fail = "Error during processing. " + throwable;
-                      throwable.printStackTrace();
-                  }
+        listeners.add(new Listener.OnMessageReceived<Connection, Data>() {
+            AtomicInteger checkTCP = new AtomicInteger(0);
+            AtomicInteger checkUDP = new AtomicInteger(0);
+            AtomicInteger checkUDT = new AtomicInteger(0);
+            AtomicBoolean doneTCP = new AtomicBoolean(false);
+            AtomicBoolean doneUDP = new AtomicBoolean(false);
+            AtomicBoolean doneUDT = new AtomicBoolean(false);
 
-                  @Override
-                  public
-                  void received(Connection connection, Data data) {
-                      if (data.type == TYPE.TCP) {
-                          if (!data.equals(dataTCP)) {
-                              PingPongTest.this.fail = "TCP data is not equal on client.";
-                              throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                          }
-                          if (this.checkTCP.getAndIncrement() <= PingPongTest.this.tries) {
-                              connection.send()
-                                        .TCP(dataTCP);
-                          }
-                          else {
-                              System.err.println("TCP done.");
-                              this.doneTCP.set(true);
-                          }
-                      }
-                      else if (data.type == TYPE.UDP) {
-                          if (!data.equals(dataUDP)) {
-                              PingPongTest.this.fail = "UDP data is not equal on client.";
-                              throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                          }
-                          if (this.checkUDP.getAndIncrement() <= PingPongTest.this.tries) {
-                              connection.send()
-                                        .UDP(dataUDP);
-                          }
-                          else {
-                              System.err.println("UDP done.");
-                              this.doneUDP.set(true);
-                          }
-                      }
-                      else if (data.type == TYPE.UDT) {
-                          if (!data.equals(dataUDT)) {
-                              PingPongTest.this.fail = "UDT data is not equal on client.";
-                              throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                          }
-                          if (this.checkUDT.getAndIncrement() <= PingPongTest.this.tries) {
-                              connection.send()
-                                        .UDT(dataUDT);
-                          }
-                          else {
-                              System.err.println("UDT done.");
-                              this.doneUDT.set(true);
-                          }
-                      }
-                      else {
-                          PingPongTest.this.fail = "Unknown data type on client.";
-                          throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                      }
+            @Override
+            public
+            void received(Connection connection, Data data) {
+                if (data.type == TYPE.TCP) {
+                    if (!data.equals(dataTCP)) {
+                        PingPongTest.this.fail = "TCP data is not equal on client.";
+                        throw new RuntimeException("Fail! " + PingPongTest.this.fail);
+                    }
+                    if (this.checkTCP.getAndIncrement() <= PingPongTest.this.tries) {
+                        connection.send()
+                                  .TCP(dataTCP);
+                    }
+                    else {
+                        System.err.println("TCP done.");
+                        this.doneTCP.set(true);
+                    }
+                }
+                else if (data.type == TYPE.UDP) {
+                    if (!data.equals(dataUDP)) {
+                        PingPongTest.this.fail = "UDP data is not equal on client.";
+                        throw new RuntimeException("Fail! " + PingPongTest.this.fail);
+                    }
+                    if (this.checkUDP.getAndIncrement() <= PingPongTest.this.tries) {
+                        connection.send()
+                                  .UDP(dataUDP);
+                    }
+                    else {
+                        System.err.println("UDP done.");
+                        this.doneUDP.set(true);
+                    }
+                }
+                else if (data.type == TYPE.UDT) {
+                    if (!data.equals(dataUDT)) {
+                        PingPongTest.this.fail = "UDT data is not equal on client.";
+                        throw new RuntimeException("Fail! " + PingPongTest.this.fail);
+                    }
+                    if (this.checkUDT.getAndIncrement() <= PingPongTest.this.tries) {
+                        connection.send()
+                                  .UDT(dataUDT);
+                    }
+                    else {
+                        System.err.println("UDT done.");
+                        this.doneUDT.set(true);
+                    }
+                }
+                else {
+                    PingPongTest.this.fail = "Unknown data type on client.";
+                    throw new RuntimeException("Fail! " + PingPongTest.this.fail);
+                }
 
-                      if (this.doneTCP.get() && this.doneUDP.get() && this.doneUDT.get()) {
-                          System.err.println("Ran TCP, UDP, UDT " + PingPongTest.this.tries + " times each");
-                          stopEndPoints();
-                      }
-                  }
-              });
+                if (this.doneTCP.get() && this.doneUDP.get() && this.doneUDT.get()) {
+                    System.err.println("Ran TCP, UDP, UDT " + PingPongTest.this.tries + " times each");
+                    stopEndPoints();
+                }
+            }
+        });
 
         client.connect(5000);
 

@@ -16,12 +16,12 @@
 package dorkbox.network.connection.idle;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ListenerRaw;
+import dorkbox.network.connection.Listener;
 
 import java.io.IOException;
 
 public abstract
-class IdleSender<C extends Connection, M> extends ListenerRaw<C, M> {
+class IdleSender<C extends Connection, M> implements Listener.OnIdle<C> {
     final IdleListener<C, M> idleListener;
     volatile boolean started;
 

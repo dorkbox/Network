@@ -86,7 +86,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         addEndPoint(server);
         server.setIdleTimeout(10);
         server.bind(false);
-        server.listeners().add(new Listener<Data>() {
+        server.listeners().add(new Listener.OnConnected<Connection>() {
 
             @Override
             public void connected (Connection connection) {
@@ -108,7 +108,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         Client client = new Client(configuration);
         client.setIdleTimeout(10);
         addEndPoint(client);
-        client.listeners().add(new Listener<Data>() {
+        client.listeners().add(new Listener.OnMessageReceived<Connection, Data>() {
             @Override
             public void received(Connection connection, Data object) {
                 if (mainData.equals(object)) {

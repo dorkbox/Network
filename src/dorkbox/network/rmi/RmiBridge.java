@@ -38,7 +38,7 @@ import com.esotericsoftware.kryo.util.IntMap;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.ListenerRaw;
+import dorkbox.network.connection.Listener;
 import dorkbox.util.collections.ObjectIntMap;
 import org.slf4j.Logger;
 
@@ -114,7 +114,7 @@ class RmiBridge {
     private final ObjectIntMap<Object> objectToID = new ObjectIntMap<Object>();
     private final Executor executor;
 
-    private final ListenerRaw<ConnectionImpl, InvokeMethod> invokeListener = new ListenerRaw<ConnectionImpl, InvokeMethod>() {
+    private final Listener.OnMessageReceived<ConnectionImpl, InvokeMethod> invokeListener = new Listener.OnMessageReceived<ConnectionImpl, InvokeMethod>() {
         @SuppressWarnings("AutoBoxing")
         @Override
         public
@@ -188,7 +188,7 @@ class RmiBridge {
      */
     @SuppressWarnings("rawtypes")
     public
-    ListenerRaw getListener() {
+    Listener getListener() {
         return this.invokeListener;
     }
 

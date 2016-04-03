@@ -296,7 +296,7 @@ class EndPoint<C extends Connection> {
             public
             void run() {
                 // connectionManager.shutdown accurately reflects the state of the app. Safe to use here
-                if (EndPoint.this.connectionManager != null && !EndPoint.this.connectionManager.shutdown) {
+                if (EndPoint.this.connectionManager != null && !EndPoint.this.connectionManager.shutdown.get()) {
                     EndPoint.this.stop();
                 }
             }
@@ -364,7 +364,7 @@ class EndPoint<C extends Connection> {
     }
 
     /**
-     * The amount of milli-seconds that must elapse with no read or write before {@link ListenerRaw#idle(Connection)} }
+     * The amount of milli-seconds that must elapse with no read or write before {@link Listener.OnIdle#idle(Connection)} }
      * will be triggered
      */
     public

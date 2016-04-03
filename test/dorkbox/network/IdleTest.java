@@ -23,7 +23,12 @@ import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.idle.*;
+import dorkbox.network.connection.idle.IdleBridge;
+import dorkbox.network.connection.idle.IdleListener;
+import dorkbox.network.connection.idle.IdleListenerTCP;
+import dorkbox.network.connection.idle.IdleListenerUDP;
+import dorkbox.network.connection.idle.IdleListenerUDT;
+import dorkbox.network.connection.idle.InputStreamSender;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -125,7 +130,7 @@ class IdleTest extends BaseTest {
         server.setIdleTimeout(100);
         server.bind(false);
         server.listeners()
-              .add(new Listener<Data>() {
+              .add(new Listener.OnConnected<Connection>() {
 
                   @Override
                   public
@@ -151,7 +156,7 @@ class IdleTest extends BaseTest {
         Client client = new Client(configuration);
         addEndPoint(client);
         client.listeners()
-              .add(new Listener<Data>() {
+              .add(new Listener.OnMessageReceived<Connection, Data>() {
                   @Override
                   public
                   void received(Connection connection, Data object) {
@@ -182,7 +187,7 @@ class IdleTest extends BaseTest {
         server.setIdleTimeout(100);
         server.bind(false);
         server.listeners()
-              .add(new Listener<byte[]>() {
+              .add(new Listener.OnConnected<Connection>() {
                   @Override
                   public
                   void connected(Connection connection) {
@@ -243,7 +248,7 @@ class IdleTest extends BaseTest {
         Client client = new Client(configuration);
         addEndPoint(client);
         client.listeners()
-              .add(new Listener<byte[]>() {
+              .add(new Listener.OnMessageReceived<Connection, byte[]>() {
                   int total;
 
                   @Override

@@ -52,7 +52,7 @@ class ClientSendTest extends BaseTest {
         server.bind(false);
 
         server.listeners()
-              .add(new Listener<AMessage>() {
+              .add(new Listener.OnMessageReceived<Connection, AMessage>() {
                   @Override
                   public
                   void received(Connection connection, AMessage object) {
@@ -67,7 +67,7 @@ class ClientSendTest extends BaseTest {
         client.connect(5000);
 
         client.listeners()
-              .add(new Listener<AMessage>() {
+              .add(new Listener.OnMessageReceived<Connection, AMessage>() {
                   @Override
                   public
                   void received(Connection connection, AMessage object) {

@@ -13,15 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.idle;
+package dorkbox.network.rmi;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 
-public
-interface IdleListener<C extends Connection, M> extends Listener {
-    /**
-     * used by the Idle Sender
-     */
-    void send(C connection, M message);
+abstract
+class RemoteInvocationResponse<C extends Connection> implements Listener.OnDisconnected<C>,
+                                                                Listener.OnMessageReceived<C, InvokeMethodResult> {
 }

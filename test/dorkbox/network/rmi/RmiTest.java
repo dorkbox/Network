@@ -41,6 +41,7 @@ import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerBridge;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -210,27 +211,29 @@ class RmiTest extends BaseTest {
         addEndPoint(server);
         server.bind(false);
 
-        server.listeners()
-              .add(new Listener<MessageWithTestObject>() {
-                  @Override
-                  public
-                  void connected(final Connection connection) {
-                      System.err.println("Starting test for: Server -> Client");
-                      RmiTest.runTest(connection, 1);
-                  }
+        final ListenerBridge listeners = server.listeners();
+        listeners.add(new Listener.OnConnected<Connection>() {
+            @Override
+            public
+            void connected(final Connection connection) {
+                System.err.println("Starting test for: Server -> Client");
+                RmiTest.runTest(connection, 1);
+            }
+        });
+        listeners.add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
 
-                  @Override
-                  public
-                  void received(Connection connection, MessageWithTestObject m) {
-                      TestObject object = m.testObject;
-                      final int id = object.id();
-                      assertEquals(2, id);
-                      System.err.println("Client -> Server Finished!");
+            @Override
+            public
+            void received(Connection connection, MessageWithTestObject m) {
+                TestObject object = m.testObject;
+                final int id = object.id();
+                assertEquals(2, id);
+                System.err.println("Client -> Server Finished!");
 
-                      stopEndPoints(2000);
-                  }
+                stopEndPoints(2000);
+            }
 
-              });
+        });
 
 
         // ----
@@ -241,7 +244,7 @@ class RmiTest extends BaseTest {
         addEndPoint(client);
 
         client.listeners()
-              .add(new Listener<MessageWithTestObject>() {
+              .add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
                   @Override
                   public
                   void received(Connection connection, MessageWithTestObject m) {

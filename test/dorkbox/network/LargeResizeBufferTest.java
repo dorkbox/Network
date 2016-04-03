@@ -59,7 +59,7 @@ class LargeResizeBufferTest extends BaseTest {
         server.bind(false);
 
         server.listeners()
-              .add(new Listener<LargeMessage>() {
+              .add(new Listener.OnMessageReceived<Connection, LargeMessage>() {
                   AtomicInteger received = new AtomicInteger();
                   AtomicInteger receivedBytes = new AtomicInteger();
 
@@ -86,7 +86,7 @@ class LargeResizeBufferTest extends BaseTest {
         addEndPoint(client);
 
         client.listeners()
-              .add(new Listener<LargeMessage>() {
+              .add(new Listener.OnMessageReceived<Connection, LargeMessage>() {
                   AtomicInteger received = new AtomicInteger();
                   AtomicInteger receivedBytes = new AtomicInteger();
 

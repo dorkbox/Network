@@ -141,7 +141,7 @@ class ConnectionTest extends BaseTest {
 
         server.bind(false);
         server.listeners()
-              .add(new Listener<Object>() {
+              .add(new Listener.OnConnected<Connection>() {
                   Timer timer = new Timer();
 
                   @Override
@@ -156,7 +156,10 @@ class ConnectionTest extends BaseTest {
                           }
                       }, 1000);
                   }
+              });
 
+        server.listeners()
+              .add(new Listener.OnMessageReceived<Connection, Object>() {
                   @Override
                   public void received(Connection connection, Object message) {
                       System.err.println("Received message from client: " + message.getClass().getSimpleName());
@@ -178,7 +181,7 @@ class ConnectionTest extends BaseTest {
         addEndPoint(client);
 
         client.listeners()
-              .add(new Listener<Object>() {
+              .add(new Listener.OnDisconnected<Connection>() {
                   @Override
                   public
                   void disconnected(Connection connection) {

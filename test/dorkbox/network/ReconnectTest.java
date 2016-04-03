@@ -47,7 +47,7 @@ class ReconnectTest extends BaseTest {
         addEndPoint(server);
 
         server.listeners()
-              .add(new Listener<Object>() {
+              .add(new Listener.OnConnected<Connection>() {
                   @Override
                   public
                   void connected(final Connection connection) {
@@ -68,7 +68,7 @@ class ReconnectTest extends BaseTest {
         final Client client = new Client(configuration);
         addEndPoint(client);
         client.listeners()
-              .add(new Listener<Object>() {
+              .add(new Listener.OnDisconnected<Connection>() {
                   @Override
                   public
                   void disconnected(Connection connection) {

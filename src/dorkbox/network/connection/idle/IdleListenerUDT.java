@@ -18,7 +18,7 @@ package dorkbox.network.connection.idle;
 import dorkbox.network.connection.Connection;
 
 public
-class IdleListenerUDT<C extends Connection, M> extends IdleListener<C, M> {
+class IdleListenerUDT<C extends Connection, M> implements IdleListener<C, M> {
 
     /**
      * used by the Idle Sender
@@ -31,6 +31,7 @@ class IdleListenerUDT<C extends Connection, M> extends IdleListener<C, M> {
      * used by the Idle Sender
      */
     @Override
+    public
     void send(C connection, M message) {
         connection.send()
                   .UDT(message);

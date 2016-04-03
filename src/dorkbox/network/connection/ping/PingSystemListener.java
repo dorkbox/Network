@@ -16,10 +16,10 @@
 package dorkbox.network.connection.ping;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.ListenerRaw;
+import dorkbox.network.connection.Listener;
 
 public
-class PingSystemListener extends ListenerRaw<ConnectionImpl, PingMessage> {
+class PingSystemListener implements Listener.OnMessageReceived<ConnectionImpl, PingMessage> {
 
     public
     PingSystemListener() {

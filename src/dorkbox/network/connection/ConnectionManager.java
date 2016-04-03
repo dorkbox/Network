@@ -18,20 +18,19 @@ package dorkbox.network.connection;
 import com.esotericsoftware.kryo.util.IdentityMap;
 import dorkbox.network.connection.bridge.ConnectionBridgeServer;
 import dorkbox.network.connection.bridge.ConnectionExceptSpecifiedBridgeServer;
-import dorkbox.network.rmi.RmiMessages;
+import dorkbox.network.connection.listenerManagement.OnConnectedManager;
+import dorkbox.network.connection.listenerManagement.OnDisconnectedManager;
+import dorkbox.network.connection.listenerManagement.OnIdleManager;
+import dorkbox.network.connection.listenerManagement.OnMessageReceivedManager;
 import dorkbox.util.ClassHelper;
 import dorkbox.util.Property;
 import dorkbox.util.collections.ConcurrentEntry;
-import dorkbox.util.collections.ConcurrentIterator;
 import org.slf4j.Logger;
 
 import java.io.IOException;
-import java.lang.reflect.Type;
-import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
-
-import static dorkbox.util.collections.ConcurrentIterator.headREF;
 
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
 @SuppressWarnings("unchecked")
@@ -44,27 +43,29 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @Property
     public static final float LOAD_FACTOR = 0.8F;
 
-    private static Listener<?> unRegisteredType_Listener = null;
     private final String loggerName;
 
-    @SuppressWarnings("unused")
-    private volatile IdentityMap<Connection, ConnectionManager<C>> localManagers = new IdentityMap<Connection, ConnectionManager<C>>(8, ConnectionManager.LOAD_FACTOR);
-    @SuppressWarnings("unused")
-    private volatile IdentityMap<Type, ConcurrentIterator> listeners = new IdentityMap<Type, ConcurrentIterator>(32, LOAD_FACTOR);
+    private final OnConnectedManager<C> onConnectedManager;
+    private final OnDisconnectedManager<C> onDisconnectedManager;
+    private final OnIdleManager<C> onIdleManager;
+    private final OnMessageReceivedManager<C> onMessageReceivedManager;
+
+
 
     @SuppressWarnings({"FieldCanBeLocal", "unused"})
     private volatile ConcurrentEntry<C> connectionsHead = null; // reference to the first element
 
-    // This is only touched by a single thread, maintains a map of entries for FAST lookup during connection remove.
+    // This is ONLY touched by a single thread, maintains a map of entries for FAST lookup during connection remove.
     private final IdentityMap<C, ConcurrentEntry> connectionEntries = new IdentityMap<C, ConcurrentEntry>(32, ConnectionManager.LOAD_FACTOR);
 
 
+    @SuppressWarnings("unused")
+    private volatile IdentityMap<Connection, ConnectionManager<C>> localManagers = new IdentityMap<Connection, ConnectionManager<C>>(8, ConnectionManager.LOAD_FACTOR);
 
 
     // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
     // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
     // use-case 99% of the time)
-    private final Object singleWriterLock1 = new Object();
     private final Object singleWriterLock2 = new Object();
     private final Object singleWriterLock3 = new Object();
 
@@ -75,11 +76,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
                                                            IdentityMap.class,
                                                            "localManagers");
 
-    // Recommended for best performance while adhering to the "single writer principle". Must be static-final
-    private static final AtomicReferenceFieldUpdater<ConnectionManager, IdentityMap> listenersREF =
-                    AtomicReferenceFieldUpdater.newUpdater(ConnectionManager.class,
-                                                           IdentityMap.class,
-                                                           "listeners");
+
 
     // Recommended for best performance while adhering to the "single writer principle". Must be static-final
     private static final AtomicReferenceFieldUpdater<ConnectionManager, ConcurrentEntry> connectionsREF =
@@ -93,14 +90,19 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     private final Class<?> baseClass;
     protected final org.slf4j.Logger logger;
-    volatile boolean shutdown = false;
+    private final AtomicBoolean hasAddedAtLeastOnce = new AtomicBoolean(false);
+    final AtomicBoolean shutdown = new AtomicBoolean(false);
 
-    public
+
     ConnectionManager(final String loggerName, final Class<?> baseClass) {
         this.loggerName = loggerName;
         this.logger = org.slf4j.LoggerFactory.getLogger(loggerName);
-
         this.baseClass = baseClass;
+
+        onConnectedManager = new OnConnectedManager<C>(logger);
+        onDisconnectedManager = new OnDisconnectedManager<C>(logger);
+        onIdleManager = new OnIdleManager<C>(logger);
+        onMessageReceivedManager = new OnMessageReceivedManager<C>(logger);
     }
 
     /**
@@ -115,16 +117,21 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void add(final ListenerRaw listener) {
+    void add(final Listener listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
 
         // find the class that uses Listener.class.
         Class<?> clazz = listener.getClass();
-        while (clazz.getSuperclass() != ListenerRaw.class) {
-            clazz = clazz.getSuperclass();
-        }
+        Class<?>[] interfaces = clazz.getInterfaces();
+
+//        for (Class<?> anInterface : interfaces) {
+//        }
+//
+//        while (!(clazz.getSuperclass() != Object.class)) {
+//            clazz = clazz.getSuperclass();
+//        }
 
         // this is the connection generic parameter for the listener
         Class<?> genericClass = ClassHelper.getGenericParameterAsClassForSuperClass(clazz, 0);
@@ -152,34 +159,39 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private
-    void addListener0(final ListenerRaw listener) {
-        Class<?> type = listener.getObjectType();
-
-        // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
-        // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
-        // use-case 99% of the time)
-        synchronized (singleWriterLock1) {
-            // access a snapshot of the listeners (single-writer-principle)
-            final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
-
-            ConcurrentIterator subscribedListeners = listeners.get(type);
-            if (subscribedListeners == null) {
-                subscribedListeners = new ConcurrentIterator();
-                listeners.put(type, subscribedListeners);
-            }
-
-            subscribedListeners.add(listener);
-
-            // save this snapshot back to the original (single writer principle)
-            listenersREF.lazySet(this, listeners);
+    void addListener0(final Listener listener) {
+        boolean found = false;
+        if (listener instanceof Listener.OnConnected) {
+            onConnectedManager.add((Listener.OnConnected<C>) listener);
+            found = true;
+        }
+        if (listener instanceof Listener.OnDisconnected) {
+            onDisconnectedManager.add((Listener.OnDisconnected<C>) listener);
+            found = true;
+        }
+        if (listener instanceof Listener.OnIdle) {
+            onIdleManager.add((Listener.OnIdle<C>) listener);
+            found = true;
         }
 
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("listener added: {} <{}>",
+        if (listener instanceof Listener.OnMessageReceived) {
+            onMessageReceivedManager.add((Listener.OnMessageReceived<C, Object>) listener);
+            found = true;
+        }
+
+        final Logger logger2 = this.logger;
+        if (!found) {
+            logger2.error("No matching listener types. Unable to add listener: {}",
                           listener.getClass()
-                                  .getName(),
-                          listener.getObjectType());
+                                  .getName());
+        }
+        else {
+            hasAddedAtLeastOnce.set(true);
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("listener added: {}",
+                              listener.getClass()
+                                      .getName());
+            }
         }
     }
 
@@ -195,35 +207,36 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void remove(final ListenerRaw listener) {
+    void remove(final Listener listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
 
-        Class<?> type = listener.getObjectType();
-
-        // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
-        // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
-        // use-case 99% of the time)
-        synchronized (singleWriterLock1) {
-            // access a snapshot of the listeners (single-writer-principle)
-            final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
-            final ConcurrentIterator concurrentIterator = listeners.get(type);
-            if (concurrentIterator != null) {
-                concurrentIterator.remove(listener);
-            }
-
-            // save this snapshot back to the original (single writer principle)
-            listenersREF.lazySet(this, listeners);
+        boolean found = false;
+        if (listener instanceof Listener.OnConnected) {
+            found = onConnectedManager.remove((Listener.OnConnected<C>) listener);
+        }
+        if (listener instanceof Listener.OnDisconnected) {
+            found |= onDisconnectedManager.remove((Listener.OnDisconnected<C>) listener);
+        }
+        if (listener instanceof Listener.OnIdle) {
+            found |= onIdleManager.remove((Listener.OnIdle<C>) listener);
+        }
+        if (listener instanceof Listener.OnMessageReceived) {
+            found |= onMessageReceivedManager.remove((Listener.OnMessageReceived<C, Object>) listener);
         }
 
-
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("listener removed: {} <{}>",
+        final Logger logger2 = this.logger;
+        if (!found) {
+            logger2.error("No matching listener types. Unable to remove listener: {}",
                           listener.getClass()
-                                  .getName(),
-                          listener.getObjectType());
+                                  .getName());
+
+        }
+        else if (logger2.isTraceEnabled()) {
+            logger2.trace("listener removed: {}",
+                          listener.getClass()
+                                  .getName());
         }
     }
 
@@ -234,22 +247,11 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @Override
     public final
     void removeAll() {
-        // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
-        // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
-        // use-case 99% of the time)
-        synchronized (singleWriterLock1) {
-            // access a snapshot of the listeners (single-writer-principle)
-            final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
-
-            listeners.clear();
-
-            // save this snapshot back to the original (single writer principle)
-            listenersREF.lazySet(this, listeners);
-        }
+        onMessageReceivedManager.removeAll();
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
-            logger2.trace("all listeners removed !!");
+            logger2.trace("ALL listeners removed !!");
         }
     }
 
@@ -265,22 +267,15 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
             throw new IllegalArgumentException("classType cannot be null.");
         }
 
-        // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
-        // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
-        // use-case 99% of the time)
-        synchronized (singleWriterLock1) {
-            // access a snapshot of the listeners (single-writer-principle)
-            final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
-
-            listeners.remove(classType);
-
-            // save this snapshot back to the original (single writer principle)
-            listenersREF.lazySet(this, listeners);
-        }
-
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("all listeners removed for type: {}",
+        final Logger logger2 = this.logger;
+        if (onMessageReceivedManager.removeAll(classType)) {
+            if (logger2.isTraceEnabled()) {
+                logger2.trace("All listeners removed for type: {}",
+                              classType.getClass()
+                                       .getName());
+            }
+        } else {
+            logger2.warn("No listeners found to remove for type: {}",
                           classType.getClass()
                                    .getName());
         }
@@ -304,85 +299,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @SuppressWarnings("Duplicates")
     private
     boolean notifyOnMessage0(final C connection, final Object message, boolean foundListener) {
-        Class<?> objectType = message.getClass();
-
-        // this is the GLOBAL version (unless it's the call from below, then it's the connection scoped version)
-        final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
-        ConcurrentIterator concurrentIterator = listeners.get(objectType);
-
-        if (concurrentIterator != null) {
-            ConcurrentEntry<ListenerRaw<C, Object>> head = headREF.get(concurrentIterator);
-            ConcurrentEntry<ListenerRaw<C, Object>> current = head;
-            ListenerRaw<C, Object> listener;
-            while (current != null) {
-                if (this.shutdown) {
-                    return true;
-                }
-
-                listener = current.getValue();
-                current = current.next();
-
-                try {
-                    listener.received(connection, message);
-                } catch (Exception e) {
-                    logger.error("Unable to notify on message '{}' for listener '{}', connection '{}'.",
-                                 objectType,
-                                 listener,
-                                 connection,
-                                 e);
-                    listener.error(connection, e);
-                }
-            }
-
-            foundListener = head != null;  // true if we have something to publish to, otherwise false
-        }
-
-        if (!(message instanceof RmiMessages)) {
-            // we march through all super types of the object, and find the FIRST set
-            // of listeners that are registered and cast it as that, and notify the method.
-            // NOTICE: we do NOT call ALL TYPE -- meaning, if we have Object->Foo->Bar
-            // and have listeners for Object and Foo
-            // we will call Bar (from the above code)
-            // we will call Foo (from this code)
-            // we will NOT call Object (since we called Foo). If Foo was not registered, THEN we would call object!
-
-            objectType = objectType.getSuperclass();
-            while (objectType != null) {
-                // check to see if we have what we are looking for in our CURRENT class
-                concurrentIterator = listeners.get(objectType);
-                if (concurrentIterator != null) {
-                    ConcurrentEntry<ListenerRaw<C, Object>> head = headREF.get(concurrentIterator);
-                    ConcurrentEntry<ListenerRaw<C, Object>> current = head;
-                    ListenerRaw<C, Object> listener;
-                    while (current != null) {
-                        if (this.shutdown) {
-                            return true;
-                        }
-
-                        listener = current.getValue();
-                        current = current.next();
-
-                        try {
-                            listener.received(connection, message);
-                        } catch (Exception e) {
-                            logger.error("Unable to notify on message '{}' for listener '{}', connection '{}'.",
-                                         objectType,
-                                         listener,
-                                         connection,
-                                         e);
-                            listener.error(connection, e);
-                        }
-                    }
-
-                    foundListener = head != null;  // true if we have something to publish to, otherwise false
-                    break;
-                }
-
-                // NO MATCH, so walk up.
-                objectType = objectType.getSuperclass();
-            }
-        }
-
+        foundListener |= onMessageReceivedManager.notifyReceived(connection, message, shutdown);
 
         // now have to account for additional connection listener managers (non-global).
         // access a snapshot of the managers (single-writer-principle)
@@ -399,9 +316,6 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
         if (foundListener) {
             connection.send()
                       .flush();
-        }
-        else if (unRegisteredType_Listener != null) {
-            unRegisteredType_Listener.received(connection, null);
         }
         else {
             Logger logger2 = this.logger;
@@ -422,35 +336,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @Override
     public final
     void notifyOnIdle(final C connection) {
-        // this is the GLOBAL version (unless it's the call from below, then it's the connection scoped version)
-        final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
-
-        boolean foundListener = false;
-        final IdentityMap.Entries<Type, ConcurrentIterator> entries = listeners.entries();  // entries is necessary for multiple threads
-        for (IdentityMap.Entry<Type, ConcurrentIterator> entry : entries) {
-            if (entry != null && entry.value != null) {
-                ConcurrentEntry<ListenerRaw<C, Object>> head = headREF.get(entry.value);
-                ConcurrentEntry<ListenerRaw<C, Object>> current = head;
-                ListenerRaw<C, Object> listener;
-                while (current != null) {
-                    if (this.shutdown) {
-                        return;
-                    }
-
-                    listener = current.getValue();
-                    current = current.next();
-
-                    try {
-                        listener.idle(connection);
-                    } catch (Exception e) {
-                        logger.error("Unable to notify listener on 'idle' for listener '{}', connection '{}'.", listener, connection, e);
-                        listener.error(connection, e);
-                    }
-                }
-
-                foundListener |= head != null;  // true if we have something to publish to, otherwise false
-            }
-        }
+        boolean foundListener = onIdleManager.notifyIdle(connection, shutdown);
 
         if (foundListener) {
             connection.send()
@@ -477,34 +363,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     void connectionConnected(final C connection) {
         addConnection(connection);
 
-        final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
-
-        boolean foundListener = false;
-        final IdentityMap.Entries<Type, ConcurrentIterator> entries = listeners.entries();
-        for (IdentityMap.Entry<Type, ConcurrentIterator> entry : entries) {
-            if (entry != null && entry.value != null) {
-                ConcurrentEntry<ListenerRaw<C, Object>> head = headREF.get(entry.value);
-                ConcurrentEntry<ListenerRaw<C, Object>> current = head;
-                ListenerRaw<C, Object> listener;
-                while (current != null) {
-                    if (this.shutdown) {
-                        return;
-                    }
-
-                    listener = current.getValue();
-                    current = current.next();
-
-                    try {
-                        listener.connected(connection);
-                    } catch (Exception e) {
-                        logger.error("Unable to notify listener on 'connected' for listener '{}', connection '{}'.", listener, connection, e);
-                        listener.error(connection, e);
-                    }
-                }
-
-                foundListener |= head != null;  // true if we have something to publish to, otherwise false
-            }
-        }
+        boolean foundListener = onConnectedManager.notifyConnected(connection, shutdown);
 
         if (foundListener) {
             connection.send()
@@ -529,40 +388,12 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @Override
     public
     void connectionDisconnected(final C connection) {
-        final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
-
-        boolean foundListener = false;
-        final IdentityMap.Entries<Type, ConcurrentIterator> entries = listeners.entries();  // entries is necessary for multiple threads
-        for (IdentityMap.Entry<Type, ConcurrentIterator> entry : entries) {
-            if (entry != null && entry.value != null) {
-                ConcurrentEntry<ListenerRaw<C, Object>> head = headREF.get(entry.value);
-                ConcurrentEntry<ListenerRaw<C, Object>> current = head;
-                ListenerRaw<C, Object> listener;
-                while (current != null) {
-                    if (this.shutdown) {
-                        return;
-                    }
-
-                    listener = current.getValue();
-                    current = current.next();
-
-                    try {
-                        listener.disconnected(connection);
-                    } catch (Exception e) {
-                        logger.error("Unable to notify listener on 'disconnected' for listener '{}', connection '{}'.", listener, connection, e);
-                        listener.error(connection, e);
-                    }
-                }
-
-                foundListener |= head != null;  // true if we have something to publish to, otherwise false
-            }
-        }
+        boolean foundListener = onDisconnectedManager.notifyDisconnected(connection, shutdown);
 
         if (foundListener) {
             connection.send()
                       .flush();
         }
-
 
         // now have to account for additional (local) listener managers.
 
@@ -614,6 +445,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      *
      * @param connection the connection to remove
      */
+    private
     void removeConnection(C connection) {
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
@@ -676,7 +508,8 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
             manager = localManagers.get(connection);
             if (manager == null) {
                 created = true;
-                manager = new ConnectionManager<C>(loggerName + "-" + connection.toString() + " Specific", ConnectionManager.this.baseClass);
+                manager = new ConnectionManager<C>(loggerName + "-" + connection.toString() + " Specific",
+                                                   ConnectionManager.this.baseClass);
                 localManagers.put(connection, manager);
 
                 // save this snapshot back to the original (single writer principle)
@@ -746,7 +579,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     final
     boolean hasListeners() {
-        return listenersREF.get(this).size == 0;
+        return hasAddedAtLeastOnce.get();
     }
 
     /**
@@ -754,24 +587,15 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     final
     void stop() {
-        this.shutdown = true;
+        this.shutdown.set(true);
 
         // disconnect the sessions
         closeConnections();
 
-        synchronized (singleWriterLock1) {
-            final IdentityMap<Type, ConcurrentIterator> listeners = listenersREF.get(this);
-            final Iterator<ConcurrentIterator> iterator = listeners.values()
-                                                                   .iterator();
-            while (iterator.hasNext()) {
-                final ConcurrentIterator next = iterator.next();
-                next.clear();
-                iterator.remove();
-            }
-
-            // save this snapshot back to the original (single writer principle)
-            listenersREF.lazySet(this, listeners);
-        }
+        onConnectedManager.clear();
+        onDisconnectedManager.clear();
+        onIdleManager.clear();
+        onMessageReceivedManager.clear();
     }
 
     /**

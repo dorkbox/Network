@@ -86,7 +86,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
 
 
         server.listeners()
-              .add(new Listener<OtherObjectImpl>() {
+              .add(new Listener.OnMessageReceived<Connection, OtherObjectImpl>() {
                   @Override
                   public
                   void received(Connection connection, OtherObjectImpl object) {
@@ -108,7 +108,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
 
         addEndPoint(client);
         client.listeners()
-              .add(new Listener<Object>() {
+              .add(new Listener.OnConnected<Connection>() {
                   @Override
                   public
                   void connected(final Connection connection) {
