@@ -66,7 +66,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     public static
     String getVersion() {
-        return "1.19";
+        return "1.20";
     }
 
     /**

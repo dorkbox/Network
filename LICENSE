@@ -1,6 +1,7 @@
     - Dorkbox Network - Apache 2.0 License
       https://github.com/dorkbox
       Copyright 2010, dorkbox, llc
+        Encrypted, high-performance, event-driven/reactive network stack for Java 6+
 
 
     - Barchart UDT/UDTv4 - BSD 3-clause License
@@ -14,6 +15,7 @@
     - Bennidi Iterator - MIT License
       https://github.com/bennidi/mbassador
       Copyright 2012, Benjamin Diedrichsen
+        Fast iterators from the MBassador project
 
 
     - BouncyCastle - MIT License
@@ -24,7 +26,7 @@
     - Dorkbox ObjectPool - Apache 2.0 License
       https://github.com/dorkbox
       Copyright 2014, dorkbox, llc
-        Fast and compatible java object pool
+        Fast and compatible, blocking/non-blocking/soft-reference object pool for Java 6+
 
 
     - Dorkbox Utils - Apache 2.0 License
@@ -36,6 +38,7 @@
       https://github.com/LWJGL/lwjgl3/blob/5819c9123222f6ce51f208e022cb907091dd8023/modules/core/src/main/java/org/lwjgl/system/FastThreadLocal.java
       Copyright 2012-2014, Lightweight Java Game Library Project
        Riven
+        Optimized and Fast ThreadLocals
 
 
     - Javassist - Apache 2.0 License
@@ -86,6 +89,7 @@
       Copyright 2008, Nathan Sweet
        Dan Brown
        dorkbox, llc
+        Drop-in replacement for MinLog to log through SLF4j.
 
 
     - Netty DNS - Apache 2.0 License
