@@ -1,7 +1,7 @@
     - Dorkbox Network - Apache 2.0 License
       https://github.com/dorkbox
       Copyright 2010, dorkbox, llc
-        Encrypted, high-performance, event-driven/reactive network stack for Java 6+
+        Encrypted, high-performance, and event-driven/reactive network stack for Java 6+
 
 
     - Barchart UDT/UDTv4 - BSD 3-clause License
@@ -26,7 +26,7 @@
     - Dorkbox ObjectPool - Apache 2.0 License
       https://github.com/dorkbox
       Copyright 2014, dorkbox, llc
-        Fast and compatible, blocking/non-blocking/soft-reference object pool for Java 6+
+        Fast, lightweight, and compatible blocking/non-blocking/soft-reference object pool for Java 6+
 
 
     - Dorkbox Utils - Apache 2.0 License
