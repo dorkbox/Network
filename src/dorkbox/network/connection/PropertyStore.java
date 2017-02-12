@@ -15,6 +15,14 @@
  */
 package dorkbox.network.connection;
 
+import java.io.IOException;
+import java.security.SecureRandom;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+
 import dorkbox.network.util.store.SettingsStore;
 import dorkbox.util.SerializationManager;
 import dorkbox.util.bytes.ByteArrayWrapper;
@@ -22,14 +30,7 @@ import dorkbox.util.database.DB_Server;
 import dorkbox.util.database.DatabaseStorage;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.storage.Storage;
-import dorkbox.util.storage.Store;
-import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
-
-import java.io.IOException;
-import java.security.SecureRandom;
-import java.util.HashMap;
-import java.util.Map;
+import dorkbox.util.storage.StorageType;
 
 /**
  * The property store is the DEFAULT type of store for the network stack.
@@ -61,8 +62,8 @@ class PropertyStore extends SettingsStore {
             serializationManager.register(DB_Server.class);
         }
 
-        this.storage = Store.Memory()
-                            .make();
+        this.storage = StorageType.Memory()
+                                  .make();
 
         servers = this.storage.getAndPut(DatabaseStorage.SERVERS, new HashMap<ByteArrayWrapper, DB_Server>(16));
 
@@ -209,6 +210,6 @@ class PropertyStore extends SettingsStore {
     @Override
     public
     void close() {
-        Store.close(storage);
+        StorageType.close(storage);
     }
 }
