@@ -30,7 +30,7 @@ import dorkbox.util.database.DB_Server;
 import dorkbox.util.database.DatabaseStorage;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.storage.Storage;
-import dorkbox.util.storage.StorageType;
+import dorkbox.util.storage.StorageSystem;
 
 /**
  * The property store is the DEFAULT type of store for the network stack.
@@ -62,8 +62,8 @@ class PropertyStore extends SettingsStore {
             serializationManager.register(DB_Server.class);
         }
 
-        this.storage = StorageType.Memory()
-                                  .make();
+        this.storage = StorageSystem.Memory()
+                                    .make();
 
         servers = this.storage.getAndPut(DatabaseStorage.SERVERS, new HashMap<ByteArrayWrapper, DB_Server>(16));
 
@@ -210,6 +210,6 @@ class PropertyStore extends SettingsStore {
     @Override
     public
     void close() {
-        StorageType.close(storage);
+        StorageSystem.close(storage);
     }
 }
