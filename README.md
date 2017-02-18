@@ -79,13 +79,19 @@ client.send()
 
 ```
 
+&nbsp; 
+&nbsp; 
 
+Release Notes 
+---------
 
-<h4>(We now release to maven!</h4> 
-
-This project **includes** some utility classes, which are an extremely small subset of a much larger library; including only what is *necessary* for this particular project to function. Additionally this project is **kept in sync** with the utilities library, so "jar hell" is not an issue, and the latest release will always include the same utility files as all other projects in the dorkbox repository at that time.
+This project includes some utility classes that are a small subset of a much larger library. These classes are **kept in sync** with the main utilities library, so "jar hell" is not an issue, and the latest release will always include the same version of utility files as all of the other projects in the dorkbox repository at that time. 
   
-  Please note that the utility classes have their source code included in the release, and eventually the entire utility library will be provided as a dorkbox repository.
+  Please note that the utility source code is included in the release and on our [GitHub](https://github.com/dorkbox/Utilities) repository.
+  
+  
+Maven Info
+---------
 ```
 <dependency>
   <groupId>com.dorkbox</groupId>
@@ -115,7 +121,7 @@ https://repo1.maven.org/maven2/net/jpountz/lz4/lz4/
 https://repo1.maven.org/maven2/org/objenesis/objenesis/  
 https://repo1.maven.org/maven2/com/esotericsoftware/kryo/  
 
-<h2>License</h2>
-
+License
+---------
 This project is © 2010 dorkbox llc, and is distributed under the terms of the Apache v2.0 License. See file "LICENSE" for further references.
 
