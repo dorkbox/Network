@@ -15,12 +15,12 @@
     <orderEntry type="library" name="bouncyCastle bcprov-jdk15on" level="application" />
     <orderEntry type="library" name="dorkbox object_pool" level="application" />
     <orderEntry type="library" name="asm" level="application" />
-    <orderEntry type="library" name="kryo3" level="application" />
     <orderEntry type="library" name="lz4_xxhash" level="application" />
     <orderEntry type="library" name="netty-all" level="application" />
     <orderEntry type="library" name="reflectasm" level="application" />
     <orderEntry type="library" name="objenesis" level="application" />
     <orderEntry type="library" name="junit-4.12" level="application" />
     <orderEntry type="library" name="dorkbox minlog_slf4j" level="application" />
+    <orderEntry type="library" name="kryo" level="application" />
   </component>
 </module>
