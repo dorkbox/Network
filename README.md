@@ -96,7 +96,7 @@ Maven Info
 <dependency>
   <groupId>com.dorkbox</groupId>
   <artifactId>Network</artifactId>
-  <version>1.21</version>
+  <version>1.22</version>
 </dependency>
 ```
 
