@@ -15,20 +15,7 @@
  */
 package dorkbox.network.connection;
 
-import com.esotericsoftware.kryo.util.ObjectMap;
-import dorkbox.network.connection.registration.MetaChannel;
-import dorkbox.network.connection.registration.remote.RegistrationRemoteHandler;
-import dorkbox.network.pipeline.KryoEncoder;
-import dorkbox.network.pipeline.KryoEncoderCrypto;
-import dorkbox.util.MathUtil;
-import dorkbox.util.collections.IntMap;
-import dorkbox.util.crypto.CryptoECC;
-import dorkbox.util.exceptions.SecurityException;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelPipeline;
-import org.bouncycastle.crypto.CipherParameters;
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
-import org.slf4j.Logger;
+import static dorkbox.network.connection.registration.remote.RegistrationRemoteHandler.checkEqual;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -37,7 +24,22 @@ import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static dorkbox.network.connection.registration.remote.RegistrationRemoteHandler.checkEqual;
+import org.bouncycastle.crypto.CipherParameters;
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.slf4j.Logger;
+
+import com.esotericsoftware.kryo.util.ObjectMap;
+
+import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.network.connection.registration.remote.RegistrationRemoteHandler;
+import dorkbox.network.pipeline.KryoEncoder;
+import dorkbox.network.pipeline.KryoEncoderCrypto;
+import dorkbox.util.RandomUtil;
+import dorkbox.util.collections.IntMap;
+import dorkbox.util.crypto.CryptoECC;
+import dorkbox.util.exceptions.SecurityException;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelPipeline;
 
 /**
  * Just wraps common/needed methods of the client/server endpoint by the registration stage/handshake.
@@ -449,11 +451,11 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
 
     public
     Integer initializeChannel(final MetaChannel metaChannel) {
-        Integer connectionID = MathUtil.randomInt();
+        Integer connectionID = RandomUtil.int_();
         try {
             IntMap<MetaChannel> channelMap = getAndLockChannelMap();
             while (channelMap.containsKey(connectionID)) {
-                connectionID = MathUtil.randomInt();
+                connectionID = RandomUtil.int_();
             }
 
             metaChannel.connectionID = connectionID;
