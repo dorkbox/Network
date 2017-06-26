@@ -15,16 +15,16 @@
  */
 package dorkbox.network.util;
 
-import dorkbox.network.Server;
-import dorkbox.util.OS;
-import io.netty.util.internal.PlatformDependent;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.rmi.server.ExportException;
+
+import dorkbox.network.Server;
+import dorkbox.util.OS;
+import io.netty.util.internal.PlatformDependent;
 
 /**
  * Loads the specified library, extracting it from the jar, if necessary
@@ -47,9 +47,8 @@ class NativeLoader {
             }
 
             final String outputFileName = destinationPrefix + "." + Server.getVersion() + suffix;
-            final String tempDir = System.getProperty("java.io.tmpdir");
 
-            final File file = new File(tempDir, outputFileName);
+            final File file = new File(OS.TEMP_DIR, outputFileName);
             if (!file.canRead()) {
                 ClassLoader loader = PlatformDependent.getClassLoader(classLoaderClass);
                 URL url = loader.getResource(sourceFileName);
