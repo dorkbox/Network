@@ -15,6 +15,11 @@
  */
 package dorkbox.network;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.BootstrapWrapper;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
@@ -30,6 +35,7 @@ import dorkbox.network.rmi.TimeoutException;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
+import dorkbox.util.Version;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
@@ -49,10 +55,6 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioSocketChannel;
 import io.netty.util.internal.PlatformDependent;
-import org.slf4j.Logger;
-
-import java.io.IOException;
-import java.net.InetSocketAddress;
 
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
@@ -65,8 +67,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * Gets the version number.
      */
     public static
-    String getVersion() {
-        return "1.22";
+    Version getVersion() {
+        return new Version("1.22");
     }
 
     /**

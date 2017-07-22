@@ -15,6 +15,10 @@
  */
 package dorkbox.network;
 
+import java.io.IOException;
+
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointServer;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
@@ -25,6 +29,7 @@ import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
+import dorkbox.util.Version;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
@@ -46,9 +51,6 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
-import org.slf4j.Logger;
-
-import java.io.IOException;
 
 /**
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
@@ -62,8 +64,8 @@ class Server<C extends Connection> extends EndPointServer<C> {
      * Gets the version number.
      */
     public static
-    String getVersion() {
-        return "1.22";
+    Version getVersion() {
+        return new Version("1.22");
     }
 
     /**

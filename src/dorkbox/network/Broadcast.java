@@ -15,8 +15,23 @@
  */
 package dorkbox.network;
 
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import org.slf4j.Logger;
+
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostHandler;
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostInitializer;
+import dorkbox.util.Version;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -26,14 +41,6 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.nio.NioDatagramChannel;
-import org.slf4j.Logger;
-
-import java.net.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @SuppressWarnings({"unused", "AutoBoxing"})
 public final
@@ -47,8 +54,8 @@ class Broadcast {
      * Gets the version number.
      */
     public static
-    String getVersion() {
-        return "1.22";
+    Version getVersion() {
+        return new Version("1.22");
     }
 
     /**

@@ -15,6 +15,21 @@
  */
 package dorkbox.network;
 
+import java.net.IDN;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.security.AccessControlException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.dns.decoder.DomainDecoder;
 import dorkbox.network.dns.decoder.MailExchangerDecoder;
@@ -28,6 +43,7 @@ import dorkbox.network.dns.record.StartOfAuthorityRecord;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
+import dorkbox.util.Version;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.AddressedEnvelope;
@@ -52,20 +68,6 @@ import io.netty.resolver.dns.DnsNameResolverBuilder;
 import io.netty.resolver.dns.DnsServerAddresses;
 import io.netty.util.concurrent.Future;
 import io.netty.util.internal.PlatformDependent;
-import org.slf4j.Logger;
-
-import java.net.IDN;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.security.AccessControlException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * for now, we only support ipv4
@@ -113,8 +115,8 @@ class DnsClient {
      * Gets the version number.
      */
     public static
-    String getVersion() {
-        return "1.22";
+    Version getVersion() {
+        return new Version("1.22");
     }
 
     /**
