@@ -7,16 +7,6 @@
  */
 package com.barchart.udt;
 
-import com.barchart.udt.anno.Native;
-import com.barchart.udt.nio.KindUDT;
-import com.barchart.udt.util.HelpUDT;
-import dorkbox.network.util.NativeLoader;
-import dorkbox.util.FileUtil;
-import dorkbox.util.OS;
-import dorkbox.util.OsType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -28,6 +18,18 @@ import java.security.CodeSource;
 import java.security.ProtectionDomain;
 import java.util.List;
 import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.barchart.udt.anno.Native;
+import com.barchart.udt.nio.KindUDT;
+import com.barchart.udt.util.HelpUDT;
+
+import dorkbox.network.util.NativeLoader;
+import dorkbox.util.FileUtil;
+import dorkbox.util.OS;
+import dorkbox.util.OSType;
 
 /**
  * UDT native socket wrapper
@@ -139,7 +141,7 @@ class SocketUDT {
         final String path = loc.getPath();
         final boolean isContainer = path.endsWith(".jar") || path.endsWith(".box");
 
-        final OsType os = OS.get();
+        final OSType os = OS.get();
         String osName = os.getName();
         boolean loaded = false;
 
