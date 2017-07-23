@@ -93,11 +93,14 @@ This project includes some utility classes that are a small subset of a much lar
 Maven Info
 ---------
 ```
-<dependency>
-  <groupId>com.dorkbox</groupId>
-  <artifactId>Network</artifactId>
-  <version>1.22</version>
-</dependency>
+<dependencies>
+    ...
+    <dependency>
+      <groupId>com.dorkbox</groupId>
+      <artifactId>Network</artifactId>
+      <version>1.22</version>
+    </dependency>
+</dependencies>
 ```
 
 Or if you don't want to use Maven, you can access the files directly here:  
