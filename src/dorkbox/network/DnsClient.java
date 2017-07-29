@@ -116,7 +116,7 @@ class DnsClient {
      */
     public static
     Version getVersion() {
-        return new Version("1.22");
+        return new Version("1.23");
     }
 
     /**
