@@ -19,6 +19,17 @@
  */
 package dorkbox.network.kryo;
 
+import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.objenesis.strategy.StdInstantiatorStrategy;
+
 import com.esotericsoftware.kryo.DefaultSerializer;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;
@@ -27,14 +38,15 @@ import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.serializers.CollectionSerializer;
+import com.esotericsoftware.kryo.serializers.CollectionSerializer.BindCollection;
+import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer;
+import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.LongArraySerializer;
+import com.esotericsoftware.kryo.serializers.DefaultSerializers.StringSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
+import com.esotericsoftware.kryo.serializers.FieldSerializer.Bind;
 import com.esotericsoftware.kryo.serializers.FieldSerializer.Optional;
-import org.objenesis.strategy.StdInstantiatorStrategy;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
+import com.esotericsoftware.kryo.serializers.MapSerializer.BindMap;
 
 /** @author Nathan Sweet <misc@n4te.com> */
 
@@ -107,6 +119,28 @@ public class FieldSerializerTest extends KryoTestCase {
 
         this.supportsCopy = true;
     }
+
+    public
+    void testFieldRemovalOnGenerics() {
+        kryo.register(IsGeneric.class);
+        kryo.register(DefaultTypes.class);
+        kryo.register(byte[].class);
+
+        FieldSerializer serializer = new FieldSerializer<IsGeneric>(kryo, IsGeneric.class);
+        serializer.removeField("y");
+        kryo.register(IsGeneric.class, serializer);
+
+        IsGeneric<IsGeneric<DefaultTypes>> test = new IsGeneric<IsGeneric<DefaultTypes>>();
+        test.item = new IsGeneric<DefaultTypes>();
+
+        try {
+            roundTrip(5, 11, test);
+        } catch (KryoException e) {
+            e.printStackTrace();
+            fail("Couldn't serialize generic with a removed field.");
+        }
+    }
+
 
     public void testOptionalRegistration () {
         this.kryo.setRegistrationRequired(false);
@@ -355,13 +389,83 @@ public class FieldSerializerTest extends KryoTestCase {
         roundTrip(4, 4, test);
     }
 
-    public void testGenericTypes () {
-        this.kryo = new Kryo();
-        this.kryo.setRegistrationRequired(true);
-        this.kryo.register(HasGenerics.class);
-        this.kryo.register(ArrayList.class);
-        this.kryo.register(ArrayList[].class);
-        this.kryo.register(HashMap.class);
+    /**
+     * This test uses StdInstantiatorStrategy and therefore requires a no-arg constructor.
+     **/
+    @SuppressWarnings("synthetic-access")
+    public
+    void testDefaultInstantiatorStrategy() {
+        kryo.register(HasArgumentConstructor.class);
+        HasArgumentConstructor test = new HasPrivateConstructor();
+        HasPrivateConstructor.invocations = 0;
+
+        kryo.register(HasPrivateConstructor.class);
+        roundTrip(4, 4, test);
+        assertEquals("Default constructor should not be invoked with StdInstantiatorStrategy strategy", 25,
+                     HasPrivateConstructor.invocations);
+    }
+
+    /**
+     * This test uses StdInstantiatorStrategy and should bypass invocation of no-arg constructor, even if it is provided.
+     **/
+    @SuppressWarnings("synthetic-access")
+    public
+    void testStdInstantiatorStrategy() {
+        kryo.register(HasArgumentConstructor.class);
+        kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
+        HasArgumentConstructor test = new HasPrivateConstructor();
+        HasPrivateConstructor.invocations = 0;
+
+        kryo.register(HasPrivateConstructor.class);
+        roundTrip(4, 4, test);
+        assertEquals("Default constructor should not be invoked with StdInstantiatorStrategy strategy", 0,
+                     HasPrivateConstructor.invocations);
+    }
+
+    public
+    void testGenericTypesOptimized() {
+        testGenericTypes(true);
+    }
+
+    public
+    void testGenericTypesNonOptimized() {
+        testGenericTypes(false);
+    }
+
+    /**
+     * Check that it is OK to change the optimizedGenerics setting on the same Kryo instance multiple times.
+     */
+    public
+    void testGenericTypesOptimizedAndNonOptimized() {
+        Kryo kryoInstance = kryo;
+        testGenericTypes(true);
+        assertEquals("The same instance of Kryo should be used", kryoInstance, kryo);
+        testGenericTypes(false);
+        assertEquals("The same instance of Kryo should be used", kryoInstance, kryo);
+        testGenericTypes(true);
+        assertEquals("The same instance of Kryo should be used", kryoInstance, kryo);
+        testGenericTypes(false);
+        assertEquals("The same instance of Kryo should be used", kryoInstance, kryo);
+    }
+
+    private
+    void testGenericTypes(boolean optimizedGenerics) {
+        kryo.getFieldSerializerConfig()
+            .setOptimizedGenerics(optimizedGenerics);
+        kryo.setReferences(true);
+        kryo.setRegistrationRequired(true);
+        kryo.register(HasGenerics.class);
+        kryo.register(ArrayList.class);
+        kryo.register(ArrayList[].class);
+        kryo.register(HashMap.class);
+
+        // It may happen that classes were registered already befor this function
+        // was called. In this case, invoke the setters on the FieldSerializer
+        // objects directly.
+        FieldSerializer<?> fieldSerializer;
+        fieldSerializer = (FieldSerializer<?>) kryo.getSerializer(HasGenerics.class);
+        fieldSerializer.setOptimizedGenerics(optimizedGenerics);
+
         HasGenerics test = new HasGenerics();
         test.list1 = new ArrayList();
         test.list1.add(1);
@@ -383,9 +487,9 @@ public class FieldSerializerTest extends KryoTestCase {
         test.list5 = new ArrayList();
         test.list5.add("one");
         test.list5.add("two");
-        roundTrip(53, 80, test);
+        roundTrip(optimizedGenerics ? 53 : 56, optimizedGenerics ? 80 : 83, test);
         ArrayList[] al = new ArrayList[1];
-        al[0] = new ArrayList(Arrays.asList(new String[] { "A", "B", "S" }));
+        al[0] = new ArrayList(Arrays.asList(new String[] {"A", "B", "S"}));
         roundTrip(18, 18, al);
     }
 
@@ -406,7 +510,205 @@ public class FieldSerializerTest extends KryoTestCase {
         roundTrip(75, 95, test);
     }
 
-    static public class DefaultTypes {
+    public
+    void testTransients() {
+        kryo.register(HasTransients.class);
+        HasTransients objectWithTransients1 = new HasTransients();
+        objectWithTransients1.transientField1 = "Test";
+        objectWithTransients1.anotherField2 = 5;
+        objectWithTransients1.anotherField3 = "Field2";
+
+        FieldSerializer<HasTransients> ser = (FieldSerializer<HasTransients>) kryo.getSerializer(HasTransients.class);
+        ser.setCopyTransient(false);
+
+        HasTransients objectWithTransients3 = kryo.copy(objectWithTransients1);
+        assertTrue("Objects should be different if copy does not include transient fields",
+                   !objectWithTransients3.equals(objectWithTransients1));
+        assertEquals("transient fields should be null", objectWithTransients3.transientField1, null);
+
+        ser.setCopyTransient(true);
+        HasTransients objectWithTransients2 = kryo.copy(objectWithTransients1);
+        assertEquals("Objects should be equal if copy includes transient fields", objectWithTransients2, objectWithTransients1);
+    }
+
+    public
+    void testTransientsUsingGlobalConfig() {
+        kryo.getFieldSerializerConfig()
+            .setCopyTransient(false);
+        kryo.register(HasTransients.class);
+        HasTransients objectWithTransients1 = new HasTransients();
+        objectWithTransients1.transientField1 = "Test";
+        objectWithTransients1.anotherField2 = 5;
+        objectWithTransients1.anotherField3 = "Field2";
+
+        FieldSerializer<HasTransients> ser = (FieldSerializer<HasTransients>) kryo.getSerializer(HasTransients.class);
+        HasTransients objectWithTransients3 = kryo.copy(objectWithTransients1);
+        assertTrue("Objects should be different if copy does not include transient fields",
+                   !objectWithTransients3.equals(objectWithTransients1));
+        assertEquals("transient fields should be null", objectWithTransients3.transientField1, null);
+
+        ser.setCopyTransient(true);
+        HasTransients objectWithTransients2 = kryo.copy(objectWithTransients1);
+        assertEquals("Objects should be equal if copy includes transient fields", objectWithTransients2, objectWithTransients1);
+    }
+
+    public
+    void testSerializeTransients() {
+        kryo.register(HasTransients.class);
+        HasTransients objectWithTransients1 = new HasTransients();
+        objectWithTransients1.transientField1 = "Test";
+        objectWithTransients1.anotherField2 = 5;
+        objectWithTransients1.anotherField3 = "Field2";
+
+        ByteArrayOutputStream outputStream;
+        Output output;
+        Input input;
+        byte[] outBytes;
+
+        FieldSerializer<HasTransients> ser = (FieldSerializer<HasTransients>) kryo.getSerializer(HasTransients.class);
+        ser.setSerializeTransient(false);
+
+        outputStream = new ByteArrayOutputStream();
+        output = new Output(outputStream);
+        ser.write(kryo, output, objectWithTransients1);
+        output.flush();
+
+        outBytes = outputStream.toByteArray();
+        input = new Input(outBytes);
+        HasTransients objectWithTransients3 = ser.read(kryo, input, HasTransients.class);
+        assertTrue("Objects should be different if write does not include transient fields",
+                   !objectWithTransients3.equals(objectWithTransients1));
+        assertEquals("transient fields should be null", objectWithTransients3.transientField1, null);
+
+        ser.setSerializeTransient(true);
+
+        outputStream = new ByteArrayOutputStream();
+        output = new Output(outputStream);
+        ser.write(kryo, output, objectWithTransients1);
+        output.flush();
+
+        outBytes = outputStream.toByteArray();
+        input = new Input(outBytes);
+        HasTransients objectWithTransients2 = ser.read(kryo, input, HasTransients.class);
+        assertTrue("Objects should be equal if write includes transient fields", objectWithTransients2.equals(objectWithTransients1));
+    }
+
+    public
+    void testSerializeTransientsUsingGlobalConfig() {
+        kryo.getFieldSerializerConfig()
+            .setSerializeTransient(false);
+        kryo.register(HasTransients.class);
+        HasTransients objectWithTransients1 = new HasTransients();
+        objectWithTransients1.transientField1 = "Test";
+        objectWithTransients1.anotherField2 = 5;
+        objectWithTransients1.anotherField3 = "Field2";
+
+        ByteArrayOutputStream outputStream;
+        Output output;
+        Input input;
+        byte[] outBytes;
+
+        FieldSerializer<HasTransients> ser = (FieldSerializer<HasTransients>) kryo.getSerializer(HasTransients.class);
+        outputStream = new ByteArrayOutputStream();
+        output = new Output(outputStream);
+        ser.write(kryo, output, objectWithTransients1);
+        output.flush();
+
+        outBytes = outputStream.toByteArray();
+        input = new Input(outBytes);
+        HasTransients objectWithTransients3 = ser.read(kryo, input, HasTransients.class);
+        assertTrue("Objects should be different if write does not include transient fields",
+                   !objectWithTransients3.equals(objectWithTransients1));
+        assertEquals("transient fields should be null", objectWithTransients3.transientField1, null);
+
+        ser.setSerializeTransient(true);
+
+        outputStream = new ByteArrayOutputStream();
+        output = new Output(outputStream);
+        ser.write(kryo, output, objectWithTransients1);
+        output.flush();
+
+        outBytes = outputStream.toByteArray();
+        input = new Input(outBytes);
+        HasTransients objectWithTransients2 = ser.read(kryo, input, HasTransients.class);
+        assertTrue("Objects should be equal if write includes transient fields", objectWithTransients2.equals(objectWithTransients1));
+    }
+
+    public
+    void testCorrectlyAnnotatedFields() {
+        kryo.register(int[].class);
+        kryo.register(long[].class);
+        kryo.register(HashMap.class);
+        kryo.register(ArrayList.class);
+        kryo.register(AnnotatedFields.class);
+        AnnotatedFields obj1 = new AnnotatedFields();
+        obj1.map = new HashMap<String, int[]>();
+        obj1.map.put("key1", new int[] {1, 2, 3});
+        obj1.map.put("key2", new int[] {3, 4, 5});
+        obj1.map.put("key3", null);
+
+        obj1.collection = new ArrayList<long[]>();
+        obj1.collection.add(new long[] {1, 2, 3});
+
+        roundTrip(31, 73, obj1);
+    }
+
+    public
+    void testWronglyAnnotatedCollectionFields() {
+        try {
+            kryo.register(WronglyAnnotatedCollectionFields.class);
+            WronglyAnnotatedCollectionFields obj1 = new WronglyAnnotatedCollectionFields();
+            roundTrip(31, 73, obj1);
+        } catch (RuntimeException e) {
+            Throwable cause = e.getCause()
+                               .getCause();
+            assertTrue("Exception should complain about a field not implementing java.util.Collection",
+                       cause.getMessage()
+                            .contains("be used only with fields implementing java.util.Collection"));
+            return;
+        }
+
+        assertFalse("Exception was expected", true);
+    }
+
+    public
+    void testWronglyAnnotatedMapFields() {
+        try {
+            kryo.register(WronglyAnnotatedMapFields.class);
+            WronglyAnnotatedMapFields obj1 = new WronglyAnnotatedMapFields();
+            roundTrip(31, 73, obj1);
+        } catch (RuntimeException e) {
+            Throwable cause = e.getCause()
+                               .getCause();
+            assertTrue("Exception should complain about a field not implementing java.util.Map ",
+                       cause.getMessage()
+                            .contains("be used only with fields implementing java.util.Map"));
+            return;
+        }
+
+        assertFalse("Exception was expected", true);
+    }
+
+    public
+    void testMultipleTimesAnnotatedMapFields() {
+        try {
+            kryo.register(MultipleTimesAnnotatedCollectionFields.class);
+            MultipleTimesAnnotatedCollectionFields obj1 = new MultipleTimesAnnotatedCollectionFields();
+            roundTrip(31, 73, obj1);
+        } catch (RuntimeException e) {
+            Throwable cause = e.getCause()
+                               .getCause();
+            assertTrue("Exception should complain about a field that has a serializer already",
+                       cause.getMessage()
+                            .contains("already"));
+            return;
+        }
+
+        assertFalse("Exception was expected", true);
+    }
+
+    static public
+    class DefaultTypes {
         // Primitives.
         public boolean booleanField;
         public byte byteField;
@@ -432,608 +734,560 @@ public class FieldSerializerTest extends KryoTestCase {
         DefaultTypes child;
         HasStringField hasStringField;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            DefaultTypes other = (DefaultTypes)obj;
-            if (this.BooleanField == null) {
-                if (other.BooleanField != null) {
+            DefaultTypes other = (DefaultTypes) obj;
+            if (BooleanField == null) {
+                if (other.BooleanField != null)
                     return false;
-                }
-            } else if (!this.BooleanField.equals(other.BooleanField)) {
-                return false;
             }
-            if (this.ByteField == null) {
-                if (other.ByteField != null) {
+            else if (!BooleanField.equals(other.BooleanField))
+                return false;
+            if (ByteField == null) {
+                if (other.ByteField != null)
                     return false;
-                }
-            } else if (!this.ByteField.equals(other.ByteField)) {
-                return false;
             }
-            if (this.CharacterField == null) {
-                if (other.CharacterField != null) {
+            else if (!ByteField.equals(other.ByteField))
+                return false;
+            if (CharacterField == null) {
+                if (other.CharacterField != null)
                     return false;
-                }
-            } else if (!this.CharacterField.equals(other.CharacterField)) {
-                return false;
             }
-            if (this.DoubleField == null) {
-                if (other.DoubleField != null) {
+            else if (!CharacterField.equals(other.CharacterField))
+                return false;
+            if (DoubleField == null) {
+                if (other.DoubleField != null)
                     return false;
-                }
-            } else if (!this.DoubleField.equals(other.DoubleField)) {
-                return false;
             }
-            if (this.FloatField == null) {
-                if (other.FloatField != null) {
+            else if (!DoubleField.equals(other.DoubleField))
+                return false;
+            if (FloatField == null) {
+                if (other.FloatField != null)
                     return false;
-                }
-            } else if (!this.FloatField.equals(other.FloatField)) {
-                return false;
             }
-            if (this.IntegerField == null) {
-                if (other.IntegerField != null) {
+            else if (!FloatField.equals(other.FloatField))
+                return false;
+            if (IntegerField == null) {
+                if (other.IntegerField != null)
                     return false;
-                }
-            } else if (!this.IntegerField.equals(other.IntegerField)) {
-                return false;
             }
-            if (this.LongField == null) {
-                if (other.LongField != null) {
+            else if (!IntegerField.equals(other.IntegerField))
+                return false;
+            if (LongField == null) {
+                if (other.LongField != null)
                     return false;
-                }
-            } else if (!this.LongField.equals(other.LongField)) {
-                return false;
             }
-            if (this.ShortField == null) {
-                if (other.ShortField != null) {
+            else if (!LongField.equals(other.LongField))
+                return false;
+            if (ShortField == null) {
+                if (other.ShortField != null)
                     return false;
-                }
-            } else if (!this.ShortField.equals(other.ShortField)) {
-                return false;
             }
-            if (this.StringField == null) {
-                if (other.StringField != null) {
+            else if (!ShortField.equals(other.ShortField))
+                return false;
+            if (StringField == null) {
+                if (other.StringField != null)
                     return false;
-                }
-            } else if (!this.StringField.equals(other.StringField)) {
-                return false;
             }
-            if (this.booleanField != other.booleanField) {
+            else if (!StringField.equals(other.StringField))
                 return false;
-            }
+            if (booleanField != other.booleanField)
+                return false;
 
-            Object list1 = arrayToList(this.byteArrayField);
+            Object list1 = arrayToList(byteArrayField);
             Object list2 = arrayToList(other.byteArrayField);
             if (list1 != list2) {
-                if (list1 == null || list2 == null) {
+                if (list1 == null || list2 == null)
                     return false;
-                }
-                if (!list1.equals(list2)) {
+                if (!list1.equals(list2))
                     return false;
-                }
             }
 
-            if (this.child != other.child) {
-                if (this.child == null || other.child == null) {
+            if (child != other.child) {
+                if (child == null || other.child == null)
                     return false;
-                }
-                if (this.child != this && !this.child.equals(other.child)) {
+                if (child != this && !child.equals(other.child))
                     return false;
-                }
             }
 
-            if (this.byteField != other.byteField) {
+            if (byteField != other.byteField)
                 return false;
-            }
-            if (this.charField != other.charField) {
+            if (charField != other.charField)
                 return false;
-            }
-            if (Double.doubleToLongBits(this.doubleField) != Double.doubleToLongBits(other.doubleField)) {
+            if (Double.doubleToLongBits(doubleField) != Double.doubleToLongBits(other.doubleField))
                 return false;
-            }
-            if (Float.floatToIntBits(this.floatField) != Float.floatToIntBits(other.floatField)) {
+            if (Float.floatToIntBits(floatField) != Float.floatToIntBits(other.floatField))
                 return false;
-            }
-            if (this.intField != other.intField) {
+            if (intField != other.intField)
                 return false;
-            }
-            if (this.longField != other.longField) {
+            if (longField != other.longField)
                 return false;
-            }
-            if (this.shortField != other.shortField) {
+            if (shortField != other.shortField)
                 return false;
-            }
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static public final class A {
+
+    static public final
+    class A {
         public int value;
         public B b;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            A other = (A)obj;
-            if (this.b == null) {
-                if (other.b != null) {
+            A other = (A) obj;
+            if (b == null) {
+                if (other.b != null)
                     return false;
-                }
-            } else if (!this.b.equals(other.b)) {
-                return false;
             }
-            if (this.value != other.value) {
+            else if (!b.equals(other.b))
                 return false;
-            }
+            if (value != other.value)
+                return false;
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static public final class B {
+
+    static public final
+    class B {
         public int value;
         public A a;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            B other = (B)obj;
-            if (this.a == null) {
-                if (other.a != null) {
+            B other = (B) obj;
+            if (a == null) {
+                if (other.a != null)
                     return false;
-                }
-            } else if (!this.a.equals(other.a)) {
-                return false;
             }
-            if (this.value != other.value) {
+            else if (!a.equals(other.a))
                 return false;
-            }
+            if (value != other.value)
+                return false;
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static final class C {
+
+    static public final
+    class C {
         public A a;
         public D d;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            C other = (C)obj;
-            if (this.a == null) {
-                if (other.a != null) {
+            C other = (C) obj;
+            if (a == null) {
+                if (other.a != null)
                     return false;
-                }
-            } else if (!this.a.equals(other.a)) {
-                return false;
             }
-            if (this.d == null) {
-                if (other.d != null) {
+            else if (!a.equals(other.a))
+                return false;
+            if (d == null) {
+                if (other.d != null)
                     return false;
-                }
-            } else if (!this.d.equals(other.d)) {
-                return false;
             }
+            else if (!d.equals(other.d))
+                return false;
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static public final class D {
+
+    static public final
+    class D {
         public E e;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            D other = (D)obj;
-            if (this.e == null) {
-                if (other.e != null) {
+            D other = (D) obj;
+            if (e == null) {
+                if (other.e != null)
                     return false;
-                }
-            } else if (!this.e.equals(other.e)) {
-                return false;
             }
+            else if (!e.equals(other.e))
+                return false;
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static public final class E {
+
+    static public final
+    class E {
         public F f;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            E other = (E)obj;
-            if (this.f == null) {
-                if (other.f != null) {
+            E other = (E) obj;
+            if (f == null) {
+                if (other.f != null)
                     return false;
-                }
-            } else if (!this.f.equals(other.f)) {
-                return false;
             }
+            else if (!f.equals(other.f))
+                return false;
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static public final class F {
+
+    static public final
+    class F {
         public int value;
         public final int finalValue = 12;
         public A a;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            F other = (F)obj;
-            if (this.finalValue != other.finalValue) {
+            F other = (F) obj;
+            if (finalValue != other.finalValue)
                 return false;
-            }
-            if (this.value != other.value) {
+            if (value != other.value)
                 return false;
-            }
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static public class SimpleNoDefaultConstructor {
+
+    static public
+    class SimpleNoDefaultConstructor {
         int constructorValue;
 
-        public SimpleNoDefaultConstructor (int constructorValue) {
+        public
+        SimpleNoDefaultConstructor(int constructorValue) {
             this.constructorValue = constructorValue;
         }
 
-        public int getConstructorValue () {
-            return this.constructorValue;
+        public
+        int getConstructorValue() {
+            return constructorValue;
         }
 
-        @Override
-        public int hashCode () {
+        public
+        int hashCode() {
             final int prime = 31;
             int result = 1;
-            result = prime * result + this.constructorValue;
+            result = prime * result + constructorValue;
             return result;
         }
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            SimpleNoDefaultConstructor other = (SimpleNoDefaultConstructor)obj;
-            if (this.constructorValue != other.constructorValue) {
+            SimpleNoDefaultConstructor other = (SimpleNoDefaultConstructor) obj;
+            if (constructorValue != other.constructorValue)
                 return false;
-            }
             return true;
         }
     }
 
-    static public class ComplexNoDefaultConstructor {
+
+    static public
+    class HasTransients {
+        public transient String transientField1;
+        public int anotherField2;
+        public String anotherField3;
+
+        public
+        HasTransients() {
+        }
+
+        public
+        int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + anotherField2;
+            result = prime * result + ((anotherField3 == null) ? 0 : anotherField3.hashCode());
+            result = prime * result + ((transientField1 == null) ? 0 : transientField1.hashCode());
+            return result;
+        }
+
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
+                return true;
+            if (obj == null)
+                return false;
+            if (getClass() != obj.getClass())
+                return false;
+            HasTransients other = (HasTransients) obj;
+            if (anotherField2 != other.anotherField2)
+                return false;
+            if (anotherField3 == null) {
+                if (other.anotherField3 != null)
+                    return false;
+            }
+            else if (!anotherField3.equals(other.anotherField3))
+                return false;
+            if (transientField1 == null) {
+                if (other.transientField1 != null)
+                    return false;
+            }
+            else if (!transientField1.equals(other.transientField1))
+                return false;
+            return true;
+        }
+    }
+
+
+    static public
+    class ComplexNoDefaultConstructor {
         public transient String name;
         public int anotherField1;
         public String anotherField2;
 
-        public ComplexNoDefaultConstructor (String name) {
+        public
+        ComplexNoDefaultConstructor(String name) {
             this.name = name;
         }
 
-        @Override
-        public int hashCode () {
+        public
+        int hashCode() {
             final int prime = 31;
             int result = 1;
-            result = prime * result + this.anotherField1;
-            result = prime * result + (this.anotherField2 == null ? 0 : this.anotherField2.hashCode());
-            result = prime * result + (this.name == null ? 0 : this.name.hashCode());
+            result = prime * result + anotherField1;
+            result = prime * result + ((anotherField2 == null) ? 0 : anotherField2.hashCode());
+            result = prime * result + ((name == null) ? 0 : name.hashCode());
             return result;
         }
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            ComplexNoDefaultConstructor other = (ComplexNoDefaultConstructor)obj;
-            if (this.anotherField1 != other.anotherField1) {
+            ComplexNoDefaultConstructor other = (ComplexNoDefaultConstructor) obj;
+            if (anotherField1 != other.anotherField1)
                 return false;
-            }
-            if (this.anotherField2 == null) {
-                if (other.anotherField2 != null) {
+            if (anotherField2 == null) {
+                if (other.anotherField2 != null)
                     return false;
-                }
-            } else if (!this.anotherField2.equals(other.anotherField2)) {
-                return false;
             }
-            if (this.name == null) {
-                if (other.name != null) {
+            else if (!anotherField2.equals(other.anotherField2))
+                return false;
+            if (name == null) {
+                if (other.name != null)
                     return false;
-                }
-            } else if (!this.name.equals(other.name)) {
-                return false;
             }
+            else if (!name.equals(other.name))
+                return false;
             return true;
         }
     }
 
-    static public class HasNonNull {
-        @NotNull public String nonNullText;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+    static public
+    class HasNonNull {
+        @NotNull
+        public String nonNullText;
+
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            HasNonNull other = (HasNonNull)obj;
-            if (this.nonNullText == null) {
-                if (other.nonNullText != null) {
+            HasNonNull other = (HasNonNull) obj;
+            if (nonNullText == null) {
+                if (other.nonNullText != null)
                     return false;
-                }
-            } else if (!this.nonNullText.equals(other.nonNullText)) {
-                return false;
             }
+            else if (!nonNullText.equals(other.nonNullText))
+                return false;
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static public class HasStringField {
+
+    static public
+    class HasStringField {
         public String text;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            HasStringField other = (HasStringField)obj;
-            if (this.text == null) {
-                if (other.text != null) {
+            HasStringField other = (HasStringField) obj;
+            if (text == null) {
+                if (other.text != null)
                     return false;
-                }
-            } else if (!this.text.equals(other.text)) {
-                return false;
             }
+            else if (!text.equals(other.text))
+                return false;
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static public class HasOptionalAnnotation {
-        @Optional("smurf") int moo;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+    static public
+    class HasOptionalAnnotation {
+        @Optional("smurf")
+        int moo;
+
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            HasOptionalAnnotation other = (HasOptionalAnnotation)obj;
-            if (this.moo != other.moo) {
+            HasOptionalAnnotation other = (HasOptionalAnnotation) obj;
+            if (moo != other.moo)
                 return false;
-            }
             return true;
         }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
-        }
     }
+
 
     @DefaultSerializer(HasDefaultSerializerAnnotationSerializer.class)
-    static public class HasDefaultSerializerAnnotation {
+    static public
+    class HasDefaultSerializerAnnotation {
         long time;
 
-        public HasDefaultSerializerAnnotation (long time) {
+        public
+        HasDefaultSerializerAnnotation(long time) {
             this.time = time;
         }
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            HasDefaultSerializerAnnotation other = (HasDefaultSerializerAnnotation)obj;
-            if (this.time != other.time) {
+            HasDefaultSerializerAnnotation other = (HasDefaultSerializerAnnotation) obj;
+            if (time != other.time)
                 return false;
-            }
             return true;
-        }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
         }
     }
 
-    static public class HasDefaultSerializerAnnotationSerializer extends Serializer<HasDefaultSerializerAnnotation> {
+
+    static public
+    class HasDefaultSerializerAnnotationSerializer extends Serializer<HasDefaultSerializerAnnotation> {
         @Override
-        public void write (Kryo kryo, Output output, HasDefaultSerializerAnnotation object) {
+        public
+        void write(Kryo kryo, Output output, HasDefaultSerializerAnnotation object) {
             output.writeLong(object.time, true);
         }
 
         @Override
-        public HasDefaultSerializerAnnotation read (Kryo kryo, Input input, Class type) {
+        public
+        HasDefaultSerializerAnnotation read(Kryo kryo, Input input, Class type) {
             return new HasDefaultSerializerAnnotation(input.readLong(true));
         }
 
         @Override
-        public HasDefaultSerializerAnnotation copy (Kryo kryo, HasDefaultSerializerAnnotation original) {
+        public
+        HasDefaultSerializerAnnotation copy(Kryo kryo, HasDefaultSerializerAnnotation original) {
             return new HasDefaultSerializerAnnotation(original.time);
         }
     }
 
-    static public class HasArgumentConstructor {
+
+    static public
+    class HasArgumentConstructor {
         public String moo;
 
-        public HasArgumentConstructor (String moo) {
+        public
+        HasArgumentConstructor(String moo) {
             this.moo = moo;
         }
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            HasArgumentConstructor other = (HasArgumentConstructor)obj;
-            if (this.moo == null) {
-                if (other.moo != null) {
+            HasArgumentConstructor other = (HasArgumentConstructor) obj;
+            if (moo == null) {
+                if (other.moo != null)
                     return false;
-                }
-            } else if (!this.moo.equals(other.moo)) {
-                return false;
             }
+            else if (!moo.equals(other.moo))
+                return false;
             return true;
         }
-
-        @Override
-        public int hashCode() {
-            return super.hashCode();
-        }
     }
 
-    static public class HasPrivateConstructor extends HasArgumentConstructor {
-        private HasPrivateConstructor () {
+
+    static public
+    class HasPrivateConstructor extends HasArgumentConstructor {
+        static int invocations;
+
+        private
+        HasPrivateConstructor() {
             super("cow");
+            HasPrivateConstructor.invocations++;
         }
     }
 
-    static public class HasGenerics {
+
+    static public
+    class HasGenerics {
         ArrayList<Integer> list1;
         List<List<?>> list2 = new ArrayList<List<?>>();
         List<?> list3 = new ArrayList();
@@ -1041,66 +1295,183 @@ public class FieldSerializerTest extends KryoTestCase {
         ArrayList<String> list5;
         HashMap<String, ArrayList<Integer>> map1;
 
-        @Override
-        public boolean equals (Object obj) {
-            if (this == obj) {
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
                 return true;
-            }
-            if (obj == null) {
+            if (obj == null)
                 return false;
-            }
-            if (getClass() != obj.getClass()) {
+            if (getClass() != obj.getClass())
                 return false;
-            }
-            HasGenerics other = (HasGenerics)obj;
-            if (this.list1 == null) {
-                if (other.list1 != null) {
+            HasGenerics other = (HasGenerics) obj;
+            if (list1 == null) {
+                if (other.list1 != null)
                     return false;
-                }
-            } else if (!this.list1.equals(other.list1)) {
-                return false;
             }
-            if (this.list2 == null) {
-                if (other.list2 != null) {
-                    return false;
-                }
-            } else if (!this.list2.equals(other.list2)) {
+            else if (!list1.equals(other.list1))
                 return false;
+            if (list2 == null) {
+                if (other.list2 != null)
+                    return false;
             }
-            if (this.list3 == null) {
-                if (other.list3 != null) {
-                    return false;
-                }
-            } else if (!this.list3.equals(other.list3)) {
+            else if (!list2.equals(other.list2))
                 return false;
+            if (list3 == null) {
+                if (other.list3 != null)
+                    return false;
             }
-            if (this.list4 == null) {
-                if (other.list4 != null) {
-                    return false;
-                }
-            } else if (!this.list4.equals(other.list4)) {
+            else if (!list3.equals(other.list3))
                 return false;
+            if (list4 == null) {
+                if (other.list4 != null)
+                    return false;
             }
-            if (this.list5 == null) {
-                if (other.list5 != null) {
-                    return false;
-                }
-            } else if (!this.list5.equals(other.list5)) {
+            else if (!list4.equals(other.list4))
                 return false;
+            if (list5 == null) {
+                if (other.list5 != null)
+                    return false;
             }
-            if (this.map1 == null) {
-                if (other.map1 != null) {
-                    return false;
-                }
-            } else if (!this.map1.equals(other.map1)) {
+            else if (!list5.equals(other.list5))
                 return false;
+            if (map1 == null) {
+                if (other.map1 != null)
+                    return false;
+            }
+            else if (!map1.equals(other.map1))
+                return false;
+            return true;
+        }
+    }
+
+
+    static public
+    class MultipleTimesAnnotatedCollectionFields {
+        // This annotation should result in an exception, because
+        // it is applied to a non-collection field
+        @BindCollection(elementSerializer = LongArraySerializer.class,
+                        elementClass = long[].class,
+                        elementsCanBeNull = false)
+        @Bind(CollectionSerializer.class)
+        Collection collection;
+    }
+
+
+    static public
+    class WronglyAnnotatedCollectionFields {
+        // This annotation should result in an exception, because
+        // it is applied to a non-collection field
+        @BindCollection(elementSerializer = LongArraySerializer.class,
+                        elementClass = long[].class,
+                        elementsCanBeNull = false)
+        int collection;
+    }
+
+
+    static public
+    class WronglyAnnotatedMapFields {
+        // This annotation should result in an exception, because
+        // it is applied to a non-map field
+        @BindMap(valueSerializer = IntArraySerializer.class,
+                 keySerializer = StringSerializer.class,
+                 valueClass = int[].class,
+                 keyClass = String.class,
+                 keysCanBeNull = false)
+        Object map;
+    }
+
+
+    static public
+    class AnnotatedFields {
+        @Bind(StringSerializer.class)
+        Object stringField;
+
+        @BindMap(valueSerializer = IntArraySerializer.class,
+                 keySerializer = StringSerializer.class,
+                 valueClass = int[].class,
+                 keyClass = String.class,
+                 keysCanBeNull = false)
+        Map map;
+
+        @BindCollection(elementSerializer = LongArraySerializer.class,
+                        elementClass = long[].class,
+                        elementsCanBeNull = false)
+        Collection collection;
+
+        public
+        boolean equals(Object obj) {
+            if (this == obj)
+                return true;
+            if (obj == null)
+                return false;
+            if (getClass() != obj.getClass())
+                return false;
+            AnnotatedFields other = (AnnotatedFields) obj;
+            if (map == null) {
+                if (other.map != null)
+                    return false;
+            }
+            else {
+                if (other.map == null)
+                    return false;
+                if (map.size() != other.map.size())
+                    return false;
+                for (Object e : map.entrySet()) {
+                    Map.Entry entry = (Map.Entry) e;
+                    if (!other.map.containsKey(entry.getKey()))
+                        return false;
+                    Object otherValue = other.map.get(entry.getKey());
+                    if (entry.getValue() == null && otherValue != null)
+                        return false;
+                    if (!Arrays.equals((int[]) entry.getValue(), (int[]) otherValue))
+                        return false;
+                }
+            }
+            if (collection == null) {
+                if (other.collection != null)
+                    return false;
+            }
+            else {
+                if (other.collection == null)
+                    return false;
+                if (collection.size() != other.collection.size())
+                    return false;
+                Iterator it1 = collection.iterator();
+                Iterator it2 = other.collection.iterator();
+                while (it1.hasNext()) {
+                    Object e1 = it1.next();
+                    Object e2 = it2.next();
+                    if (!Arrays.equals((long[]) e1, (long[]) e2))
+                        return false;
+                }
             }
             return true;
         }
+    }
+
+
+    static public
+    class IsGeneric<T> {
+        T item;
+        private int y;
+        private int z;
 
         @Override
-        public int hashCode() {
-            return super.hashCode();
+        public
+        boolean equals(Object o) {
+            if (this == o)
+                return true;
+            if (!(o instanceof IsGeneric))
+                return false;
+
+            IsGeneric isGeneric = (IsGeneric) o;
+
+            if (z != isGeneric.z)
+                return false;
+            if (item != null ? !item.equals(isGeneric.item) : isGeneric.item != null)
+                return false;
+
+            return true;
         }
     }
 }
