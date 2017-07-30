@@ -1619,17 +1619,13 @@ class SocketUDT {
      * @see #setOption0(int, Class, Object)
      */
     public
-    <T> void setOption( //
-                        final OptionUDT<T> option, //
-                        final T value //
-    ) throws ExceptionUDT {
+    <T> void setOption(final OptionUDT<T> option, final T value) throws ExceptionUDT {
 
         if (option == null || value == null) {
             throw new IllegalArgumentException("option == null || value == null");
         }
 
         setOption0(option.code(), option.type(), value);
-
     }
 
     /**
@@ -1637,11 +1633,7 @@ class SocketUDT {
      * href="http://udt.sourceforge.net/udt4/doc/opt.htm">UDT::setsockopt()</a>
      */
     protected native
-    void setOption0( //
-                     final int code, //
-                     final Class<?> klaz, //
-                     final Object value //
-    ) throws ExceptionUDT;
+    void setOption0(final int code, final Class<?> klaz, final Object value) throws ExceptionUDT;
 
     /**
      * Set maximum receive buffer size. Affects both protocol-level (UDT) and
