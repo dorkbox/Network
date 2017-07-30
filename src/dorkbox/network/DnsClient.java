@@ -19,6 +19,7 @@ import java.net.IDN;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.security.AccessControlException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -45,7 +46,6 @@ import dorkbox.util.OS;
 import dorkbox.util.Property;
 import dorkbox.util.Version;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
@@ -54,18 +54,22 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
-import io.netty.channel.socket.InternetProtocolFamily;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.handler.codec.dns.DefaultDnsQuestion;
+import io.netty.handler.codec.dns.DnsPtrRecord;
+import io.netty.handler.codec.dns.DnsRawRecord;
 import io.netty.handler.codec.dns.DnsRecord;
 import io.netty.handler.codec.dns.DnsRecordType;
 import io.netty.handler.codec.dns.DnsResponse;
 import io.netty.handler.codec.dns.DnsResponseCode;
 import io.netty.handler.codec.dns.DnsSection;
+import io.netty.resolver.ResolvedAddressTypes;
+import io.netty.resolver.dns.DefaultDnsServerAddressStreamProvider;
 import io.netty.resolver.dns.DnsNameResolver;
 import io.netty.resolver.dns.DnsNameResolverBuilder;
-import io.netty.resolver.dns.DnsServerAddresses;
+import io.netty.resolver.dns.DnsServerAddressStreamProvider;
+import io.netty.resolver.dns.SequentialDnsServerAddressStreamProvider;
 import io.netty.util.concurrent.Future;
 import io.netty.util.internal.PlatformDependent;
 
@@ -96,6 +100,9 @@ class DnsClient {
         }
     }
 
+    /**
+     * This is a list of all of the public DNS servers to query, when submitting DNS queries
+     */
     // @formatter:off
     @Property
     public static List<InetSocketAddress> DNS_SERVER_LIST = Arrays.asList(
@@ -108,6 +115,10 @@ class DnsClient {
     );
     // @formatter:on
 
+    /**
+     * This is a list of all of the BOX default DNS servers to query, when submitting DNS queries.
+     */
+    public final static List<InetSocketAddress> DEFAULT_DNS_SERVER_LIST = DefaultDnsServerAddressStreamProvider.defaultAddressList();
 
     private static final String ptrSuffix = ".in-addr.arpa";
 
@@ -215,14 +226,18 @@ class DnsClient {
             channelType = NioDatagramChannel.class;
         }
 
+
+        List<DnsServerAddressStreamProvider> list = new ArrayList<DnsServerAddressStreamProvider>(nameServerAddresses.size());
+
         DnsNameResolverBuilder builder = new DnsNameResolverBuilder(eventLoopGroup.next());
         builder.channelFactory(new ReflectiveChannelFactory<DatagramChannel>(channelType))
                .channelType(channelType)
                .ttl(minTtl, maxTtl)
-               .resolvedAddressTypes(InternetProtocolFamily.IPv4) // for now, we only support ipv4
-               .nameServerAddresses(DnsServerAddresses.sequential(nameServerAddresses));
+               .resolvedAddressTypes(ResolvedAddressTypes.IPV4_ONLY) // for now, we only support ipv4
+               .nameServerProvider(new SequentialDnsServerAddressStreamProvider(nameServerAddresses));
 
         resolver = builder.build();
+
 
         // A/AAAA use the built-in decoder
 
@@ -244,8 +259,7 @@ class DnsClient {
      */
     public
     String resolve(String hostname) {
-        if (resolver.resolvedAddressTypes()
-                    .get(0) == InternetProtocolFamily.IPv4) {
+        if (resolver.resolvedAddressTypes() == ResolvedAddressTypes.IPV4_ONLY) {
             return resolve(hostname, DnsRecordType.A);
         }
         else {
@@ -313,8 +327,13 @@ class DnsClient {
                             for (int i = 0; i < answerCount; i++) {
                                 final DnsRecord r = response.recordAt(DnsSection.ANSWER, i);
                                 if (r.type() == type) {
-                                    ByteBuf recordContent = ((ByteBufHolder) r).content();
-                                    return (T) decoder.decode(r, recordContent);
+                                    // can be either RAW or it will be a PTR record
+                                    if (r instanceof DnsRawRecord) {
+                                        ByteBuf recordContent = ((DnsRawRecord) r).content();
+                                        return (T) decoder.decode(r, recordContent);
+                                    } else if (r instanceof DnsPtrRecord) {
+                                        return (T) ((DnsPtrRecord)r).hostname();
+                                    }
                                 }
                             }
                         }
