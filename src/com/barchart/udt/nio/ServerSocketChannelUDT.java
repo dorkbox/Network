@@ -7,14 +7,18 @@
  */
 package com.barchart.udt.nio;
 
-import com.barchart.udt.SocketUDT;
-import com.barchart.udt.TypeUDT;
-import com.barchart.udt.anno.ThreadSafe;
+import java.io.IOException;
+import java.net.SocketAddress;
+import java.net.SocketOption;
+import java.nio.channels.ServerSocketChannel;
+import java.util.Set;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.channels.ServerSocketChannel;
+import com.barchart.udt.SocketUDT;
+import com.barchart.udt.TypeUDT;
+import com.barchart.udt.anno.ThreadSafe;
 
 /**
  * {@link ServerSocketChannel}-like wrapper for {@link SocketUDT} can be either
@@ -39,22 +43,16 @@ import java.nio.channels.ServerSocketChannel;
  */
 public class ServerSocketChannelUDT extends ServerSocketChannel implements ChannelUDT {
 
-	protected static final Logger log = LoggerFactory
-			.getLogger(ServerSocketChannelUDT.class);
+	protected static final Logger log = LoggerFactory.getLogger(ServerSocketChannelUDT.class);
 
 	@ThreadSafe("this")
 	protected NioServerSocketUDT socketAdapter;
 
 	protected final SocketUDT socketUDT;
 
-	protected ServerSocketChannelUDT( //
-			final SelectorProviderUDT provider, //
-			final SocketUDT socketUDT //
-	) {
-
+	protected ServerSocketChannelUDT(final SelectorProviderUDT provider, final SocketUDT socketUDT) {
 		super(provider);
 		this.socketUDT = socketUDT;
-
 	}
 
 	@Override
@@ -83,14 +81,22 @@ public class ServerSocketChannelUDT extends ServerSocketChannel implements Chann
 		}
 	}
 
-	@Override
+    /**
+     * java 7
+     */
+    @Override
+    public
+    SocketAddress getLocalAddress() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
 	protected void implCloseSelectableChannel() throws IOException {
 		socketUDT.close();
 	}
 
 	@Override
-	protected void implConfigureBlocking(final boolean block)
-			throws IOException {
+	protected void implConfigureBlocking(final boolean block) throws IOException {
 		socketUDT.setBlocking(block);
 	}
 
@@ -108,6 +114,42 @@ public class ServerSocketChannelUDT extends ServerSocketChannel implements Chann
 	public SelectorProviderUDT providerUDT() {
 		return (SelectorProviderUDT) super.provider();
 	}
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    ServerSocketChannel bind(final SocketAddress local, final int backlog) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    <T> ServerSocketChannel setOption(final SocketOption<T> name, final T value) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    <T> T getOption(final SocketOption<T> name) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    Set<SocketOption<?>> supportedOptions() {
+        throw new UnsupportedOperationException("feature not available");
+    }
 
     @Override
 	public synchronized NioServerSocketUDT socket() {

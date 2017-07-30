@@ -7,13 +7,14 @@
  */
 package com.barchart.udt.nio;
 
-import com.barchart.udt.SocketUDT;
-import com.barchart.udt.TypeUDT;
-
 import java.io.IOException;
+import java.net.ProtocolFamily;
 import java.nio.channels.DatagramChannel;
 import java.nio.channels.Pipe;
 import java.nio.channels.spi.SelectorProvider;
+
+import com.barchart.udt.SocketUDT;
+import com.barchart.udt.TypeUDT;
 
 /**
  * selection provider for UDT
@@ -26,14 +27,12 @@ public class SelectorProviderUDT extends SelectorProvider {
 	/**
 	 * system-wide provider instance, for {@link TypeUDT#DATAGRAM} UDT sockets
 	 */
-	public static final SelectorProviderUDT DATAGRAM = //
-	new SelectorProviderUDT(TypeUDT.DATAGRAM);
+	public static final SelectorProviderUDT DATAGRAM = new SelectorProviderUDT(TypeUDT.DATAGRAM);
 
 	/**
 	 * system-wide provider instance, for {@link TypeUDT#STREAM} UDT sockets
 	 */
-	public static final SelectorProviderUDT STREAM = //
-	new SelectorProviderUDT(TypeUDT.STREAM);
+	public static final SelectorProviderUDT STREAM = new SelectorProviderUDT(TypeUDT.STREAM);
 
 	public static SelectorProviderUDT from(final TypeUDT type) {
 		switch (type) {
@@ -78,6 +77,15 @@ public class SelectorProviderUDT extends SelectorProvider {
 	public DatagramChannel openDatagramChannel() throws IOException {
 		throw new UnsupportedOperationException("feature not available");
 	}
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    DatagramChannel openDatagramChannel(final ProtocolFamily family) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
 
     /**
 	 * Not supported.

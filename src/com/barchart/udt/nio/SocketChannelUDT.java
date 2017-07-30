@@ -7,22 +7,25 @@
  */
 package com.barchart.udt.nio;
 
-import com.barchart.udt.ExceptionUDT;
-import com.barchart.udt.SocketUDT;
-import com.barchart.udt.TypeUDT;
-import com.barchart.udt.anno.ThreadSafe;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.SocketOption;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ConnectionPendingException;
 import java.nio.channels.IllegalBlockingModeException;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.UnresolvedAddressException;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.barchart.udt.ExceptionUDT;
+import com.barchart.udt.SocketUDT;
+import com.barchart.udt.TypeUDT;
+import com.barchart.udt.anno.ThreadSafe;
 
 /**
  * {@link SocketChannel}-like wrapper for {@link SocketUDT}, can be either
@@ -54,8 +57,7 @@ import java.nio.channels.UnresolvedAddressException;
  */
 public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 
-	protected static final Logger log = LoggerFactory
-			.getLogger(SocketChannelUDT.class);
+	protected static final Logger log = LoggerFactory.getLogger(SocketChannelUDT.class);
 
 	protected final Object connectLock = new Object();
 
@@ -76,22 +78,13 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 
     private InetSocketAddress remoteSocket;
 
-	protected SocketChannelUDT( //
-			final SelectorProviderUDT provider, //
-			final SocketUDT socketUDT //
-	) throws ExceptionUDT {
-
+	protected SocketChannelUDT(final SelectorProviderUDT provider, final SocketUDT socketUDT) throws ExceptionUDT {
 		super(provider);
 		this.socketUDT = socketUDT;
 		this.socketUDT.setBlocking(true);
 	}
 
-	protected SocketChannelUDT( //
-			final SelectorProviderUDT provider, //
-			final SocketUDT socketUDT, //
-			final boolean isConnected //
-	) throws ExceptionUDT {
-
+	protected SocketChannelUDT(final SelectorProviderUDT provider, final SocketUDT socketUDT, final boolean isConnected) throws ExceptionUDT {
 		this(provider, socketUDT);
 
 		if (isConnected) {
@@ -101,7 +94,6 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 			isConnectFinished = false;
 			isConnectionPending = true;
 		}
-
 	}
 
 	@Override
@@ -240,6 +232,15 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 
 	}
 
+    /**
+     * java 7
+     */
+    @Override
+    public
+    SocketAddress getRemoteAddress() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
     @Override
 	protected void implCloseSelectableChannel() throws IOException {
 		socketUDT.close();
@@ -357,8 +358,7 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 	}
 
 	@Override
-	public long read(final ByteBuffer[] dsts, final int offset, final int length)
-			throws IOException {
+	public long read(final ByteBuffer[] dsts, final int offset, final int length) throws IOException {
 		throw new RuntimeException("feature not available");
 	}
 
@@ -477,11 +477,9 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 	}
 
 	@Override
-	public long write(final ByteBuffer[] bufferArray, final int offset,
-			final int length) throws IOException {
+	public long write(final ByteBuffer[] bufferArray, final int offset, final int length) throws IOException {
 
 		try {
-
 			long total = 0;
 
 			for (int index = offset; index < offset + length; index++) {
@@ -505,21 +503,71 @@ public class SocketChannelUDT extends SocketChannel implements ChannelUDT {
 		} catch (final Throwable e) {
 			throw new IOException("failed to write buffer array", e);
 		}
-
 	}
 
-	@Override
+    /**
+     * java 7
+     */
+    @Override
+    public
+    SocketAddress getLocalAddress() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    @Override
 	public TypeUDT typeUDT() {
 		return providerUDT().type();
 	}
 
 	/** java 7 */
-	public SocketChannelUDT bind(final SocketAddress localAddress)
-			throws IOException {
-
+	@Override
+    public SocketChannelUDT bind(final SocketAddress localAddress) throws IOException {
 		socketUDT.bind((InetSocketAddress) localAddress);
-
 		return this;
-
 	}
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    <T> SocketChannel setOption(final SocketOption<T> option, final T value) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    <T> T getOption(final SocketOption<T> name) throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    Set<SocketOption<?>> supportedOptions() {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    SocketChannel shutdownInput() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
+
+    /**
+     * java 7
+     */
+    @Override
+    public
+    SocketChannel shutdownOutput() throws IOException {
+        throw new UnsupportedOperationException("feature not available");
+    }
 }
