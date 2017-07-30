@@ -68,7 +68,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     public static
     Version getVersion() {
-        return new Version("1.23");
+        return new Version("1.24");
     }
 
     /**
