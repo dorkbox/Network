@@ -7,14 +7,15 @@
  */
 package com.barchart.udt.nio;
 
-import com.barchart.udt.SocketUDT;
-import com.barchart.udt.TypeUDT;
-import com.barchart.udt.anno.ThreadSafe;
+import java.io.IOException;
+import java.nio.channels.ServerSocketChannel;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.channels.ServerSocketChannel;
+import com.barchart.udt.SocketUDT;
+import com.barchart.udt.TypeUDT;
+import com.barchart.udt.anno.ThreadSafe;
 
 /**
  * {@link ServerSocketChannel}-like wrapper for {@link SocketUDT} can be either
@@ -39,28 +40,21 @@ import java.nio.channels.ServerSocketChannel;
  */
 public class ServerSocketChannelUDT extends ServerSocketChannel implements ChannelUDT {
 
-	protected static final Logger log = LoggerFactory
-			.getLogger(ServerSocketChannelUDT.class);
+	protected static final Logger log = LoggerFactory.getLogger(ServerSocketChannelUDT.class);
 
 	@ThreadSafe("this")
 	protected NioServerSocketUDT socketAdapter;
 
 	protected final SocketUDT socketUDT;
 
-	protected ServerSocketChannelUDT( //
-			final SelectorProviderUDT provider, //
-			final SocketUDT socketUDT //
-	) {
-
+	protected ServerSocketChannelUDT(final SelectorProviderUDT provider, final SocketUDT socketUDT) {
 		super(provider);
 		this.socketUDT = socketUDT;
-
 	}
 
 	@Override
 	public SocketChannelUDT accept() throws IOException {
 		try {
-
 			begin();
 
 			final SocketUDT clientUDT = socketUDT.accept();
@@ -89,8 +83,7 @@ public class ServerSocketChannelUDT extends ServerSocketChannel implements Chann
 	}
 
 	@Override
-	protected void implConfigureBlocking(final boolean block)
-			throws IOException {
+	protected void implConfigureBlocking(final boolean block) throws IOException {
 		socketUDT.setBlocking(block);
 	}
 
