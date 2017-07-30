@@ -15,12 +15,13 @@
  */
 package dorkbox.network.connection.registration;
 
-import dorkbox.network.connection.ConnectionImpl;
-import io.netty.channel.Channel;
+import java.net.InetSocketAddress;
+
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
-import java.net.InetSocketAddress;
+import dorkbox.network.connection.ConnectionImpl;
+import io.netty.channel.Channel;
 
 // @formatter:off
 public
@@ -80,22 +81,22 @@ class MetaChannel {
 
     public
     void close(final long maxShutdownWaitTimeInMilliSeconds) {
-        if (this.localChannel != null) {
+        if (this.localChannel != null && this.localChannel.isOpen()) {
             this.localChannel.close();
         }
 
-        if (this.tcpChannel != null) {
+        if (this.tcpChannel != null && this.tcpChannel.isOpen()) {
             this.tcpChannel.close()
                            .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }
 
-        if (this.udtChannel != null) {
+        if (this.udtChannel != null && this.udtChannel.isOpen()) {
             this.udtChannel.close()
                            .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }
 
         // only the CLIENT will have this.
-        if (this.udpChannel != null && this.udpRemoteAddress == null) {
+        if (this.udpChannel != null && this.udpRemoteAddress == null && this.udpChannel.isOpen()) {
             this.udpChannel.close()
                            .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }

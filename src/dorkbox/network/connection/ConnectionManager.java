@@ -15,7 +15,15 @@
  */
 package dorkbox.network.connection;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+
+import org.slf4j.Logger;
+
 import com.esotericsoftware.kryo.util.IdentityMap;
+
 import dorkbox.network.connection.bridge.ConnectionBridgeServer;
 import dorkbox.network.connection.bridge.ConnectionExceptSpecifiedBridgeServer;
 import dorkbox.network.connection.listenerManagement.OnConnectedManager;
@@ -25,12 +33,6 @@ import dorkbox.network.connection.listenerManagement.OnMessageReceivedManager;
 import dorkbox.util.ClassHelper;
 import dorkbox.util.Property;
 import dorkbox.util.collections.ConcurrentEntry;
-import org.slf4j.Logger;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
 @SuppressWarnings("unchecked")
@@ -650,6 +652,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      *
      * @see dorkbox.network.connection.ConnectionPoint#flush()
      */
+    @Override
     public
     void flush() {
         ConcurrentEntry<C> current = connectionsREF.get(this);
@@ -667,6 +670,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      * Sends the object to all server connections (except the specified one) over the network using TCP. (or via LOCAL when it's a local
      * channel).
      */
+    @Override
     public
     ConnectionPoint TCP(final C connection, final Object message) {
         ConcurrentEntry<C> current = connectionsREF.get(this);
@@ -687,6 +691,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      * Sends the object to all server connections (except the specified one) over the network using UDP (or via LOCAL when it's a local
      * channel).
      */
+    @Override
     public
     ConnectionPoint UDP(final C connection, final Object message) {
         ConcurrentEntry<C> current = connectionsREF.get(this);
@@ -707,6 +712,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      * Sends the object to all server connections (except the specified one) over the network using UDT. (or via LOCAL when it's a local
      * channel).
      */
+    @Override
     public
     ConnectionPoint UDT(final C connection, final Object message) {
         ConcurrentEntry<C> current = connectionsREF.get(this);
@@ -726,6 +732,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     /**
      * Sends the message to other listeners INSIDE this endpoint for EVERY connection. It does not send it to a remote address.
      */
+    @Override
     public
     void self(final Object message) {
         ConcurrentEntry<C> current = connectionsREF.get(this);
@@ -741,6 +748,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     /**
      * Sends the object all server connections over the network using TCP. (or via LOCAL when it's a local channel).
      */
+    @Override
     public
     ConnectionPoint TCP(final Object message) {
         ConcurrentEntry<C> current = connectionsREF.get(this);
@@ -758,6 +766,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     /**
      * Sends the object all server connections over the network using UDP. (or via LOCAL when it's a local channel).
      */
+    @Override
     public
     ConnectionPoint UDP(final Object message) {
         ConcurrentEntry<C> current = connectionsREF.get(this);
@@ -776,6 +785,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     /**
      * Sends the object all server connections over the network using UDT. (or via LOCAL when it's a local channel).
      */
+    @Override
     public
     ConnectionPoint UDT(final Object message) {
         ConcurrentEntry<C> current = connectionsREF.get(this);

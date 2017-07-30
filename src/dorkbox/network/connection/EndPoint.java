@@ -15,6 +15,24 @@
  */
 package dorkbox.network.connection;
 
+import java.io.IOException;
+import java.security.AccessControlException;
+import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
+import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.slf4j.Logger;
+
 import dorkbox.network.Configuration;
 import dorkbox.network.connection.bridge.ConnectionBridgeBase;
 import dorkbox.network.connection.ping.PingSystemListener;
@@ -41,22 +59,6 @@ import io.netty.util.NetUtil;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 import io.netty.util.internal.PlatformDependent;
-import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
-import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
-import org.slf4j.Logger;
-
-import java.io.IOException;
-import java.security.AccessControlException;
-import java.security.SecureRandom;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * represents the base of a client/server end point
@@ -566,9 +568,11 @@ class EndPoint<C extends Connection> {
             // now we stop all of our channels
             for (ChannelFuture f : this.shutdownChannelList) {
                 Channel channel = f.channel();
-                channel.close()
-                       .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
-                Thread.yield();
+                if (channel.isOpen()) {
+                    channel.close()
+                           .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+                    Thread.yield();
+                }
             }
 
             // we have to clear the shutdown list. (
@@ -622,8 +626,10 @@ class EndPoint<C extends Connection> {
             // a client/server thread executor, it will deadlock while waiting for the threadpool to terminate.
             boolean isInEventLoop = false;
             for (EventLoopGroup loopGroup : this.eventLoopGroups) {
-                for (EventExecutor child : loopGroup.children()) {
-                    if (child.inEventLoop()) {
+                Iterator<EventExecutor> iterator = loopGroup.iterator();
+                while (iterator.hasNext()) {
+                    EventExecutor next = iterator.next();
+                    if (next.inEventLoop()) {
                         isInEventLoop = true;
                         break;
                     }
