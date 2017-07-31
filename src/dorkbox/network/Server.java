@@ -65,7 +65,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
      */
     public static
     Version getVersion() {
-        return new Version("1.24");
+        return new Version("1.25");
     }
 
     /**
