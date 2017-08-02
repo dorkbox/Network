@@ -15,9 +15,9 @@
  */
 package dorkbox.network;
 
-import dorkbox.network.util.store.SettingsStore;
-
 import java.util.concurrent.Executor;
+
+import dorkbox.network.store.SettingsStore;
 
 public
 class Configuration {

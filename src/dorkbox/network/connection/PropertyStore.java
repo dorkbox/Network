@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection;
 
-import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Map;
@@ -23,11 +22,10 @@ import java.util.Map;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
-import dorkbox.network.util.store.SettingsStore;
+import dorkbox.network.store.DB_Server;
+import dorkbox.network.store.SettingsStore;
 import dorkbox.util.SerializationManager;
 import dorkbox.util.bytes.ByteArrayWrapper;
-import dorkbox.util.database.DB_Server;
-import dorkbox.util.database.DatabaseStorage;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.storage.Storage;
 import dorkbox.util.storage.StorageSystem;
@@ -38,7 +36,6 @@ import dorkbox.util.storage.StorageSystem;
  */
 final
 class PropertyStore extends SettingsStore {
-
     private  Storage storage;
     private Map<ByteArrayWrapper, DB_Server> servers;
 
@@ -52,7 +49,7 @@ class PropertyStore extends SettingsStore {
      */
     @Override
     public
-    void init(final SerializationManager serializationManager, final Storage ignored) throws IOException {
+    void init(final SerializationManager serializationManager, final Storage ignored) {
         // make sure our custom types are registered
         // only register if not ALREADY initialized, since we can initialize in the server and in the client. This creates problems if
         // running inside the same JVM (we don't permit it)
@@ -63,9 +60,9 @@ class PropertyStore extends SettingsStore {
         }
 
         this.storage = StorageSystem.Memory()
-                                    .make();
+                                    .build();
 
-        servers = this.storage.getAndPut(DatabaseStorage.SERVERS, new HashMap<ByteArrayWrapper, DB_Server>(16));
+        servers = this.storage.getAndPut(DB_Server.STORAGE_KEY, new HashMap<ByteArrayWrapper, DB_Server>(16));
 
         DB_Server localServer = servers.get(DB_Server.IP_SELF); // this will always be null and is here to help people that copy/paste code
         if (localServer == null) {
@@ -73,7 +70,7 @@ class PropertyStore extends SettingsStore {
             servers.put(DB_Server.IP_SELF, localServer);
 
             // have to always specify what we are saving
-            this.storage.putAndSave(DatabaseStorage.SERVERS, servers);
+            this.storage.putAndSave(DB_Server.STORAGE_KEY, servers);
         }
     }
 
@@ -101,7 +98,7 @@ class PropertyStore extends SettingsStore {
                .setPrivateKey(serverPrivateKey);
 
         // have to always specify what we are saving
-        storage.putAndSave(DatabaseStorage.SERVERS, servers);
+        storage.putAndSave(DB_Server.STORAGE_KEY, servers);
     }
 
     /**
@@ -128,7 +125,7 @@ class PropertyStore extends SettingsStore {
                .setPublicKey(serverPublicKey);
 
         // have to always specify what we are saving
-        storage.putAndSave(DatabaseStorage.SERVERS, servers);
+        storage.putAndSave(DB_Server.STORAGE_KEY, servers);
     }
 
     /**
@@ -153,7 +150,7 @@ class PropertyStore extends SettingsStore {
             localServer.setSalt(bytes);
 
             // have to always specify what we are saving
-            storage.putAndSave(DatabaseStorage.SERVERS, servers);
+            storage.putAndSave(DB_Server.STORAGE_KEY, servers);
         }
 
         return salt;

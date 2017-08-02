@@ -16,13 +16,12 @@
 package dorkbox.network.connection;
 
 
-import dorkbox.network.BaseTest;
-import dorkbox.util.exceptions.SecurityException;
+import static org.junit.Assert.fail;
+
 import org.junit.Test;
 
-import java.io.IOException;
-
-import static org.junit.Assert.fail;
+import dorkbox.network.BaseTest;
+import dorkbox.util.exceptions.SecurityException;
 
 
 public
@@ -32,11 +31,7 @@ class PropertyStoreAccessTest extends BaseTest {
     public
     void testAccess() throws SecurityException {
         PropertyStore store = new PropertyStore();
-        try {
-            store.init(null, null);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        store.init(null, null);
 
         System.out.println();
         System.out.println();

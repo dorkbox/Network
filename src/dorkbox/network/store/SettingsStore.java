@@ -13,18 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.util.store;
+package dorkbox.network.store;
 
-import dorkbox.util.OS;
-import dorkbox.util.SerializationManager;
-import dorkbox.util.exceptions.SecurityException;
-import dorkbox.util.storage.Storage;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import dorkbox.util.OS;
+import dorkbox.util.SerializationManager;
+import dorkbox.util.exceptions.SecurityException;
+import dorkbox.util.storage.Storage;
 
 /**
  * This class provides a way for the network stack to use the server's database, instead of a property file (which it uses when stand-alone)
@@ -39,7 +38,7 @@ class SettingsStore {
      * Initialize the settingsStore with the provided serialization manager.
      */
     public abstract
-    void init(SerializationManager serializationManager, Storage storage) throws IOException;
+    void init(SerializationManager serializationManager, Storage storage);
 
 
     private static String getCallingClass() {

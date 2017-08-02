@@ -13,16 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.util.store;
+package dorkbox.network.store;
+
+import java.security.SecureRandom;
+
+import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
 import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.storage.Storage;
-import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
-
-import java.io.IOException;
-import java.security.SecureRandom;
 
 public
 class NullSettingsStore extends SettingsStore {
@@ -31,7 +31,7 @@ class NullSettingsStore extends SettingsStore {
 
     @Override
     public
-    void init(final SerializationManager serializationManager, final Storage storage) throws IOException {
+    void init(final SerializationManager serializationManager, final Storage storage) {
 
     }
 
