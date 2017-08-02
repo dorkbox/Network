@@ -55,7 +55,7 @@ class Broadcast {
      */
     public static
     Version getVersion() {
-        return new Version("1.25");
+        return new Version("1.26");
     }
 
     /**
