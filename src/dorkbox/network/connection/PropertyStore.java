@@ -62,7 +62,7 @@ class PropertyStore extends SettingsStore {
         this.storage = StorageSystem.Memory()
                                     .build();
 
-        servers = this.storage.getAndPut(DB_Server.STORAGE_KEY, new HashMap<ByteArrayWrapper, DB_Server>(16));
+        servers = this.storage.get(DB_Server.STORAGE_KEY, new HashMap<ByteArrayWrapper, DB_Server>(16));
 
         DB_Server localServer = servers.get(DB_Server.IP_SELF); // this will always be null and is here to help people that copy/paste code
         if (localServer == null) {
@@ -70,7 +70,7 @@ class PropertyStore extends SettingsStore {
             servers.put(DB_Server.IP_SELF, localServer);
 
             // have to always specify what we are saving
-            this.storage.putAndSave(DB_Server.STORAGE_KEY, servers);
+            this.storage.put(DB_Server.STORAGE_KEY, servers);
         }
     }
 
@@ -98,7 +98,7 @@ class PropertyStore extends SettingsStore {
                .setPrivateKey(serverPrivateKey);
 
         // have to always specify what we are saving
-        storage.putAndSave(DB_Server.STORAGE_KEY, servers);
+        storage.put(DB_Server.STORAGE_KEY, servers);
     }
 
     /**
@@ -125,7 +125,7 @@ class PropertyStore extends SettingsStore {
                .setPublicKey(serverPublicKey);
 
         // have to always specify what we are saving
-        storage.putAndSave(DB_Server.STORAGE_KEY, servers);
+        storage.put(DB_Server.STORAGE_KEY, servers);
     }
 
     /**
@@ -150,7 +150,7 @@ class PropertyStore extends SettingsStore {
             localServer.setSalt(bytes);
 
             // have to always specify what we are saving
-            storage.putAndSave(DB_Server.STORAGE_KEY, servers);
+            storage.put(DB_Server.STORAGE_KEY, servers);
         }
 
         return salt;
