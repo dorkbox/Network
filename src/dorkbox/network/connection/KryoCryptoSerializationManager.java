@@ -15,6 +15,20 @@
  */
 package dorkbox.network.connection;
 
+import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationHandler;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+
+import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.bouncycastle.crypto.params.IESParameters;
+import org.bouncycastle.crypto.params.IESWithCipherParameters;
+import org.slf4j.Logger;
+
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Serializer;
@@ -25,6 +39,7 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
+
 import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.rmi.CachedMethod;
 import dorkbox.network.rmi.InvocationHandlerSerializer;
@@ -35,8 +50,8 @@ import dorkbox.network.rmi.InvokeMethodSerializer;
 import dorkbox.network.rmi.RemoteObjectSerializer;
 import dorkbox.network.rmi.RmiRegistration;
 import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.objectPool.ObjectPool;
-import dorkbox.objectPool.PoolableObject;
+import dorkbox.objectpool.ObjectPool;
+import dorkbox.objectpool.PoolableObject;
 import dorkbox.util.Property;
 import dorkbox.util.serialization.ArraysAsListSerializer;
 import dorkbox.util.serialization.EccPrivateKeySerializer;
@@ -47,19 +62,6 @@ import dorkbox.util.serialization.IesWithCipherParametersSerializer;
 import dorkbox.util.serialization.IgnoreSerialization;
 import dorkbox.util.serialization.UnmodifiableCollectionsSerializer;
 import io.netty.buffer.ByteBuf;
-import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
-import org.bouncycastle.crypto.params.IESParameters;
-import org.bouncycastle.crypto.params.IESWithCipherParameters;
-import org.slf4j.Logger;
-
-import java.io.IOException;
-import java.lang.annotation.Annotation;
-import java.lang.reflect.InvocationHandler;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
 
 /**
  * Threads reading/writing, it messes up a single instance. it is possible to use a single kryo with the use of synchronize, however - that

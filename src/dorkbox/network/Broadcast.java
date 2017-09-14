@@ -31,7 +31,6 @@ import org.slf4j.Logger;
 
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostHandler;
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostInitializer;
-import dorkbox.util.Version;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -54,8 +53,8 @@ class Broadcast {
      * Gets the version number.
      */
     public static
-    Version getVersion() {
-        return new Version("1.27");
+    String getVersion() {
+        return "1.28";
     }
 
     /**

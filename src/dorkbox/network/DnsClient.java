@@ -44,7 +44,6 @@ import dorkbox.network.dns.record.StartOfAuthorityRecord;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
-import dorkbox.util.Version;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.EventLoopGroup;
@@ -126,8 +125,8 @@ class DnsClient {
      * Gets the version number.
      */
     public static
-    Version getVersion() {
-        return new Version("1.27");
+    String getVersion() {
+        return "1.28";
     }
 
     /**

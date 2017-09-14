@@ -35,7 +35,6 @@ import dorkbox.network.rmi.TimeoutException;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
-import dorkbox.util.Version;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
@@ -67,8 +66,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * Gets the version number.
      */
     public static
-    Version getVersion() {
-        return new Version("1.27");
+    String getVersion() {
+        return "1.28";
     }
 
     /**

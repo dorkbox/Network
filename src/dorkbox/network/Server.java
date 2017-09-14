@@ -29,7 +29,6 @@ import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
-import dorkbox.util.Version;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
@@ -64,8 +63,8 @@ class Server<C extends Connection> extends EndPointServer<C> {
      * Gets the version number.
      */
     public static
-    Version getVersion() {
-        return new Version("1.27");
+    String getVersion() {
+        return "1.28";
     }
 
     /**
