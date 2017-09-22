@@ -64,7 +64,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
      */
     public static
     String getVersion() {
-        return "1.28";
+        return "1.29";
     }
 
     /**
