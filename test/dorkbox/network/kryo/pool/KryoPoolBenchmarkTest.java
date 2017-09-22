@@ -27,8 +27,8 @@ import org.junit.Test;
 import com.esotericsoftware.kryo.Kryo;
 
 import dorkbox.network.kryo.FieldSerializerTest;
-import dorkbox.objectpool.ObjectPool;
-import dorkbox.objectpool.PoolableObject;
+import dorkbox.objectPool.ObjectPool;
+import dorkbox.objectPool.PoolableObject;
 
 public
 class KryoPoolBenchmarkTest {
