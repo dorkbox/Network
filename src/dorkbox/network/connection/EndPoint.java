@@ -218,7 +218,11 @@ class EndPoint<C extends Connection> {
         }
 
         // serialization stuff
-        this.serializationManager = KryoCryptoSerializationManager.DEFAULT;
+        if (options.serialization != null) {
+            this.serializationManager = options.serialization;
+        } else {
+            this.serializationManager = KryoCryptoSerializationManager.DEFAULT();
+        }
 
         rmiEnabled = options.rmiEnabled;
         if (rmiEnabled) {

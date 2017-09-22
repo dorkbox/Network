@@ -19,13 +19,7 @@
  */
 package dorkbox.network;
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.KryoCryptoSerializationManager;
-import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.ListenerBridge;
-import dorkbox.util.exceptions.InitializationException;
-import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -34,7 +28,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.assertEquals;
+import org.junit.Test;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.KryoCryptoSerializationManager;
+import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerBridge;
+import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.SecurityException;
 
 public
 class MultipleThreadTest extends BaseTest {
@@ -57,13 +58,13 @@ class MultipleThreadTest extends BaseTest {
     @Test
     public
     void multipleThreads() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        KryoCryptoSerializationManager.DEFAULT.register(String[].class);
-        KryoCryptoSerializationManager.DEFAULT.register(DataClass.class);
-
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization.register(String[].class);
+        configuration.serialization.register(DataClass.class);
+
 
         final Server server = new Server(configuration);
 

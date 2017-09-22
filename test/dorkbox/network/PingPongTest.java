@@ -19,6 +19,15 @@
  */
 package dorkbox.network;
 
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Test;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
@@ -27,14 +36,6 @@ import dorkbox.network.connection.ListenerBridge;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.fail;
 
 public
 class PingPongTest extends BaseTest {
@@ -50,9 +51,6 @@ class PingPongTest extends BaseTest {
     @Test
     public
     void pingPong() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         // UDP data is kinda big. Make sure it fits into one packet.
         int origSize = EndPoint.udpMaxSize;
         EndPoint.udpMaxSize = 2048;
@@ -64,6 +62,8 @@ class PingPongTest extends BaseTest {
         configuration.udpPort = udpPort;
         configuration.udtPort = udtPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
 
 
         final Data dataTCP = new Data();

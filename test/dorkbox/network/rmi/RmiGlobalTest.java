@@ -34,6 +34,16 @@
  */
 package dorkbox.network.rmi;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.io.Serializable;
+
+import org.junit.Test;
+
 import dorkbox.network.BaseTest;
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
@@ -45,15 +55,6 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.io.Serializable;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public
 class RmiGlobalTest extends BaseTest {
@@ -209,15 +210,15 @@ class RmiGlobalTest extends BaseTest {
     @Test
     public
     void rmi() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
-
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
+
         configuration.rmiEnabled = true;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+
 
         final Server server = new Server(configuration);
         server.setIdleTimeout(0);

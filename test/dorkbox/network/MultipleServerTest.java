@@ -19,17 +19,18 @@
  */
 package dorkbox.network;
 
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Test;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.fail;
 
 public
 class MultipleServerTest extends BaseTest {
@@ -38,13 +39,12 @@ class MultipleServerTest extends BaseTest {
     @Test
     public
     void multipleServers() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        KryoCryptoSerializationManager.DEFAULT.register(String[].class);
-
         Configuration configuration1 = new Configuration();
         configuration1.tcpPort = tcpPort;
         configuration1.udpPort = udpPort;
         configuration1.localChannelName = "chan1";
+        configuration1.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration1.serialization.register(String[].class);
 
         Server server1 = new Server(configuration1);
         addEndPoint(server1);
@@ -68,6 +68,8 @@ class MultipleServerTest extends BaseTest {
         configuration2.tcpPort = tcpPort + 1;
         configuration2.udpPort = udpPort + 1;
         configuration2.localChannelName = "chan2";
+        configuration2.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration2.serialization.register(String[].class);
 
         Server server2 = new Server(configuration2);
 
@@ -91,6 +93,7 @@ class MultipleServerTest extends BaseTest {
 
         configuration1.localChannelName = null;
         configuration1.host = host;
+
 
         Client client1 = new Client(configuration1);
         addEndPoint(client1);

@@ -19,6 +19,14 @@
  */
 package dorkbox.network;
 
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Test;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
@@ -26,13 +34,6 @@ import dorkbox.network.connection.ListenerBridge;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.fail;
 
 public
 class PingPongLocalTest extends BaseTest {
@@ -41,15 +42,17 @@ class PingPongLocalTest extends BaseTest {
 
     @Test
     public void pingPongLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         this.fail = "Data not received.";
 
         final Data dataLOCAL = new Data();
         populateData(dataLOCAL);
 
-        Server server = new Server();
+        Configuration configuration = Configuration.localOnly();
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+
+
+        Server server = new Server(configuration);
         addEndPoint(server);
         server.bind(false);
         final ListenerBridge listeners = server.listeners();

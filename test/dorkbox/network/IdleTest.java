@@ -19,6 +19,15 @@
  */
 package dorkbox.network;
 
+import static org.junit.Assert.fail;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Arrays;
+
+import org.junit.Test;
+
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
@@ -32,14 +41,6 @@ import dorkbox.network.connection.idle.InputStreamSender;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.util.Arrays;
-
-import static org.junit.Assert.fail;
 
 @SuppressWarnings({"rawtypes"})
 public
@@ -56,14 +57,14 @@ class IdleTest extends BaseTest {
     @Test
     public
     void InputStreamSender() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT(false, false);
-
         final int largeDataSize = 12345;
 
         System.err.println("-- TCP");
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT(false, false);
+
         streamSpecificType(largeDataSize, configuration, ConnectionType.TCP);
 
 
@@ -72,6 +73,8 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT(false, false);
+
         streamSpecificType(largeDataSize, configuration, ConnectionType.UDP);
 
 
@@ -80,6 +83,8 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udtPort = udtPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT(false, false);
+
         streamSpecificType(largeDataSize, configuration, ConnectionType.UDT);
     }
 
@@ -89,9 +94,6 @@ class IdleTest extends BaseTest {
     @Test
     public
     void ObjectSender() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         final Data mainData = new Data();
         populateData(mainData);
 
@@ -100,6 +102,9 @@ class IdleTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+
         sendObject(mainData, configuration, ConnectionType.TCP);
 
 
@@ -108,6 +113,9 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+
         sendObject(mainData, configuration, ConnectionType.TCP);
 
 
@@ -116,6 +124,9 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udtPort = udtPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+
         sendObject(mainData, configuration, ConnectionType.TCP);
     }
 

@@ -82,11 +82,6 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
 
     private static final String OBJECT_ID = "objectID";
 
-    /**
-     * The default serialization manager. This is static, since serialization must be consistent within the JVM. This can be changed.
-     */
-    public static KryoCryptoSerializationManager DEFAULT = DEFAULT();
-
     public static
     KryoCryptoSerializationManager DEFAULT() {
         return DEFAULT(true, true);

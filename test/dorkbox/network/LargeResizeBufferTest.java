@@ -19,19 +19,20 @@
  */
 package dorkbox.network;
 
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.security.SecureRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Test;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.security.SecureRandom;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.fail;
 
 public
 class LargeResizeBufferTest extends BaseTest {
@@ -44,15 +45,14 @@ class LargeResizeBufferTest extends BaseTest {
     @Test
     public
     void manyLargeMessages() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         final int messageCount = 1024;
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
 
         Server server = new Server(configuration);
         addEndPoint(server);

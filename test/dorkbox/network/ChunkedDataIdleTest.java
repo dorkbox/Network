@@ -20,6 +20,13 @@
 package dorkbox.network;
 
 
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.util.Arrays;
+
+import org.junit.Test;
+
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
@@ -28,12 +35,6 @@ import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.util.Arrays;
-
-import static org.junit.Assert.fail;
 
 public class ChunkedDataIdleTest extends BaseTest {
     private volatile boolean success = false;
@@ -47,9 +48,6 @@ public class ChunkedDataIdleTest extends BaseTest {
     // have to test sending objects
     @Test
     public void ObjectSender() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         final Data mainData = new Data();
         populateData(mainData);
 
@@ -58,6 +56,9 @@ public class ChunkedDataIdleTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+
         sendObject(mainData, configuration, ConnectionType.TCP);
 
 
@@ -66,6 +67,9 @@ public class ChunkedDataIdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+
         sendObject(mainData, configuration, ConnectionType.UDP);
 
 
@@ -74,6 +78,9 @@ public class ChunkedDataIdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udtPort = udtPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+
         sendObject(mainData, configuration, ConnectionType.UDT);
     }
 

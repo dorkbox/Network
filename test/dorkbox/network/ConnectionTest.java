@@ -19,6 +19,12 @@
  */
 package dorkbox.network;
 
+import java.io.IOException;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import org.junit.Test;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
@@ -26,11 +32,6 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.util.Timer;
-import java.util.TimerTask;
 
 public
 class ConnectionTest extends BaseTest {
@@ -38,13 +39,12 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         System.out.println("---- " + "Local");
 
         Configuration configuration = new Configuration();
         configuration.localChannelName = EndPoint.LOCAL_CHANNEL;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
 
         startServer(configuration);
         startClient(configuration);
@@ -55,13 +55,12 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectTcp() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         System.out.println("---- " + "TCP");
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
 
         startServer(configuration);
 
@@ -74,14 +73,13 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectTcpUdp() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         System.out.println("---- " + "TCP UDP");
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
 
         startServer(configuration);
 
@@ -94,14 +92,13 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectTcpUdt() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         System.out.println("---- " + "TCP UDT");
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udtPort = udtPort;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
 
         startServer(configuration);
 
@@ -114,15 +111,14 @@ class ConnectionTest extends BaseTest {
     @Test
     public
     void connectTcpUdpUdt() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        register(KryoCryptoSerializationManager.DEFAULT);
-
         System.out.println("---- " + "TCP UDP UDT");
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.udtPort = udtPort;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
 
         startServer(configuration);
 

@@ -15,6 +15,14 @@
  */
 package dorkbox.network.rmi;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Test;
+
 import dorkbox.network.BaseTest;
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
@@ -25,13 +33,6 @@ import dorkbox.network.connection.Listener;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.IgnoreSerialization;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 @SuppressWarnings("Duplicates")
 public
@@ -66,16 +67,17 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
     @Test
     public
     void rmi() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT();
-        KryoCryptoSerializationManager.DEFAULT.registerRemote(TestObject.class, TestObjectImpl.class);
-        KryoCryptoSerializationManager.DEFAULT.registerRemote(OtherObject.class, OtherObjectImpl.class);
-
-
-
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
+
         configuration.rmiEnabled = true;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+
+        configuration.serialization.registerRemote(TestObject.class, TestObjectImpl.class);
+        configuration.serialization.registerRemote(OtherObject.class, OtherObjectImpl.class);
+
+
 
         Server server = new Server(configuration);
         server.setIdleTimeout(0);

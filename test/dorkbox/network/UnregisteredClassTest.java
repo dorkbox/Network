@@ -19,6 +19,15 @@
  */
 package dorkbox.network;
 
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Test;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoCryptoSerializationManager;
@@ -26,14 +35,6 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.ListenerBridge;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.fail;
 
 public
 class UnregisteredClassTest extends BaseTest {
@@ -46,8 +47,6 @@ class UnregisteredClassTest extends BaseTest {
     @Test
     public
     void unregisteredClasses() throws InitializationException, SecurityException, IOException, InterruptedException {
-        KryoCryptoSerializationManager.DEFAULT = KryoCryptoSerializationManager.DEFAULT(false, false);
-
         int origSize = EndPoint.udpMaxSize;
         EndPoint.udpMaxSize = 2048;
 
@@ -55,6 +54,8 @@ class UnregisteredClassTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
+        configuration.serialization = KryoCryptoSerializationManager.DEFAULT(false, false);
+
 
         System.err.println("Running test " + this.tries + " times, please wait for it to finish.");
 

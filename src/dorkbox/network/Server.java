@@ -86,11 +86,11 @@ class Server<C extends Connection> extends EndPointServer<C> {
     private final String localChannelName;
 
     /**
-     * Starts a LOCAL <b>only</b> server, with the default serialization scheme
+     * Starts a LOCAL <b>only</b> server, with the default serialization scheme.
      */
     public
     Server() throws InitializationException, SecurityException, IOException {
-        this(new Configuration(LOCAL_CHANNEL));
+        this(Configuration.localOnly());
     }
 
     /**

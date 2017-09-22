@@ -75,7 +75,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     public
     Client() throws InitializationException, SecurityException, IOException {
-        this(new Configuration(LOCAL_CHANNEL));
+        this(Configuration.localOnly());
     }
 
     /**
