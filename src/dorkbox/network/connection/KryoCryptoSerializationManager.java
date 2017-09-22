@@ -325,8 +325,7 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
     }
 
     /**
-     * Objects that are accessed over RMI, must be accessed via an interface. This method configures the serialization of an
-     * implementation
+     * Objects that are accessed over RMI, must be accessed via an interface. This method configures the serialization of an implementation
      * to be serialized via the defined interface, as a RemoteObject (ie: proxy object). If the implementation class is ALREADY registered,
      * then it's registration will be overwritten by this one
      *
