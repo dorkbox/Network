@@ -42,6 +42,7 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
@@ -173,8 +174,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
                 tcpBootstrap.group(boss)
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                            .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
-                            .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                            .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .remoteAddress(options.host, options.tcpPort)
                             .handler(new RegistrationRemoteHandlerClientTCP<C>(threadName,
                                                                                registrationWrapper,
@@ -204,8 +204,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
                 udpBootstrap.group(boss)
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                            .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
-                            .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                            .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .localAddress(new InetSocketAddress(0))  // bind to wildcard
                             .remoteAddress(new InetSocketAddress(options.host, options.udpPort))
                             .handler(new RegistrationRemoteHandlerClientUDP<C>(threadName,
@@ -245,8 +244,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
                     udtBootstrap.group(udtBoss)
                                 .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                                .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
-                                .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                                .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                                 .remoteAddress(options.host, options.udtPort)
                                 .handler(new RegistrationRemoteHandlerClientUDT<C>(threadName,
                                                                                    registrationWrapper,
@@ -425,28 +423,28 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     }
 
     /**
-     * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be invoked remotely on the
-     * object with the specified ID in the ObjectSpace for the current connection.
+     * Returns a new proxy object that implements the specified interface. Methods invoked on the proxy object will be
+     * invoked remotely on the object with the specified ID in the ObjectSpace for the current connection.
      * <p/>
      * This will request a registration ID from the remote endpoint, <b>and will block</b> until the object has been returned.
      * <p/>
-     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
-     * RemoteObject#setResponseTimeout(int) response timeout}.
+     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the
+     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
      * <p/>
-     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must not be
-     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
-     * called on the update thread.
+     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must
+     * not be called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a
+     * void return value can be called on the update thread.
      * <p/>
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
-     * have the proxy object replaced with the registered (non-proxy) object.
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
      *
      * @see RemoteObject
      */
     @Override
     public
-    <Iface, Impl extends Iface> Iface createProxyObject(final Class<Impl> remoteImplementationClass) throws IOException {
+    <Iface> Iface getRemoteObject(final Class<Iface> interfaceClass) throws IOException {
         return this.connectionManager.getConnection0()
-                                     .createProxyObject(remoteImplementationClass);
+                                     .getRemoteObject(interfaceClass);
     }
 
     /**
@@ -469,9 +467,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     @Override
     public
-    <Iface, Impl extends Iface> Iface getProxyObject(final int objectId) throws IOException {
+    <Iface> Iface getRemoteObject(final int objectId) throws IOException {
         return this.connectionManager.getConnection0()
-                                     .getProxyObject(objectId);
+                                     .getRemoteObject(objectId);
     }
 
     /**

@@ -38,6 +38,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.EpollChannelOption;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -198,8 +199,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 localBootstrap.group(localBoss, localWorker)
                               .channel(LocalServerChannel.class)
                               .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                              .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
-                              .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                              .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                               .localAddress(new LocalAddress(localChannelName))
                               .childHandler(new RegistrationLocalHandlerServer<C>(threadName, registrationWrapper));
 
@@ -229,8 +229,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                         .option(ChannelOption.SO_REUSEADDR, true)
                         .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .childOption(ChannelOption.SO_KEEPALIVE, true)
-                        .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
-                        .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                         .childHandler(new RegistrationRemoteHandlerServerTCP<C>(threadName,
                                                                                 registrationWrapper,
                                                                                 serializationManager));
@@ -266,8 +265,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
 
             udpBootstrap.group(worker)
                         .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                        .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
-                        .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
 
                         // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
                         .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
@@ -301,8 +299,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
             udtBootstrap.group(udtBoss, udtWorker)
                         .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
                         .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                        .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, WRITE_BUFF_HIGH)
-                        .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, WRITE_BUFF_LOW)
+                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                         // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
                         .localAddress(udtPort)
                         .childHandler(new RegistrationRemoteHandlerServerUDT<C>(threadName,
