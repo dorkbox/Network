@@ -53,6 +53,7 @@ import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.objectPool.ObjectPool;
 import dorkbox.objectPool.PoolableObject;
 import dorkbox.util.Property;
+import dorkbox.util.SerializationManager;
 import dorkbox.util.serialization.ArraysAsListSerializer;
 import dorkbox.util.serialization.EccPrivateKeySerializer;
 import dorkbox.util.serialization.EccPublicKeySerializer;
@@ -272,12 +273,15 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public synchronized
-    void register(Class<?> clazz) {
+    SerializationManager register(Class<?> clazz) {
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class) call.");
         }
+        else {
+            classesToRegister.add(clazz);
+        }
 
-        classesToRegister.add(clazz);
+        return this;
     }
 
     /**
@@ -289,13 +293,15 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public synchronized
-    void register(Class<?> clazz, Serializer<?> serializer) {
+    SerializationManager register(Class<?> clazz, Serializer<?> serializer) {
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer) call.");
-            return;
+        }
+        else {
+            classSerializerToRegister.add(new ClassSerializer(clazz, serializer));
         }
 
-        classSerializerToRegister.add(new ClassSerializer(clazz, serializer));
+        return this;
     }
 
     /**
@@ -310,13 +316,15 @@ class KryoCryptoSerializationManager implements CryptoSerializationManager {
      */
     @Override
     public synchronized
-    void register(Class<?> clazz, Serializer<?> serializer, int id) {
+    SerializationManager register(Class<?> clazz, Serializer<?> serializer, int id) {
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer, int) call.");
-            return;
+        }
+        else {
+            classSerializer2ToRegister.add(new ClassSerializer2(clazz, serializer, id));
         }
 
-        classSerializer2ToRegister.add(new ClassSerializer2(clazz, serializer, id));
+        return this;
     }
 
     /**
