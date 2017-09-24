@@ -15,6 +15,19 @@
  */
 package dorkbox.network.connection;
 
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.LinkedList;
+import java.util.Map;
+import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.bouncycastle.crypto.params.ParametersWithIV;
+import org.slf4j.Logger;
+
+import com.esotericsoftware.kryo.Registration;
+
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
@@ -27,8 +40,11 @@ import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.rmi.RMI;
 import dorkbox.network.rmi.RemoteObject;
-import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.rmi.RemoteObjectCallback;
+import dorkbox.network.rmi.RmiImplHandler;
 import dorkbox.network.rmi.RmiRegistration;
+import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.util.collections.IntMap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -43,18 +59,6 @@ import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Promise;
-import org.bouncycastle.crypto.params.ParametersWithIV;
-import org.slf4j.Logger;
-
-import java.io.IOException;
-import java.lang.reflect.Field;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.WeakHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -79,7 +83,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     private final AtomicBoolean messageInProgress = new AtomicBoolean(false);
 
     private ISessionManager<Connection> sessionManager;
-    private ChannelWrapper channelWrapper;
+    private ChannelWrapper<Connection> channelWrapper;
     private boolean isLoopback;
 
     private volatile PingFuture pingFuture = null;
@@ -96,26 +100,28 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     // back to the network stack
     private boolean closeAsap = false;
 
-    private volatile ObjectRegistrationLatch objectRegistrationLatch;
-    private final Object remoteObjectLock = new Object();
-    private final RmiBridge rmiBridge;
-
-    private final Map<Integer, RemoteObject> proxyIdCache = Collections.synchronizedMap(new WeakHashMap<Integer, RemoteObject>(8));
-
     // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
     // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
     // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
     private final AtomicLong aes_gcm_iv = new AtomicLong(0);
 
+    //
+    // RMI fields
+    //
+    private final RmiImplHandler rmiImplHandler;
+    private final Map<Integer, RemoteObject> proxyIdCache = new WeakHashMap<Integer, RemoteObject>(8);
+    private final IntMap<RemoteObjectCallback> rmiRegistrationCallbacks = new IntMap<>();
+    private int rmiRegistrationID = 0; // protected by synchronized (rmiRegistrationCallbacks)
+
     /**
      * All of the parameters can be null, when metaChannel wants to get the base class type
      */
-    @SuppressWarnings("rawtypes")
+    @SuppressWarnings({"rawtypes", "unchecked"})
     public
-    ConnectionImpl(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+    ConnectionImpl(final Logger logger, final EndPoint endPoint, final RmiImplHandler rmiImplHandler) {
         this.logger = logger;
         this.endPoint = endPoint;
-        this.rmiBridge = rmiBridge;
+        this.rmiImplHandler = rmiImplHandler;
     }
 
     /**
@@ -123,6 +129,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      * <p/>
      * This happens BEFORE prep.
      */
+    @SuppressWarnings("unchecked")
     void init(final ChannelWrapper channelWrapper, final ConnectionManager<Connection> sessionManager) {
         this.sessionManager = sessionManager;
         this.channelWrapper = channelWrapper;
@@ -155,6 +162,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
      *          clobber each other
      */
+    @Override
     public final
     ParametersWithIV getCryptoParameters() {
         return this.channelWrapper.cryptoParameters();
@@ -167,6 +175,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      *  The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
      *  counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
      */
+    @Override
     public final
     long getNextGcmSequence() {
         return aes_gcm_iv.getAndIncrement();
@@ -950,103 +959,145 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     // RMI methods
     //
 
-
-    @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked"})
-    @Override
-    public final
-    <Iface, Impl extends Iface> Iface createProxyObject(final Class<Impl> remoteImplementationClass) throws IOException {
-        // only one register can happen at a time
-        synchronized (remoteObjectLock) {
-            objectRegistrationLatch = new ObjectRegistrationLatch();
-
-            // since this synchronous, we want to wait for the response before we continue
-            // this means we are creating a NEW object on the server, bound access to only this connection
-            TCP(new RmiRegistration(remoteImplementationClass.getName())).flush();
-
-            //noinspection Duplicates
+    /**
+     * Internal call CLIENT ONLY.
+     * <p>
+     * RMI methods are usually created during the connection phase. We should wait until they are finished
+     */
+    void waitForRmi(final int connectionTimeout) {
+        synchronized (rmiRegistrationCallbacks) {
             try {
-                if (!objectRegistrationLatch.latch.await(2, TimeUnit.SECONDS)) {
-                    final String errorMessage = "Timed out getting registration ID for: " + remoteImplementationClass;
-                    logger.error(errorMessage);
-                    throw new IOException(errorMessage);
-                }
+                rmiRegistrationCallbacks.wait(connectionTimeout);
             } catch (InterruptedException e) {
-                final String errorMessage = "Error getting registration ID for: " + remoteImplementationClass;
-                logger.error(errorMessage, e);
-                throw new IOException(errorMessage, e);
+                logger.error("Interrupted waiting for RMI to finish.", e);
             }
-
-            // local var to prevent double hit on volatile field
-            final ObjectRegistrationLatch latch = objectRegistrationLatch;
-            if (latch.hasError) {
-                final String errorMessage = "Error getting registration ID for: " + remoteImplementationClass;
-                logger.error(errorMessage);
-                throw new IOException(errorMessage);
-            }
-
-            return (Iface) latch.remoteObject;
         }
     }
 
-    @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked"})
-    @Override
-    public final
-    <Iface, Impl extends Iface> Iface getProxyObject(final int objectId) throws IOException {
-        // only one register can happen at a time
-        synchronized (remoteObjectLock) {
-            objectRegistrationLatch = new ObjectRegistrationLatch();
-
-            // since this synchronous, we want to wait for the response before we continue
-            // this means that we are ACCESSING a remote object on the server, the server checks GLOBAL, then LOCAL for this object
-            TCP(new RmiRegistration(objectId)).flush();
-
-            //noinspection Duplicates
-            try {
-                if (!objectRegistrationLatch.latch.await(2, TimeUnit.SECONDS)) {
-                    final String errorMessage = "Timed out getting registration for ID: " + objectId;
-                    logger.error(errorMessage);
-                    throw new IOException(errorMessage);
-                }
-            } catch (InterruptedException e) {
-                final String errorMessage = "Error getting registration for ID: " + objectId;
-                logger.error(errorMessage, e);
-                throw new IOException(errorMessage, e);
-            }
-
-            // local var to prevent double hit on volatile field
-            final ObjectRegistrationLatch latch = objectRegistrationLatch;
-            if (latch.hasError) {
-                final String errorMessage = "Error getting registration for ID: " + objectId;
-                logger.error(errorMessage);
-                throw new IOException(errorMessage);
-            }
-
-            return (Iface) latch.remoteObject;
+    /**
+     * Internal call CLIENT ONLY.
+     * <p>
+     * RMI methods are usually created during the connection phase. If there are none, we should unblock the waiting client.connect().
+     */
+    boolean rmiCallbacksIsEmpty() {
+        synchronized (rmiRegistrationCallbacks) {
+            return rmiRegistrationCallbacks.size == 0;
         }
     }
 
+    /**
+     * Internal call CLIENT ONLY.
+     * <p>
+     * RMI methods are usually created during the connection phase. If there are none, we should unblock the waiting client.connect().
+     */
+    void rmiCallbacksNotify() {
+        synchronized (rmiRegistrationCallbacks) {
+            rmiRegistrationCallbacks.notify();
+        }
+    }
+
+    /**
+     * Internal call CLIENT ONLY.
+     * <p>
+     * RMI methods are usually created during the connection phase. If there are none, we should unblock the waiting client.connect().
+     */
+    private
+    void rmiCallbacksNotifyIfEmpty() {
+        synchronized (rmiRegistrationCallbacks) {
+            if (rmiRegistrationCallbacks.size == 0) {
+                rmiRegistrationCallbacks.notify();
+            }
+        }
+    }
+
+
+    @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked", "Duplicates"})
+    @Override
+    public final
+    <Iface> void getRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) throws IOException {
+        if (!interfaceClass.isInterface()) {
+            throw new IllegalArgumentException("Cannot create a proxy for RMI access. It must be an interface.");
+        }
+
+        RmiRegistration message;
+
+        synchronized (rmiRegistrationCallbacks) {
+            int nextRmiID = rmiRegistrationID++;
+            rmiRegistrationCallbacks.put(nextRmiID, callback);
+            message = new RmiRegistration(interfaceClass, nextRmiID);
+        }
+
+        // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
+        // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
+
+        // this means we are creating a NEW object on the server, bound access to only this connection
+        TCP(message).flush();
+    }
+
+    @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked", "Duplicates"})
+    @Override
+    public final
+    <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) throws IOException {
+        RmiRegistration message;
+
+        synchronized (rmiRegistrationCallbacks) {
+            int nextRmiID = rmiRegistrationID++;
+            rmiRegistrationCallbacks.put(nextRmiID, callback);
+            message = new RmiRegistration(objectId, nextRmiID);
+        }
+
+        // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
+        // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
+
+        // this means we are creating a NEW object on the server, bound access to only this connection
+        TCP(message).flush();
+    }
+
+    final
     void registerInternal(final ConnectionImpl connection, final RmiRegistration remoteRegistration) {
-        final String implementationClassName = remoteRegistration.remoteImplementationClass;
+        final Class<?> interfaceClass = remoteRegistration.interfaceClass;
+        final int rmiID = remoteRegistration.rmiID;
 
-
-        if (implementationClassName != null) {
+        if (interfaceClass != null) {
             // THIS IS ON THE REMOTE CONNECTION (where the object will really exist)
             //
             // CREATE a new ID, and register the ID and new object (must create a new one) in the object maps
-
             Class<?> implementationClass;
 
-            try {
-                implementationClass = Class.forName(implementationClassName);
-            } catch (Exception e) {
-                logger.error("Error registering RMI class " + implementationClassName, e);
-                connection.TCP(new RmiRegistration()).flush();
+            // have to find the implementation from the specified interface
+            CryptoSerializationManager manager = getEndPoint().serializationManager;
+            KryoExtra kryo = manager.takeKryo();
+            Registration registration = kryo.getRegistration(interfaceClass);
+
+
+            if (registration == null) {
+                // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
+                manager.returnKryo(kryo);
+
+                logger.error("Error getting RMI class interface for " + interfaceClass);
+                connection.TCP(new RmiRegistration(rmiID)).flush();
+                return;
+            }
+
+
+            implementationClass = manager.getRmiImpl(registration.getId());
+            if (implementationClass == null) {
+                // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
+                manager.returnKryo(kryo);
+
+                logger.error("Error getting RMI class implementation for " + interfaceClass);
+                connection.TCP(new RmiRegistration(rmiID)).flush();
                 return;
             }
 
             try {
-                final Object remotePrimaryObject = implementationClass.newInstance();
-                rmiBridge.register(rmiBridge.nextObjectId(), remotePrimaryObject);
+                // this is what creates a new instance of the impl class, and stores it as an ID.
+                final Object remotePrimaryObject = kryo.newInstance(implementationClass);
+
+                // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
+                manager.returnKryo(kryo);
+
+                rmiImplHandler.register(rmiImplHandler.nextObjectId(), remotePrimaryObject);
 
                 LinkedList<ClassObject> remoteClasses = new LinkedList<ClassObject>();
                 remoteClasses.add(new ClassObject(implementationClass, remotePrimaryObject));
@@ -1063,43 +1114,46 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
                             final Class<?> type = field.getType();
 
-                            rmiBridge.register(rmiBridge.nextObjectId(), o);
+                            rmiImplHandler.register(rmiImplHandler.nextObjectId(), o);
                             remoteClasses.offerLast(new ClassObject(type, o));
                         }
                     }
                 }
 
-                connection.TCP(new RmiRegistration(remotePrimaryObject)).flush();
+                connection.TCP(new RmiRegistration(remotePrimaryObject, rmiID)).flush();
             } catch (Exception e) {
-                logger.error("Error registering RMI class " + implementationClassName, e);
-                connection.TCP(new RmiRegistration()).flush();
+                logger.error("Error registering RMI class " + implementationClass, e);
+                connection.TCP(new RmiRegistration(rmiID)).flush();
             }
         }
-        else if (remoteRegistration.remoteObjectId > RmiBridge.INVALID_RMI) {
+        else if (remoteRegistration.remoteObjectId > RmiImplHandler.INVALID_RMI) {
             // THIS IS ON THE REMOTE CONNECTION (where the object will really exist)
             //
             // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
             Object object = getImplementationObject(remoteRegistration.remoteObjectId);
 
             if (object != null) {
-                connection.TCP(new RmiRegistration(object)).flush();
+                connection.TCP(new RmiRegistration(object, rmiID)).flush();
             } else {
-                connection.TCP(new RmiRegistration()).flush();
+                connection.TCP(new RmiRegistration(rmiID)).flush();
             }
         }
         else {
-            // THIS IS ON THE LOCAL CONNECTION (that sent the 'create proxy object') SIDE
+            // THIS IS ON THE LOCAL CONNECTION SIDE, which is the side that called 'getRemoteObject()'
 
-            // the next two use a local var, so that there isn't a double hit for volatile access
-            final ObjectRegistrationLatch latch = this.objectRegistrationLatch;
-            latch.hasError = remoteRegistration.hasError;
+            // this will be null if there was an error
+            Object remoteObject = remoteRegistration.remoteObject;
 
-            if (!remoteRegistration.hasError) {
-                latch.remoteObject = remoteRegistration.remoteObject;
+            RemoteObjectCallback callback;
+            synchronized (rmiRegistrationCallbacks) {
+                callback = rmiRegistrationCallbacks.remove(remoteRegistration.rmiID);
             }
 
-            // notify the original register that it may continue. We access the volatile field directly, so that it's members are updated
-            objectRegistrationLatch.latch.countDown();
+            //noinspection unchecked
+            callback.created(remoteObject);
+
+            // tell the client that we are finished with all RMI callbacks
+            rmiCallbacksNotifyIfEmpty();
         }
     }
 
@@ -1109,18 +1163,19 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      * @return the registered ID for a specific object. This is used by the "local" side when setting up the to fetch an object for the
      * "remote" side for RMI
      */
+    @Override
     public
     <T> int getRegisteredId(final T object) {
         // always check local before checking global, because less contention on the synchronization
-        RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
+        RmiImplHandler globalRmiImplHandler = endPoint.globalRmiImplHandler;
 
-        if (globalRmiBridge == null) {
-            throw new NullPointerException("Unable to call 'getRegisteredId' when the globalRmiBridge is null!");
+        if (globalRmiImplHandler == null) {
+            throw new NullPointerException("Unable to call 'getRegisteredId' when the globalRmiImplHandler is null!");
         }
 
-        int object1 = globalRmiBridge.getRegisteredId(object);
+        int object1 = globalRmiImplHandler.getRegisteredId(object);
         if (object1 == Integer.MAX_VALUE) {
-            return rmiBridge.getRegisteredId(object);
+            return rmiImplHandler.getRegisteredId(object);
         } else {
             return object1;
         }
@@ -1131,36 +1186,40 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      *
      * @param type must be the interface the proxy will bind to
      */
+    @Override
     public
     RemoteObject getProxyObject(final int objectID, final Class<?> type) {
-        // we want to have a connection specific cache of IDs, using weak references.
-        // because this is PER CONNECTION, this is safe.
-        RemoteObject remoteObject = proxyIdCache.get(objectID);
+        synchronized (proxyIdCache) {
+            // we want to have a connection specific cache of IDs, using weak references.
+            // because this is PER CONNECTION, this is safe.
+            RemoteObject remoteObject = proxyIdCache.get(objectID);
 
-        if (remoteObject == null) {
-            // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-            remoteObject = rmiBridge.createProxyObject(this, objectID, type);
-            proxyIdCache.put(objectID, remoteObject);
+            if (remoteObject == null) {
+                // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
+                remoteObject = rmiImplHandler.createProxyObject(this, objectID, type);
+                proxyIdCache.put(objectID, remoteObject);
+            }
+
+            return remoteObject;
         }
-
-        return remoteObject;
     }
 
     /**
      * This is used by RMI for the REMOTE side, to get the implementation
      */
+    @Override
     public
     Object getImplementationObject(final int objectID) {
-        if (RmiBridge.isGlobal(objectID)) {
-            RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
+        if (RmiImplHandler.isGlobal(objectID)) {
+            RmiImplHandler globalRmiImplHandler = endPoint.globalRmiImplHandler;
 
-            if (globalRmiBridge == null) {
+            if (globalRmiImplHandler == null) {
                 throw new NullPointerException("Unable to call 'getRegisteredId' when the gloablRmiBridge is null!");
             }
 
-            return globalRmiBridge.getRegisteredObject(objectID);
+            return globalRmiImplHandler.getRegisteredObject(objectID);
         } else {
-            return rmiBridge.getRegisteredObject(objectID);
+            return rmiImplHandler.getRegisteredObject(objectID);
         }
     }
 }

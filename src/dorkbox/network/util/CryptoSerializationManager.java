@@ -15,18 +15,17 @@
  */
 package dorkbox.network.util;
 
-import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.util.SerializationManager;
-import io.netty.buffer.ByteBuf;
-
 import java.io.IOException;
+
+import dorkbox.network.connection.ConnectionImpl;
+import io.netty.buffer.ByteBuf;
 
 /**
  * Threads reading/writing, it messes up a single instance. it is possible to use a single kryo with the use of synchronize, however - that
  * defeats the point of multi-threaded
  */
 public
-interface CryptoSerializationManager extends SerializationManager, RMISerializationManager {
+interface CryptoSerializationManager extends RmiSerializationManager {
 
     /**
      * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
@@ -46,5 +45,4 @@ interface CryptoSerializationManager extends SerializationManager, RMISerializat
      *                 should ALWAYS be the length of the expected object!
      */
     Object readWithCrypto(ConnectionImpl connection, ByteBuf buffer, int length) throws IOException;
-
 }

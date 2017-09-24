@@ -29,10 +29,10 @@ import org.junit.Test;
 
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.KryoCryptoSerializationManager;
+import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -56,7 +56,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
@@ -67,7 +67,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.UDP);
@@ -78,7 +78,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udtPort = udtPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.UDT);
@@ -164,7 +164,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         data.Booleans = new Boolean[] {true, false};
     }
 
-    private void register (CryptoSerializationManager manager) {
+    private void register (SerializationManager manager) {
         manager.register(int[].class);
         manager.register(short[].class);
         manager.register(float[].class);

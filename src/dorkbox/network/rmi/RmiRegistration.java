@@ -21,32 +21,48 @@ package dorkbox.network.rmi;
 public
 class RmiRegistration {
     public Object remoteObject;
-    public String remoteImplementationClass;
-    public boolean hasError;
+    public Class<?> interfaceClass;
 
     // this is used to get specific, GLOBAL rmi objects (objects that are not bound to a single connection)
     public int remoteObjectId;
 
-    public
+    public int rmiID;
+
+    @SuppressWarnings("unused")
+    private
     RmiRegistration() {
-        hasError = true;
+        // for serialization
     }
 
+    // When requesting a new remote object to be created.
+    // SENT FROM "client" -> "server"
     public
-    RmiRegistration(final String remoteImplementationClass) {
-        this.remoteImplementationClass = remoteImplementationClass;
-        hasError = false;
+    RmiRegistration(final Class<?> interfaceClass, final int rmiID) {
+        this.interfaceClass = interfaceClass;
+        this.rmiID = rmiID;
     }
 
+    // When requesting a new remote object to be created.
+    // SENT FROM "client" -> "server"
     public
-    RmiRegistration(final Object remoteObject) {
-        this.remoteObject = remoteObject;
-        hasError = false;
-    }
-
-    public
-    RmiRegistration(final int remoteObjectId) {
+    RmiRegistration(final int remoteObjectId, final int rmiID) {
         this.remoteObjectId = remoteObjectId;
-        hasError = false;
+        this.rmiID = rmiID;
+    }
+
+
+    // When there was an error creating the remote object.
+    // SENT FROM "server" -> "client"
+    public
+    RmiRegistration(final int rmiID) {
+        this.rmiID = rmiID;
+    }
+
+    // This is when we successfully created a new object
+    // SENT FROM "server" -> "client"
+    public
+    RmiRegistration(final Object remoteObject, final int rmiID) {
+        this.remoteObject = remoteObject;
+        this.rmiID = rmiID;
     }
 }

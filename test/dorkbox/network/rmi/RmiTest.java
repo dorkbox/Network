@@ -40,171 +40,209 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
+import org.slf4j.LoggerFactory;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
+import ch.qos.logback.classic.joran.JoranConfigurator;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.ConsoleAppender;
 import dorkbox.network.BaseTest;
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.KryoCryptoSerializationManager;
+import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.ListenerBridge;
-import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
+import io.netty.util.ResourceLeakDetector;
 
 public
 class RmiTest extends BaseTest {
 
-    private static
-    void runTest(final Connection connection, final int remoteObjectID) {
-        new Thread() {
-            @Override
-            public
-            void run() {
-                try {
-                    TestObject test = connection.createProxyObject(TestObjectImpl.class);
+    public static
+    void runTests(final Connection connection, final TestObject test, final int remoteObjectID) {
+        RemoteObject remoteObject = (RemoteObject) test;
 
-                    //TestObject test = connection.getRemoteObject(id, TestObject.class);
-                    RemoteObject remoteObject = (RemoteObject) test;
+        // Default behavior. RMI is transparent, method calls behave like normal
+        // (return values and exceptions are returned, call is synchronous)
+        System.err.println("hashCode: " + test.hashCode());
+        System.err.println("toString: " + test.toString());
 
-                    // Default behavior. RMI is transparent, method calls behave like normal
-                    // (return values and exceptions are returned, call is synchronous)
-                    System.err.println("hashCode: " + test.hashCode());
-                    System.err.println("toString: " + test);
+        // see what the "remote" toString() method is
+        final String s = remoteObject.toString();
+        remoteObject.enableToString(true);
+        assertFalse(s.equals(remoteObject.toString()));
 
-                    // see what the "remote" toString() method is
-                    final String s = remoteObject.toString();
-                    remoteObject.enableToString(true);
-                    assertFalse(s.equals(remoteObject.toString()));
-
-                    test.moo();
-                    test.moo("Cow");
-                    assertEquals(remoteObjectID, test.id());
+        test.moo();
+        test.moo("Cow");
+        assertEquals(remoteObjectID, test.id());
 
 
-                    // UDP calls that ignore the return value
-                    remoteObject.setUDP();
-                    remoteObject.setAsync(true);
-                    remoteObject.setTransmitReturnValue(false);
-                    remoteObject.setTransmitExceptions(false);
-                    test.moo("Meow");
-                    assertEquals(0, test.id());
-                    remoteObject.setAsync(false);
-                    remoteObject.setTransmitReturnValue(true);
-                    remoteObject.setTransmitExceptions(true);
-                    remoteObject.setTCP();
+        // UDP calls that ignore the return value
+        remoteObject.setUDP();
+        remoteObject.setAsync(true);
+        remoteObject.setTransmitReturnValue(false);
+        remoteObject.setTransmitExceptions(false);
+        test.moo("Meow");
+        assertEquals(0, test.id());
+
+        remoteObject.setAsync(false);
+        remoteObject.setTransmitReturnValue(true);
+        remoteObject.setTransmitExceptions(true);
+        remoteObject.setTCP();
 
 
-                    // Test that RMI correctly waits for the remotely invoked method to exit
-                    remoteObject.setResponseTimeout(5000);
-                    test.moo("You should see this two seconds before...", 2000);
-                    System.out.println("...This");
-                    remoteObject.setResponseTimeout(3000);
+        // Test that RMI correctly waits for the remotely invoked method to exit
+        remoteObject.setResponseTimeout(5000);
+        test.moo("You should see this two seconds before...", 2000);
+        System.out.println("...This");
+        remoteObject.setResponseTimeout(3000);
 
-                    // Try exception handling
-                    boolean caught = false;
-                    try {
-                        test.throwException();
-                    } catch (UnsupportedOperationException ex) {
-                        System.err.println("\tExpected.");
-                        caught = true;
-                    }
-                    assertTrue(caught);
-
-
-                    // Return values are ignored, but exceptions are still dealt with properly
-                    remoteObject.setTransmitReturnValue(false);
-                    test.moo("Baa");
-                    test.id();
-                    caught = false;
-                    try {
-                        test.throwException();
-                    } catch (UnsupportedOperationException ex) {
-                        caught = true;
-                    }
-                    assertTrue(caught);
-
-                    // Non-blocking call that ignores the return value
-                    remoteObject.setAsync(true);
-                    remoteObject.setTransmitReturnValue(false);
-                    test.moo("Meow");
-                    assertEquals(0, test.id());
-
-                    // Non-blocking call that returns the return value
-                    remoteObject.setTransmitReturnValue(true);
-                    test.moo("Foo");
-
-                    assertEquals(0, test.id());
-                    // wait for the response to id()
-                    assertEquals(remoteObjectID, remoteObject.waitForLastResponse());
-
-                    assertEquals(0, test.id());
-                    byte responseID = remoteObject.getLastResponseID();
-                    // wait for the response to id()
-                    assertEquals(remoteObjectID, remoteObject.waitForResponse(responseID));
-
-                    // Non-blocking call that errors out
-                    remoteObject.setTransmitReturnValue(false);
-                    test.throwException();
-                    assertEquals(remoteObject.waitForLastResponse()
-                                             .getClass(), UnsupportedOperationException.class);
-
-                    // Call will time out if non-blocking isn't working properly
-                    remoteObject.setTransmitExceptions(false);
-                    test.moo("Mooooooooo", 3000);
-
-                    // should wait for a small time
-                    remoteObject.setTransmitReturnValue(true);
-                    remoteObject.setAsync(false);
-                    remoteObject.setResponseTimeout(6000);
-                    System.out.println("You should see this 2 seconds before");
-                    float slow = test.slow();
-                    System.out.println("...This");
-                    assertEquals(slow, 123, 0.0001D);
+        // Try exception handling
+        boolean caught = false;
+        try {
+            test.throwException();
+        } catch (UnsupportedOperationException ex) {
+            System.err.println("\tExpected.");
+            caught = true;
+        }
+        assertTrue(caught);
 
 
-                    // Test sending a reference to a remote object.
-                    MessageWithTestObject m = new MessageWithTestObject();
-                    m.number = 678;
-                    m.text = "sometext";
-                    m.testObject = test;
-                    connection.send()
-                              .TCP(m)
-                              .flush();
+        // Return values are ignored, but exceptions are still dealt with properly
+        remoteObject.setTransmitReturnValue(false);
+        test.moo("Baa");
+        test.id();
+        caught = false;
+        try {
+            test.throwException();
+        } catch (UnsupportedOperationException ex) {
+            caught = true;
+        }
+        assertTrue(caught);
 
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    fail();
-                }
-            }
-        }.start();
+        // Non-blocking call that ignores the return value
+        remoteObject.setAsync(true);
+        remoteObject.setTransmitReturnValue(false);
+        test.moo("Meow");
+        assertEquals(0, test.id());
+
+        // Non-blocking call that returns the return value
+        remoteObject.setTransmitReturnValue(true);
+        test.moo("Foo");
+
+        assertEquals(0, test.id());
+        // wait for the response to id()
+        assertEquals(remoteObjectID, remoteObject.waitForLastResponse());
+
+        assertEquals(0, test.id());
+        byte responseID = remoteObject.getLastResponseID();
+        // wait for the response to id()
+        assertEquals(remoteObjectID, remoteObject.waitForResponse(responseID));
+
+        // Non-blocking call that errors out
+        remoteObject.setTransmitReturnValue(false);
+        test.throwException();
+        assertEquals(remoteObject.waitForLastResponse()
+                                 .getClass(), UnsupportedOperationException.class);
+
+        // Call will time out if non-blocking isn't working properly
+        remoteObject.setTransmitExceptions(false);
+        test.moo("Mooooooooo", 3000);
+
+        // should wait for a small time
+        remoteObject.setTransmitReturnValue(true);
+        remoteObject.setAsync(false);
+        remoteObject.setResponseTimeout(6000);
+        System.out.println("You should see this 2 seconds before");
+        float slow = test.slow();
+        System.out.println("...This");
+        assertEquals(slow, 123, 0.0001D);
+
+
+        // Test sending a reference to a remote object.
+        MessageWithTestObject m = new MessageWithTestObject();
+        m.number = 678;
+        m.text = "sometext";
+        m.testObject = test;
+        connection.send()
+                  .TCP(m)
+                  .flush();
+
     }
 
     public static
-    void register(CryptoSerializationManager manager) {
+    void register(dorkbox.network.util.CryptoSerializationManager manager) {
         manager.register(Object.class); // Needed for Object#toString, hashCode, etc.
-
-        manager.registerRemote(TestObject.class, TestObjectImpl.class);
         manager.register(MessageWithTestObject.class);
-
         manager.register(UnsupportedOperationException.class);
     }
 
     @Test
     public
     void rmi() throws InitializationException, SecurityException, IOException, InterruptedException {
+        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
+
+        // assume SLF4J is bound to logback in the current environment
+        Logger rootLogger = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        LoggerContext context = rootLogger.getLoggerContext();
+
+        JoranConfigurator jc = new JoranConfigurator();
+        jc.setContext(context);
+        context.reset(); // override default configuration
+
+//        rootLogger.setLevel(Level.OFF);
+
+        // rootLogger.setLevel(Level.DEBUG);
+       rootLogger.setLevel(Level.TRACE);
+//        rootLogger.setLevel(Level.ALL);
+
+
+        // we only want error messages
+        Logger nettyLogger = (Logger) LoggerFactory.getLogger("io.netty");
+        nettyLogger.setLevel(Level.ERROR);
+
+        // we only want error messages
+        Logger kryoLogger = (Logger) LoggerFactory.getLogger("com.esotericsoftware");
+        // kryoLogger.setLevel(Level.TRACE);
+        kryoLogger.setLevel(Level.ERROR);
+
+        // we only want error messages
+        Logger barchartLogger = (Logger) LoggerFactory.getLogger("com.barchart");
+        barchartLogger.setLevel(Level.ERROR);
+
+        PatternLayoutEncoder encoder = new PatternLayoutEncoder();
+        encoder.setContext(context);
+        encoder.setPattern("%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n");
+        encoder.start();
+
+        ConsoleAppender<ILoggingEvent> consoleAppender = new ch.qos.logback.core.ConsoleAppender<ILoggingEvent>();
+
+        consoleAppender.setContext(context);
+        consoleAppender.setEncoder(encoder);
+        consoleAppender.start();
+
+        rootLogger.addAppender(consoleAppender);
+
+
+
+
+
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
 
-        configuration.rmiEnabled = true;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
+        configuration.serialization.registerRmiImplementation(TestObject.class, TestObjectImpl.class);
 
 
         final Server server = new Server(configuration);
@@ -214,16 +252,7 @@ class RmiTest extends BaseTest {
         server.bind(false);
 
         final ListenerBridge listeners = server.listeners();
-        listeners.add(new Listener.OnConnected<Connection>() {
-            @Override
-            public
-            void connected(final Connection connection) {
-                System.err.println("Starting test for: Server -> Client");
-                RmiTest.runTest(connection, 1);
-            }
-        });
         listeners.add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
-
             @Override
             public
             void received(Connection connection, MessageWithTestObject m) {
@@ -234,16 +263,54 @@ class RmiTest extends BaseTest {
 
                 stopEndPoints(2000);
             }
-
         });
 
 
         // ----
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
+
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+        configuration.serialization.registerRmiInterface(TestObject.class);
+
 
         final Client client = new Client(configuration);
         client.setIdleTimeout(0);
 
         addEndPoint(client);
+
+
+        client.listeners().add(new Listener.OnConnected<Connection>() {
+            @Override
+            public
+            void connected(final Connection connection) {
+                System.err.println("Starting test for: Client -> Server");
+
+                try {
+                    // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
+                    connection.getRemoteObject(TestObject.class, new RemoteObjectCallback<TestObject>() {
+                        @Override
+                        public
+                        void created(final TestObject remoteObject) {
+                            new Thread() {
+                                @Override
+                                public
+                                void run() {
+                                    // MUST run on a separate thread because remote object method invocations are blocking
+                                    runTests(connection, remoteObject, 1);
+                                }
+                            }.start();
+                        }
+                    });
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    fail();
+                }
+            }
+        });
 
         client.listeners()
               .add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
@@ -255,130 +322,22 @@ class RmiTest extends BaseTest {
                       assertEquals(1, id);
                       System.err.println("Server -> Client Finished!");
 
-                      System.err.println("Starting test for: Client -> Server");
-                      // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
-                      runTest(connection, 2);
+                      // System.err.println("Starting test for: Client -> Server");
+                      // System.err.println("Starting test for: Server -> Client");
+                      //
+                      // // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
+                      // try {
+                      //     // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
+                      //     connection.getRemoteObject(TestObjectImpl.class, remoteObject->runTest(connection, remoteObject, 2));
+                      // } catch (IOException e) {
+                      //     e.printStackTrace();
+                      //     fail();
+                      // }
                   }
               });
 
         client.connect(5000);
 
         waitForThreads();
-    }
-
-    public
-    interface TestObject {
-        void throwException();
-
-        void moo();
-
-        void moo(String value);
-
-        void moo(String value, long delay);
-
-        int id();
-
-        float slow();
-    }
-
-
-    public static
-    class TestObjectImpl implements TestObject {
-        // has to start at 1, because UDP/UDT method invocations ignore return values
-        static final AtomicInteger ID_COUNTER = new AtomicInteger(1);
-
-        public long value = System.currentTimeMillis();
-        public int moos;
-        private final int id = ID_COUNTER.getAndIncrement();
-
-        public
-        TestObjectImpl() {
-        }
-
-        @Override
-        public
-        void throwException() {
-            throw new UnsupportedOperationException("Why would I do that?");
-        }
-
-        @Override
-        public
-        void moo() {
-            this.moos++;
-            System.out.println("Moo!");
-        }
-
-        @Override
-        public
-        void moo(String value) {
-            this.moos += 2;
-            System.out.println("Moo: " + value);
-        }
-
-        @Override
-        public
-        void moo(String value, long delay) {
-            this.moos += 4;
-            System.out.println("Moo: " + value + " (" + delay + ")");
-            try {
-                Thread.sleep(delay);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-
-        @Override
-        public
-        int id() {
-            return id;
-        }
-
-        @Override
-        public
-        float slow() {
-            System.out.println("Slowdown!!");
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            return 123.0F;
-        }
-
-        @Override
-        public
-        boolean equals(final Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-
-            final TestObjectImpl that = (TestObjectImpl) o;
-
-            return id == that.id;
-
-        }
-
-        @Override
-        public
-        int hashCode() {
-            return id;
-        }
-
-        @Override
-        public
-        String toString() {
-            return "Tada! This is a remote object!";
-        }
-    }
-
-
-    public static
-    class MessageWithTestObject implements RmiMessages {
-        public int number;
-        public String text;
-        public TestObject testObject;
     }
 }

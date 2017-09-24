@@ -31,6 +31,7 @@ import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerC
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDT;
 import dorkbox.network.rmi.RemoteObject;
+import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.TimeoutException;
 import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
@@ -329,9 +330,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
             }
         }
 
-        connection = this.connectionManager.getConnection0();
+        // RMI methods are usually created during the connection phase. We should wait until they are finished
+        waitForRmi(connectionTimeout);
     }
-
 
     @Override
     public
@@ -423,11 +424,12 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     }
 
     /**
-     * Returns a new proxy object that implements the specified interface. Methods invoked on the proxy object will be
-     * invoked remotely on the object with the specified ID in the ObjectSpace for the current connection.
-     * <p/>
-     * This will request a registration ID from the remote endpoint, <b>and will block</b> until the object has been returned.
-     * <p/>
+     * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
+     * to an object that is created remotely.
+     * <p>
+     * The callback will be notified when the remote object has been created.
+     * <p>
+     * <p>
      * Methods that return a value will throw {@link TimeoutException} if the response is not received with the
      * {@link RemoteObject#setResponseTimeout(int) response timeout}.
      * <p/>
@@ -437,39 +439,44 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * <p/>
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
+     * <p>
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `RemoteObject remoteObject = (RemoteObject) test;`
      *
      * @see RemoteObject
      */
     @Override
     public
-    <Iface> Iface getRemoteObject(final Class<Iface> interfaceClass) throws IOException {
-        return this.connectionManager.getConnection0()
-                                     .getRemoteObject(interfaceClass);
+    <Iface> void getRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) throws IOException {
+        this.connectionManager.getConnection0().getRemoteObject(interfaceClass, callback);
     }
 
     /**
-     * Returns a new proxy object implements the specified interface. Methods invoked on the proxy object will be invoked remotely on the
-     * object with the specified ID in the ObjectSpace for the current connection.
+     * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
+     * to an object that is created remotely.
+     * <p>
+     * The callback will be notified when the remote object has been created.
+     * <p>
+     * <p>
+     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the
+     * {@link RemoteObject#setResponseTimeout(int) response timeout}.
      * <p/>
-     * This will REUSE a registration ID from the remote endpoint, <b>and will block</b> until the object has been returned.
+     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must
+     * not be called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a
+     * void return value can be called on the update thread.
      * <p/>
-     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
-     * RemoteObject#setResponseTimeout(int) response timeout}.
-     * <p/>
-     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must not be
-     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
-     * called on the update thread.
-     * <p/>
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
-     * have the proxy object replaced with the registered (non-proxy) object.
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     * <p>
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `RemoteObject remoteObject = (RemoteObject) test;`
      *
      * @see RemoteObject
      */
     @Override
     public
-    <Iface> Iface getRemoteObject(final int objectId) throws IOException {
-        return this.connectionManager.getConnection0()
-                                     .getRemoteObject(objectId);
+    <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) throws IOException {
+        this.connectionManager.getConnection0().getRemoteObject(objectId, callback);
     }
 
     /**

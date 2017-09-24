@@ -15,14 +15,16 @@
  */
 package dorkbox.network.rmi;
 
+import java.lang.reflect.Proxy;
+
+import org.slf4j.Logger;
+
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import dorkbox.network.connection.KryoExtra;
-import org.slf4j.Logger;
 
-import java.lang.reflect.Proxy;
+import dorkbox.network.connection.KryoExtra;
 
 public
 class InvocationHandlerSerializer extends Serializer<Object> {
@@ -36,7 +38,7 @@ class InvocationHandlerSerializer extends Serializer<Object> {
     @Override
     public
     void write(Kryo kryo, Output output, Object object) {
-        RemoteObjectInvocationHandler handler = (RemoteObjectInvocationHandler) Proxy.getInvocationHandler(object);
+        RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(object);
         output.writeInt(handler.objectID, true);
     }
 

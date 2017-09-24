@@ -30,7 +30,7 @@ import org.junit.Test;
 
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.KryoCryptoSerializationManager;
+import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleListener;
@@ -38,7 +38,7 @@ import dorkbox.network.connection.idle.IdleListenerTCP;
 import dorkbox.network.connection.idle.IdleListenerUDP;
 import dorkbox.network.connection.idle.IdleListenerUDT;
 import dorkbox.network.connection.idle.InputStreamSender;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -63,7 +63,7 @@ class IdleTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT(false, false);
+        configuration.serialization = CryptoSerializationManager.DEFAULT(false, false);
 
         streamSpecificType(largeDataSize, configuration, ConnectionType.TCP);
 
@@ -73,7 +73,7 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT(false, false);
+        configuration.serialization = CryptoSerializationManager.DEFAULT(false, false);
 
         streamSpecificType(largeDataSize, configuration, ConnectionType.UDP);
 
@@ -83,7 +83,7 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udtPort = udtPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT(false, false);
+        configuration.serialization = CryptoSerializationManager.DEFAULT(false, false);
 
         streamSpecificType(largeDataSize, configuration, ConnectionType.UDT);
     }
@@ -102,7 +102,7 @@ class IdleTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
@@ -113,7 +113,7 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
@@ -124,7 +124,7 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udtPort = udtPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
@@ -316,7 +316,7 @@ class IdleTest extends BaseTest {
     }
 
     private static
-    void register(CryptoSerializationManager manager) {
+    void register(SerializationManager manager) {
         manager.register(int[].class);
         manager.register(short[].class);
         manager.register(float[].class);

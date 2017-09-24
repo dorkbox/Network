@@ -23,13 +23,6 @@ import org.bouncycastle.crypto.params.IESParameters;
  */
 public
 class Registration {
-    public static final byte notAdroid = (byte) 0;
-    public static final byte android = (byte) 1;
-
-
-    // signals which serialization is possible. If they match, then UNSAFE can be used (except android. it always must use ASM)
-    public byte connectionType;
-
     public ECPublicKeyParameters publicKey;
     public IESParameters eccParameters;
     public byte[] aesKey;

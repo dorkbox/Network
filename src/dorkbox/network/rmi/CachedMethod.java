@@ -34,19 +34,6 @@
  */
 package dorkbox.network.rmi;
 
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
-import com.esotericsoftware.kryo.util.IdentityMap;
-import com.esotericsoftware.kryo.util.Util;
-import com.esotericsoftware.reflectasm.MethodAccess;
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.KryoExtra;
-import dorkbox.network.util.RMISerializationManager;
-import dorkbox.util.ClassHelper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -55,6 +42,21 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.util.IdentityMap;
+import com.esotericsoftware.kryo.util.Util;
+import com.esotericsoftware.reflectasm.MethodAccess;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.KryoExtra;
+import dorkbox.network.util.RmiSerializationManager;
+import dorkbox.util.ClassHelper;
 
 public
 class CachedMethod {
@@ -114,7 +116,7 @@ class CachedMethod {
 
     // type will be likely be the interface
     public static
-    CachedMethod[] getMethods(final RMISerializationManager serializationManager, final Class<?> type) {
+    CachedMethod[] getMethods(final RmiSerializationManager serializationManager, final Class<?> type) {
         CachedMethod[] cachedMethods = methodCache.get(type);
         if (cachedMethods != null) {
             return cachedMethods;
@@ -315,6 +317,10 @@ class CachedMethod {
     /**
      * Called by the SerializationManager, so that RMI classes that are overridden for serialization purposes, can check to see if certain
      * methods need to be overridden.
+     * <p>
+     * NOTE: It is CRITICAL that this is unique per JVM, otherwise unexpected things can happen.
+     *
+     * @throws IllegalArgumentException if the iface/impl have previously been overridden
      */
     public static
     void registerOverridden(final Class<?> ifaceClass, final Class<?> implClass) {

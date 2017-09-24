@@ -15,9 +15,9 @@
  */
 package dorkbox.network.rmi;
 
-import com.esotericsoftware.kryo.util.IdentityMap;
-
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+
+import com.esotericsoftware.kryo.util.IdentityMap;
 
 /**
  * Uses the "single writer principle" for fast access
@@ -67,10 +67,20 @@ class OverriddenMethods {
         return identityMap.get(type);
     }
 
+    /**
+     * @throws IllegalArgumentException if the iface/impl have previously been overridden
+     */
     // synchronized to make sure only one writer at a time
     public synchronized
     void set(final Class<?> ifaceClass, final Class<?> implClass) {
-        this.overriddenMethods.put(ifaceClass, implClass);
-        this.overriddenReverseMethods.put(implClass, ifaceClass);
+        Class<?> a = this.overriddenMethods.put(ifaceClass, implClass);
+        Class<?> b = this.overriddenReverseMethods.put(implClass, ifaceClass);
+
+        // this MUST BE UNIQUE per JVM, otherwise unexpected things can happen.
+        if (a != null || b != null) {
+            throw new IllegalArgumentException("Unable to override interface (" + ifaceClass + ") and implementation (" + implClass + ") " +
+                                               "because they have already been overridden by something else. It is critical that they are" +
+                                               " both unique per JVM");
+        }
     }
 }

@@ -19,25 +19,26 @@
  */
 package dorkbox.network;
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.ListenerBridge;
-import dorkbox.network.rmi.RmiBridge;
-import dorkbox.util.exceptions.InitializationException;
-import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-import org.slf4j.Logger;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import org.junit.Test;
+import org.slf4j.Logger;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.ListenerBridge;
+import dorkbox.network.rmi.RmiImplHandler;
+import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.SecurityException;
 
 public
 class ListenerTest extends BaseTest {
@@ -63,8 +64,8 @@ class ListenerTest extends BaseTest {
     // quick and dirty test to also test connection sub-classing
     class TestConnectionA extends ConnectionImpl {
         public
-        TestConnectionA(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
-            super(logger, endPoint, rmiBridge);
+        TestConnectionA(final Logger logger, final EndPoint endPoint, final RmiImplHandler rmiImplHandler) {
+            super(logger, endPoint, rmiImplHandler);
         }
 
         public
@@ -76,8 +77,8 @@ class ListenerTest extends BaseTest {
 
     class TestConnectionB extends TestConnectionA {
         public
-        TestConnectionB(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
-            super(logger, endPoint, rmiBridge);
+        TestConnectionB(final Logger logger, final EndPoint endPoint, final RmiImplHandler rmiImplHandler) {
+            super(logger, endPoint, rmiImplHandler);
         }
 
         @Override
@@ -108,7 +109,7 @@ class ListenerTest extends BaseTest {
         Server server = new Server(configuration) {
             @Override
             public
-            TestConnectionA newConnection(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+            TestConnectionA newConnection(final Logger logger, final EndPoint endPoint, final RmiImplHandler rmiBridge) {
                 return new TestConnectionA(logger, endPoint, rmiBridge);
             }
         };

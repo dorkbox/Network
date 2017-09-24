@@ -15,26 +15,26 @@
  */
 package dorkbox.network.pipeline.udp;
 
-import dorkbox.network.connection.KryoCryptoSerializationManager;
-import dorkbox.network.util.CryptoSerializationManager;
+import java.io.IOException;
+import java.util.List;
+
+import org.slf4j.LoggerFactory;
+
+import dorkbox.network.connection.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageDecoder;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.util.List;
 
 @Sharable
 public
 class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
 
-    private final CryptoSerializationManager serializationManager;
+    private final dorkbox.network.util.CryptoSerializationManager serializationManager;
 
     public
-    KryoDecoderUdp(CryptoSerializationManager serializationManager) {
+    KryoDecoderUdp(dorkbox.network.util.CryptoSerializationManager serializationManager) {
         this.serializationManager = serializationManager;
     }
 
@@ -48,7 +48,7 @@ class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
                 // there is a REMOTE possibility that UDP traffic BEAT the TCP registration traffic, which means that THIS packet
                 // COULD be encrypted!
 
-                if (KryoCryptoSerializationManager.isEncrypted(data)) {
+                if (CryptoSerializationManager.isEncrypted(data)) {
                     String message = "Encrypted UDP packet received before registration complete.";
                     LoggerFactory.getLogger(this.getClass()).error(message);
                     throw new IOException(message);

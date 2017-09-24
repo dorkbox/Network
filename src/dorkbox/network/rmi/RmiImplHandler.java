@@ -34,14 +34,6 @@
  */
 package dorkbox.network.rmi;
 
-import com.esotericsoftware.kryo.util.IntMap;
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.Listener;
-import dorkbox.util.collections.ObjectIntMap;
-import org.slf4j.Logger;
-
 import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
@@ -51,13 +43,24 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
+import org.slf4j.Logger;
+
+import com.esotericsoftware.kryo.util.IntMap;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.Listener;
+import dorkbox.network.util.RmiSerializationManager;
+import dorkbox.util.collections.ObjectIntMap;
+
 /**
  * Allows methods on objects to be invoked remotely over TCP, UDP, UDT, or LOCAL. Local connections ignore TCP/UDP/UDT requests, and perform
  * object transformation (because there is no serialization occurring) using a series of weak hashmaps.
  * <p/>
  * <p/>
- * Objects are {@link dorkbox.network.util.RMISerializationManager#registerRemote(Class, Class)}, and endpoint connections can then {@link
- * Connection#createProxyObject(Class)} for the registered objects.
+ * Objects are {@link RmiSerializationManager#registerRmiInterface(Class)}, and endpoint connections can then {@link
+ * Connection#getRemoteObject(Class)} for the registered objects.
  * <p/>
  * It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a return value which
  * is not {@link RemoteObject#setAsync(boolean) ignored}, an extra byte is written. If the type of a parameter is not final (note that
@@ -84,7 +87,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
  * @author Nathan Sweet <misc@n4te.com>, Nathan Robinson
  */
 public final
-class RmiBridge {
+class RmiImplHandler {
     public static final int INVALID_RMI = 0;
     static final int returnValueMask = 1 << 7;
     static final int returnExceptionMask = 1 << 6;
@@ -102,7 +105,7 @@ class RmiBridge {
         return (objectId & 1) != 0;
     }
 
-    // the name of who created this RmiBridge
+    // the name of who created this RmiImplHandler
     private final org.slf4j.Logger logger;
 
     // we start at 1, because 0 (INVALID_RMI) means we access connection only objects
@@ -127,7 +130,7 @@ class RmiBridge {
             final Object target = connection.getImplementationObject(objectID);
 
             if (target == null) {
-                Logger logger2 = RmiBridge.this.logger;
+                Logger logger2 = RmiImplHandler.this.logger;
                 if (logger2.isWarnEnabled()) {
                     logger2.warn("Ignoring remote invocation request for unknown object ID: {}", objectID);
                 }
@@ -135,7 +138,7 @@ class RmiBridge {
                 return;
             }
 
-            Executor executor2 = RmiBridge.this.executor;
+            Executor executor2 = RmiImplHandler.this.executor;
             if (executor2 == null) {
                 try {
                     invoke(connection, target, invokeMethod);
@@ -160,18 +163,18 @@ class RmiBridge {
     };
 
     /**
-     * Creates an RmiBridge with no connections. Connections must be {@link RmiBridge#register(int, Object)} added to allow the remote end
+     * Creates an RmiImplHandler with no connections. Connections must be {@link RmiImplHandler#register(int, Object)} added to allow the remote end
      * of the connections to access objects in this ObjectSpace.
      *
      * @param executor
      *                 Sets the executor used to invoke methods when an invocation is received from a remote endpoint. By default, no
      *                 executor is set and invocations occur on the network thread, which should not be blocked for long, May be null.
      * @param isGlobal
-     *                 specify if this RmiBridge is a "global" bridge, meaning connections will prefer objects from this bridge instead of
+     *                 specify if this RmiImplHandler is a "global" bridge, meaning connections will prefer objects from this bridge instead of
      *                 the connection-local bridge.
      */
     public
-    RmiBridge(final org.slf4j.Logger logger, final Executor executor, final boolean isGlobal) {
+    RmiImplHandler(final org.slf4j.Logger logger, final Executor executor, final boolean isGlobal) {
         this.logger = logger;
         this.executor = executor;
 
@@ -194,7 +197,7 @@ class RmiBridge {
 
     /**
      * Invokes the method on the object and, if necessary, sends the result back to the connection that made the invocation request. This
-     * method is invoked on the update thread of the {@link EndPoint} for this RmiBridge and unless an executor has been set.
+     * method is invoked on the update thread of the {@link EndPoint} for this RmiImplHandler and unless an executor has been set.
      *
      * @param connection
      *                 The remote side of this connection requested the invocation.
@@ -295,13 +298,13 @@ class RmiBridge {
         int value = rmiObjectIdCounter.getAndAdd(2);
         if (value > MAX_RMI_VALUE) {
             rmiObjectIdCounter.set(MAX_RMI_VALUE); // prevent wrapping by spammy callers
-            logger.error("RMI next value has exceeded maximum limits in RmiBridge!");
+            logger.error("RMI next value has exceeded maximum limits in RmiImplHandler!");
         }
         return value;
     }
 
     /**
-     * Registers an object to allow the remote end of the RmiBridge connections to access it using the specified ID.
+     * Registers an object to allow the remote end of the RmiImplHandler connections to access it using the specified ID.
      *
      * @param objectID
      *                 Must not be Integer.MAX_VALUE.
@@ -316,7 +319,7 @@ class RmiBridge {
             throw new IllegalArgumentException("object cannot be null.");
         }
 
-        WriteLock writeLock = RmiBridge.this.objectLock.writeLock();
+        WriteLock writeLock = RmiImplHandler.this.objectLock.writeLock();
         writeLock.lock();
 
         this.idToObject.put(objectID, object);
@@ -331,12 +334,12 @@ class RmiBridge {
     }
 
     /**
-     * Removes an object. The remote end of the RmiBridge connection will no longer be able to access it.
+     * Removes an object. The remote end of the RmiImplHandler connection will no longer be able to access it.
      */
     @SuppressWarnings("AutoBoxing")
     public
     void remove(int objectID) {
-        WriteLock writeLock = RmiBridge.this.objectLock.writeLock();
+        WriteLock writeLock = RmiImplHandler.this.objectLock.writeLock();
         writeLock.lock();
 
         Object object = this.idToObject.remove(objectID);
@@ -353,12 +356,12 @@ class RmiBridge {
     }
 
     /**
-     * Removes an object. The remote end of the RmiBridge connection will no longer be able to access it.
+     * Removes an object. The remote end of the RmiImplHandler connection will no longer be able to access it.
      */
     @SuppressWarnings("AutoBoxing")
     public
     void remove(Object object) {
-        WriteLock writeLock = RmiBridge.this.objectLock.writeLock();
+        WriteLock writeLock = RmiImplHandler.this.objectLock.writeLock();
         writeLock.lock();
 
         if (!this.idToObject.containsValue(object, true)) {
@@ -409,12 +412,12 @@ class RmiBridge {
     }
 
     /**
-     * Warning. This is an advanced method. You should probably be using {@link Connection#createProxyObject(Class)}.
+     * Warning. This is an advanced method. You should probably be using {@link Connection#getRemoteObject(Class, RemoteObjectCallback)}
      * <p>
      * <p>
      * Returns a proxy object that implements the specified interfaces. Methods invoked on the proxy object will be invoked remotely on the
      * object with the specified ID in the ObjectSpace for the specified connection. If the remote end of the connection has not {@link
-     * RmiBridge#register(int, Object)} added the connection to the ObjectSpace, the remote method invocations will be ignored.
+     * RmiImplHandler#register(int, Object)} added the connection to the ObjectSpace, the remote method invocations will be ignored.
      * <p/>
      * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
      * RemoteObject#setResponseTimeout(int) response timeout}.
@@ -441,8 +444,8 @@ class RmiBridge {
         temp[0] = RemoteObject.class;
         temp[1] = iface;
 
-        return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(),
+        return (RemoteObject) Proxy.newProxyInstance(RmiImplHandler.class.getClassLoader(),
                                                      temp,
-                                                     new RemoteObjectInvocationHandler(connection, objectID));
+                                                     new RmiProxyHandler(connection, objectID));
     }
 }

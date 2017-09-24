@@ -38,10 +38,11 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+
 import dorkbox.network.connection.KryoExtra;
 
 /**
- * Serializes an object registered with the RmiBridge so the receiving side gets a {@link RemoteObject} proxy rather than the bytes for the
+ * Serializes an object registered with the RmiImplHandler so the receiving side gets a {@link RemoteObject} proxy rather than the bytes for the
  * serialized object.
  *
  * @author Nathan Sweet <misc@n4te.com>
