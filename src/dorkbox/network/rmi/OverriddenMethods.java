@@ -48,7 +48,7 @@ class OverriddenMethods {
     }
 
     /**
-     * access a snapshot of the subscriptions (single-writer-principle)
+     * access a snapshot of the overridden methods (single-writer-principle)
      */
     public
     Class<?> get(final Class<?> type) {
@@ -58,7 +58,7 @@ class OverriddenMethods {
     }
 
     /**
-     * access a snapshot of the subscriptions (single-writer-principle)
+     * access a snapshot of the overridden methods (single-writer-principle)
      */
     public
     Class<?> getReverse(final Class<?> type) {
