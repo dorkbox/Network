@@ -4,7 +4,7 @@ package dorkbox.network.rmi;
  *
  */
 public
-interface TestObject {
+interface TestCow {
     void throwException();
 
     void moo();

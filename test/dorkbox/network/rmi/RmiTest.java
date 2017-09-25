@@ -42,15 +42,7 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 
 import org.junit.Test;
-import org.slf4j.LoggerFactory;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
-import ch.qos.logback.classic.joran.JoranConfigurator;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.ConsoleAppender;
 import dorkbox.network.BaseTest;
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
@@ -61,13 +53,12 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.ListenerBridge;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import io.netty.util.ResourceLeakDetector;
 
 public
 class RmiTest extends BaseTest {
 
     public static
-    void runTests(final Connection connection, final TestObject test, final int remoteObjectID) {
+    void runTests(final Connection connection, final TestCow test, final int remoteObjectID) {
         RemoteObject remoteObject = (RemoteObject) test;
 
         // Default behavior. RMI is transparent, method calls behave like normal
@@ -171,7 +162,7 @@ class RmiTest extends BaseTest {
         MessageWithTestObject m = new MessageWithTestObject();
         m.number = 678;
         m.text = "sometext";
-        m.testObject = test;
+        m.testCow = test;
         connection.send()
                   .TCP(m)
                   .flush();
@@ -188,53 +179,6 @@ class RmiTest extends BaseTest {
     @Test
     public
     void rmi() throws InitializationException, SecurityException, IOException, InterruptedException {
-        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
-
-        // assume SLF4J is bound to logback in the current environment
-        Logger rootLogger = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
-        LoggerContext context = rootLogger.getLoggerContext();
-
-        JoranConfigurator jc = new JoranConfigurator();
-        jc.setContext(context);
-        context.reset(); // override default configuration
-
-//        rootLogger.setLevel(Level.OFF);
-
-        // rootLogger.setLevel(Level.DEBUG);
-       rootLogger.setLevel(Level.TRACE);
-//        rootLogger.setLevel(Level.ALL);
-
-
-        // we only want error messages
-        Logger nettyLogger = (Logger) LoggerFactory.getLogger("io.netty");
-        nettyLogger.setLevel(Level.ERROR);
-
-        // we only want error messages
-        Logger kryoLogger = (Logger) LoggerFactory.getLogger("com.esotericsoftware");
-        // kryoLogger.setLevel(Level.TRACE);
-        kryoLogger.setLevel(Level.ERROR);
-
-        // we only want error messages
-        Logger barchartLogger = (Logger) LoggerFactory.getLogger("com.barchart");
-        barchartLogger.setLevel(Level.ERROR);
-
-        PatternLayoutEncoder encoder = new PatternLayoutEncoder();
-        encoder.setContext(context);
-        encoder.setPattern("%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n");
-        encoder.start();
-
-        ConsoleAppender<ILoggingEvent> consoleAppender = new ch.qos.logback.core.ConsoleAppender<ILoggingEvent>();
-
-        consoleAppender.setContext(context);
-        consoleAppender.setEncoder(encoder);
-        consoleAppender.start();
-
-        rootLogger.addAppender(consoleAppender);
-
-
-
-
-
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
@@ -242,7 +186,12 @@ class RmiTest extends BaseTest {
 
         configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
-        configuration.serialization.registerRmiImplementation(TestObject.class, TestObjectImpl.class);
+
+        // for Client -> Server RMI (ID 1)
+        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
+
+        // for Server -> Client RMI (ID 2)
+        configuration.serialization.registerRmiInterface(TestCow.class);
 
 
         final Server server = new Server(configuration);
@@ -256,12 +205,39 @@ class RmiTest extends BaseTest {
             @Override
             public
             void received(Connection connection, MessageWithTestObject m) {
-                TestObject object = m.testObject;
-                final int id = object.id();
-                assertEquals(2, id);
-                System.err.println("Client -> Server Finished!");
+                System.err.println("Received finish signal for test for: Client -> Server");
 
-                stopEndPoints(2000);
+                TestCow object = m.testCow;
+                final int id = object.id();
+                assertEquals(1, id);
+                System.err.println("Finished test for: Client -> Server");
+
+
+                System.err.println("Starting test for: Server -> Client");
+
+                // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
+                try {
+                    // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
+                    connection.getRemoteObject(TestCow.class, new RemoteObjectCallback<TestCow>() {
+                        @Override
+                        public
+                        void created(final TestCow remoteObject) {
+                            new Thread() {
+                                @Override
+                                public
+                                void run() {
+                                    System.err.println("Running test for: Server -> Client");
+                                    // MUST run on a separate thread because remote object method invocations are blocking
+                                    runTests(connection, remoteObject, 2);
+                                    System.err.println("Done with test for: Server -> Client");
+                                }
+                            }.start();
+                        }
+                    });
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    fail();
+                }
             }
         });
 
@@ -274,7 +250,12 @@ class RmiTest extends BaseTest {
 
         configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
-        configuration.serialization.registerRmiInterface(TestObject.class);
+
+        // for Client -> Server RMI (ID 1)
+        configuration.serialization.registerRmiInterface(TestCow.class);
+
+        // for Server -> Client RMI (ID 2)
+        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
 
 
         final Client client = new Client(configuration);
@@ -291,16 +272,18 @@ class RmiTest extends BaseTest {
 
                 try {
                     // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
-                    connection.getRemoteObject(TestObject.class, new RemoteObjectCallback<TestObject>() {
+                    connection.getRemoteObject(TestCow.class, new RemoteObjectCallback<TestCow>() {
                         @Override
                         public
-                        void created(final TestObject remoteObject) {
+                        void created(final TestCow remoteObject) {
                             new Thread() {
                                 @Override
                                 public
                                 void run() {
+                                    System.err.println("Running test for: Client -> Server");
                                     // MUST run on a separate thread because remote object method invocations are blocking
                                     runTests(connection, remoteObject, 1);
+                                    System.err.println("Done with test for: Client -> Server");
                                 }
                             }.start();
                         }
@@ -317,22 +300,14 @@ class RmiTest extends BaseTest {
                   @Override
                   public
                   void received(Connection connection, MessageWithTestObject m) {
-                      TestObject object = m.testObject;
-                      final int id = object.id();
-                      assertEquals(1, id);
-                      System.err.println("Server -> Client Finished!");
+                      System.err.println("Received finish signal for test for: Client -> Server");
 
-                      // System.err.println("Starting test for: Client -> Server");
-                      // System.err.println("Starting test for: Server -> Client");
-                      //
-                      // // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
-                      // try {
-                      //     // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
-                      //     connection.getRemoteObject(TestObjectImpl.class, remoteObject->runTest(connection, remoteObject, 2));
-                      // } catch (IOException e) {
-                      //     e.printStackTrace();
-                      //     fail();
-                      // }
+                      TestCow object = m.testCow;
+                      final int id = object.id();
+                      assertEquals(2, id);
+                      System.err.println("Finished test for: Client -> Server");
+
+                      stopEndPoints(2000);
                   }
               });
 

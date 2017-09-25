@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  */
 public
-class TestObjectImpl implements TestObject {
+class TestCowImpl implements TestCow {
     // has to start at 1, because UDP/UDT method invocations ignore return values
     static final AtomicInteger ID_COUNTER = new AtomicInteger(1);
 
@@ -15,7 +15,7 @@ class TestObjectImpl implements TestObject {
     private final int id = ID_COUNTER.getAndIncrement();
 
     public
-    TestObjectImpl() {
+    TestCowImpl() {
     }
 
     @Override
@@ -78,7 +78,7 @@ class TestObjectImpl implements TestObject {
             return false;
         }
 
-        final TestObjectImpl that = (TestObjectImpl) o;
+        final TestCowImpl that = (TestCowImpl) o;
 
         return id == that.id;
 
