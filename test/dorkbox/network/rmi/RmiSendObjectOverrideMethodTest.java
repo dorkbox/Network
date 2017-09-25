@@ -72,10 +72,8 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
         configuration.host = host;
 
         configuration.serialization = CryptoSerializationManager.DEFAULT();
-        // configuration.serialization.rmi().register(TestObjectImpl.class).override(TestObject.class, TestObjectImpl.class);
-        // configuration.serialization.rmi().register(OtherObject.class).override(OtherObject.class, OtherObjectImpl.class);
-
-
+        configuration.serialization.registerRmiImplementation(TestObject.class, TestObjectImpl.class);
+        configuration.serialization.registerRmiImplementation(OtherObject.class, OtherObjectImpl.class);
 
         Server server = new Server(configuration);
         server.setIdleTimeout(0);
@@ -103,6 +101,14 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
 
 
         // ----
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
+
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization.registerRmiInterface(TestObject.class);
+        configuration.serialization.registerRmiInterface(OtherObject.class);
+
         Client client = new Client(configuration);
         client.setIdleTimeout(0);
 
@@ -114,31 +120,39 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
                   void connected(final Connection connection) {
                       try {
                           // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
-                          connection.getRemoteObject(TestObjectImpl.class, new RemoteObjectCallback<TestObjectImpl>() {
+                          connection.getRemoteObject(TestObject.class, new RemoteObjectCallback<TestObject>() {
                               @Override
                               public
-                              void created(final TestObjectImpl remoteObject) {
-                                  remoteObject.setOther(43.21f);
-                                  // Normal remote method call.
-                                  assertEquals(43.21f, remoteObject.other(), .0001f);
+                              void created(final TestObject remoteObject) {
+                              // MUST run on a separate thread because remote object method invocations are blocking
+                                  new Thread() {
+                                      @Override
+                                      public
+                                      void run() {
+                                          remoteObject.setOther(43.21f);
 
-                                  // Make a remote method call that returns another remote proxy object.
-                                  // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
-                                  //  here we have a proxy to both of them.
-                                  OtherObject otherObject = remoteObject.getOtherObject();
+                                          // Normal remote method call.
+                                          assertEquals(43.21f, remoteObject.other(), .0001f);
 
-                                  // Normal remote method call on the second object.
-                                  otherObject.setValue(12.34f);
+                                          // Make a remote method call that returns another remote proxy object.
+                                          // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
+                                          //  here we have a proxy to both of them.
+                                          OtherObject otherObject = remoteObject.getOtherObject();
 
-                                  float value = otherObject.value();
-                                  assertEquals(12.34f, value, .0001f);
+                                          // Normal remote method call on the second object.
+                                          otherObject.setValue(12.34f);
 
-                                  // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
-                                  // that is where that object acutally exists.
-                                  // we have to manually flush, since we are in a separate thread that does not auto-flush.
-                                  connection.send()
-                                            .TCP(otherObject)
-                                            .flush();
+                                          float value = otherObject.value();
+                                          assertEquals(12.34f, value, .0001f);
+
+                                          // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                                          // that is where that object acutally exists.
+                                          // we have to manually flush, since we are in a separate thread that does not auto-flush.
+                                          connection.send()
+                                                    .TCP(otherObject)
+                                                    .flush();
+                                      }
+                                  }.start();
                               }
                           });
 
@@ -179,7 +193,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
         @IgnoreSerialization
         private final int ID = idCounter.getAndIncrement();
 
-        @RMI
+        @Rmi
         private final OtherObject otherObject = new OtherObjectImpl();
         private float aFloat;
 
