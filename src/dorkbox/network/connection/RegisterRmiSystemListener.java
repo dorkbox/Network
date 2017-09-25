@@ -25,7 +25,7 @@ class RegisterRmiSystemListener implements Listener.OnMessageReceived<Connection
     @Override
     public
     void received(final ConnectionImpl connection, final RmiRegistration registerClass) {
-        // register this into the RmiImplHandler
+        // register this into the RmiBridge
         connection.registerInternal(connection, registerClass);
     }
 }

@@ -42,12 +42,11 @@ import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
-import dorkbox.network.rmi.RmiImplHandler;
+import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.store.NullSettingsStore;
 import dorkbox.network.store.SettingsStore;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
-import dorkbox.util.SerializationManager;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.exceptions.InitializationException;
@@ -164,7 +163,7 @@ class EndPoint<C extends Connection> {
     final ECPublicKeyParameters publicKey;
 
     final SecureRandom secureRandom;
-    final RmiImplHandler globalRmiImplHandler;
+    final RmiBridge globalRmiBridge;
 
     private final CountDownLatch blockUntilDone = new CountDownLatch(1);
 
@@ -322,10 +321,10 @@ class EndPoint<C extends Connection> {
         if (this.rmiEnabled) {
             // these register the listener for registering a class implementation for RMI (internal use only)
             this.connectionManager.add(new RegisterRmiSystemListener());
-            this.globalRmiImplHandler = new RmiImplHandler(logger, options.rmiExecutor, true);
+            this.globalRmiBridge = new RmiBridge(logger, options.rmiExecutor, true);
         }
         else {
-            this.globalRmiImplHandler = null;
+            this.globalRmiBridge = null;
         }
 
         serializationManager.finishInit();
@@ -420,7 +419,7 @@ class EndPoint<C extends Connection> {
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
      */
     public
-    SerializationManager getSerialization() {
+    dorkbox.network.util.CryptoSerializationManager getSerialization() {
         return this.serializationManager;
     }
 
@@ -434,8 +433,8 @@ class EndPoint<C extends Connection> {
      * @return a new network connection
      */
     protected
-    ConnectionImpl newConnection(final Logger logger, final EndPoint<C> endPoint, final RmiImplHandler rmiImplHandler) {
-        return new ConnectionImpl(logger, endPoint, rmiImplHandler);
+    ConnectionImpl newConnection(final Logger logger, final EndPoint<C> endPoint, final RmiBridge rmiBridge) {
+        return new ConnectionImpl(logger, endPoint, rmiBridge);
     }
 
     /**
@@ -450,9 +449,9 @@ class EndPoint<C extends Connection> {
     Connection connection0(MetaChannel metaChannel) {
         ConnectionImpl connection;
 
-        RmiImplHandler rmiImplHandler = null;
+        RmiBridge rmiBridge = null;
         if (metaChannel != null && rmiEnabled) {
-            rmiImplHandler = new RmiImplHandler(logger, rmiExecutor, false);
+            rmiBridge = new RmiBridge(logger, rmiExecutor, false);
         }
 
         // setup the extras needed by the network connection.
@@ -461,7 +460,7 @@ class EndPoint<C extends Connection> {
         if (metaChannel != null) {
             ChannelWrapper<C> wrapper;
 
-            connection = newConnection(logger, this, rmiImplHandler);
+            connection = newConnection(logger, this, rmiBridge);
             metaChannel.connection = connection;
 
             if (metaChannel.localChannel != null) {
@@ -479,10 +478,10 @@ class EndPoint<C extends Connection> {
             // now initialize the connection channels with whatever extra info they might need.
             connection.init(wrapper, (ConnectionManager<Connection>) this.connectionManager);
 
-            if (rmiImplHandler != null) {
+            if (rmiBridge != null) {
                 // notify our remote object space that it is able to receive method calls.
                 connection.listeners()
-                          .add(rmiImplHandler.getListener());
+                          .add(rmiBridge.getListener());
             }
         }
         else {
@@ -800,8 +799,8 @@ class EndPoint<C extends Connection> {
      */
     public
     <T> int createGlobalObject(final T globalObject) {
-        int globalObjectId = globalRmiImplHandler.nextObjectId();
-        globalRmiImplHandler.register(globalObjectId, globalObject);
+        int globalObjectId = globalRmiBridge.nextObjectId();
+        globalRmiBridge.register(globalObjectId, globalObject);
         return globalObjectId;
     }
 }

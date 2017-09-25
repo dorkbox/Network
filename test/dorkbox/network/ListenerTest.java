@@ -36,7 +36,7 @@ import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.ListenerBridge;
-import dorkbox.network.rmi.RmiImplHandler;
+import dorkbox.network.rmi.RmiBridge;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -64,8 +64,8 @@ class ListenerTest extends BaseTest {
     // quick and dirty test to also test connection sub-classing
     class TestConnectionA extends ConnectionImpl {
         public
-        TestConnectionA(final Logger logger, final EndPoint endPoint, final RmiImplHandler rmiImplHandler) {
-            super(logger, endPoint, rmiImplHandler);
+        TestConnectionA(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+            super(logger, endPoint, rmiBridge);
         }
 
         public
@@ -77,8 +77,8 @@ class ListenerTest extends BaseTest {
 
     class TestConnectionB extends TestConnectionA {
         public
-        TestConnectionB(final Logger logger, final EndPoint endPoint, final RmiImplHandler rmiImplHandler) {
-            super(logger, endPoint, rmiImplHandler);
+        TestConnectionB(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+            super(logger, endPoint, rmiBridge);
         }
 
         @Override
@@ -109,7 +109,7 @@ class ListenerTest extends BaseTest {
         Server server = new Server(configuration) {
             @Override
             public
-            TestConnectionA newConnection(final Logger logger, final EndPoint endPoint, final RmiImplHandler rmiBridge) {
+            TestConnectionA newConnection(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
                 return new TestConnectionA(logger, endPoint, rmiBridge);
             }
         };

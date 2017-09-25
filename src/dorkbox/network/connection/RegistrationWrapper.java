@@ -99,7 +99,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      */
     public
     boolean rmiEnabled() {
-        return endPoint.globalRmiImplHandler != null;
+        return endPoint.globalRmiBridge != null;
     }
 
     public

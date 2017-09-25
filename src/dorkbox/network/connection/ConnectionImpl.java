@@ -38,10 +38,10 @@ import dorkbox.network.connection.ping.PingTuple;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
-import dorkbox.network.rmi.RMI;
 import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.rmi.RemoteObjectCallback;
-import dorkbox.network.rmi.RmiImplHandler;
+import dorkbox.network.rmi.Rmi;
+import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.rmi.RmiRegistration;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.collections.IntMap;
@@ -108,7 +108,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     //
     // RMI fields
     //
-    private final RmiImplHandler rmiImplHandler;
+    private final RmiBridge rmiBridge;
     private final Map<Integer, RemoteObject> proxyIdCache = new WeakHashMap<Integer, RemoteObject>(8);
     private final IntMap<RemoteObjectCallback> rmiRegistrationCallbacks = new IntMap<>();
     private int rmiRegistrationID = 0; // protected by synchronized (rmiRegistrationCallbacks)
@@ -118,10 +118,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
     public
-    ConnectionImpl(final Logger logger, final EndPoint endPoint, final RmiImplHandler rmiImplHandler) {
+    ConnectionImpl(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
         this.logger = logger;
         this.endPoint = endPoint;
-        this.rmiImplHandler = rmiImplHandler;
+        this.rmiBridge = rmiBridge;
     }
 
     /**
@@ -1097,7 +1097,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                 // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
                 manager.returnKryo(kryo);
 
-                rmiImplHandler.register(rmiImplHandler.nextObjectId(), remotePrimaryObject);
+                rmiBridge.register(rmiBridge.nextObjectId(), remotePrimaryObject);
 
                 LinkedList<ClassObject> remoteClasses = new LinkedList<ClassObject>();
                 remoteClasses.add(new ClassObject(implementationClass, remotePrimaryObject));
@@ -1106,7 +1106,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                 while ((remoteClassObject = remoteClasses.pollFirst()) != null) {
                     // we have to check for any additional fields that will have proxy information
                     for (Field field : remoteClassObject.clazz.getDeclaredFields()) {
-                        if (field.getAnnotation(RMI.class) != null) {
+                        if (field.getAnnotation(Rmi.class) != null) {
                             boolean prev = field.isAccessible();
                             field.setAccessible(true);
                             final Object o = field.get(remoteClassObject.object);
@@ -1114,7 +1114,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
                             final Class<?> type = field.getType();
 
-                            rmiImplHandler.register(rmiImplHandler.nextObjectId(), o);
+                            rmiBridge.register(rmiBridge.nextObjectId(), o);
                             remoteClasses.offerLast(new ClassObject(type, o));
                         }
                     }
@@ -1126,7 +1126,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                 connection.TCP(new RmiRegistration(rmiID)).flush();
             }
         }
-        else if (remoteRegistration.remoteObjectId > RmiImplHandler.INVALID_RMI) {
+        else if (remoteRegistration.remoteObjectId > RmiBridge.INVALID_RMI) {
             // THIS IS ON THE REMOTE CONNECTION (where the object will really exist)
             //
             // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
@@ -1167,15 +1167,15 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     public
     <T> int getRegisteredId(final T object) {
         // always check local before checking global, because less contention on the synchronization
-        RmiImplHandler globalRmiImplHandler = endPoint.globalRmiImplHandler;
+        RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
 
-        if (globalRmiImplHandler == null) {
-            throw new NullPointerException("Unable to call 'getRegisteredId' when the globalRmiImplHandler is null!");
+        if (globalRmiBridge == null) {
+            throw new NullPointerException("Unable to call 'getRegisteredId' when the globalRmiBridge is null!");
         }
 
-        int object1 = globalRmiImplHandler.getRegisteredId(object);
+        int object1 = globalRmiBridge.getRegisteredId(object);
         if (object1 == Integer.MAX_VALUE) {
-            return rmiImplHandler.getRegisteredId(object);
+            return rmiBridge.getRegisteredId(object);
         } else {
             return object1;
         }
@@ -1196,7 +1196,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
             if (remoteObject == null) {
                 // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-                remoteObject = rmiImplHandler.createProxyObject(this, objectID, type);
+                remoteObject = rmiBridge.createProxyObject(this, objectID, type);
                 proxyIdCache.put(objectID, remoteObject);
             }
 
@@ -1210,16 +1210,16 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public
     Object getImplementationObject(final int objectID) {
-        if (RmiImplHandler.isGlobal(objectID)) {
-            RmiImplHandler globalRmiImplHandler = endPoint.globalRmiImplHandler;
+        if (RmiBridge.isGlobal(objectID)) {
+            RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
 
-            if (globalRmiImplHandler == null) {
+            if (globalRmiBridge == null) {
                 throw new NullPointerException("Unable to call 'getRegisteredId' when the gloablRmiBridge is null!");
             }
 
-            return globalRmiImplHandler.getRegisteredObject(objectID);
+            return globalRmiBridge.getRegisteredObject(objectID);
         } else {
-            return rmiImplHandler.getRegisteredObject(objectID);
+            return rmiBridge.getRegisteredObject(objectID);
         }
     }
 }
