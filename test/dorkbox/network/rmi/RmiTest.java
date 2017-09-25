@@ -222,12 +222,12 @@ class RmiTest extends BaseTest {
                         @Override
                         public
                         void created(final TestCow remoteObject) {
+                            // MUST run on a separate thread because remote object method invocations are blocking
                             new Thread() {
                                 @Override
                                 public
                                 void run() {
                                     System.err.println("Running test for: Server -> Client");
-                                    // MUST run on a separate thread because remote object method invocations are blocking
                                     runTests(connection, remoteObject, 2);
                                     System.err.println("Done with test for: Server -> Client");
                                 }
@@ -276,12 +276,12 @@ class RmiTest extends BaseTest {
                         @Override
                         public
                         void created(final TestCow remoteObject) {
+                            // MUST run on a separate thread because remote object method invocations are blocking
                             new Thread() {
                                 @Override
                                 public
                                 void run() {
                                     System.err.println("Running test for: Client -> Server");
-                                    // MUST run on a separate thread because remote object method invocations are blocking
                                     runTests(connection, remoteObject, 1);
                                     System.err.println("Done with test for: Client -> Server");
                                 }
