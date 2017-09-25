@@ -34,14 +34,14 @@
  */
 package dorkbox.network.pipeline;
 
-import com.esotericsoftware.kryo.KryoException;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-import io.netty.buffer.ByteBuf;
-
 import java.io.DataInput;
 import java.io.InputStream;
 
+import com.esotericsoftware.kryo.KryoException;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+
+import io.netty.buffer.ByteBuf;
 
 /**
  * An {@link InputStream} which reads data from a {@link ByteBuf}.

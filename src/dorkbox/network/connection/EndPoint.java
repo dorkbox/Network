@@ -45,7 +45,6 @@ import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.store.NullSettingsStore;
 import dorkbox.network.store.SettingsStore;
-import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
 import dorkbox.util.crypto.CryptoECC;
@@ -156,7 +155,7 @@ class EndPoint<C extends Connection> {
     protected final Class<? extends EndPoint<C>> type;
 
     protected final ConnectionManager<C> connectionManager;
-    protected final CryptoSerializationManager serializationManager;
+    protected final dorkbox.network.util.CryptoSerializationManager serializationManager;
     protected final RegistrationWrapper<C> registrationWrapper;
 
     protected final Object shutdownInProgress = new Object();
@@ -221,14 +220,11 @@ class EndPoint<C extends Connection> {
         if (options.serialization != null) {
             this.serializationManager = options.serialization;
         } else {
-            this.serializationManager = KryoCryptoSerializationManager.DEFAULT();
+            this.serializationManager = CryptoSerializationManager.DEFAULT();
         }
 
-        rmiEnabled = options.rmiEnabled;
-        if (rmiEnabled) {
-            // setup our RMI serialization managers. Can only be called once
-            serializationManager.initRmiSerialization();
-        }
+        // setup our RMI serialization managers. Can only be called once
+        rmiEnabled = serializationManager.initRmiSerialization();
         rmiExecutor = options.rmiExecutor;
 
 
@@ -423,7 +419,7 @@ class EndPoint<C extends Connection> {
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
      */
     public
-    CryptoSerializationManager getSerialization() {
+    dorkbox.network.util.CryptoSerializationManager getSerialization() {
         return this.serializationManager;
     }
 

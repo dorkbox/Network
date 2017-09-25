@@ -19,6 +19,18 @@
  */
 package dorkbox.network;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
@@ -27,17 +39,6 @@ import dorkbox.network.connection.ListenerBridge;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-import org.slf4j.Logger;
-
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public
 class ListenerTest extends BaseTest {

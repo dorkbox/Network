@@ -15,19 +15,19 @@
  */
 package dorkbox.network.pipeline;
 
-import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.rmi.RMI;
-import dorkbox.util.FastThreadLocal;
-import io.netty.channel.ChannelHandler.Sharable;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.MessageToMessageEncoder;
-
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.rmi.Rmi;
+import dorkbox.util.FastThreadLocal;
+import io.netty.channel.ChannelHandler.Sharable;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.MessageToMessageEncoder;
 
 @Sharable
 public
@@ -66,7 +66,7 @@ class LocalRmiEncoder extends MessageToMessageEncoder<Object> {
         Boolean needsTransform = transformObjectCache.get(implClass);
 
         if (needsTransform == null) {
-            boolean hasRmi = implClass.getAnnotation(RMI.class) != null;
+            boolean hasRmi = implClass.getAnnotation(Rmi.class) != null;
 
             if (hasRmi) {
                 // replace object

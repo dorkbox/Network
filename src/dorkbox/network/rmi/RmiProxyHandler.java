@@ -35,12 +35,6 @@
 package dorkbox.network.rmi;
 
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.util.RMISerializationManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -49,11 +43,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.util.RmiSerializationManager;
+
 /**
  * Handles network communication when methods are invoked on a proxy.
  */
-class RemoteObjectInvocationHandler implements InvocationHandler {
-    private static final Logger logger = LoggerFactory.getLogger(RemoteObjectInvocationHandler.class);
+class RmiProxyHandler implements InvocationHandler {
+    private final Logger logger;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition responseCondition = this.lock.newCondition();
@@ -80,11 +81,15 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
     private Byte lastResponseID;
     private byte nextResponseId = (byte) 1;
 
-    RemoteObjectInvocationHandler(final Connection connection, final int objectID) {
+    RmiProxyHandler(final Connection connection, final int objectID) {
         super();
+
         this.connection = connection;
         this.objectID = objectID;
         this.proxyString = "<proxy #" + objectID + ">";
+
+        logger = LoggerFactory.getLogger(connection.getEndPoint().getName() + ":" + this.getClass().getSimpleName());
+
 
         this.responseListener = new RemoteInvocationResponse<Connection>() {
             @Override
@@ -99,23 +104,20 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
                 byte responseID = invokeMethodResult.responseID;
 
                 if (invokeMethodResult.objectID != objectID) {
-//				    System.err.println("FAILED: " + responseID);
-//				    logger.trace("{} FAILED to received data: {}  with id ({})", connection, invokeMethodResult.result, invokeMethodResult.responseID);
                     return;
                 }
 
-//				logger.trace("{} received data: {}  with id ({})", connection, invokeMethodResult.result, invokeMethodResult.responseID);
                 synchronized (this) {
-                    if (RemoteObjectInvocationHandler.this.pendingResponses[responseID]) {
-                        RemoteObjectInvocationHandler.this.responseTable[responseID] = invokeMethodResult;
+                    if (RmiProxyHandler.this.pendingResponses[responseID]) {
+                        RmiProxyHandler.this.responseTable[responseID] = invokeMethodResult;
                     }
                 }
 
-                RemoteObjectInvocationHandler.this.lock.lock();
+                RmiProxyHandler.this.lock.lock();
                 try {
-                    RemoteObjectInvocationHandler.this.responseCondition.signalAll();
+                    RmiProxyHandler.this.responseCondition.signalAll();
                 } finally {
-                    RemoteObjectInvocationHandler.this.lock.unlock();
+                    RmiProxyHandler.this.lock.unlock();
                 }
             }
         };
@@ -201,10 +203,8 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
             return proxyString;
         }
 
-        final Logger logger1 = RemoteObjectInvocationHandler.logger;
-
         EndPoint endPoint = this.connection.getEndPoint();
-        final RMISerializationManager serializationManager = endPoint.getSerialization();
+        final RmiSerializationManager serializationManager = endPoint.getSerialization();
 
         InvokeMethod invokeMethod = new InvokeMethod();
         invokeMethod.objectID = this.objectID;
@@ -212,7 +212,7 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
 
 
         // which method do we access?
-        CachedMethod[] cachedMethods = CachedMethod.getMethods(serializationManager, method.getDeclaringClass());
+        CachedMethod[] cachedMethods = CachedMethod.getMethods(serializationManager, method.getDeclaringClass(), invokeMethod.objectID);
 
         for (int i = 0, n = cachedMethods.length; i < n; i++) {
             CachedMethod cachedMethod = cachedMethods[i];
@@ -245,13 +245,15 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
 
         if (invokeMethod.cachedMethod == null) {
             String msg = "Method not found: " + method;
-            logger1.error(msg);
+            logger.error(msg);
             return msg;
         }
 
 
         byte responseID = (byte) 0;
-        // An invocation doesn't need a response is if it's async and no return values or exceptions are wanted back.
+        // An invocation doesn't need a response is if it's
+        // ASYNC and no return values or exceptions are wanted back
+        Class<?> returnType = method.getReturnType();
         boolean ignoreResponse = this.isAsync && !(this.transmitReturnValue || this.transmitExceptions);
         if (ignoreResponse) {
             invokeMethod.responseData = (byte) 0; // 0 means do not respond.
@@ -276,6 +278,8 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
             invokeMethod.responseData = responseData;
         }
 
+        this.lastResponseID = (byte) (invokeMethod.responseData & RmiBridge.responseIdMask);
+
         // Sends our invokeMethod to the remote connection, which the RmiBridge listens for
         if (this.udp) {
             this.connection.send()
@@ -293,22 +297,20 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
                            .flush();
         }
 
-        if (logger1.isTraceEnabled()) {
+        if (logger.isTraceEnabled()) {
             String argString = "";
             if (args != null) {
                 argString = Arrays.deepToString(args);
                 argString = argString.substring(1, argString.length() - 1);
             }
-            logger1.trace(this.connection + " sent: " + method.getDeclaringClass()
+            logger.trace(this.connection + " sent: " + method.getDeclaringClass()
                                                               .getSimpleName() +
                           "#" + method.getName() + "(" + argString + ")");
         }
 
-        this.lastResponseID = (byte) (invokeMethod.responseData & RmiBridge.responseIdMask);
-
-
+        // 0 means respond immediately because it's
+        // ASYNC and no return values or exceptions are wanted back
         if (this.isAsync) {
-            Class<?> returnType = method.getReturnType();
             if (returnType.isPrimitive()) {
                 if (returnType == int.class) {
                     return 0;
@@ -362,11 +364,21 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
      */
     private
     Object waitForResponse(final byte responseID) throws IOException {
-        long endTime = System.currentTimeMillis() + this.timeoutMillis;
-        long remaining = this.timeoutMillis;
+        // if timeout == 0, we wait "forever"
+        long remaining;
+        long endTime;
 
-        if (remaining == 0) {
-            // just wait however log it takes.
+        if (this.timeoutMillis != 0) {
+            remaining = this.timeoutMillis;
+            endTime = System.currentTimeMillis() + remaining;
+        } else {
+            // not forever, but close enough
+            remaining = Long.MAX_VALUE;
+            endTime = Long.MAX_VALUE;
+        }
+
+        // wait for the specified time
+        while (remaining > 0) {
             InvokeMethodResult invokeMethodResult;
             synchronized (this) {
                 invokeMethodResult = this.responseTable[responseID];
@@ -379,7 +391,7 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
             else {
                 this.lock.lock();
                 try {
-                    this.responseCondition.await();
+                    this.responseCondition.await(remaining, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread()
                           .interrupt();
@@ -389,41 +401,7 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
                 }
             }
 
-            synchronized (this) {
-                invokeMethodResult = this.responseTable[responseID];
-            }
-            if (invokeMethodResult != null) {
-                this.lastResponseID = null;
-                return invokeMethodResult.result;
-            }
-        }
-        else {
-            // wait for the specified time
-            while (remaining > 0) {
-                InvokeMethodResult invokeMethodResult;
-                synchronized (this) {
-                    invokeMethodResult = this.responseTable[responseID];
-                }
-
-                if (invokeMethodResult != null) {
-                    this.lastResponseID = null;
-                    return invokeMethodResult.result;
-                }
-                else {
-                    this.lock.lock();
-                    try {
-                        this.responseCondition.await(remaining, TimeUnit.MILLISECONDS);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread()
-                              .interrupt();
-                        throw new IOException("Response timed out.", e);
-                    } finally {
-                        this.lock.unlock();
-                    }
-                }
-
-                remaining = endTime - System.currentTimeMillis();
-            }
+            remaining = endTime - System.currentTimeMillis();
         }
 
         // only get here if we timeout
@@ -457,7 +435,7 @@ class RemoteObjectInvocationHandler implements InvocationHandler {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        RemoteObjectInvocationHandler other = (RemoteObjectInvocationHandler) obj;
+        RmiProxyHandler other = (RmiProxyHandler) obj;
         return this.objectID == other.objectID;
     }
 }

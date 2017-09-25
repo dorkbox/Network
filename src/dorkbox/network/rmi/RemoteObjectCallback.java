@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 dorkbox, llc
+ * Copyright 2017 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,12 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection;
+package dorkbox.network.rmi;
 
-import java.util.concurrent.CountDownLatch;
-
-class ObjectRegistrationLatch {
-    final CountDownLatch latch = new CountDownLatch(1);
-    Object remoteObject;
-    boolean hasError = false;
+/**
+ * Callback for creating remote RMI classes
+ */
+public
+interface RemoteObjectCallback<Iface> {
+    /**
+     * @param remoteObject the remote object (as a proxy object) or null if there was an error
+     */
+    void created(Iface remoteObject);
 }

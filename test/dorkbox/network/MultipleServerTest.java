@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.KryoCryptoSerializationManager;
+import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -43,7 +43,7 @@ class MultipleServerTest extends BaseTest {
         configuration1.tcpPort = tcpPort;
         configuration1.udpPort = udpPort;
         configuration1.localChannelName = "chan1";
-        configuration1.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration1.serialization = CryptoSerializationManager.DEFAULT();
         configuration1.serialization.register(String[].class);
 
         Server server1 = new Server(configuration1);
@@ -68,7 +68,7 @@ class MultipleServerTest extends BaseTest {
         configuration2.tcpPort = tcpPort + 1;
         configuration2.udpPort = udpPort + 1;
         configuration2.localChannelName = "chan2";
-        configuration2.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration2.serialization = CryptoSerializationManager.DEFAULT();
         configuration2.serialization.register(String[].class);
 
         Server server2 = new Server(configuration2);

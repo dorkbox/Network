@@ -29,8 +29,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.KryoCryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.ListenerBridge;
 import dorkbox.util.exceptions.InitializationException;
@@ -54,7 +54,7 @@ class UnregisteredClassTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT(false, false);
+        configuration.serialization = CryptoSerializationManager.DEFAULT(false, false);
 
 
         System.err.println("Running test " + this.tries + " times, please wait for it to finish.");

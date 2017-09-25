@@ -54,16 +54,22 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
     @SuppressWarnings("rawtypes")
     public
     void write(final Kryo kryo, final Output output, final InvokeMethod object) {
+        // System.err.println(":: objectID " + object.objectID);
+        // System.err.println(":: methodClassID " + object.cachedMethod.methodClassID);
+        // System.err.println(":: methodIndex " + object.cachedMethod.methodIndex);
+
         output.writeInt(object.objectID, true);
         output.writeInt(object.cachedMethod.methodClassID, true);
         output.writeByte(object.cachedMethod.methodIndex);
 
         Serializer[] serializers = object.cachedMethod.serializers;
+        int length = serializers.length;
+
         Object[] args = object.args;
 
-        int i = 0, n = serializers.length;
-        for (; i < n; i++) {
+        for (int i = 0; i < length; i++) {
             Serializer serializer = serializers[i];
+
             if (serializer != null) {
                 kryo.writeObjectOrNull(output, args[i], serializer);
             }
@@ -84,20 +90,22 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
 
         int methodClassID = input.readInt(true);
         Class<?> methodClass = kryo.getRegistration(methodClassID)
-                                   .getType();
+                                       .getType();
 
         byte methodIndex = input.readByte();
+        CachedMethod cachedMethod;
         try {
-            invokeMethod.cachedMethod = CachedMethod.getMethods(kryo, methodClass)[methodIndex];
+            cachedMethod = CachedMethod.getMethods(kryo, methodClass, methodClassID)[methodIndex];
+            invokeMethod.cachedMethod = cachedMethod;
         } catch (IndexOutOfBoundsException ex) {
             throw new KryoException("Invalid method index " + methodIndex + " for class: " + methodClass.getName());
         }
 
-        CachedMethod cachedMethod = invokeMethod.cachedMethod;
         Serializer<?>[] serializers = cachedMethod.serializers;
         Class<?>[] parameterTypes = cachedMethod.method.getParameterTypes();
         Object[] args = new Object[serializers.length];
         invokeMethod.args = args;
+
         for (int i = 0, n = args.length; i < n; i++) {
             Serializer<?> serializer = serializers[i];
             if (serializer != null) {

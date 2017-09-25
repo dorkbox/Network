@@ -47,7 +47,7 @@ import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.KryoCryptoSerializationManager;
+import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -68,12 +68,11 @@ class RmiSendObjectTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.host = host;
 
-        configuration.rmiEnabled = true;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization.registerRmiImplementation(TestObject.class, TestObjectImpl.class);
+        configuration.serialization.registerRmiImplementation(OtherObject.class, OtherObjectImpl.class);
 
-        configuration.serialization.register(TestObject.class);
-        configuration.serialization.registerRemote(TestObject.class, TestObjectImpl.class);
-        configuration.serialization.registerRemote(OtherObject.class, OtherObjectImpl.class);
+
 
 
         Server server = new Server(configuration);
@@ -100,6 +99,15 @@ class RmiSendObjectTest extends BaseTest {
 
 
         // ----
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.host = host;
+
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization.registerRmiInterface(TestObject.class);
+        configuration.serialization.registerRmiInterface(OtherObject.class);
+
+
         Client client = new Client(configuration);
         client.setIdleTimeout(0);
 
@@ -109,36 +117,42 @@ class RmiSendObjectTest extends BaseTest {
                   @Override
                   public
                   void connected(final Connection connection) {
-                      new Thread(new Runnable() {
-                          @Override
-                          public
-                          void run() {
-                              TestObject test = null;
-                              try {
-                                  test = connection.createProxyObject(TestObjectImpl.class);
+                      try {
+                          connection.getRemoteObject(TestObject.class, new RemoteObjectCallback<TestObject>() {
+                              @Override
+                              public
+                              void created(final TestObject remoteObject) {
+                                  // MUST run on a separate thread because remote object method invocations are blocking
+                                  new Thread() {
+                                      @Override
+                                      public
+                                      void run() {
+                                          remoteObject.setOther(43.21f);
 
-                                  test.setOther(43.21f);
-                                  // Normal remote method call.
-                                  assertEquals(43.21f, test.other(), 0.0001F);
+                                          // Normal remote method call.
+                                          assertEquals(43.21f, remoteObject.other(), 0.0001F);
 
-                                  // Make a remote method call that returns another remote proxy object.
-                                  OtherObject otherObject = test.getOtherObject();
-                                  // Normal remote method call on the second object.
-                                  otherObject.setValue(12.34f);
-                                  float value = otherObject.value();
-                                  assertEquals(12.34f, value, 0.0001F);
+                                          // Make a remote method call that returns another remote proxy object.
+                                          OtherObject otherObject = remoteObject.getOtherObject();
 
-                                  // When a remote proxy object is sent, the other side receives its actual remote object.
-                                  // we have to manually flush, since we are in a separate thread that does not auto-flush.
-                                  connection.send()
-                                            .TCP(otherObject)
-                                            .flush();
-                              } catch (IOException e) {
-                                  e.printStackTrace();
-                                  fail();
+                                          // Normal remote method call on the second object.
+                                          otherObject.setValue(12.34f);
+                                          float value = otherObject.value();
+                                          assertEquals(12.34f, value, 0.0001F);
+
+                                          // When a remote proxy object is sent, the other side receives its actual remote object.
+                                          // we have to manually flush, since we are in a separate thread that does not auto-flush.
+                                          connection.send()
+                                                    .TCP(otherObject)
+                                                    .flush();
+                                      }
+                                  }.start();
                               }
-                          }
-                      }).start();
+                          });
+                      } catch (IOException e) {
+                          e.printStackTrace();
+                          fail();
+                      }
                   }
               });
 
@@ -147,7 +161,7 @@ class RmiSendObjectTest extends BaseTest {
         waitForThreads();
     }
 
-    public
+    private
     interface TestObject {
         void setOther(float aFloat);
         float other();
@@ -155,7 +169,7 @@ class RmiSendObjectTest extends BaseTest {
     }
 
 
-    public
+    private
     interface OtherObject {
         void setValue(float aFloat);
         float value();
@@ -164,13 +178,12 @@ class RmiSendObjectTest extends BaseTest {
 
     private static final AtomicInteger idCounter = new AtomicInteger();
 
-
-    public static
+    private static
     class TestObjectImpl implements TestObject {
         @IgnoreSerialization
         private final int ID = idCounter.getAndIncrement();
 
-        @RMI
+        @Rmi
         private final OtherObject otherObject = new OtherObjectImpl();
         private float aFloat;
 
@@ -201,7 +214,7 @@ class RmiSendObjectTest extends BaseTest {
     }
 
 
-    public static
+    private static
     class OtherObjectImpl implements OtherObject {
         @IgnoreSerialization
         private final int ID = idCounter.getAndIncrement();

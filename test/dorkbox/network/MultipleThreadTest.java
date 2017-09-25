@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.KryoCryptoSerializationManager;
+import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.ListenerBridge;
 import dorkbox.util.exceptions.InitializationException;
@@ -61,7 +61,7 @@ class MultipleThreadTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
         configuration.serialization.register(String[].class);
         configuration.serialization.register(DataClass.class);
 

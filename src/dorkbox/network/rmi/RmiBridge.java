@@ -34,14 +34,6 @@
  */
 package dorkbox.network.rmi;
 
-import com.esotericsoftware.kryo.util.IntMap;
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.Listener;
-import dorkbox.util.collections.ObjectIntMap;
-import org.slf4j.Logger;
-
 import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
@@ -51,13 +43,24 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
+import org.slf4j.Logger;
+
+import com.esotericsoftware.kryo.util.IntMap;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.Listener;
+import dorkbox.network.util.RmiSerializationManager;
+import dorkbox.util.collections.ObjectIntMap;
+
 /**
  * Allows methods on objects to be invoked remotely over TCP, UDP, UDT, or LOCAL. Local connections ignore TCP/UDP/UDT requests, and perform
  * object transformation (because there is no serialization occurring) using a series of weak hashmaps.
  * <p/>
  * <p/>
- * Objects are {@link dorkbox.network.util.RMISerializationManager#registerRemote(Class, Class)}, and endpoint connections can then {@link
- * Connection#createProxyObject(Class)} for the registered objects.
+ * Objects are {@link RmiSerializationManager#registerRmiInterface(Class)}, and endpoint connections can then {@link
+ * Connection#getRemoteObject(Class)} for the registered objects.
  * <p/>
  * It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a return value which
  * is not {@link RemoteObject#setAsync(boolean) ignored}, an extra byte is written. If the type of a parameter is not final (note that
@@ -409,7 +412,7 @@ class RmiBridge {
     }
 
     /**
-     * Warning. This is an advanced method. You should probably be using {@link Connection#createProxyObject(Class)}.
+     * Warning. This is an advanced method. You should probably be using {@link Connection#getRemoteObject(Class, RemoteObjectCallback)}
      * <p>
      * <p>
      * Returns a proxy object that implements the specified interfaces. Methods invoked on the proxy object will be invoked remotely on the
@@ -443,6 +446,6 @@ class RmiBridge {
 
         return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(),
                                                      temp,
-                                                     new RemoteObjectInvocationHandler(connection, objectID));
+                                                     new RmiProxyHandler(connection, objectID));
     }
 }

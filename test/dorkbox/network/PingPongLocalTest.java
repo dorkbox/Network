@@ -28,10 +28,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.KryoCryptoSerializationManager;
+import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.ListenerBridge;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -48,7 +48,7 @@ class PingPongLocalTest extends BaseTest {
         populateData(dataLOCAL);
 
         Configuration configuration = Configuration.localOnly();
-        configuration.serialization = KryoCryptoSerializationManager.DEFAULT();
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
 
 
@@ -169,7 +169,7 @@ class PingPongLocalTest extends BaseTest {
         data.Booleans = new Boolean[] {true,false};
     }
 
-    private void register(CryptoSerializationManager manager) {
+    private void register(SerializationManager manager) {
         manager.register(int[].class);
         manager.register(short[].class);
         manager.register(float[].class);

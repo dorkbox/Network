@@ -15,6 +15,13 @@
  */
 package dorkbox.network.connection;
 
+import java.io.IOException;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.connection.bridge.ConnectionBridge;
@@ -22,12 +29,6 @@ import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
-import org.slf4j.Logger;
-
-import java.io.IOException;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This serves the purpose of making sure that specific methods are not available to the end user.
@@ -38,10 +39,12 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
     protected C connection;
 
     protected final Object registrationLock = new Object();
+
     protected final AtomicInteger connectingBootstrap = new AtomicInteger(0);
     protected List<BootstrapWrapper> bootstraps = new LinkedList<BootstrapWrapper>();
     protected volatile int connectionTimeout = 5000; // default
     protected volatile boolean registrationComplete = false;
+    private volatile boolean rmiInitializationComplete = false;
 
     private volatile ConnectionBridge connectionBridgeFlushAlways;
 
@@ -186,10 +189,30 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
             }
         };
 
+        //noinspection unchecked
+        this.connection = (C) connection;
+
+        // check if there were any RMI callbacks during the connect phase.
+        rmiInitializationComplete = connection.rmiCallbacksIsEmpty();
 
         // notify the registration we are done!
         synchronized (this.registrationLock) {
             this.registrationLock.notify();
+        }
+    }
+
+    /**
+     * Internal call.
+     * <p>
+     * RMI methods are usually created during the connection phase. We should wait until they are finished, but ONLY if there is
+     * something we need to wait for.
+     *
+     * This is called AFTER registration is finished.
+     */
+    protected
+    void waitForRmi(final int connectionTimeout) {
+        if (!rmiInitializationComplete && connection instanceof ConnectionImpl) {
+            ((ConnectionImpl) connection).waitForRmi(connectionTimeout);
         }
     }
 
@@ -224,6 +247,11 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
             this.registrationLock.notify();
         }
         registrationComplete = false;
+
+        // Always unblock the waiting client.connect().
+        if (connection instanceof ConnectionImpl) {
+            ((ConnectionImpl) connection).rmiCallbacksNotify();
+        }
     }
 
     /**
@@ -232,6 +260,11 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
     void abortRegistration() {
         synchronized (this.registrationLock) {
             this.registrationLock.notify();
+        }
+
+        // Always unblock the waiting client.connect().
+        if (connection instanceof ConnectionImpl) {
+            ((ConnectionImpl) connection).rmiCallbacksNotify();
         }
         stop();
     }

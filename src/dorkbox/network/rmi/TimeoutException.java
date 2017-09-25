@@ -41,7 +41,8 @@ import java.io.IOException;
  * RemoteObject#setResponseTimeout(int) response timeout}.
  *
  * @author Nathan Sweet <misc@n4te.com>
- * @see dorkbox.network.connection.Connection#createProxyObject(Class)
+ * @see dorkbox.network.connection.Connection#getRemoteObject(int, RemoteObjectCallback)
+ * @see dorkbox.network.connection.Connection#getRemoteObject(Class, RemoteObjectCallback)
  */
 public
 class TimeoutException extends IOException {

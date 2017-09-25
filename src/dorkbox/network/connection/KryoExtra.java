@@ -15,7 +15,14 @@
  */
 package dorkbox.network.connection;
 
+import java.io.IOException;
+
+import org.bouncycastle.crypto.engines.AESFastEngine;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.bouncycastle.crypto.params.ParametersWithIV;
+
 import com.esotericsoftware.kryo.Kryo;
+
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
 import dorkbox.util.bytes.BigEndian;
@@ -26,11 +33,6 @@ import io.netty.buffer.Unpooled;
 import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
-import org.bouncycastle.crypto.engines.AESFastEngine;
-import org.bouncycastle.crypto.modes.GCMBlockCipher;
-import org.bouncycastle.crypto.params.ParametersWithIV;
-
-import java.io.IOException;
 
 /**
  * Nothing in this class is thread safe
@@ -83,8 +85,11 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
     private byte[] decompressOutput;
     private ByteBuf decompressBuf;
 
+    private dorkbox.network.util.CryptoSerializationManager serializationManager;
+
     public
-    KryoExtra() {
+    KryoExtra(final dorkbox.network.util.CryptoSerializationManager serializationManager) {
+        this.serializationManager = serializationManager;
     }
 
     public synchronized
@@ -579,5 +584,10 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
         }
 
         super.finalize();
+    }
+
+    public
+    dorkbox.network.util.CryptoSerializationManager getSerializationManager() {
+        return serializationManager;
     }
 }
