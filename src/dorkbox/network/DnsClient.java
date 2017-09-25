@@ -126,7 +126,7 @@ class DnsClient {
      */
     public static
     String getVersion() {
-        return "1.29";
+        return "2.0";
     }
 
     /**
