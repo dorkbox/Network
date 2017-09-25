@@ -40,7 +40,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.io.Serializable;
 
 import org.junit.Test;
 
@@ -61,11 +60,11 @@ class RmiGlobalTest extends BaseTest {
     private int CLIENT_GLOBAL_OBJECT_ID = 0;
     private int SERVER_GLOBAL_OBJECT_ID = 0;
 
-    private final TestObject globalRemoteServerObject = new TestObjectImpl();
-    private final TestObject globalRemoteClientObject = new TestObjectImpl();
+    private final TestCow globalRemoteServerObject = new TestCowImpl();
+    private final TestCow globalRemoteClientObject = new TestCowImpl();
 
     private static
-    void runTest(final Connection connection, final TestObject rObject, final TestObject test, final int remoteObjectID) {
+    void runTest(final Connection connection, final TestCow rObject, final TestCow test, final int remoteObjectID) {
         System.err.println("Starting test for: " + remoteObjectID);
 
         assertEquals(rObject.hashCode(), test.hashCode());
@@ -170,10 +169,10 @@ class RmiGlobalTest extends BaseTest {
 
 
         // Test sending a reference to a remote object.
-        MessageWithTestObject m = new MessageWithTestObject();
+        MessageWithTestCow m = new MessageWithTestCow();
         m.number = 678;
         m.text = "sometext";
-        m.testObject = test;
+        m.testCow = test;
         connection.send()
                   .TCP(m)
                   .flush();
@@ -184,10 +183,7 @@ class RmiGlobalTest extends BaseTest {
     public static
     void register(dorkbox.network.util.CryptoSerializationManager manager) {
         manager.register(Object.class); // Needed for Object#toString, hashCode, etc.
-
-        // manager.rmi().register(TestObject.class).override(TestObject.class, TestObjectImpl.class);
-        manager.register(MessageWithTestObject.class);
-
+        manager.register(MessageWithTestCow.class);
         manager.register(UnsupportedOperationException.class);
     }
 
@@ -201,6 +197,12 @@ class RmiGlobalTest extends BaseTest {
 
         configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
+
+        // for Server -> Client RMI (ID: CLIENT_GLOBAL_OBJECT_ID)
+        configuration.serialization.registerRmiInterface(TestCow.class);
+
+        // for Client -> Server RMI (ID: SERVER_GLOBAL_OBJECT_ID)
+        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
 
 
         final Server server = new Server(configuration);
@@ -218,11 +220,20 @@ class RmiGlobalTest extends BaseTest {
                   public
                   void connected(final Connection connection) {
                       try {
-                          connection.getRemoteObject(CLIENT_GLOBAL_OBJECT_ID, new RemoteObjectCallback<TestObject>() {
+                          connection.getRemoteObject(CLIENT_GLOBAL_OBJECT_ID, new RemoteObjectCallback<TestCow>() {
                               @Override
                               public
-                              void created(final TestObject remoteObject) {
-                                  runTest(connection, globalRemoteClientObject, remoteObject, CLIENT_GLOBAL_OBJECT_ID);
+                              void created(final TestCow remoteObject) {
+                                  // MUST run on a separate thread because remote object method invocations are blocking
+                                  new Thread() {
+                                      @Override
+                                      public
+                                      void run() {
+                                          System.err.println("Running test for: Server -> Client");
+                                          runTest(connection, globalRemoteClientObject, remoteObject, CLIENT_GLOBAL_OBJECT_ID);
+                                          System.err.println("Done with test for: Server -> Client");
+                                      }
+                                  }.start();
                               }
                           });
                       } catch (IOException e) {
@@ -233,14 +244,17 @@ class RmiGlobalTest extends BaseTest {
               });
 
         server.listeners()
-              .add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
+              .add(new Listener.OnMessageReceived<Connection, MessageWithTestCow>() {
                   @Override
                   public
-                  void received(Connection connection, MessageWithTestObject m) {
-                      TestObject object = m.testObject;
+                  void received(Connection connection, MessageWithTestCow m) {
+                      System.err.println("Received finish signal for test for: Client -> Server");
+
+                      TestCow object = m.testCow;
                       final int id = object.id();
-                      assertEquals(1, id);
-                      System.err.println("Client/Server Finished!");
+                      assertEquals(SERVER_GLOBAL_OBJECT_ID, id);
+
+                      System.err.println("Finished test for: Client -> Server");
 
                       stopEndPoints(2000);
                   }
@@ -248,9 +262,24 @@ class RmiGlobalTest extends BaseTest {
 
 
         // ----
+        configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
+
+        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        register(configuration.serialization);
+
+        // for Server -> Client RMI (ID: CLIENT_GLOBAL_OBJECT_ID)
+        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
+
+        // for Client -> Server RMI (ID: SERVER_GLOBAL_OBJECT_ID)
+        configuration.serialization.registerRmiInterface(TestCow.class);
+
 
         final Client client = new Client(configuration);
         client.setIdleTimeout(0);
+
 
         // register this object as a global object that the server will get
         CLIENT_GLOBAL_OBJECT_ID = client.createGlobalObject(globalRemoteClientObject);
@@ -258,22 +287,34 @@ class RmiGlobalTest extends BaseTest {
         addEndPoint(client);
 
         client.listeners()
-              .add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
+              .add(new Listener.OnMessageReceived<Connection, MessageWithTestCow>() {
                   @Override
                   public
-                  void received(Connection connection, MessageWithTestObject m) {
-                      TestObject object = m.testObject;
+                  void received(Connection connection, MessageWithTestCow m) {
+                      System.err.println("Received finish signal for test for: Server -> Client");
+
+                      TestCow object = m.testCow;
                       final int id = object.id();
-                      assertEquals(1, id);
-                      System.err.println("Server/Client Finished!");
+                      assertEquals(CLIENT_GLOBAL_OBJECT_ID, id);
+
+                      System.err.println("Finished test for: Server -> Client");
 
                       // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
                       try {
-                          connection.getRemoteObject(SERVER_GLOBAL_OBJECT_ID, new RemoteObjectCallback<TestObject>() {
+                          connection.getRemoteObject(SERVER_GLOBAL_OBJECT_ID, new RemoteObjectCallback<TestCow>() {
                               @Override
                               public
-                              void created(final TestObject remoteObject) {
-                                  runTest(connection, globalRemoteServerObject, remoteObject, SERVER_GLOBAL_OBJECT_ID);
+                              void created(final TestCow remoteObject) {
+                                  // MUST run on a separate thread because remote object method invocations are blocking
+                                  new Thread() {
+                                      @Override
+                                      public
+                                      void run() {
+                                          System.err.println("Running test for: Client -> Server");
+                                          runTest(connection, globalRemoteServerObject, remoteObject, SERVER_GLOBAL_OBJECT_ID);
+                                          System.err.println("Done with test for: Client -> Server");
+                                      }
+                                  }.start();
                               }
                           });
                       } catch (IOException e) {
@@ -285,21 +326,6 @@ class RmiGlobalTest extends BaseTest {
 
         client.connect(5000);
         waitForThreads();
-    }
-
-    private
-    interface TestObject extends Serializable {
-        void throwException();
-
-        void moo();
-
-        void moo(String value);
-
-        void moo(String value, long delay);
-
-        int id();
-
-        float slow();
     }
 
     private static
@@ -320,13 +346,13 @@ class RmiGlobalTest extends BaseTest {
 
 
     private static
-    class TestObjectImpl extends ConnectionAware implements TestObject {
+    class TestCowImpl extends ConnectionAware implements TestCow {
         public long value = System.currentTimeMillis();
         public int moos;
         private final int id = 1;
 
         public
-        TestObjectImpl() {
+        TestCowImpl() {
         }
 
         @Override
@@ -378,13 +404,5 @@ class RmiGlobalTest extends BaseTest {
             }
             return 123.0F;
         }
-    }
-
-
-    private static
-    class MessageWithTestObject implements RmiMessages {
-        public int number;
-        public String text;
-        public TestObject testObject;
     }
 }

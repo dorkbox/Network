@@ -15,20 +15,18 @@
  */
 package dorkbox.network.pipeline;
 
+import java.lang.reflect.Field;
+import java.util.List;
+
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.rmi.OverriddenMethods;
 import dorkbox.network.rmi.RemoteObject;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageDecoder;
-
-import java.lang.reflect.Field;
-import java.util.List;
 
 public
 class LocalRmiDecoder extends MessageToMessageDecoder<Object> {
 
     private static final RmiFieldCache fieldCache = RmiFieldCache.INSTANCE();
-    private static final OverriddenMethods overriddenMethods = OverriddenMethods.INSTANCE();
 
     public
     LocalRmiDecoder() {
@@ -70,7 +68,10 @@ class LocalRmiDecoder extends MessageToMessageDecoder<Object> {
                         throw new RuntimeException("Unable to get RMI interface object for RMI implementation");
                     }
 
-                    final Class<?> iface = overriddenMethods.getReverse(localRmiObject.getClass());
+
+                    final Class<?> iface = connection.getEndPoint()
+                                                     .getSerialization()
+                                                     .getRmiIface(localRmiObject.getClass());
                     if (iface == null) {
                         throw new RuntimeException("Unable to get interface for RMI implementation");
                     }

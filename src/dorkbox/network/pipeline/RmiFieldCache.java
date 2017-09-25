@@ -15,12 +15,13 @@
  */
 package dorkbox.network.pipeline;
 
-import com.esotericsoftware.kryo.util.IdentityMap;
-import dorkbox.network.rmi.RMI;
-
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+
+import com.esotericsoftware.kryo.util.IdentityMap;
+
+import dorkbox.network.rmi.Rmi;
 
 /**
  * Uses the "single writer principle" for fast access, but disregards 'single writer', because duplicates are OK
@@ -57,7 +58,7 @@ class RmiFieldCache {
         final ArrayList<Field> fields = new ArrayList<Field>();
 
         for (Field field : clazz.getDeclaredFields()) {
-            if (field.getAnnotation(RMI.class) != null) {
+            if (field.getAnnotation(Rmi.class) != null) {
                 fields.add(field);
             }
         }

@@ -19,7 +19,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.RmiTest;
-import dorkbox.network.rmi.TestObject;
+import dorkbox.network.rmi.TestCow;
 import io.netty.util.ResourceLeakDetector;
 
 /**
@@ -41,8 +41,8 @@ class TestClient
 
 //        rootLogger.setLevel(Level.OFF);
 
-        // rootLogger.setLevel(Level.DEBUG);
-       rootLogger.setLevel(Level.TRACE);
+        rootLogger.setLevel(Level.DEBUG);
+       // rootLogger.setLevel(Level.TRACE);
 //        rootLogger.setLevel(Level.ALL);
 
 
@@ -79,11 +79,13 @@ class TestClient
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = 2000;
+        configuration.udpPort = 2001;
+        configuration.udtPort = 2002;
         configuration.host = "localhost";
 
         configuration.serialization = CryptoSerializationManager.DEFAULT();
         RmiTest.register(configuration.serialization);
-        configuration.serialization.registerRmiInterface(TestObject.class);
+        configuration.serialization.registerRmiInterface(TestCow.class);
 
 
         try {
@@ -99,16 +101,17 @@ class TestClient
 
                           try {
                               // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
-                              connection.getRemoteObject(TestObject.class, new RemoteObjectCallback<TestObject>() {
+                              connection.getRemoteObject(TestCow.class, new RemoteObjectCallback<TestCow>() {
                                   @Override
                                   public
-                                  void created(final TestObject remoteObject) {
+                                  void created(final TestCow remoteObject) {
                                       new Thread() {
                                           @Override
                                           public
                                           void run() {
                                               // MUST run on a separate thread because remote object method invocations are blocking
                                               RmiTest.runTests(connection, remoteObject, 1);
+                                              System.err.println("DONE");
                                           }
                                       }.start();
                                   }
@@ -117,18 +120,6 @@ class TestClient
                               e.printStackTrace();
                               fail();
                           }
-
-                          // try {
-                          //     connection.getRemoteObject(TestObject.class, new RemoteObjectCallback<TestObject>() {
-                          //         @Override
-                          //         public
-                          //         void created(final TestObject remoteObject) {
-                          //             remoteObject.test();
-                          //         }
-                          //     });
-                          // } catch (IOException e) {
-                          //     e.printStackTrace();
-                          // }
                       }
                   });
 

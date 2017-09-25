@@ -15,7 +15,11 @@
  */
 package dorkbox.network.rmi;
 
-import java.lang.annotation.*;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  * This specifies to the serializer, that this class contains an RMI object, and that a specific field is an RMI object. Both are
@@ -32,4 +36,4 @@ import java.lang.annotation.*;
 @Inherited
 @Target(value = {ElementType.TYPE, ElementType.FIELD})
 public
-@interface RMI {}
+@interface Rmi {}

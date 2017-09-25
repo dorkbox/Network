@@ -68,6 +68,7 @@ interface RmiSerializationManager extends SerializationManager {
 
     /**
      * Necessary to register classes for RMI, only called once when the RMI bridge is created.
+     *
      * @return true if there are classes that have been registered for RMI
      */
     boolean initRmiSerialization();
@@ -83,6 +84,15 @@ interface RmiSerializationManager extends SerializationManager {
     void returnKryo(KryoExtra kryo);
 
     /**
+     * Gets the RMI interface based on the specified ID (which is the ID for the registered implementation)
+     *
+     * @param objectId ID of the registered interface, which will map to the corresponding implementation.
+     *
+     * @return the implementation for the interface, or null
+     */
+    Class<?> getRmiIface(int objectId);
+
+    /**
      * Gets the RMI implementation based on the specified ID (which is the ID for the registered interface)
      *
      * @param objectId ID of the registered interface, which will map to the corresponding implementation.
@@ -92,6 +102,20 @@ interface RmiSerializationManager extends SerializationManager {
     Class<?> getRmiImpl(int objectId);
 
     /**
+     * Gets the RMI implementation based on the specified interface
+     *
+     * @return the corresponding implementation
+     */
+    Class<?> getRmiImpl(Class<?> iface);
+
+    /**
+     * Gets the RMI interface based on the specified implementation
+     *
+     * @return the corresponding interface
+     */
+    Class<?> getRmiIface(Class<?> implementation);
+
+    /**
      * Enable remote method invocation (RMI) for this connection. There is additional overhead to using RMI.
      * <p/>
      * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
@@ -99,8 +123,6 @@ interface RmiSerializationManager extends SerializationManager {
      * type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
      */
     RmiSerializationManager registerRmiInterface(Class<?> ifaceClass);
-
-
 
     /**
      * Objects that we want to use RMI with, must be accessed via an interface. This method configures the serialization of an

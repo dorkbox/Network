@@ -207,7 +207,7 @@ class RmiProxyHandler implements InvocationHandler {
         }
 
         EndPoint endPoint = this.connection.getEndPoint();
-        final RmiSerializationManager serializationManager = (RmiSerializationManager) endPoint.getSerialization();
+        final RmiSerializationManager serializationManager = endPoint.getSerialization();
 
         InvokeMethod invokeMethod = new InvokeMethod();
         invokeMethod.objectID = this.objectID;
@@ -215,7 +215,7 @@ class RmiProxyHandler implements InvocationHandler {
 
 
         // which method do we access?
-        CachedMethod[] cachedMethods = CachedMethod.getMethods(serializationManager, method.getDeclaringClass());
+        CachedMethod[] cachedMethods = CachedMethod.getMethods(serializationManager, method.getDeclaringClass(), invokeMethod.objectID);
 
         for (int i = 0, n = cachedMethods.length; i < n; i++) {
             CachedMethod cachedMethod = cachedMethods[i];
@@ -255,10 +255,9 @@ class RmiProxyHandler implements InvocationHandler {
 
         byte responseID = (byte) 0;
         // An invocation doesn't need a response is if it's
-        // VOID return type
         // ASYNC and no return values or exceptions are wanted back
         Class<?> returnType = method.getReturnType();
-        boolean ignoreResponse = returnType == void.class || this.isAsync && !(this.transmitReturnValue || this.transmitExceptions);
+        boolean ignoreResponse = this.isAsync && !(this.transmitReturnValue || this.transmitExceptions);
         if (ignoreResponse) {
             invokeMethod.responseData = (byte) 0; // 0 means do not respond.
         }
@@ -266,7 +265,7 @@ class RmiProxyHandler implements InvocationHandler {
             synchronized (this) {
                 // Increment the response counter and put it into the low bits of the responseID.
                 responseID = this.nextResponseId++;
-                if (this.nextResponseId > RmiImplHandler.responseIdMask) {
+                if (this.nextResponseId > RmiBridge.responseIdMask) {
                     this.nextResponseId = (byte) 1;
                 }
                 this.pendingResponses[responseID] = true;
@@ -274,15 +273,17 @@ class RmiProxyHandler implements InvocationHandler {
             // Pack other data into the high bits.
             byte responseData = responseID;
             if (this.transmitReturnValue) {
-                responseData |= (byte) RmiImplHandler.returnValueMask;
+                responseData |= (byte) RmiBridge.returnValueMask;
             }
             if (this.transmitExceptions) {
-                responseData |= (byte) RmiImplHandler.returnExceptionMask;
+                responseData |= (byte) RmiBridge.returnExceptionMask;
             }
             invokeMethod.responseData = responseData;
         }
 
-        // Sends our invokeMethod to the remote connection, which the RmiImplHandler listens for
+        this.lastResponseID = (byte) (invokeMethod.responseData & RmiBridge.responseIdMask);
+
+        // Sends our invokeMethod to the remote connection, which the RmiBridge listens for
         if (this.udp) {
             this.connection.send()
                            .UDP(invokeMethod)
@@ -310,10 +311,7 @@ class RmiProxyHandler implements InvocationHandler {
                           "#" + method.getName() + "(" + argString + ")");
         }
 
-        this.lastResponseID = (byte) (invokeMethod.responseData & RmiImplHandler.responseIdMask);
-
         // 0 means respond immediately because it's
-        // VOID return type
         // ASYNC and no return values or exceptions are wanted back
         if (this.isAsync) {
             if (returnType.isPrimitive()) {
@@ -341,13 +339,7 @@ class RmiProxyHandler implements InvocationHandler {
                 if (returnType == double.class) {
                     return 0.0d;
                 }
-                if (returnType == void.class) {
-                    return 0.0d;
-                }
             }
-            return null;
-        }
-        else if (returnType == void.class) {
             return null;
         }
 
@@ -375,11 +367,21 @@ class RmiProxyHandler implements InvocationHandler {
      */
     private
     Object waitForResponse(final byte responseID) throws IOException {
-        long endTime = System.currentTimeMillis() + this.timeoutMillis;
-        long remaining = this.timeoutMillis;
+        // if timeout == 0, we wait "forever"
+        long remaining;
+        long endTime;
 
-        if (remaining == 0) {
-            // just wait however log it takes.
+        if (this.timeoutMillis != 0) {
+            remaining = this.timeoutMillis;
+            endTime = System.currentTimeMillis() + remaining;
+        } else {
+            // not forever, but close enough
+            remaining = Long.MAX_VALUE;
+            endTime = Long.MAX_VALUE;
+        }
+
+        // wait for the specified time
+        while (remaining > 0) {
             InvokeMethodResult invokeMethodResult;
             synchronized (this) {
                 invokeMethodResult = this.responseTable[responseID];
@@ -392,7 +394,7 @@ class RmiProxyHandler implements InvocationHandler {
             else {
                 this.lock.lock();
                 try {
-                    this.responseCondition.await();
+                    this.responseCondition.await(remaining, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread()
                           .interrupt();
@@ -402,41 +404,7 @@ class RmiProxyHandler implements InvocationHandler {
                 }
             }
 
-            synchronized (this) {
-                invokeMethodResult = this.responseTable[responseID];
-            }
-            if (invokeMethodResult != null) {
-                this.lastResponseID = null;
-                return invokeMethodResult.result;
-            }
-        }
-        else {
-            // wait for the specified time
-            while (remaining > 0) {
-                InvokeMethodResult invokeMethodResult;
-                synchronized (this) {
-                    invokeMethodResult = this.responseTable[responseID];
-                }
-
-                if (invokeMethodResult != null) {
-                    this.lastResponseID = null;
-                    return invokeMethodResult.result;
-                }
-                else {
-                    this.lock.lock();
-                    try {
-                        this.responseCondition.await(remaining, TimeUnit.MILLISECONDS);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread()
-                              .interrupt();
-                        throw new IOException("Response timed out.", e);
-                    } finally {
-                        this.lock.unlock();
-                    }
-                }
-
-                remaining = endTime - System.currentTimeMillis();
-            }
+            remaining = endTime - System.currentTimeMillis();
         }
 
         // only get here if we timeout

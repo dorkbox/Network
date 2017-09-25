@@ -42,7 +42,7 @@ import com.esotericsoftware.kryo.util.IntMap;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
 
 import dorkbox.network.connection.ping.PingMessage;
-import dorkbox.network.rmi.CachedMethod;
+import dorkbox.network.rmi.ClassDefinitions;
 import dorkbox.network.rmi.InvocationHandlerSerializer;
 import dorkbox.network.rmi.InvocationResultSerializer;
 import dorkbox.network.rmi.InvokeMethod;
@@ -153,9 +153,11 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     }
 
     private static class RemoteImplClass {
+        private final Class<?> ifaceClass;
         private final Class<?> implClass;
 
-        RemoteImplClass(final Class<?> implClass) {
+        RemoteImplClass(final Class<?> ifaceClass, final Class<?> implClass) {
+            this.ifaceClass = ifaceClass;
             this.implClass = implClass;
         }
     }
@@ -174,7 +176,9 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     private RemoteObjectSerializer remoteObjectSerializer;
 
     // used to track which interface -> implementation, for use by RMI
-    private final IntMap<Class<?>> rmiInterfaceToImpl = new IntMap<Class<?>>();
+    private final IntMap<Class<?>> rmiIdToImpl = new IntMap<Class<?>>();
+    private final IntMap<Class<?>> rmiIdToIface = new IntMap<Class<?>>();
+    private final ClassDefinitions classDefinitions = new ClassDefinitions();
 
     /**
      * By default, the serialization manager will compress+encrypt data to connections with remote IPs, and only compress on the loopback IP
@@ -207,12 +211,12 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
             public
             KryoExtra create() {
                 synchronized (CryptoSerializationManager.this) {
-                    KryoExtra kryo = new KryoExtra();
+                    KryoExtra kryo = new KryoExtra(CryptoSerializationManager.this);
 
                     // we HAVE to pre-allocate the KRYOs
                     boolean useAsm = !useUnsafeMemory;
 
-                    kryo.setAsmEnabled(useAsm);
+                    kryo.getFieldSerializerConfig().setUseAsm(useAsm);
                     kryo.setRegistrationRequired(registrationRequired);
 
                     kryo.setReferences(references);
@@ -268,7 +272,8 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
                             int id = kryo.register(remoteImplClass.implClass, remoteObjectSerializer).getId();
 
                             // sets up the RMI, so when we receive the iface class from the client, we know what impl to use
-                            rmiInterfaceToImpl.put(id, remoteImplClass.implClass);
+                            rmiIdToImpl.put(id, remoteImplClass.implClass);
+                            rmiIdToIface.put(id, remoteImplClass.ifaceClass);
                         }
                     }
 
@@ -355,38 +360,12 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     }
 
     /**
-     * @return the previously registered class
+     * Enable remote method invocation (RMI) for this connection. There is additional overhead to using RMI.
+     * <p/>
+     * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
+     * return value which is not {@link dorkbox.network.rmi.RemoteObject#setAsync(boolean) ignored}, an extra byte is written. If the
+     * type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
      */
-    private
-    Class<?> getLastAddedClass() {
-        // get the previously registered class
-        Object obj = classesToRegister.get(classesToRegister.size() - 1);
-        if (obj instanceof Class) {
-            return (Class) obj;
-        }
-        else if (obj instanceof ClassSerializer) {
-            ClassSerializer classSerializer = (ClassSerializer) obj;
-            return classSerializer.clazz;
-        }
-        else if (obj instanceof ClassSerializer2) {
-            ClassSerializer2 classSerializer = (ClassSerializer2) obj;
-            return classSerializer.clazz;
-        }
-
-        return null;
-    }
-
-    private static
-    boolean testInterface(Class<?> from, Class<?> iface) {
-        for (Class<?> intface : from.getInterfaces()) {
-            if (iface.equals(intface) || testInterface(intface, iface)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     @Override
     public synchronized
     RmiSerializationManager registerRmiInterface(Class<?> ifaceClass) {
@@ -421,13 +400,11 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
         }
 
         usesRmi = true;
+        classesToRegister.add(new RemoteImplClass(ifaceClass, implClass));
 
-        // THIS IS DONE ON THE SERVER ONLY
-        // we have to save the fact that we might have overridden methods.
-        // will throw IllegalArgumentException if the iface/impl have previously been overridden
-        CachedMethod.registerOverridden(ifaceClass, implClass);
+        // this MUST BE UNIQUE otherwise unexpected things can happen.
+        classDefinitions.set(ifaceClass, implClass);
 
-        classesToRegister.add(new RemoteImplClass(implClass));
         return this;
     }
 
@@ -473,14 +450,49 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     }
 
     /**
+     * Gets the RMI interface based on the specified ID (which is the ID for the registered implementation)
+     *
+     * @param objectId ID of the registered interface, which will map to the corresponding implementation.
+     * @return the implementation for the interface, or null
+     */
+    @Override
+    public
+    Class<?> getRmiIface(int objectId) {
+        return rmiIdToIface.get(objectId);
+    }
+
+    /**
+     * Gets the RMI implementation based on the specified interface
+     *
+     * @return the corresponding implementation
+     */
+    @Override
+    public
+    Class<?> getRmiImpl(Class<?> iface) {
+        return classDefinitions.get(iface);
+    }
+
+    /**
+     * Gets the RMI interface based on the specified implementation
+     *
+     * @return the corresponding interface
+     */
+    @Override
+    public
+    Class<?> getRmiIface(Class<?> implementation) {
+        return classDefinitions.getReverse(implementation);
+    }
+
+    /**
      * Gets the RMI implementation based on the specified ID (which is the ID for the registered interface)
      *
      * @param objectId ID of the registered interface, which will map to the corresponding implementation.
      * @return the implementation for the interface, or null
      */
     @Override
-    public Class<?> getRmiImpl(int objectId) {
-        return rmiInterfaceToImpl.get(objectId);
+    public
+    Class<?> getRmiImpl(int objectId) {
+        return rmiIdToImpl.get(objectId);
     }
 
     /**

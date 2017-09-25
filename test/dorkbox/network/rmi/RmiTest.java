@@ -159,7 +159,7 @@ class RmiTest extends BaseTest {
 
 
         // Test sending a reference to a remote object.
-        MessageWithTestObject m = new MessageWithTestObject();
+        MessageWithTestCow m = new MessageWithTestCow();
         m.number = 678;
         m.text = "sometext";
         m.testCow = test;
@@ -172,7 +172,7 @@ class RmiTest extends BaseTest {
     public static
     void register(dorkbox.network.util.CryptoSerializationManager manager) {
         manager.register(Object.class); // Needed for Object#toString, hashCode, etc.
-        manager.register(MessageWithTestObject.class);
+        manager.register(MessageWithTestCow.class);
         manager.register(UnsupportedOperationException.class);
     }
 
@@ -201,10 +201,10 @@ class RmiTest extends BaseTest {
         server.bind(false);
 
         final ListenerBridge listeners = server.listeners();
-        listeners.add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
+        listeners.add(new Listener.OnMessageReceived<Connection, MessageWithTestCow>() {
             @Override
             public
-            void received(Connection connection, MessageWithTestObject m) {
+            void received(Connection connection, MessageWithTestCow m) {
                 System.err.println("Received finish signal for test for: Client -> Server");
 
                 TestCow object = m.testCow;
@@ -296,10 +296,10 @@ class RmiTest extends BaseTest {
         });
 
         client.listeners()
-              .add(new Listener.OnMessageReceived<Connection, MessageWithTestObject>() {
+              .add(new Listener.OnMessageReceived<Connection, MessageWithTestCow>() {
                   @Override
                   public
-                  void received(Connection connection, MessageWithTestObject m) {
+                  void received(Connection connection, MessageWithTestCow m) {
                       System.err.println("Received finish signal for test for: Client -> Server");
 
                       TestCow object = m.testCow;

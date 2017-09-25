@@ -23,28 +23,23 @@ import com.esotericsoftware.kryo.util.IdentityMap;
  * Uses the "single writer principle" for fast access
  */
 public
-class OverriddenMethods {
+class ClassDefinitions {
     // not concurrent because they are setup during system initialization
     private volatile IdentityMap<Class<?>, Class<?>> overriddenMethods = new IdentityMap<Class<?>, Class<?>>();
     private volatile IdentityMap<Class<?>, Class<?>> overriddenReverseMethods = new IdentityMap<Class<?>, Class<?>>();
 
-    private static final AtomicReferenceFieldUpdater<OverriddenMethods, IdentityMap> overriddenMethodsREF =
-                    AtomicReferenceFieldUpdater.newUpdater(OverriddenMethods.class,
+    private static final AtomicReferenceFieldUpdater<ClassDefinitions, IdentityMap> overriddenMethodsREF =
+                    AtomicReferenceFieldUpdater.newUpdater(ClassDefinitions.class,
                                                            IdentityMap.class,
                                                            "overriddenMethods");
 
-    private static final AtomicReferenceFieldUpdater<OverriddenMethods, IdentityMap> overriddenReverseMethodsREF =
-                    AtomicReferenceFieldUpdater.newUpdater(OverriddenMethods.class,
+    private static final AtomicReferenceFieldUpdater<ClassDefinitions, IdentityMap> overriddenReverseMethodsREF =
+                    AtomicReferenceFieldUpdater.newUpdater(ClassDefinitions.class,
                                                            IdentityMap.class,
                                                            "overriddenReverseMethods");
 
-    private static final OverriddenMethods INSTANCE = new OverriddenMethods();
-    public static synchronized OverriddenMethods INSTANCE() {
-        return INSTANCE;
-    }
-
-    private
-    OverriddenMethods() {
+    public
+    ClassDefinitions() {
     }
 
     /**
@@ -76,7 +71,7 @@ class OverriddenMethods {
         Class<?> a = this.overriddenMethods.put(ifaceClass, implClass);
         Class<?> b = this.overriddenReverseMethods.put(implClass, ifaceClass);
 
-        // this MUST BE UNIQUE per JVM, otherwise unexpected things can happen.
+        // this MUST BE UNIQUE otherwise unexpected things can happen.
         if (a != null || b != null) {
             throw new IllegalArgumentException("Unable to override interface (" + ifaceClass + ") and implementation (" + implClass + ") " +
                                                "because they have already been overridden by something else. It is critical that they are" +
