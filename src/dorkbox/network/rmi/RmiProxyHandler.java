@@ -104,12 +104,9 @@ class RmiProxyHandler implements InvocationHandler {
                 byte responseID = invokeMethodResult.responseID;
 
                 if (invokeMethodResult.objectID != objectID) {
-//				    System.err.println("FAILED: " + responseID);
-//				    logger.trace("{} FAILED to received data: {}  with id ({})", connection, invokeMethodResult.result, invokeMethodResult.responseID);
                     return;
                 }
 
-//				logger.trace("{} received data: {}  with id ({})", connection, invokeMethodResult.result, invokeMethodResult.responseID);
                 synchronized (this) {
                     if (RmiProxyHandler.this.pendingResponses[responseID]) {
                         RmiProxyHandler.this.responseTable[responseID] = invokeMethodResult;
