@@ -204,7 +204,7 @@ class RmiTest extends BaseTest {
         listeners.add(new Listener.OnMessageReceived<Connection, MessageWithTestCow>() {
             @Override
             public
-            void received(Connection connection, MessageWithTestCow m) {
+            void received(final Connection connection, MessageWithTestCow m) {
                 System.err.println("Received finish signal for test for: Client -> Server");
 
                 TestCow object = m.testCow;

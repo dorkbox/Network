@@ -110,7 +110,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     //
     private final RmiBridge rmiBridge;
     private final Map<Integer, RemoteObject> proxyIdCache = new WeakHashMap<Integer, RemoteObject>(8);
-    private final IntMap<RemoteObjectCallback> rmiRegistrationCallbacks = new IntMap<>();
+    private final IntMap<RemoteObjectCallback> rmiRegistrationCallbacks = new IntMap<RemoteObjectCallback>();
     private int rmiRegistrationID = 0; // protected by synchronized (rmiRegistrationCallbacks)
 
     /**
