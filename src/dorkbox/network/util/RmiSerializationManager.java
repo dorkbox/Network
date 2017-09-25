@@ -15,6 +15,8 @@
  */
 package dorkbox.network.util;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Serializer;
 
 import dorkbox.network.connection.KryoExtra;
@@ -64,7 +66,6 @@ interface RmiSerializationManager extends SerializationManager {
      */
     @Override
     RmiSerializationManager register(Class<?> clazz, Serializer<?> serializer, int id);
-
 
     /**
      * Necessary to register classes for RMI, only called once when the RMI bridge is created.
