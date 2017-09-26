@@ -396,7 +396,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on TCP port: {}", tcpPort);
+            logger2.info("Listening on address {} at TCP port: {}", hostName, tcpPort);
             manageForShutdown(future);
         }
 
@@ -421,7 +421,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on UDP port: {}", udpPort);
+            logger2.info("Listening on address {} at UDP port: {}", hostName, udpPort);
             manageForShutdown(future);
         }
 
@@ -445,7 +445,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on UDT port: {}", udtPort);
+            logger2.info("Listening on address {} at UDT port: {}", hostName, udtPort);
             manageForShutdown(future);
         }
 
