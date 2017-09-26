@@ -136,7 +136,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         if (options.localChannelName != null && options.tcpPort < 0 && options.udpPort < 0 && options.udtPort < 0) {
             // no networked bootstraps. LOCAL connection only
             Bootstrap localBootstrap = new Bootstrap();
-            this.bootstraps.add(new BootstrapWrapper("LOCAL", -1, localBootstrap));
+            this.bootstraps.add(new BootstrapWrapper("LOCAL", options.localChannelName, -1, localBootstrap));
 
             EventLoopGroup localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-LOCAL",
                                                                                                                   threadGroup));
@@ -159,7 +159,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
             if (options.tcpPort > 0) {
                 Bootstrap tcpBootstrap = new Bootstrap();
-                this.bootstraps.add(new BootstrapWrapper("TCP", options.tcpPort, tcpBootstrap));
+                this.bootstraps.add(new BootstrapWrapper("TCP", options.host, options.tcpPort, tcpBootstrap));
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
@@ -189,7 +189,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
             if (options.udpPort > 0) {
                 Bootstrap udpBootstrap = new Bootstrap();
-                this.bootstraps.add(new BootstrapWrapper("UDP", options.udpPort, udpBootstrap));
+                this.bootstraps.add(new BootstrapWrapper("UDP", options.host, options.udpPort, udpBootstrap));
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
@@ -237,7 +237,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                 if (udtAvailable) {
                     // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
                     Bootstrap udtBootstrap = new Bootstrap();
-                    this.bootstraps.add(new BootstrapWrapper("UDT", options.udtPort, udtBootstrap));
+                    this.bootstraps.add(new BootstrapWrapper("UDT", options.host, options.udtPort, udtBootstrap));
 
                     EventLoopGroup udtBoss = UdtEndpointProxy.getWorker(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
 

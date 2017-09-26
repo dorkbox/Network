@@ -21,11 +21,13 @@ public
 class BootstrapWrapper {
     public final String type;
     public final Bootstrap bootstrap;
+    public final String address;
     public final int port;
 
     public
-    BootstrapWrapper(String type, int port, Bootstrap bootstrap) {
+    BootstrapWrapper(String type, String address, int port, Bootstrap bootstrap) {
         this.type = type;
+        this.address = address;
         this.port = port;
         this.bootstrap = bootstrap;
     }
@@ -33,6 +35,6 @@ class BootstrapWrapper {
     @Override
     public
     String toString() {
-        return "BootstrapWrapper [type=" + this.type + ", port=" + this.port + "]";
+        return "BootstrapWrapper{" + "type='" + type + '\'' + ", address='" + address + '\'' + ", port=" + port + '}';
     }
 }

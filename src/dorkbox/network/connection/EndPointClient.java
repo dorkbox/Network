@@ -86,16 +86,16 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
                 future.await();
             } catch (Exception e) {
                 String errorMessage = stopWithErrorMessage(logger2,
-                                                           "Could not connect to the " + bootstrapWrapper.type + " server on port: " +
-                                                           bootstrapWrapper.port,
+                                                           "Could not connect to the " + bootstrapWrapper.type + " server at " +
+                                                           bootstrapWrapper.address + " on port: " + bootstrapWrapper.port,
                                                            e);
                 throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
                 String errorMessage = stopWithErrorMessage(logger2,
-                                                           "Could not connect to the " + bootstrapWrapper.type + " server on port: " +
-                                                           bootstrapWrapper.port,
+                                                           "Could not connect to the " + bootstrapWrapper.type + " server at " +
+                                                           bootstrapWrapper.address + " on port: " + bootstrapWrapper.port,
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
