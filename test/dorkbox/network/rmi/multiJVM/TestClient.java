@@ -90,7 +90,7 @@ class TestClient
 
         try {
             Client client = new Client(configuration);
-            client.setIdleTimeout(0);
+            // client.setIdleTimeout(0);
 
             client.listeners()
                   .add(new dorkbox.network.connection.Listener.OnConnected<Connection>() {
@@ -105,11 +105,11 @@ class TestClient
                                   @Override
                                   public
                                   void created(final TestCow remoteObject) {
+                                      // MUST run on a separate thread because remote object method invocations are blocking
                                       new Thread() {
                                           @Override
                                           public
                                           void run() {
-                                              // MUST run on a separate thread because remote object method invocations are blocking
                                               RmiTest.runTests(connection, remoteObject, 1);
                                               System.err.println("DONE");
                                           }
@@ -123,7 +123,7 @@ class TestClient
                       }
                   });
 
-            client.connect(0);
+            client.connect(3330);
 
             Thread.sleep(999999999);
         } catch (Exception e) {

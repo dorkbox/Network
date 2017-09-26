@@ -40,44 +40,6 @@ class TestServer
             e.printStackTrace();
         }
 
-        server.setIdleTimeout(0);
+        // server.setIdleTimeout(0);
         server.bind(true);
-
-
-        // configuration.host = "localhost";
-        // configuration.serialization.register(TestObjImpl.class);
-        //
-        // Client client = null;
-        // try {
-        //     client = new Client(configuration);
-        // } catch (InitializationException e) {
-        //     e.printStackTrace();
-        // } catch (SecurityException e) {
-        //     e.printStackTrace();
-        // } catch (IOException e) {
-        //     e.printStackTrace();
-        // }
-        // client.setIdleTimeout(0);
-        //
-        // client.listeners()
-        //       .add(new dorkbox.network.connection.Listener.OnConnected<Connection>() {
-        //           @Override
-        //           public
-        //           void connected(final Connection connection) {
-        //               System.err.println("CONNECTED!");
-        //
-        //               try {
-        //                   TestCow object = connection.createProxyObject(TestCow.class);
-        //                   object.test();
-        //               } catch (IOException e) {
-        //                   e.printStackTrace();
-        //               }
-        //           }
-        //       });
-        //
-        // try {
-        //     client.connect(5000);
-        // } catch (IOException e) {
-        //     e.printStackTrace();
-        // }
     }}
