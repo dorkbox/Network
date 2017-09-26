@@ -69,7 +69,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     public static
     String getVersion() {
-        return "2.0";
+        return "2.1";
     }
 
     private final String localChannelName;
