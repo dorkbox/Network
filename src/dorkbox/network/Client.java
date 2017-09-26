@@ -72,6 +72,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         return "2.0";
     }
 
+    private final String localChannelName;
+    private final String hostName;
+
     /**
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme
      */
@@ -106,6 +109,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
             logger2.error(msg);
             throw new IllegalArgumentException(msg);
         }
+
+        localChannelName = options.localChannelName;
+        hostName = options.host;
 
         boolean isAndroid = PlatformDependent.isAndroid();
 
@@ -312,6 +318,13 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         // make sure we are not trying to connect during a close or stop event.
         // This will wait until we have finished shutting down.
         synchronized (this.shutdownInProgress) {
+        }
+
+        if (localChannelName != null) {
+            logger.info("Connecting to local server: {}", localChannelName);
+        }
+        else {
+            logger.info("Connecting to server: {}", hostName);
         }
 
         // have to start the registration process
