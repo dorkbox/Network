@@ -85,6 +85,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
     private final int udtPort;
 
     private final String localChannelName;
+    private final String hostName;
 
     /**
      * Starts a LOCAL <b>only</b> server, with the default serialization scheme.
@@ -118,6 +119,14 @@ class Server<C extends Connection> extends EndPointServer<C> {
         udtPort = options.udtPort;
 
         localChannelName = options.localChannelName;
+
+        if (options.host == null) {
+            hostName = "0.0.0.0";
+        }
+        else {
+            hostName = options.host;
+        }
+
 
         if (localChannelName != null) {
             localBootstrap = new ServerBootstrap();
@@ -234,8 +243,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
                                                                                 registrationWrapper,
                                                                                 serializationManager));
 
+            // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
             if (options.host != null) {
-                tcpBootstrap.localAddress(options.host, tcpPort);
+                tcpBootstrap.localAddress(hostName, tcpPort);
             }
             else {
                 tcpBootstrap.localAddress(tcpPort);
@@ -371,13 +381,17 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 future = tcpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to TCP port " + tcpPort + " on the server.", e);
+                String errorMessage = stopWithErrorMessage(logger2,
+                                                           "Could not bind to address " + hostName + " TCP port " + tcpPort +
+                                                           " on the server.",
+                                                           e);
                 throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
                 String errorMessage = stopWithErrorMessage(logger2,
-                                                           "Could not bind to TCP port " + tcpPort + " on the server.",
+                                                           "Could not bind to address " + hostName + " TCP port " + tcpPort +
+                                                           " on the server.",
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
@@ -393,13 +407,16 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 future = udpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDP port " + udpPort + " on the server.", e);
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to address " + hostName + " UDP port " +
+                                                                    udpPort + " on the server.",
+                                                           e);
                 throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
                 String errorMessage = stopWithErrorMessage(logger2,
-                                                           "Could not bind to UDP port " + udpPort + " on the server.",
+                                                           "Could not bind to address " + hostName + " UDP port " + udpPort +
+                                                           " on the server.",
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
@@ -415,13 +432,15 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 future = udtBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to UDT port " + udtPort + " on the server.", e);
+                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to address " + hostName + " UDT port " +
+                                                                    udtPort + " on the server.", e);
                 throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
                 String errorMessage = stopWithErrorMessage(logger2,
-                                                           "Could not bind to UDT port " + udtPort + " on the server.",
+                                                           "Could not bind to address " + hostName + " UDT port " + udtPort +
+                                                           " on the server.",
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
