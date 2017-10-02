@@ -33,9 +33,4 @@ interface ConnectionBridgeBase {
      * Sends the message over the network using UDP (or via LOCAL when it's a local channel).
      */
     ConnectionPoint UDP(Object message);
-
-    /**
-     * Sends the message over the network using UDT. (or via LOCAL when it's a local channel).
-     */
-    ConnectionPoint UDT(Object message);
 }

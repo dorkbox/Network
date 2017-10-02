@@ -24,8 +24,6 @@ import dorkbox.network.connection.EndPointServer;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerTCP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerUDP;
-import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerUDT;
-import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
@@ -78,11 +76,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
     private final ServerBootstrap localBootstrap;
     private final ServerBootstrap tcpBootstrap;
     private final Bootstrap udpBootstrap;
-    private final ServerBootstrap udtBootstrap;
 
     private final int tcpPort;
     private final int udpPort;
-    private final int udtPort;
 
     private final String localChannelName;
     private final String hostName;
@@ -106,17 +102,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
         super(options);
 
         Logger logger2 = logger;
-        if (OS.isAndroid() && options.udtPort > 0) {
-            // Android does not support UDT.
-            if (logger2.isInfoEnabled()) {
-                logger2.info("Android does not support UDT.");
-            }
-            options.udtPort = -1;
-        }
 
         tcpPort = options.tcpPort;
         udpPort = options.udpPort;
-        udtPort = options.udtPort;
 
         localChannelName = options.localChannelName;
 
@@ -152,26 +140,6 @@ class Server<C extends Connection> extends EndPointServer<C> {
 
         String threadName = Server.class.getSimpleName();
 
-        if (udtPort > 0) {
-            // check to see if we have UDT available!
-            boolean udtAvailable = false;
-            try {
-                Class.forName("com.barchart.udt.nio.SelectorProviderUDT");
-                udtAvailable = true;
-            } catch (Throwable e) {
-                logger2.error("Requested a UDT service on port {}, but the barchart UDT libraries are not loaded.", udtPort);
-            }
-
-            if (udtAvailable) {
-                udtBootstrap = new ServerBootstrap();
-            }
-            else {
-                udtBootstrap = null;
-            }
-        }
-        else {
-            udtBootstrap = null;
-        }
 
         final EventLoopGroup boss;
         final EventLoopGroup worker;
@@ -295,30 +263,6 @@ class Server<C extends Connection> extends EndPointServer<C> {
             udpBootstrap.option(ChannelOption.SO_BROADCAST, false)
                         .option(ChannelOption.SO_SNDBUF, udpMaxSize);
         }
-
-
-        if (udtBootstrap != null) {
-            EventLoopGroup udtBoss;
-            EventLoopGroup udtWorker;
-
-            // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
-            udtBoss = UdtEndpointProxy.getBoss(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
-            udtWorker = UdtEndpointProxy.getWorker(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
-
-            UdtEndpointProxy.setChannelFactory(udtBootstrap);
-            udtBootstrap.group(udtBoss, udtWorker)
-                        .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
-                        .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
-                        // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                        .localAddress(udtPort)
-                        .childHandler(new RegistrationRemoteHandlerServerUDT<C>(threadName,
-                                                                                registrationWrapper,
-                                                                                serializationManager));
-
-            manageForShutdown(udtBoss);
-            manageForShutdown(udtWorker);
-        }
     }
 
     /**
@@ -422,30 +366,6 @@ class Server<C extends Connection> extends EndPointServer<C> {
             }
 
             logger2.info("Listening on address {} at UDP port: {}", hostName, udpPort);
-            manageForShutdown(future);
-        }
-
-        // UDT
-        if (udtBootstrap != null) {
-            // Wait until the connection attempt succeeds or fails.
-            try {
-                future = udtBootstrap.bind();
-                future.await();
-            } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to address " + hostName + " UDT port " +
-                                                                    udtPort + " on the server.", e);
-                throw new IllegalArgumentException(errorMessage);
-            }
-
-            if (!future.isSuccess()) {
-                String errorMessage = stopWithErrorMessage(logger2,
-                                                           "Could not bind to address " + hostName + " UDT port " + udtPort +
-                                                           " on the server.",
-                                                           future.cause());
-                throw new IllegalArgumentException(errorMessage);
-            }
-
-            logger2.info("Listening on address {} at UDT port: {}", hostName, udtPort);
             manageForShutdown(future);
         }
 

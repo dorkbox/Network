@@ -104,15 +104,6 @@ interface RemoteObject {
     void setUDP();
 
     /**
-     * Specifies that remote method invocation will happen over UDT. Default is {@link #setTCP()}
-     * <p>
-     * UDT remote method invocations <b>will</b> return a response and the invoking thread <b>will</b> wait for a response. See {@link
-     * #setAsync(boolean)} if you do not want to wait for a response, which can be retrieved later with {@link #waitForLastResponse()} or
-     * {@link #waitForResponse(byte)}.
-     */
-    void setUDT();
-
-    /**
      * Permits calls to {@link Object#toString()} to actually return the `toString()` method on the object.
      *
      * @param enableDetailedToString

@@ -24,7 +24,7 @@ interface ConnectionPoint {
     boolean isWritable();
 
     /**
-     * Flushes the contents of the TCP/UDP/UDT/etc pipes to the wire.
+     * Flushes the contents of the TCP/UDP/etc pipes to the wire.
      */
     void flush();
 }

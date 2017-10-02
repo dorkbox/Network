@@ -118,8 +118,7 @@ class EndPoint<C extends Connection> {
      * To fit into that magic 576-byte MTU and avoid fragmentation, your
      * UDP payload should be restricted by 576-60-8=508 bytes.
      *
-     * This can be set higher on an internal lan! (or use UDT to make UDP
-     * transfers easy)
+     * This can be set higher on an internal lan!
      *
      * DON'T go higher that 1400 over the internet, but 9k is possible
      * with jumbo frames on a local network (if it's supported)

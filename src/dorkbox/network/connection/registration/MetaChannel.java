@@ -42,8 +42,6 @@ class MetaChannel {
     public Channel udpChannel   = null;
     public InetSocketAddress udpRemoteAddress = null; // SERVER ONLY. needed to be aware of the remote address to send UDP replies to
 
-    public Channel udtChannel   = null;
-
     public ConnectionImpl connection; // only needed until the connection has been notified.
 
     public ECPublicKeyParameters publicKey; // used for ECC crypto + handshake on NETWORK (remote) connections. This is the remote public key.
@@ -69,10 +67,6 @@ class MetaChannel {
             this.tcpChannel.close();
         }
 
-        if (this.udtChannel != null) {
-            this.udtChannel.close();
-        }
-
         // only the CLIENT will have this.
         if (this.udpChannel != null && this.udpRemoteAddress == null) {
             this.udpChannel.close();
@@ -87,11 +81,6 @@ class MetaChannel {
 
         if (this.tcpChannel != null && this.tcpChannel.isOpen()) {
             this.tcpChannel.close()
-                           .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
-        }
-
-        if (this.udtChannel != null && this.udtChannel.isOpen()) {
-            this.udtChannel.close()
                            .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
         }
 

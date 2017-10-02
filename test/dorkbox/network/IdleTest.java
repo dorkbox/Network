@@ -36,7 +36,6 @@ import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleListener;
 import dorkbox.network.connection.idle.IdleListenerTCP;
 import dorkbox.network.connection.idle.IdleListenerUDP;
-import dorkbox.network.connection.idle.IdleListenerUDT;
 import dorkbox.network.connection.idle.InputStreamSender;
 import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
@@ -50,8 +49,7 @@ class IdleTest extends BaseTest {
 
     enum ConnectionType {
         TCP,
-        UDP,
-        UDT
+        UDP
     }
 
     @Test
@@ -76,16 +74,6 @@ class IdleTest extends BaseTest {
         configuration.serialization = CryptoSerializationManager.DEFAULT(false, false);
 
         streamSpecificType(largeDataSize, configuration, ConnectionType.UDP);
-
-
-        System.err.println("-- UDT");
-        configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
-        configuration.udtPort = udtPort;
-        configuration.host = host;
-        configuration.serialization = CryptoSerializationManager.DEFAULT(false, false);
-
-        streamSpecificType(largeDataSize, configuration, ConnectionType.UDT);
     }
 
 
@@ -117,17 +105,6 @@ class IdleTest extends BaseTest {
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
-
-
-        System.err.println("-- UDT");
-        configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
-        configuration.udtPort = udtPort;
-        configuration.host = host;
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
-        register(configuration.serialization);
-
-        sendObject(mainData, configuration, ConnectionType.TCP);
     }
 
 
@@ -154,9 +131,6 @@ class IdleTest extends BaseTest {
                               break;
                           case UDP:
                               sendOnIdle.UDP();
-                              break;
-                          case UDT:
-                              sendOnIdle.UDT();
                               break;
                       }
                   }
@@ -217,9 +191,6 @@ class IdleTest extends BaseTest {
                           case UDP:
                               listener = new IdleListenerUDP<Connection, byte[]>();
                               break;
-                          case UDT:
-                              listener = new IdleListenerUDT<Connection, byte[]>();
-                              break;
                       }
 
 
@@ -246,9 +217,6 @@ class IdleTest extends BaseTest {
                               break;
                           case UDP:
                               sendOnIdle.UDP();
-                              break;
-                          case UDT:
-                              sendOnIdle.UDT();
                               break;
                       }
                   }

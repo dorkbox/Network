@@ -45,7 +45,7 @@ class PingPongTest extends BaseTest {
 
 
     enum TYPE {
-        TCP, UDP, UDT
+        TCP, UDP
     }
 
     @Test
@@ -60,7 +60,6 @@ class PingPongTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
-        configuration.udtPort = udtPort;
         configuration.host = host;
         configuration.serialization = CryptoSerializationManager.DEFAULT();
         register(configuration.serialization);
@@ -70,8 +69,6 @@ class PingPongTest extends BaseTest {
         populateData(dataTCP, TYPE.TCP);
         final Data dataUDP = new Data();
         populateDataTiny(dataUDP, TYPE.UDP); // UDP has a max size it can send!
-        final Data dataUDT = new Data();
-        populateData(dataUDT, TYPE.UDT);
 
         Server server = new Server(configuration);
         addEndPoint(server);
@@ -105,14 +102,6 @@ class PingPongTest extends BaseTest {
                     connection.send()
                               .UDP(dataUDP);
                 }
-                else if (data.type == TYPE.UDT) {
-                    if (!data.equals(dataUDT)) {
-                        PingPongTest.this.fail = "UDT data is not equal on server.";
-                        throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                    }
-                    connection.send()
-                              .UDT(dataUDT);
-                }
                 else {
                     PingPongTest.this.fail = "Unknown data type on server.";
                     throw new RuntimeException("Fail! " + PingPongTest.this.fail);
@@ -134,8 +123,6 @@ class PingPongTest extends BaseTest {
                           .TCP(dataTCP);
                 connection.send()
                           .UDP(dataUDP); // UDP ping pong stops if a UDP packet is lost.
-                connection.send()
-                          .UDT(dataUDT);
             }
         });
 
@@ -151,10 +138,8 @@ class PingPongTest extends BaseTest {
         listeners.add(new Listener.OnMessageReceived<Connection, Data>() {
             AtomicInteger checkTCP = new AtomicInteger(0);
             AtomicInteger checkUDP = new AtomicInteger(0);
-            AtomicInteger checkUDT = new AtomicInteger(0);
             AtomicBoolean doneTCP = new AtomicBoolean(false);
             AtomicBoolean doneUDP = new AtomicBoolean(false);
-            AtomicBoolean doneUDT = new AtomicBoolean(false);
 
             @Override
             public
@@ -187,27 +172,13 @@ class PingPongTest extends BaseTest {
                         this.doneUDP.set(true);
                     }
                 }
-                else if (data.type == TYPE.UDT) {
-                    if (!data.equals(dataUDT)) {
-                        PingPongTest.this.fail = "UDT data is not equal on client.";
-                        throw new RuntimeException("Fail! " + PingPongTest.this.fail);
-                    }
-                    if (this.checkUDT.getAndIncrement() <= PingPongTest.this.tries) {
-                        connection.send()
-                                  .UDT(dataUDT);
-                    }
-                    else {
-                        System.err.println("UDT done.");
-                        this.doneUDT.set(true);
-                    }
-                }
                 else {
                     PingPongTest.this.fail = "Unknown data type on client.";
                     throw new RuntimeException("Fail! " + PingPongTest.this.fail);
                 }
 
-                if (this.doneTCP.get() && this.doneUDP.get() && this.doneUDT.get()) {
-                    System.err.println("Ran TCP, UDP, UDT " + PingPongTest.this.tries + " times each");
+                if (this.doneTCP.get() && this.doneUDP.get()) {
+                    System.err.println("Ran TCP, UDP " + PingPongTest.this.tries + " times each");
                     stopEndPoints();
                 }
             }

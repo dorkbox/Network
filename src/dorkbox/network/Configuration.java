@@ -41,13 +41,6 @@ class Configuration {
     public int udpPort = -1;
 
     /**
-     * Specify the UDT port to use. The server will listen on this port, the client will connect to it.
-     * <p>
-     * UDT requires TCP to handshake
-     */
-    public int udtPort = -1;
-
-    /**
      * Specify the local channel name to use, if the default is not wanted.
      * <p>
      * Local/remote configurations are incompatible with each other.
@@ -89,11 +82,10 @@ class Configuration {
     }
 
     public
-    Configuration(String host, int tcpPort, int udpPort, int udtPort, String localChannelName) {
+    Configuration(String host, int tcpPort, int udpPort, String localChannelName) {
         this.host = host;
         this.tcpPort = tcpPort;
         this.udpPort = udpPort;
-        this.udtPort = udtPort;
         this.localChannelName = localChannelName;
     }
 }

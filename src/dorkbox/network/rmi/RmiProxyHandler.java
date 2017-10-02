@@ -76,7 +76,6 @@ class RmiProxyHandler implements InvocationHandler {
     private boolean enableToString;
 
     private boolean udp;
-    private boolean udt;
 
     private Byte lastResponseID;
     private byte nextResponseId = (byte) 1;
@@ -159,17 +158,10 @@ class RmiProxyHandler implements InvocationHandler {
             }
             else if (name.equals("setTCP")) {
                 this.udp = false;
-                this.udt = false;
                 return null;
             }
             else if (name.equals("setUDP")) {
                 this.udp = true;
-                this.udt = false;
-                return null;
-            }
-            else if (name.equals("setUDT")) {
-                this.udp = false;
-                this.udt = true;
                 return null;
             }
             else if (name.equals("enableToString")) {
@@ -284,11 +276,6 @@ class RmiProxyHandler implements InvocationHandler {
         if (this.udp) {
             this.connection.send()
                            .UDP(invokeMethod)
-                           .flush();
-        }
-        else if (this.udt) {
-            this.connection.send()
-                           .UDT(invokeMethod)
                            .flush();
         }
         else {

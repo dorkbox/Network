@@ -15,6 +15,12 @@
  */
 package dorkbox.network.connection.registration.remote;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -27,11 +33,6 @@ import dorkbox.util.crypto.CryptoAES;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import org.slf4j.Logger;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 
 public
 class RegistrationRemoteHandlerClientUDP<C extends Connection> extends RegistrationRemoteHandlerClient<C> {
@@ -77,14 +78,14 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
         // look to see if we already have a connection (in progress) for the destined IP address.
         // Note: our CHANNEL MAP can only have one item at a time, since we do NOT RELEASE the registration lock until it's complete!!
 
-        // The ORDER has to be TCP (always) -> UDP (optional) -> UDT (optional)
+        // The ORDER has to be TCP (always) -> UDP (optional)
         // UDP
 
         InetSocketAddress udpRemoteAddress = (InetSocketAddress) channel.remoteAddress();
         if (udpRemoteAddress != null) {
             InetAddress udpRemoteServer = udpRemoteAddress.getAddress();
 
-            boolean success = registrationWrapper.associateChannels(channel, udpRemoteServer, false);
+            boolean success = registrationWrapper.associateChannels(channel, udpRemoteServer);
             if (!success) {
                 throw new IOException("UDP cannot connect to a remote server before TCP is established!");
             }

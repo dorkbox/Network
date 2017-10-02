@@ -15,6 +15,18 @@
  */
 package dorkbox.network.connection.registration.remote;
 
+import static dorkbox.network.connection.EndPoint.maxShutdownWaitTimeInMilliSeconds;
+
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
+
+import org.bouncycastle.crypto.engines.AESFastEngine;
+import org.bouncycastle.crypto.engines.IESEngine;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
@@ -34,20 +46,8 @@ import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.channel.udt.nio.NioUdtByteConnectorChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.ReferenceCountUtil;
-import org.bouncycastle.crypto.engines.AESFastEngine;
-import org.bouncycastle.crypto.engines.IESEngine;
-import org.bouncycastle.crypto.modes.GCMBlockCipher;
-import org.slf4j.Logger;
-
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.util.Arrays;
-import java.util.concurrent.TimeUnit;
-
-import static dorkbox.network.connection.EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
 public abstract
 class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandler<C> {
@@ -158,9 +158,6 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
         else if (channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class) {
             stringBuilder.append("UDP");
         }
-        else if (channelClass == NioUdtByteConnectorChannel.class) {
-            stringBuilder.append("UDT");
-        }
         else {
             stringBuilder.append("UNKNOWN");
         }
@@ -215,10 +212,6 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
             if (metaChannel.udpChannel != null) {
                 type += "/UDP";
             }
-            if (metaChannel.udtChannel != null) {
-                type += "/UDT";
-            }
-
 
             InetSocketAddress address = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();
             this.logger.debug("Encrypting {} session with {}", type, address.getAddress());
@@ -247,18 +240,6 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
             pipeline.replace(KRYO_DECODER, KRYO_CRYPTO_DECODER, new KryoDecoderUdpCrypto(this.serializationManager));
             pipeline.replace(KRYO_ENCODER, KRYO_CRYPTO_ENCODER, new KryoEncoderUdpCrypto(this.serializationManager));
         }
-
-        if (metaChannel.udtChannel != null) {
-            pipeline = metaChannel.udtChannel.pipeline();
-            pipeline.replace(FRAME_AND_KRYO_DECODER,
-                             FRAME_AND_KRYO_CRYPTO_DECODER,
-                             new KryoDecoderCrypto(this.serializationManager)); // cannot be shared because of possible fragmentation.
-
-            if (idleTimeout > 0) {
-                pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, idleTimeout, TimeUnit.MILLISECONDS));
-            }
-            pipeline.replace(FRAME_AND_KRYO_ENCODER, FRAME_AND_KRYO_CRYPTO_ENCODER, this.registrationWrapper.getKryoEncoderCrypto());
-        }
     }
 
     /**
@@ -268,7 +249,6 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
     void establishConnection(MetaChannel metaChannel) {
         ChannelPipeline tcpPipe = metaChannel.tcpChannel.pipeline();
         ChannelPipeline udpPipe;
-        ChannelPipeline udtPipe;
 
         if (metaChannel.udpChannel != null && metaChannel.udpRemoteAddress == null) {
             // don't want to muck with the SERVER udp pipeline, as it NEVER CHANGES.
@@ -278,14 +258,6 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
         else {
             udpPipe = null;
         }
-
-        if (metaChannel.udtChannel != null) {
-            udtPipe = metaChannel.udtChannel.pipeline();
-        }
-        else {
-            udtPipe = null;
-        }
-
 
         // add the "connected"/"normal" handler now that we have established a "new" connection.
         // This will have state, etc. for this connection.
@@ -298,10 +270,6 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
         if (udpPipe != null) {
             // remember, server is different than client!
             udpPipe.addLast(CONNECTION_HANDLER, connection);
-        }
-
-        if (udtPipe != null) {
-            udtPipe.addLast(CONNECTION_HANDLER, connection);
         }
     }
 
@@ -348,9 +316,6 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
             String type = "TCP";
             if (metaChannel.udpChannel != null) {
                 type += "/UDP";
-            }
-            if (metaChannel.udtChannel != null) {
-                type += "/UDT";
             }
 
             InetSocketAddress address = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();

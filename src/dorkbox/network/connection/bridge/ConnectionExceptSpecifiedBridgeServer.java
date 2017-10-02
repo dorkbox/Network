@@ -32,10 +32,4 @@ interface ConnectionExceptSpecifiedBridgeServer<C extends Connection> {
      * channel).
      */
     ConnectionPoint UDP(C connection, Object message);
-
-    /**
-     * Sends the object to all server connections (except the specified one) over the network using UDT. (or via LOCAL when it's a local
-     * channel).
-     */
-    ConnectionPoint UDT(C connection, Object message);
 }

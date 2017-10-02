@@ -40,7 +40,7 @@ class RegistrationRemoteHandlerServer<C extends Connection> extends Registration
     }
 
     /**
-     * Registers the metachannel for the UDP server (For the TCP/UDT streams)
+     * Registers the metachannel for the UDP server
      */
     @Override
     protected

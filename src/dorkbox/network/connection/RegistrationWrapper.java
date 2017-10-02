@@ -55,7 +55,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
 
     private final EndPoint<C> endPoint;
 
-    // keeps track of connections (TCP/UDT/UDP-client)
+    // keeps track of connections (TCP/UDP-client)
     private final ReentrantLock channelMapLock = new ReentrantLock();
     private final IntMap<MetaChannel> channelMap = new IntMap<MetaChannel>();
 
@@ -392,8 +392,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
 
                 if (metaChannel.localChannel == channel ||
                     metaChannel.tcpChannel == channel ||
-                    metaChannel.udpChannel == channel ||
-                    metaChannel.udtChannel == channel) {
+                    metaChannel.udpChannel == channel) {
 
                     entries.remove();
                     metaChannel.close(maxShutdownWaitTimeInMilliSeconds);
@@ -469,7 +468,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     }
 
     public
-    boolean associateChannels(final Channel channel, final InetAddress remoteAddress, final boolean isUdt) {
+    boolean associateChannels(final Channel channel, final InetAddress remoteAddress) {
         boolean success = false;
 
         try {
@@ -483,12 +482,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
                 InetAddress tcpRemoteServer = inetSocketAddress.getAddress();
                 if (checkEqual(tcpRemoteServer, remoteAddress)) {
                     channelMap.put(channel.hashCode(), metaChannel);
-                    if (isUdt) {
-                        metaChannel.udtChannel = channel;
-                    }
-                    else {
-                        metaChannel.udpChannel = channel;
-                    }
+                    metaChannel.udpChannel = channel;
                     success = true;
                     // only allow one server per registration!
                     break;
@@ -499,36 +493,6 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         }
 
         return success;
-    }
-
-    public
-    MetaChannel getAssociatedChannel_UDT(final InetAddress remoteAddress) {
-        try {
-            MetaChannel metaChannel;
-            IntMap<MetaChannel> channelMap = getAndLockChannelMap();
-            IntMap.Entries<MetaChannel> entries = channelMap.entries();
-
-            while (entries.hasNext()) {
-                metaChannel = entries.next().value;
-
-                // only look at connections that do not have UDP already setup.
-                if (metaChannel.udtChannel == null) {
-                    InetSocketAddress tcpRemote = (InetSocketAddress) metaChannel.tcpChannel.remoteAddress();
-                    InetAddress tcpRemoteAddress = tcpRemote.getAddress();
-
-                    if (RegistrationRemoteHandler.checkEqual(tcpRemoteAddress, remoteAddress)) {
-                        return metaChannel;
-                    }
-                    else {
-                        return null;
-                    }
-                }
-            }
-        } finally {
-            releaseChannelMap();
-        }
-
-        return null;
     }
 
     public

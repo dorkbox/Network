@@ -66,11 +66,6 @@ interface Connection {
     boolean hasUDP();
 
     /**
-     * @return true if this connection is also configured to use UDT
-     */
-    boolean hasUDT();
-
-    /**
      * Expose methods to send objects to a destination (such as a custom object or a standard ping)
      */
     ConnectionBridge send();

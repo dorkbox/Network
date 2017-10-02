@@ -55,17 +55,4 @@ class IdleSenderFactory<C extends Connection, M> implements IdleBridge {
                       .add(new IdleObjectSender(new IdleListenerUDP<C, M>(), message));
         }
     }
-
-    @Override
-    public
-    void UDT() {
-        if (message instanceof IdleSender) {
-            connection.listeners()
-                      .add((IdleSender) message);
-        }
-        else {
-            connection.listeners()
-                      .add(new IdleObjectSender(new IdleListenerUDT<C, M>(), message));
-        }
-    }
 }

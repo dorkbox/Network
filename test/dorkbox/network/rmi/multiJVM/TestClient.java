@@ -80,7 +80,6 @@ class TestClient
         Configuration configuration = new Configuration();
         configuration.tcpPort = 2000;
         configuration.udpPort = 2001;
-        configuration.udtPort = 2002;
         configuration.host = "localhost";
 
         configuration.serialization = CryptoSerializationManager.DEFAULT();

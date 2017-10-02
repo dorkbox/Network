@@ -168,14 +168,6 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
 
             @Override
             public
-            ConnectionPoint UDT(Object message) {
-                ConnectionPoint udt = connection.UDT_backpressure(message);
-                udt.flush();
-                return udt;
-            }
-
-            @Override
-            public
             Ping ping() {
                 Ping ping = connection.ping();
                 flush();

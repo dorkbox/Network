@@ -19,7 +19,7 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.crypto.params.IESParameters;
 
 /**
- * Internal message to handle the TCP/UDP/UDT registration process
+ * Internal message to handle the TCP/UDP registration process
  */
 public
 class Registration {

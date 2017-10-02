@@ -29,11 +29,9 @@ import dorkbox.network.connection.idle.IdleSender;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerClient;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientTCP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDP;
-import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerClientUDT;
 import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.TimeoutException;
-import dorkbox.network.util.udt.UdtEndpointProxy;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.exceptions.InitializationException;
@@ -87,9 +85,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * Starts a TCP & UDP client (or a LOCAL client), with the specified serialization scheme
      */
     public
-    Client(String host, int tcpPort, int udpPort, int udtPort, String localChannelName)
+    Client(String host, int tcpPort, int udpPort, String localChannelName)
                     throws InitializationException, SecurityException, IOException {
-        this(new Configuration(host, tcpPort, udpPort, udtPort, localChannelName));
+        this(new Configuration(host, tcpPort, udpPort, localChannelName));
     }
 
     /**
@@ -115,13 +113,6 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
         boolean isAndroid = PlatformDependent.isAndroid();
 
-        if (isAndroid && options.udtPort > 0) {
-            // Android does not support UDT.
-            if (logger2.isInfoEnabled()) {
-                logger2.info("Android does not support UDT.");
-            }
-            options.udtPort = -1;
-        }
 
         final EventLoopGroup boss;
 
@@ -139,7 +130,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
         manageForShutdown(boss);
 
-        if (options.localChannelName != null && options.tcpPort < 0 && options.udpPort < 0 && options.udtPort < 0) {
+        if (options.localChannelName != null && options.tcpPort < 0 && options.udpPort < 0) {
             // no networked bootstraps. LOCAL connection only
             Bootstrap localBootstrap = new Bootstrap();
             this.bootstraps.add(new BootstrapWrapper("LOCAL", options.localChannelName, -1, localBootstrap));
@@ -159,7 +150,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                 throw new IllegalArgumentException("You must define what host you want to connect to.");
             }
 
-            if (options.tcpPort < 0 && options.udpPort < 0 && options.udtPort < 0) {
+            if (options.tcpPort < 0 && options.udpPort < 0) {
                 throw new IllegalArgumentException("You must define what port you want to connect to.");
             }
 
@@ -227,38 +218,6 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                 //    NioDatagramChannel.leaveGroup(group), close the socket
                 udpBootstrap.option(ChannelOption.SO_BROADCAST, false)
                             .option(ChannelOption.SO_SNDBUF, udpMaxSize);
-            }
-
-
-            if (options.udtPort > 0) {
-                // check to see if we have UDT available!
-                boolean udtAvailable = false;
-                try {
-                    Class.forName("com.barchart.udt.nio.SelectorProviderUDT");
-                    udtAvailable = true;
-                } catch (Throwable e) {
-                    logger2.error("Requested a UDT connection on port {}, but the barchart UDT libraries are not loaded.", options.udtPort);
-                }
-
-                if (udtAvailable) {
-                    // all of this must be proxied to another class, so THIS class doesn't have unmet dependencies.
-                    Bootstrap udtBootstrap = new Bootstrap();
-                    this.bootstraps.add(new BootstrapWrapper("UDT", options.host, options.udtPort, udtBootstrap));
-
-                    EventLoopGroup udtBoss = UdtEndpointProxy.getWorker(DEFAULT_THREAD_POOL_SIZE, threadName, threadGroup);
-
-                    UdtEndpointProxy.setChannelFactory(udtBootstrap);
-
-                    udtBootstrap.group(udtBoss)
-                                .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                                .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
-                                .remoteAddress(options.host, options.udtPort)
-                                .handler(new RegistrationRemoteHandlerClientUDT<C>(threadName,
-                                                                                   registrationWrapper,
-                                                                                   serializationManager));
-
-                    manageForShutdown(udtBoss);
-                }
             }
         }
     }
@@ -400,12 +359,6 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     public
     boolean hasUDP() {
         return this.connection.hasUDP();
-    }
-
-    @Override
-    public
-    boolean hasUDT() {
-        return this.connection.hasUDT();
     }
 
     /**

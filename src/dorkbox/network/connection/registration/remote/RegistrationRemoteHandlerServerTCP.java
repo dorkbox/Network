@@ -15,20 +15,11 @@
  */
 package dorkbox.network.connection.registration.remote;
 
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.RegistrationWrapper;
-import dorkbox.network.connection.registration.MetaChannel;
-import dorkbox.network.connection.registration.Registration;
-import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.util.bytes.OptimizeUtilsByteArray;
-import dorkbox.util.crypto.CryptoAES;
-import dorkbox.util.crypto.CryptoECC;
-import dorkbox.util.serialization.EccPublicKeySerializer;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.util.ReferenceCountUtil;
+import java.math.BigInteger;
+import java.net.InetSocketAddress;
+import java.security.SecureRandom;
+import java.util.concurrent.TimeUnit;
+
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.BasicAgreement;
 import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
@@ -41,10 +32,21 @@ import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.util.Arrays;
 import org.slf4j.Logger;
 
-import java.math.BigInteger;
-import java.net.InetSocketAddress;
-import java.security.SecureRandom;
-import java.util.concurrent.TimeUnit;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.RegistrationWrapper;
+import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.network.connection.registration.Registration;
+import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.util.bytes.OptimizeUtilsByteArray;
+import dorkbox.util.crypto.CryptoAES;
+import dorkbox.util.crypto.CryptoECC;
+import dorkbox.util.serialization.EccPublicKeySerializer;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.util.ReferenceCountUtil;
 
 public
 class RegistrationRemoteHandlerServerTCP<C extends Connection> extends RegistrationRemoteHandlerServer<C> {
@@ -80,7 +82,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
     }
 
     /**
-     * STEP 1: Channel is first created (This is TCP/UDT only, as such it differs from the client which is TCP/UDP)
+     * STEP 1: Channel is first created (This is TCP only, as such it differs from the client which is TCP/UDP)
      */
     @Override
     protected
@@ -98,7 +100,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
 
         Channel channel = context.channel();
 
-        // The ORDER has to be TCP (always) -> UDP (optional, in UDP listener) -> UDT (optional)
+        // The ORDER has to be TCP (always)
         // TCP
         // save this new connection in our associated map. We will get a new one for each new connection from a client.
         MetaChannel metaChannel = new MetaChannel();

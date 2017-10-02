@@ -126,8 +126,8 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
 
         // find the class that uses Listener.class.
         Class<?> clazz = listener.getClass();
-        Class<?>[] interfaces = clazz.getInterfaces();
 
+//        Class<?>[] interfaces = clazz.getInterfaces();
 //        for (Class<?> anInterface : interfaces) {
 //        }
 //
@@ -320,8 +320,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
                       .flush();
         }
         else {
-            Logger logger2 = this.logger;
-            if (logger2.isErrorEnabled()) {
+            if (this.logger.isErrorEnabled()) {
                 this.logger.warn("----------- LISTENER NOT REGISTERED FOR TYPE: {}",
                                   message.getClass()
                                          .getSimpleName());
@@ -709,27 +708,6 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     }
 
     /**
-     * Sends the object to all server connections (except the specified one) over the network using UDT. (or via LOCAL when it's a local
-     * channel).
-     */
-    @Override
-    public
-    ConnectionPoint UDT(final C connection, final Object message) {
-        ConcurrentEntry<C> current = connectionsREF.get(this);
-        C c;
-        while (current != null) {
-            c = current.getValue();
-            current = current.next();
-
-            if (c != connection) {
-                c.send()
-                 .UDT(message);
-            }
-        }
-        return this;
-    }
-
-    /**
      * Sends the message to other listeners INSIDE this endpoint for EVERY connection. It does not send it to a remote address.
      */
     @Override
@@ -777,25 +755,6 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
 
             c.send()
              .UDP(message);
-        }
-        return this;
-    }
-
-
-    /**
-     * Sends the object all server connections over the network using UDT. (or via LOCAL when it's a local channel).
-     */
-    @Override
-    public
-    ConnectionPoint UDT(final Object message) {
-        ConcurrentEntry<C> current = connectionsREF.get(this);
-        C c;
-        while (current != null) {
-            c = current.getValue();
-            current = current.next();
-
-            c.send()
-             .UDT(message);
         }
         return this;
     }

@@ -20,6 +20,13 @@
 package dorkbox.network;
 
 
+import static dorkbox.network.connection.EndPoint.THREADGROUP_NAME;
+import static org.junit.Assert.fail;
+
+import java.util.ArrayList;
+
+import org.slf4j.LoggerFactory;
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
@@ -32,12 +39,6 @@ import dorkbox.util.entropy.Entropy;
 import dorkbox.util.entropy.SimpleEntropy;
 import dorkbox.util.exceptions.InitializationException;
 import io.netty.util.ResourceLeakDetector;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-
-import static dorkbox.network.connection.EndPoint.THREADGROUP_NAME;
-import static org.junit.Assert.fail;
 
 public abstract
 class BaseTest {
@@ -45,7 +46,6 @@ class BaseTest {
     public static final String host = "localhost";
     public static final int tcpPort = 54558;
     public static final int udpPort = 54779;
-    public static final int udtPort = 54580;
 
     static {
         // we want our entropy generation to be simple (ie, no user interaction to generate)

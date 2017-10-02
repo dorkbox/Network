@@ -41,8 +41,7 @@ public class ChunkedDataIdleTest extends BaseTest {
 
     enum ConnectionType {
         TCP,
-        UDP,
-        UDT
+        UDP
     }
 
     // have to test sending objects
@@ -71,17 +70,6 @@ public class ChunkedDataIdleTest extends BaseTest {
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.UDP);
-
-
-        System.err.println("-- UDT");
-        configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
-        configuration.udtPort = udtPort;
-        configuration.host = host;
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
-        register(configuration.serialization);
-
-        sendObject(mainData, configuration, ConnectionType.UDT);
     }
 
 
@@ -105,7 +93,6 @@ public class ChunkedDataIdleTest extends BaseTest {
                 switch (type) {
                     case TCP: sendOnIdle.TCP(); break;
                     case UDP: sendOnIdle.UDP(); break;
-                    case UDT: sendOnIdle.UDT(); break;
                 }
             }
         });

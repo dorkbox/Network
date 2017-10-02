@@ -15,11 +15,12 @@
  */
 package dorkbox.network.connection.wrapper;
 
+import org.bouncycastle.crypto.params.ParametersWithIV;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionPointWriter;
 import dorkbox.network.connection.ISessionManager;
 import io.netty.channel.EventLoop;
-import org.bouncycastle.crypto.params.ParametersWithIV;
 
 public
 interface ChannelWrapper<C extends Connection> {
@@ -28,15 +29,13 @@ interface ChannelWrapper<C extends Connection> {
 
     ConnectionPointWriter udp();
 
-    ConnectionPointWriter udt();
-
     /**
      * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
      */
     void init();
 
     /**
-     * Flushes the contents of the TCP/UDP/UDT/etc pipes to the actual transport.
+     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
      */
     void flush();
 
@@ -56,7 +55,7 @@ interface ChannelWrapper<C extends Connection> {
     boolean isLoopback();
 
     /**
-     * @return the remote host (can be local, tcp, udp, udt)
+     * @return the remote host (can be local, tcp, udp)
      */
     String getRemoteHost();
 

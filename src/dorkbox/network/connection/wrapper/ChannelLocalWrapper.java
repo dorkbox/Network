@@ -15,6 +15,10 @@
  */
 package dorkbox.network.connection.wrapper;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.bouncycastle.crypto.params.ParametersWithIV;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionPointWriter;
 import dorkbox.network.connection.EndPoint;
@@ -23,9 +27,6 @@ import dorkbox.network.connection.registration.MetaChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
 import io.netty.channel.local.LocalAddress;
-import org.bouncycastle.crypto.params.ParametersWithIV;
-
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public
 class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, ConnectionPointWriter {
@@ -69,12 +70,6 @@ class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, Co
     @Override
     public
     ConnectionPointWriter udp() {
-        return this;
-    }
-
-    @Override
-    public
-    ConnectionPointWriter udt() {
         return this;
     }
 

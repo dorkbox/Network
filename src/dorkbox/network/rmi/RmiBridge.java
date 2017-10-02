@@ -55,12 +55,12 @@ import dorkbox.network.util.RmiSerializationManager;
 import dorkbox.util.collections.ObjectIntMap;
 
 /**
- * Allows methods on objects to be invoked remotely over TCP, UDP, UDT, or LOCAL. Local connections ignore TCP/UDP/UDT requests, and perform
+ * Allows methods on objects to be invoked remotely over TCP, UDP, or LOCAL. Local connections ignore TCP/UDP requests, and perform
  * object transformation (because there is no serialization occurring) using a series of weak hashmaps.
  * <p/>
  * <p/>
  * Objects are {@link RmiSerializationManager#registerRmiInterface(Class)}, and endpoint connections can then {@link
- * Connection#getRemoteObject(Class)} for the registered objects.
+ * Connection#getRemoteObject(Class, RemoteObjectCallback)} for the registered objects.
  * <p/>
  * It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a return value which
  * is not {@link RemoteObject#setAsync(boolean) ignored}, an extra byte is written. If the type of a parameter is not final (note that

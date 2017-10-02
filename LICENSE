@@ -4,14 +4,6 @@
         Encrypted, high-performance, and event-driven/reactive network stack for Java 6+
 
 
-    - Barchart UDT/UDTv4 - BSD 3-clause License
-      https://github.com/barchart/barchart-udt
-      http://udt.sourceforge.net
-      http://www.barchart.com
-      Copyright 2009-2013, Barchart, Inc.
-      Copyright 2001 - 2011, The Board of Trustees of the University of Illinois
-
-
     - Bennidi Iterator - MIT License
       https://github.com/bennidi/mbassador
       Copyright 2012, Benjamin Diedrichsen

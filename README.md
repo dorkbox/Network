@@ -1,7 +1,7 @@
 Network
 =======
 
-The Network project is an encrypted, high-performance, event-driven/reactive Network stack with DNS and RMI, using Netty, Kryo, KryoNet RMI, and LZ4 via TCP/UDP/UDT. 
+The Network project is an encrypted, high-performance, event-driven/reactive Network stack with DNS and RMI, using Netty, Kryo, KryoNet RMI, and LZ4 via TCP/UDP. 
 
 These are the main features:
 - The connection between endpoints is AES256-GCM / EC curve25519.
@@ -16,7 +16,7 @@ These are the main features:
  - "Pinging" the remote end (for measuring round-trip time)
  
 
-- The available transports are TCP, UDP, and UDT
+- The available transports are TCP and UDP
 - There are simple wrapper classes for:
   - Server
   - Client

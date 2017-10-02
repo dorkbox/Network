@@ -54,7 +54,6 @@ import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.channel.udt.nio.NioUdtByteConnectorChannel;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
@@ -62,7 +61,7 @@ import io.netty.util.concurrent.Promise;
 
 
 /**
- * The "network connection" is established once the registration is validated for TCP/UDP/UDT
+ * The "network connection" is established once the registration is validated for TCP/UDP
  */
 @SuppressWarnings("unused")
 @Sharable
@@ -248,7 +247,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     }
 
     /**
-     * Sends a "ping" packet, trying UDP, then UDT, then TCP (in that order) to measure <b>ROUND TRIP</b> time to the remote connection.
+     * Sends a "ping" packet, trying UDP then TCP (in that order) to measure <b>ROUND TRIP</b> time to the remote connection.
      *
      * @return Ping can have a listener attached, which will get called when the ping returns.
      */
@@ -273,15 +272,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
     /**
      * INTERNAL USE ONLY. Used to initiate a ping, and to return a ping.
-     * Sends a ping message attempted in the following order: UDP, UDT, TCP
+     * Sends a ping message attempted in the following order: UDP, TCP
      */
     public final
     void ping0(PingMessage ping) {
         if (this.channelWrapper.udp() != null) {
             UDP(ping).flush();
-        }
-        else if (this.channelWrapper.udt() != null) {
-            UDT(ping).flush();
         }
         else {
             TCP(ping).flush();
@@ -309,15 +305,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     public final
     boolean hasUDP() {
         return this.channelWrapper.udp() != null;
-    }
-
-    /**
-     * @return true if this connection is also configured to use UDT
-     */
-    @Override
-    public final
-    boolean hasUDT() {
-        return this.channelWrapper.udt() != null;
     }
 
     @Override
@@ -484,59 +471,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     }
 
     /**
-     * Sends the object over the network using TCP. (LOCAL channels do not care if its TCP or UDP)
-     */
-    final
-    ConnectionPoint UDT_backpressure(Object message) {
-        Logger logger2 = this.logger;
-        if (!this.closeInProgress.get()) {
-            if (logger2.isTraceEnabled()) {
-                logger2.trace("Sending UDT {}", message);
-            }
-            ConnectionPointWriter udt = this.channelWrapper.udt();
-            // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
-            // INSIDE the event loop
-            controlBackPressure(udt);
-
-            udt.write(message);
-            return udt;
-        }
-        else {
-            if (logger2.isDebugEnabled()) {
-                logger2.debug("writing UDT while closed: {}", message);
-            }
-            // we have to return something, otherwise dependent code will throw a null pointer exception
-            return ChannelNull.get();
-        }
-    }
-
-    /**
-     * Sends the object over the network using TCP. (LOCAL channels do not care if its TCP or UDP)
-     */
-    @Override
-    public final
-    ConnectionPoint UDT(Object message) {
-        Logger logger2 = this.logger;
-        if (!this.closeInProgress.get()) {
-            if (logger2.isTraceEnabled()) {
-                logger2.trace("Sending UDT {}", message);
-            }
-            ConnectionPointWriter udt = this.channelWrapper.udt();
-            udt.write(message);
-            return udt;
-        }
-        else {
-            if (logger2.isDebugEnabled()) {
-                logger2.debug("writing UDT while closed: {}", message);
-            }
-            // we have to return something, otherwise dependent code will throw a null pointer exception
-            return ChannelNull.get();
-        }
-    }
-
-
-    /**
-     * Flushes the contents of the TCP/UDP/UDT/etc pipes to the actual transport.
+     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
      */
     @Override
     public final
@@ -642,9 +577,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             else if (channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class) {
                 type = "UDP";
             }
-            else if (channelClass == NioUdtByteConnectorChannel.class) {
-                type = "UDT";
-            }
             else if (channelClass == LocalChannel.class) {
                 type = "LOCAL";
             }
@@ -664,7 +596,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             //   and connection.close() can be called by the user.
             this.sessionManager.connectionDisconnected(this);
 
-            // close TCP/UDP/UDT together!
+            // close TCP/UDP together!
             close();
         }
 

@@ -89,46 +89,6 @@ class ConnectionTest extends BaseTest {
         waitForThreads(10);
     }
 
-    @Test
-    public
-    void connectTcpUdt() throws InitializationException, SecurityException, IOException, InterruptedException {
-        System.out.println("---- " + "TCP UDT");
-
-        Configuration configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
-        configuration.udtPort = udtPort;
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
-        register(configuration.serialization);
-
-        startServer(configuration);
-
-        configuration.host = host;
-        startClient(configuration);
-
-        waitForThreads(10);
-    }
-
-    @Test
-    public
-    void connectTcpUdpUdt() throws InitializationException, SecurityException, IOException, InterruptedException {
-        System.out.println("---- " + "TCP UDP UDT");
-
-        Configuration configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
-        configuration.udpPort = udpPort;
-        configuration.udtPort = udtPort;
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
-        register(configuration.serialization);
-
-        startServer(configuration);
-
-        configuration.host = host;
-
-        startClient(configuration);
-
-        waitForThreads(10);
-    }
-
     private
     Server startServer(Configuration configuration) throws InitializationException, SecurityException, IOException {
         Server server = new Server(configuration);

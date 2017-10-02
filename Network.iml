@@ -22,6 +22,5 @@
     <orderEntry type="library" name="junit-4.12" level="application" />
     <orderEntry type="library" name="dorkbox minlog_slf4j" level="application" />
     <orderEntry type="library" name="kryo" level="application" />
-    <orderEntry type="module" module-name="Network-UDT" />
   </component>
 </module>

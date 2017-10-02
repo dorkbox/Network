@@ -15,8 +15,25 @@
  */
 package dorkbox.network.connection.registration.remote;
 
+import java.math.BigInteger;
+import java.net.InetSocketAddress;
+import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
+
+import org.bouncycastle.crypto.BasicAgreement;
+import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
+import org.bouncycastle.crypto.digests.SHA384Digest;
+import org.bouncycastle.crypto.engines.IESEngine;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.bouncycastle.jce.ECNamedCurveTable;
+import org.bouncycastle.jce.spec.ECParameterSpec;
+import org.slf4j.Logger;
+
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -30,21 +47,6 @@ import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
-import org.bouncycastle.crypto.BasicAgreement;
-import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
-import org.bouncycastle.crypto.digests.SHA384Digest;
-import org.bouncycastle.crypto.engines.IESEngine;
-import org.bouncycastle.crypto.modes.GCMBlockCipher;
-import org.bouncycastle.crypto.params.ECPublicKeyParameters;
-import org.bouncycastle.jce.ECNamedCurveTable;
-import org.bouncycastle.jce.spec.ECParameterSpec;
-import org.slf4j.Logger;
-
-import java.math.BigInteger;
-import java.net.InetSocketAddress;
-import java.security.SecureRandom;
-import java.util.Arrays;
-import java.util.concurrent.TimeUnit;
 
 public
 class RegistrationRemoteHandlerClientTCP<C extends Connection> extends RegistrationRemoteHandlerClient<C> {
@@ -106,8 +108,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                                  .getSimpleName());
 
 
-        // TCP & UDT
-
+        // TCP
         // use the default.
         super.initChannel(channel);
     }
@@ -125,7 +126,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
         // look to see if we already have a connection (in progress) for the destined IP address.
         // Note: our CHANNEL MAP can only have one item at a time, since we do NOT RELEASE the registration lock until it's complete!!
 
-        // The ORDER has to be TCP (always) -> UDP (optional) -> UDT (optional)
+        // The ORDER has to be TCP (always)
         // TCP
         MetaChannel metaChannel = new MetaChannel();
         metaChannel.tcpChannel = channel;

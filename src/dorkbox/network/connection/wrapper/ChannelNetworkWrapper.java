@@ -15,6 +15,11 @@
  */
 package dorkbox.network.connection.wrapper;
 
+import java.net.InetSocketAddress;
+
+import org.bouncycastle.crypto.params.KeyParameter;
+import org.bouncycastle.crypto.params.ParametersWithIV;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionPointWriter;
 import dorkbox.network.connection.EndPoint;
@@ -25,17 +30,12 @@ import dorkbox.util.FastThreadLocal;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
 import io.netty.util.NetUtil;
-import org.bouncycastle.crypto.params.KeyParameter;
-import org.bouncycastle.crypto.params.ParametersWithIV;
-
-import java.net.InetSocketAddress;
 
 public
 class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
 
     private final ChannelNetwork tcp;
     private final ChannelNetwork udp;
-    private final ChannelNetwork udt;
 
     // did the remote connection public ECC key change?
     private final boolean remotePublicKeyChanged;
@@ -75,13 +75,6 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
             this.udp = null;
         }
 
-        if (metaChannel.udtChannel != null) {
-            this.udt = new ChannelNetwork(metaChannel.udtChannel);
-        }
-        else {
-            this.udt = null;
-        }
-
 
         this.remoteAddress = ((InetSocketAddress) tcpChannel.remoteAddress()).getAddress()
                                                                              .getHostAddress();
@@ -117,12 +110,6 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
         return this.udp;
     }
 
-    @Override
-    public
-    ConnectionPointWriter udt() {
-        return this.udt;
-    }
-
     /**
      * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
      */
@@ -133,7 +120,7 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
     }
 
     /**
-     * Flushes the contents of the TCP/UDP/UDT/etc pipes to the actual transport.
+     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
      */
     @Override
     public
@@ -142,10 +129,6 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
 
         if (this.udp != null) {
             this.udp.flush();
-        }
-
-        if (this.udt != null) {
-            this.udt.flush();
         }
     }
 
@@ -191,12 +174,8 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
             this.udp.close(maxShutdownWaitTimeInMilliSeconds);
         }
 
-        if (this.udt != null) {
-            this.udt.close(maxShutdownWaitTimeInMilliSeconds);
-
-            // we need to yield the thread here, so that the socket has a chance to close
-            Thread.yield();
-        }
+        // we need to yield the thread here, so that the socket has a chance to close
+        Thread.yield();
     }
 
     @Override

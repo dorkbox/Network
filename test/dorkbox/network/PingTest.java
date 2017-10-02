@@ -15,23 +15,24 @@
  */
 package dorkbox.network;
 
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+
+import org.junit.Test;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Ping;
 import dorkbox.network.connection.PingListener;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
-
-import java.io.IOException;
-
-import static org.junit.Assert.fail;
 
 public
 class PingTest extends BaseTest {
 
     private volatile int response = -1;
 
-    // ping prefers the following order:  UDP, UDT, TCP
+    // ping prefers the following order:  UDP, TCP
     @Test
     public
     void pingTCP() throws InitializationException, SecurityException, IOException, InterruptedException {
@@ -166,7 +167,7 @@ class PingTest extends BaseTest {
         }
     }
 
-    // ping prefers the following order:  UDP, UDT, TCP
+    // ping prefers the following order:  UDP, TCP
     @Test
     public
     void pingUDP() throws InitializationException, SecurityException, IOException, InterruptedException {
@@ -190,44 +191,6 @@ class PingTest extends BaseTest {
         client.connect(5000);
 
         System.err.println("Testing UDP ping");
-        for (int i = 0; i < 10; i++) {
-            this.response = client.send()
-                                  .ping()
-                                  .getResponse();
-            System.err.println("Ping: " + this.response);
-        }
-
-        stopEndPoints();
-
-        if (this.response == -1) {
-            fail();
-        }
-    }
-
-
-    // ping prefers the following order:  UDP, UDT, TCP
-    @Test
-    public
-    void pingUDT() throws InitializationException, SecurityException, IOException, InterruptedException {
-        this.response = -1;
-
-        Configuration configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
-        configuration.udtPort = udtPort;
-        configuration.host = host;
-
-        Server server = new Server(configuration);
-        addEndPoint(server);
-        server.bind(false);
-
-        // ----
-
-        Client client = new Client(configuration);
-        addEndPoint(client);
-
-        client.connect(5000);
-
-        System.err.println("Testing UDT ping");
         for (int i = 0; i < 10; i++) {
             this.response = client.send()
                                   .ping()

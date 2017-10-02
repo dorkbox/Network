@@ -23,7 +23,6 @@ class TestServer
         dorkbox.network.Configuration configuration = new dorkbox.network.Configuration();
         configuration.tcpPort = 2000;
         configuration.udpPort = 2001;
-        configuration.udtPort = 2002;
 
         configuration.serialization = CryptoSerializationManager.DEFAULT();
         RmiTest.register(configuration.serialization);
