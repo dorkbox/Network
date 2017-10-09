@@ -68,8 +68,11 @@ class CachedMethod {
         public
         int compare(Method o1, Method o2) {
             // Methods are sorted so they can be represented as an index.
-            int diff = o1.getName()
-                         .compareTo(o2.getName());
+            String o1Name = o1.getName();
+            String o2Name = o2.getName();
+
+
+            int diff = o1Name.compareTo(o2Name);
             if (diff != 0) {
                 return diff;
             }
@@ -91,7 +94,9 @@ class CachedMethod {
                     return diff;
                 }
             }
-            throw new RuntimeException("Two methods with same signature!"); // Impossible, should never happen
+
+            // Impossible, should never happen
+            throw new RuntimeException("Two methods with same signature! ('" + o1Name + "', '" + o2Name + "'");
         }
     };
 
