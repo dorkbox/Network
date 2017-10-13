@@ -37,7 +37,7 @@ import dorkbox.util.collections.ConcurrentEntry;
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
 @SuppressWarnings("unchecked")
 public
-class ConnectionManager<C extends Connection> implements ListenerBridge, ISessionManager<C>, ConnectionPoint, ConnectionBridgeServer<C>,
+class ConnectionManager<C extends Connection> implements Listeners, ISessionManager<C>, ConnectionPoint, ConnectionBridgeServer<C>,
                                                          ConnectionExceptSpecifiedBridgeServer<C> {
     /**
      * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
@@ -119,7 +119,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    ListenerBridge add(final Listener listener) {
+    Listeners add(final Listener listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
@@ -209,7 +209,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    ListenerBridge remove(final Listener listener) {
+    Listeners remove(final Listener listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
@@ -250,7 +250,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public final
-    ListenerBridge removeAll() {
+    Listeners removeAll() {
         onMessageReceivedManager.removeAll();
 
         Logger logger2 = this.logger;
@@ -268,7 +268,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public final
-    ListenerBridge removeAll(final Class<?> classType) {
+    Listeners removeAll(final Class<?> classType) {
         if (classType == null) {
             throw new IllegalArgumentException("classType cannot be null.");
         }

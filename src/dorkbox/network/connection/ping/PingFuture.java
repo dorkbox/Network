@@ -15,14 +15,14 @@
  */
 package dorkbox.network.connection.ping;
 
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Ping;
 import dorkbox.network.connection.PingListener;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.Promise;
-
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public
 class PingFuture implements Ping {
@@ -78,7 +78,7 @@ class PingFuture implements Ping {
     @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public
-    <C extends Connection> void addListener(PingListener<C> listener) {
+    <C extends Connection> void add(PingListener<C> listener) {
         this.promise.addListener((GenericFutureListener) listener);
     }
 
@@ -89,7 +89,7 @@ class PingFuture implements Ping {
     @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public
-    <C extends Connection> void removeListener(PingListener<C> listener) {
+    <C extends Connection> void remove(PingListener<C> listener) {
         this.promise.removeListener((GenericFutureListener) listener);
     }
 

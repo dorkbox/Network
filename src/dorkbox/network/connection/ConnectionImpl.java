@@ -66,7 +66,7 @@ import io.netty.util.concurrent.Promise;
 @SuppressWarnings("unused")
 @Sharable
 public
-class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConnection, Connection, ListenerBridge, ConnectionBridge {
+class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConnection, Connection, Listeners, ConnectionBridge {
 
     private final org.slf4j.Logger logger;
 
@@ -692,7 +692,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @Override
     public final
-    ListenerBridge listeners() {
+    Listeners listeners() {
         return this;
     }
 
@@ -713,7 +713,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    ListenerBridge add(Listener listener) {
+    Listeners add(Listener listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -755,7 +755,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    ListenerBridge remove(Listener listener) {
+    Listeners remove(Listener listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -790,7 +790,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @Override
     public final
-    ListenerBridge removeAll() {
+    Listeners removeAll() {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -825,7 +825,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @Override
     public final
-    ListenerBridge removeAll(Class<?> classType) {
+    Listeners removeAll(Class<?> classType) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --

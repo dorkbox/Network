@@ -19,17 +19,18 @@
  */
 package dorkbox.network;
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.ListenerBridge;
-import dorkbox.util.exceptions.InitializationException;
-import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.assertEquals;
+import org.junit.Test;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.Listeners;
+import dorkbox.util.exceptions.InitializationException;
+import dorkbox.util.exceptions.SecurityException;
 
 public
 class ReuseTest extends BaseTest {
@@ -49,7 +50,7 @@ class ReuseTest extends BaseTest {
 
         Server server = new Server(configuration);
         addEndPoint(server);
-        final ListenerBridge listeners = server.listeners();
+        final Listeners listeners = server.listeners();
         listeners.add(new Listener.OnConnected<Connection>() {
             @Override
             public
@@ -73,7 +74,7 @@ class ReuseTest extends BaseTest {
 
         Client client = new Client(configuration);
         addEndPoint(client);
-        final ListenerBridge listeners1 = client.listeners();
+        final Listeners listeners1 = client.listeners();
         listeners1.add(new Listener.OnConnected<Connection>() {
             @Override
             public

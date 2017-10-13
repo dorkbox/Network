@@ -30,7 +30,7 @@ import org.junit.Test;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.ListenerBridge;
+import dorkbox.network.connection.Listeners;
 import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -55,7 +55,7 @@ class PingPongLocalTest extends BaseTest {
         Server server = new Server(configuration);
         addEndPoint(server);
         server.bind(false);
-        final ListenerBridge listeners = server.listeners();
+        final Listeners listeners = server.listeners();
         listeners.add(new Listener.OnError<Connection>() {
             @Override
             public
@@ -81,7 +81,7 @@ class PingPongLocalTest extends BaseTest {
 
         Client client = new Client();
         addEndPoint(client);
-        final ListenerBridge listeners1 = client.listeners();
+        final Listeners listeners1 = client.listeners();
         listeners1.add(new Listener.OnConnected<Connection>() {
             AtomicInteger check = new AtomicInteger(0);
 

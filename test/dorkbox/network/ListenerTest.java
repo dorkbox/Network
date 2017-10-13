@@ -35,7 +35,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.ListenerBridge;
+import dorkbox.network.connection.Listeners;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -116,7 +116,7 @@ class ListenerTest extends BaseTest {
 
         addEndPoint(server);
         server.bind(false);
-        final ListenerBridge listeners = server.listeners();
+        final Listeners listeners = server.listeners();
 
         // standard listener
         listeners.add(new Listener.OnMessageReceived<TestConnectionA, String>() {

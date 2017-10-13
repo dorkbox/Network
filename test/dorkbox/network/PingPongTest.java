@@ -32,7 +32,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.ListenerBridge;
+import dorkbox.network.connection.Listeners;
 import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -73,7 +73,7 @@ class PingPongTest extends BaseTest {
         Server server = new Server(configuration);
         addEndPoint(server);
         server.bind(false);
-        final ListenerBridge listeners1 = server.listeners();
+        final Listeners listeners1 = server.listeners();
         listeners1.add(new Listener.OnError<Connection>() {
             @Override
             public
@@ -113,7 +113,7 @@ class PingPongTest extends BaseTest {
 
         Client client = new Client(configuration);
         addEndPoint(client);
-        final ListenerBridge listeners = client.listeners();
+        final Listeners listeners = client.listeners();
         listeners.add(new Listener.OnConnected<Connection>() {
             @Override
             public

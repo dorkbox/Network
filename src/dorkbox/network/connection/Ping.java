@@ -23,19 +23,16 @@ interface Ping {
     int getResponse();
 
     /**
-     * Adds the specified listener to this future. The specified listener is
-     * notified when this future is done. If this future is already completed,
-     * the specified listener is notified immediately.
+     * Adds a ping listener to this future. The listener is notified when this future is done. If this future is already completed,
+     * then the listener is notified immediately.
      */
-    <C extends Connection> void addListener(PingListener<C> listener);
+    <C extends Connection> void add(PingListener<C> listener);
 
     /**
-     * Removes the specified listener from this future. The specified listener
-     * is no longer notified when this future is done. If the specified listener
-     * is not associated with this future, this method does nothing and returns
-     * silently.
+     * Removes a ping listener from this future. The listener is no longer notified when this future is done. If the listener
+     * was not previously associated with this future, this method does nothing and returns silently.
      */
-    <C extends Connection> void removeListener(PingListener<C> listener);
+    <C extends Connection> void remove(PingListener<C> listener);
 
     /**
      * Cancel this Ping.

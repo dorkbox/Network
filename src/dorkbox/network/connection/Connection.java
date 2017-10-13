@@ -83,7 +83,7 @@ interface Connection {
     /**
      * Expose methods to modify the connection listeners.
      */
-    ListenerBridge listeners();
+    Listeners listeners();
 
     /**
      * Closes the connection

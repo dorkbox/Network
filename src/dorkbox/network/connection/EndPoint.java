@@ -513,7 +513,7 @@ class EndPoint<C extends Connection> {
      * Expose methods to modify the listeners (connect/disconnect/idle/receive events).
      */
     public final
-    ListenerBridge listeners() {
+    Listeners listeners() {
         return this.connectionManager;
     }
 

@@ -100,7 +100,7 @@ class PingTest extends BaseTest {
                 if (this.count++ < 10) {
                     connection.send()
                               .ping()
-                              .addListener(this);
+                              .add(this);
                 }
                 else {
                     PingTest.this.response = pingResponseTime;
@@ -113,7 +113,7 @@ class PingTest extends BaseTest {
         // doesn't matter how many times this is called. If there is a PING waiting, then it's overwritten
         Ping ping = client.send()
                           .ping();
-        ping.addListener(pingListener);
+        ping.add(pingListener);
 
         waitForThreads();
 
@@ -159,7 +159,7 @@ class PingTest extends BaseTest {
         // doesn't matter how many times this is called. If there is a PING waiting, then it's overwritten
         Ping ping = client.send()
                           .ping();
-        ping.addListener(pingListener);
+        ping.add(pingListener);
 
         waitForThreads();
         if (this.response == -1) {

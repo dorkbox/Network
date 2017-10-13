@@ -32,7 +32,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.ListenerBridge;
+import dorkbox.network.connection.Listeners;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -105,7 +105,7 @@ class UnregisteredClassTest extends BaseTest {
 
         Client client = new Client(configuration);
         addEndPoint(client);
-        final ListenerBridge listeners = client.listeners();
+        final Listeners listeners = client.listeners();
         listeners.add(new Listener.OnConnected<Connection>() {
             @Override
             public

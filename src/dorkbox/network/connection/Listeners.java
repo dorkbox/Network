@@ -22,7 +22,7 @@ package dorkbox.network.connection;
  * There should always be just a SINGLE connection type for the client or server
  */
 public
-interface ListenerBridge {
+interface Listeners {
     /**
      * Adds a listener to this connection/endpoint to be notified of
      * connect/disconnect/idle/receive(object) events.
@@ -38,7 +38,7 @@ interface ListenerBridge {
      * the connection is notified on that event (ie, admin type listeners)
      */
     @SuppressWarnings("rawtypes")
-    ListenerBridge add(Listener listener);
+    Listeners add(Listener listener);
 
     /**
      * Removes a listener from this connection/endpoint to NO LONGER be notified
@@ -53,19 +53,19 @@ interface ListenerBridge {
      * the connection is removed
      */
     @SuppressWarnings("rawtypes")
-    ListenerBridge remove(Listener listener);
+    Listeners remove(Listener listener);
 
     /**
      * Removes all registered listeners from this connection/endpoint to NO
      * LONGER be notified of connect/disconnect/idle/receive(object) events.
      */
-    ListenerBridge removeAll();
+    Listeners removeAll();
 
     /**
      * Removes all registered listeners (of the object type) from this
      * connection/endpoint to NO LONGER be notified of
      * connect/disconnect/idle/receive(object) events.
      */
-    ListenerBridge removeAll(Class<?> classType);
+    Listeners removeAll(Class<?> classType);
 
 }
