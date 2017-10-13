@@ -365,7 +365,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         if (logger2.isTraceEnabled()) {
             logger2.trace("Sending LOCAL {}", message);
         }
-        this.sessionManager.notifyOnMessage(this, message);
+        this.sessionManager.onMessage(this, message);
     }
 
     /**
@@ -511,7 +511,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         //  } else
         if (event instanceof IdleStateEvent) {
             if (((IdleStateEvent) event).state() == IdleState.ALL_IDLE) {
-                this.sessionManager.notifyOnIdle(this);
+                this.sessionManager.onIdle(this);
             }
         }
 
@@ -532,7 +532,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         // delay close until it's finished.
         this.messageInProgress.set(true);
 
-        this.sessionManager.notifyOnMessage(this, object);
+        this.sessionManager.onMessage(this, object);
 
         this.messageInProgress.set(false);
 
@@ -594,7 +594,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         if (isTCP || channelClass == LocalChannel.class) {
             // this is because channelInactive can ONLY happen when netty shuts down the channel.
             //   and connection.close() can be called by the user.
-            this.sessionManager.connectionDisconnected(this);
+            this.sessionManager.onDisconnected(this);
 
             // close TCP/UDP together!
             close();

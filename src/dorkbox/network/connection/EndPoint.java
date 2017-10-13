@@ -506,7 +506,7 @@ class EndPoint<C extends Connection> {
         // prep the channel wrapper
         connection.prep();
 
-        this.connectionManager.connectionConnected((C) connection);
+        this.connectionManager.onConnected((C) connection);
     }
 
     /**

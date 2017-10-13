@@ -22,17 +22,17 @@ interface ISessionManager<C extends Connection> {
     /**
      * Called when a message is received
      */
-    void notifyOnMessage(C connection, Object message);
+    void onMessage(C connection, Object message);
 
     /**
      * Called when the connection has been idle (read & write) for 2 seconds
      */
-    void notifyOnIdle(C connection);
+    void onIdle(C connection);
 
 
-    void connectionConnected(C connection);
+    void onConnected(C connection);
 
-    void connectionDisconnected(C connection);
+    void onDisconnected(C connection);
 
     /**
      * Returns a non-modifiable list of active connections. This is extremely slow, and not recommended!

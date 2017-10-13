@@ -300,7 +300,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public final
-    void notifyOnMessage(final C connection, final Object message) {
+    void onMessage(final C connection, final Object message) {
         notifyOnMessage0(connection, message, false);
     }
 
@@ -342,7 +342,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public final
-    void notifyOnIdle(final C connection) {
+    void onIdle(final C connection) {
         boolean foundListener = onIdleManager.notifyIdle(connection, shutdown);
 
         if (foundListener) {
@@ -355,7 +355,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         final IdentityMap<Connection, ConnectionManager<C>> localManagers = localManagersREF.get(this);
         ConnectionManager<C> localManager = localManagers.get(connection);
         if (localManager != null) {
-            localManager.notifyOnIdle(connection);
+            localManager.onIdle(connection);
         }
     }
 
@@ -367,7 +367,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @SuppressWarnings("Duplicates")
     @Override
     public
-    void connectionConnected(final C connection) {
+    void onConnected(final C connection) {
         addConnection(connection);
 
         boolean foundListener = onConnectedManager.notifyConnected(connection, shutdown);
@@ -382,7 +382,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         final IdentityMap<Connection, ConnectionManager<C>> localManagers = localManagersREF.get(this);
         ConnectionManager<C> localManager = localManagers.get(connection);
         if (localManager != null) {
-            localManager.connectionConnected(connection);
+            localManager.onConnected(connection);
         }
     }
 
@@ -394,7 +394,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @SuppressWarnings("Duplicates")
     @Override
     public
-    void connectionDisconnected(final C connection) {
+    void onDisconnected(final C connection) {
         boolean foundListener = onDisconnectedManager.notifyDisconnected(connection, shutdown);
 
         if (foundListener) {
@@ -408,7 +408,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         final IdentityMap<Connection, ConnectionManager<C>> localManagers = localManagersREF.get(this);
         ConnectionManager<C> localManager = localManagers.get(connection);
         if (localManager != null) {
-            localManager.connectionDisconnected(connection);
+            localManager.onDisconnected(connection);
 
             // remove myself from the "global" listeners so we can have our memory cleaned up.
             removeListenerManager(connection);
@@ -725,7 +725,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             c = current.getValue();
             current = current.next();
 
-            notifyOnMessage(c, message);
+            onMessage(c, message);
         }
     }
 
