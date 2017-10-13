@@ -15,13 +15,13 @@
  */
 package dorkbox.network.connection;
 
+import java.io.IOException;
+
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.bridge.ConnectionBridgeServer;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-
-import java.io.IOException;
 
 /**
  * This serves the purpose of making sure that specific methods are not available to the end user.
@@ -80,7 +80,7 @@ class EndPointServer<C extends Connection> extends EndPoint<C> {
      * @param connection the connection to add
      */
     public
-    void addConnection(C connection) {
+    void add(C connection) {
         connectionManager.addConnection(connection);
     }
 
@@ -93,7 +93,7 @@ class EndPointServer<C extends Connection> extends EndPoint<C> {
      * @param connection the connection to remove
      */
     public
-    void removeConnection(C connection) {
+    void remove(C connection) {
         connectionManager.addConnection(connection);
     }
 }
