@@ -713,7 +713,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void add(Listener listener) {
+    ListenerBridge add(Listener listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -736,6 +736,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             this.endPoint.listeners()
                          .add(listener);
         }
+
+        return this;
     }
 
     /**
@@ -753,7 +755,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void remove(Listener listener) {
+    ListenerBridge remove(Listener listener) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -778,6 +780,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             this.endPoint.listeners()
                          .remove(listener);
         }
+
+        return this;
     }
 
     /**
@@ -786,7 +790,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @Override
     public final
-    void removeAll() {
+    ListenerBridge removeAll() {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -810,6 +814,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             this.endPoint.listeners()
                          .removeAll();
         }
+
+        return this;
     }
 
     /**
@@ -819,7 +825,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @Override
     public final
-    void removeAll(Class<?> classType) {
+    ListenerBridge removeAll(Class<?> classType) {
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -845,6 +851,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             this.endPoint.listeners()
                          .removeAll(classType);
         }
+
+        return this;
     }
 
     @Override

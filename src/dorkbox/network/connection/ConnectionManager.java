@@ -119,7 +119,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void add(final Listener listener) {
+    ListenerBridge add(final Listener listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
@@ -143,13 +143,13 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
         if (genericClass == this.baseClass || genericClass == null) {
             // we are the base class, so we are fine.
             addListener0(listener);
-            return;
+            return this;
 
         }
         else if (ClassHelper.hasInterface(Connection.class, genericClass) && !ClassHelper.hasParentClass(this.baseClass, genericClass)) {
             // now we must make sure that the PARENT class is NOT the base class. ONLY the base class is allowed!
             addListener0(listener);
-            return;
+            return this;
         }
 
         // didn't successfully add the listener.
@@ -209,7 +209,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
     @SuppressWarnings("rawtypes")
     @Override
     public final
-    void remove(final Listener listener) {
+    ListenerBridge remove(final Listener listener) {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
@@ -240,6 +240,8 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
                           listener.getClass()
                                   .getName());
         }
+
+        return this;
     }
 
     /**
@@ -248,13 +250,15 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public final
-    void removeAll() {
+    ListenerBridge removeAll() {
         onMessageReceivedManager.removeAll();
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
             logger2.trace("ALL listeners removed !!");
         }
+
+        return this;
     }
 
     /**
@@ -264,7 +268,7 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
      */
     @Override
     public final
-    void removeAll(final Class<?> classType) {
+    ListenerBridge removeAll(final Class<?> classType) {
         if (classType == null) {
             throw new IllegalArgumentException("classType cannot be null.");
         }
@@ -281,6 +285,8 @@ class ConnectionManager<C extends Connection> implements ListenerBridge, ISessio
                           classType.getClass()
                                    .getName());
         }
+
+        return this;
     }
 
 
