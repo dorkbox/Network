@@ -1089,8 +1089,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                 callback = rmiRegistrationCallbacks.remove(remoteRegistration.rmiID);
             }
 
-            //noinspection unchecked
-            callback.created(remoteObject);
+            try {
+                //noinspection unchecked
+                callback.created(remoteObject);
+            } catch (Exception e) {
+                logger.error("Error getting remote object " + remoteObject.getClass() + ", ID: " + rmiID, e);
+            }
 
             // tell the client that we are finished with all RMI callbacks
             rmiCallbacksNotifyIfEmpty();
