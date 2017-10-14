@@ -61,14 +61,34 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
         new Thread(this, "Bootstrap registration").start();
     }
 
+
+    // not protected by synchronized
+    private
+    BootstrapWrapper getNextBootstrap() {
+        int bootstrapToRegister = this.connectingBootstrap.getAndIncrement();
+
+        if (bootstrapToRegister == this.bootstraps.size()) {
+            return null;
+        }
+
+        return this.bootstraps.get(bootstrapToRegister);
+    }
+
+    // not protected by synchronized
+    private
+    boolean isRegistrationComplete() {
+        return this.connectingBootstrap.get() == this.bootstraps.size();
+    }
+
     @SuppressWarnings("AutoBoxing")
     @Override
     public
     void run() {
         synchronized (this.connectingBootstrap) {
-            int bootstrapToRegister = this.connectingBootstrap.getAndIncrement();
-
-            BootstrapWrapper bootstrapWrapper = this.bootstraps.get(bootstrapToRegister);
+            BootstrapWrapper bootstrapWrapper = getNextBootstrap();
+            if (bootstrapWrapper == null) {
+                return;
+            }
 
             ChannelFuture future;
 
@@ -116,7 +136,7 @@ class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnab
     protected
     boolean registerNextProtocol0() {
         synchronized (this.connectingBootstrap) {
-            this.registrationComplete = this.connectingBootstrap.get() == this.bootstraps.size();
+            this.registrationComplete = isRegistrationComplete();
             if (!this.registrationComplete) {
                 registerNextProtocol();
             }
