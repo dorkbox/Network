@@ -15,15 +15,16 @@
  */
 package dorkbox.network;
 
-import dorkbox.network.dns.record.MailExchangerRecord;
-import dorkbox.network.dns.record.ServiceRecord;
-import dorkbox.network.dns.record.StartOfAuthorityRecord;
-import org.junit.Test;
+import static org.junit.Assert.fail;
 
 import java.net.UnknownHostException;
 import java.util.List;
 
-import static org.junit.Assert.fail;
+import org.junit.Test;
+
+import dorkbox.network.dns.record.MailExchangerRecord;
+import dorkbox.network.dns.record.ServiceRecord;
+import dorkbox.network.dns.record.StartOfAuthorityRecord;
 
 public class DnsTests {
 
@@ -31,7 +32,7 @@ public class DnsTests {
     public
     void decode_A_Record() throws UnknownHostException {
         //DnsClient dnsClient = new DnsClient("127.0.1.1");
-        DnsClient dnsClient = new DnsClient(DnsClient.DNS_SERVER_LIST);
+        DnsClient dnsClient = new DnsClient();
         String answer = dnsClient.resolveA("google.com");
         dnsClient.stop();
 
@@ -45,7 +46,7 @@ public class DnsTests {
         // PTR absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
         // our DNS client will FIX THIS, so that end-users do NOT have to know this!
 
-        DnsClient dnsClient = new DnsClient(DnsClient.DNS_SERVER_LIST);
+        DnsClient dnsClient = new DnsClient();
         String answer = dnsClient.resolvePTR("204.228.150.3");
         dnsClient.stop();
 
@@ -56,7 +57,7 @@ public class DnsTests {
 
     @Test
     public void decode_CNAME_Record() {
-        DnsClient dnsClient = new DnsClient(DnsClient.DNS_SERVER_LIST);
+        DnsClient dnsClient = new DnsClient();
         String answer = dnsClient.resolveCNAME("www.atmos.org");
         dnsClient.stop();
 
@@ -67,7 +68,7 @@ public class DnsTests {
 
     @Test
     public void decode_MX_Record() {
-        DnsClient dnsClient = new DnsClient(DnsClient.DNS_SERVER_LIST);
+        DnsClient dnsClient = new DnsClient();
         MailExchangerRecord answer = dnsClient.resolveMX("bbc.co.uk");
         final String name = answer.name();
         dnsClient.stop();
@@ -79,7 +80,7 @@ public class DnsTests {
 
     @Test
     public void decode_SRV_Record() {
-        DnsClient dnsClient = new DnsClient(DnsClient.DNS_SERVER_LIST);
+        DnsClient dnsClient = new DnsClient();
         ServiceRecord answer = dnsClient.resolveSRV("_pop3._tcp.fudo.org");
         final String name = answer.name();
         dnsClient.stop();
@@ -91,7 +92,7 @@ public class DnsTests {
 
     @Test
     public void decode_SOA_Record() {
-        DnsClient dnsClient = new DnsClient(DnsClient.DNS_SERVER_LIST);
+        DnsClient dnsClient = new DnsClient();
         StartOfAuthorityRecord answer = dnsClient.resolveSOA("google.com");
         final String nameServer = answer.primaryNameServer();
         dnsClient.stop();
@@ -104,7 +105,7 @@ public class DnsTests {
 
     @Test
     public void decode_TXT_Record() {
-        DnsClient dnsClient = new DnsClient(DnsClient.DNS_SERVER_LIST);
+        DnsClient dnsClient = new DnsClient();
         List<String> answer = dnsClient.resolveTXT("real-world-systems.com");
         final String name = answer.get(0);
         dnsClient.stop();

@@ -16,6 +16,7 @@
 package io.netty.resolver.dns;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.resolver.ResolvedAddressTypes;
 
 public final
 class DnsNameResolverAccess {
@@ -23,6 +24,11 @@ class DnsNameResolverAccess {
     public static
     String decodeDomainName(final ByteBuf byteBuff) {
         return DnsNameResolverContext.decodeDomainName(byteBuff);
+    }
+
+    public static
+    ResolvedAddressTypes getDefaultResolvedAddressTypes() {
+        return DnsNameResolver.DEFAULT_RESOLVE_ADDRESS_TYPES;
     }
 
     private
