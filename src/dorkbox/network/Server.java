@@ -101,8 +101,6 @@ class Server<C extends Connection> extends EndPointServer<C> {
         // you have to make sure to use this.serialization
         super(options);
 
-        Logger logger2 = logger;
-
         tcpPort = options.tcpPort;
         udpPort = options.udpPort;
 
@@ -227,7 +225,6 @@ class Server<C extends Connection> extends EndPointServer<C> {
 
 
         if (udpBootstrap != null) {
-
             if (OS.isAndroid()) {
                 // android ONLY supports OIO (not NIO)
                 udpBootstrap.channel(OioDatagramChannel.class);

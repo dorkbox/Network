@@ -84,9 +84,9 @@ class EndPoint<C extends Connection> {
      * The HIGH and LOW watermark points for connections
      */
     @Property
-    protected static final int WRITE_BUFF_HIGH = 32 * 1024;
+    public static final int WRITE_BUFF_HIGH = 32 * 1024;
     @Property
-    protected static final int WRITE_BUFF_LOW = 8 * 1024;
+    public static final int WRITE_BUFF_LOW = 8 * 1024;
 
     public static final String THREADGROUP_NAME = "(Netty)";
 
