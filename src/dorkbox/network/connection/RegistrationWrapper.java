@@ -53,7 +53,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     private final KryoEncoder kryoEncoder;
     private final KryoEncoderCrypto kryoEncoderCrypto;
 
-    private final EndPoint<C> endPoint;
+    private final EndPointBase<C> endPointBaseConnection;
 
     // keeps track of connections (TCP/UDP-client)
     private final ReentrantLock channelMapLock = new ReentrantLock();
@@ -77,16 +77,16 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
 
 
     public
-    RegistrationWrapper(final EndPoint<C> endPoint,
+    RegistrationWrapper(final EndPointBase<C> endPointBaseConnection,
                         final Logger logger,
                         final KryoEncoder kryoEncoder,
                         final KryoEncoderCrypto kryoEncoderCrypto) {
-        this.endPoint = endPoint;
+        this.endPointBaseConnection = endPointBaseConnection;
         this.logger = logger;
         this.kryoEncoder = kryoEncoder;
         this.kryoEncoderCrypto = kryoEncoderCrypto;
 
-        if (endPoint instanceof EndPointServer) {
+        if (endPointBaseConnection instanceof EndPointServer) {
             this.udpRemoteMap = new ObjectMap<InetSocketAddress, ConnectionImpl>(32, ConnectionManager.LOAD_FACTOR);
         }
         else {
@@ -99,7 +99,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      */
     public
     boolean rmiEnabled() {
-        return endPoint.globalRmiBridge != null;
+        return endPointBaseConnection.globalRmiBridge != null;
     }
 
     public
@@ -135,7 +135,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      */
     public
     int getIdleTimeout() {
-        return this.endPoint.getIdleTimeout();
+        return this.endPointBaseConnection.getIdleTimeout();
     }
 
     /**
@@ -146,7 +146,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      */
     public
     boolean registerNextProtocol0() {
-        return this.endPoint.registerNextProtocol0();
+        return this.endPointBaseConnection.registerNextProtocol0();
     }
 
     /**
@@ -155,7 +155,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      */
     public
     void connectionConnected0(ConnectionImpl networkConnection) {
-        this.endPoint.connectionConnected0(networkConnection);
+        this.endPointBaseConnection.connectionConnected0(networkConnection);
     }
 
     /**
@@ -166,22 +166,22 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      */
     public
     Connection connection0(MetaChannel metaChannel) {
-        return this.endPoint.connection0(metaChannel);
+        return this.endPointBaseConnection.connection0(metaChannel);
     }
 
     public
     SecureRandom getSecureRandom() {
-        return this.endPoint.secureRandom;
+        return this.endPointBaseConnection.secureRandom;
     }
 
     public
     ECPublicKeyParameters getPublicKey() {
-        return this.endPoint.publicKey;
+        return this.endPointBaseConnection.publicKey;
     }
 
     public
     CipherParameters getPrivateKey() {
-        return this.endPoint.privateKey;
+        return this.endPointBaseConnection.privateKey;
     }
 
 
@@ -197,13 +197,13 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         InetAddress address = tcpRemoteServer.getAddress();
         byte[] hostAddress = address.getAddress();
 
-        ECPublicKeyParameters savedPublicKey = this.endPoint.propertyStore.getRegisteredServerKey(hostAddress);
+        ECPublicKeyParameters savedPublicKey = this.endPointBaseConnection.propertyStore.getRegisteredServerKey(hostAddress);
         Logger logger2 = this.logger;
         if (savedPublicKey == null) {
             if (logger2.isDebugEnabled()) {
                 logger2.debug("Adding new remote IP address key for {}", address.getHostAddress());
             }
-            this.endPoint.propertyStore.addRegisteredServerKey(hostAddress, publicKey);
+            this.endPointBaseConnection.propertyStore.addRegisteredServerKey(hostAddress, publicKey);
         }
         else {
             // COMPARE!
@@ -216,7 +216,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
                     byAddress = "Unknown Address";
                 }
 
-                if (this.endPoint.disableRemoteKeyValidation) {
+                if (this.endPointBaseConnection.disableRemoteKeyValidation) {
                     logger2.warn("Invalid or non-matching public key from remote server. Their public key has changed. To fix, remove entry for: {}", byAddress);
                     return true;
                 }
@@ -234,7 +234,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     @SuppressWarnings("AutoBoxing")
     public
     void removeRegisteredServerKey(final byte[] hostAddress) throws SecurityException {
-        ECPublicKeyParameters savedPublicKey = this.endPoint.propertyStore.getRegisteredServerKey(hostAddress);
+        ECPublicKeyParameters savedPublicKey = this.endPointBaseConnection.propertyStore.getRegisteredServerKey(hostAddress);
         if (savedPublicKey != null) {
             Logger logger2 = this.logger;
             if (logger2.isDebugEnabled()) {
@@ -244,7 +244,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
                               hostAddress[2],
                               hostAddress[3]);
             }
-            this.endPoint.propertyStore.removeRegisteredServerKey(hostAddress);
+            this.endPointBaseConnection.propertyStore.removeRegisteredServerKey(hostAddress);
         }
     }
 
@@ -316,8 +316,8 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
 
     public
     void abortRegistrationIfClient() {
-        if (this.endPoint instanceof EndPointClient) {
-            ((EndPointClient<C>) this.endPoint).abortRegistration();
+        if (this.endPointBaseConnection instanceof EndPointClient) {
+            ((EndPointClient<C>) this.endPointBaseConnection).abortRegistration();
         }
     }
 

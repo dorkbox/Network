@@ -34,7 +34,7 @@ import io.netty.channel.ChannelOption;
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointClient<C extends Connection> extends EndPoint<C> implements Runnable {
+class EndPointClient<C extends Connection> extends EndPointBase<C> implements Runnable {
 
     protected C connection;
 

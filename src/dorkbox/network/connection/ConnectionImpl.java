@@ -93,7 +93,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private boolean remoteKeyChanged;
 
-    private final EndPoint<Connection> endPoint;
+    private final EndPointBase<Connection> endPointBaseConnection;
 
     // when true, the connection will be closed (either as RMI or as 'normal' listener execution) when the thread execution returns control
     // back to the network stack
@@ -117,9 +117,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
     public
-    ConnectionImpl(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
+    ConnectionImpl(final Logger logger, final EndPointBase endPointBaseConnection, final RmiBridge rmiBridge) {
         this.logger = logger;
-        this.endPoint = endPoint;
+        this.endPointBaseConnection = endPointBaseConnection;
         this.rmiBridge = rmiBridge;
     }
 
@@ -214,8 +214,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @Override
     public
-    EndPoint<Connection> getEndPoint() {
-        return this.endPoint;
+    EndPointBase<Connection> getEndPoint() {
+        return this.endPointBaseConnection;
     }
 
     /**
@@ -614,7 +614,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     void close() {
         // only close if we aren't already in the middle of closing.
         if (this.closeInProgress.compareAndSet(false, true)) {
-            int idleTimeoutMs = this.endPoint.getIdleTimeout();
+            int idleTimeoutMs = this.endPointBaseConnection.getIdleTimeout();
             if (idleTimeoutMs == 0) {
                 // default is 2 second timeout, in milliseconds.
                 idleTimeoutMs = 2000;
@@ -714,7 +714,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     Listeners add(Listener listener) {
-        if (this.endPoint instanceof EndPointServer) {
+        if (this.endPointBaseConnection instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
             //   I add one listener, and ALL connections are notified of that listener.
@@ -726,15 +726,15 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             // is empty, we can remove it from this connection.
             synchronized (this) {
                 if (this.localListenerManager == null) {
-                    this.localListenerManager = ((EndPointServer<Connection>) this.endPoint).addListenerManager(this);
+                    this.localListenerManager = ((EndPointServer<Connection>) this.endPointBaseConnection).addListenerManager(this);
                 }
                 this.localListenerManager.add(listener);
             }
 
         }
         else {
-            this.endPoint.listeners()
-                         .add(listener);
+            this.endPointBaseConnection.listeners()
+                                       .add(listener);
         }
 
         return this;
@@ -756,7 +756,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     Listeners remove(Listener listener) {
-        if (this.endPoint instanceof EndPointServer) {
+        if (this.endPointBaseConnection instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
             //   I add one listener, and ALL connections are notified of that listener.
@@ -771,14 +771,14 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                     this.localListenerManager.remove(listener);
 
                     if (!this.localListenerManager.hasListeners()) {
-                        ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
+                        ((EndPointServer<Connection>) this.endPointBaseConnection).removeListenerManager(this);
                     }
                 }
             }
         }
         else {
-            this.endPoint.listeners()
-                         .remove(listener);
+            this.endPointBaseConnection.listeners()
+                                       .remove(listener);
         }
 
         return this;
@@ -791,7 +791,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     Listeners removeAll() {
-        if (this.endPoint instanceof EndPointServer) {
+        if (this.endPointBaseConnection instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
             //   I add one listener, and ALL connections are notified of that listener.
@@ -806,13 +806,13 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                     this.localListenerManager.removeAll();
                     this.localListenerManager = null;
 
-                    ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
+                    ((EndPointServer<Connection>) this.endPointBaseConnection).removeListenerManager(this);
                 }
             }
         }
         else {
-            this.endPoint.listeners()
-                         .removeAll();
+            this.endPointBaseConnection.listeners()
+                                       .removeAll();
         }
 
         return this;
@@ -826,7 +826,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     Listeners removeAll(Class<?> classType) {
-        if (this.endPoint instanceof EndPointServer) {
+        if (this.endPointBaseConnection instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
             //   I add one listener, and ALL connections are notified of that listener.
@@ -842,14 +842,14 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
                     if (!this.localListenerManager.hasListeners()) {
                         this.localListenerManager = null;
-                        ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
+                        ((EndPointServer<Connection>) this.endPointBaseConnection).removeListenerManager(this);
                     }
                 }
             }
         }
         else {
-            this.endPoint.listeners()
-                         .removeAll(classType);
+            this.endPointBaseConnection.listeners()
+                                       .removeAll(classType);
         }
 
         return this;
@@ -1111,7 +1111,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     public
     <T> int getRegisteredId(final T object) {
         // always check local before checking global, because less contention on the synchronization
-        RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
+        RmiBridge globalRmiBridge = endPointBaseConnection.globalRmiBridge;
 
         if (globalRmiBridge == null) {
             throw new NullPointerException("Unable to call 'getRegisteredId' when the globalRmiBridge is null!");
@@ -1155,7 +1155,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     public
     Object getImplementationObject(final int objectID) {
         if (RmiBridge.isGlobal(objectID)) {
-            RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
+            RmiBridge globalRmiBridge = endPointBaseConnection.globalRmiBridge;
 
             if (globalRmiBridge == null) {
                 throw new NullPointerException("Unable to call 'getRegisteredId' when the gloablRmiBridge is null!");

@@ -16,6 +16,7 @@
 package dorkbox.network;
 
 import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
 
 import org.slf4j.Logger;
 
@@ -82,6 +83,8 @@ class Server<C extends Connection> extends EndPointServer<C> {
 
     private final String localChannelName;
     private final String hostName;
+
+    private final CountDownLatch blockUntilDone = new CountDownLatch(1);
 
     /**
      * Starts a LOCAL <b>only</b> server, with the default serialization scheme.

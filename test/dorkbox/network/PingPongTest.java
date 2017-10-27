@@ -30,7 +30,7 @@ import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.CryptoSerializationManager;
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
 import dorkbox.util.SerializationManager;
@@ -52,8 +52,8 @@ class PingPongTest extends BaseTest {
     public
     void pingPong() throws InitializationException, SecurityException, IOException, InterruptedException {
         // UDP data is kinda big. Make sure it fits into one packet.
-        int origSize = EndPoint.udpMaxSize;
-        EndPoint.udpMaxSize = 2048;
+        int origSize = EndPointBase.udpMaxSize;
+        EndPointBase.udpMaxSize = 2048;
 
         this.fail = "Data not received.";
 
@@ -192,7 +192,7 @@ class PingPongTest extends BaseTest {
             fail(this.fail);
         }
 
-        EndPoint.udpMaxSize = origSize;
+        EndPointBase.udpMaxSize = origSize;
     }
 
     private static

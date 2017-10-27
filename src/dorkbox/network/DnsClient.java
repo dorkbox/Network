@@ -22,16 +22,13 @@ import static io.netty.util.internal.ObjectUtil.intValue;
 import java.net.IDN;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.security.AccessControlException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 
@@ -88,30 +85,7 @@ import io.netty.util.internal.PlatformDependent;
  */
 @SuppressWarnings({"unused", "WeakerAccess"})
 public
-class DnsClient {
-
-    // duplicated in EndPoint
-    static {
-        //noinspection Duplicates
-        try {
-            if (PlatformDependent.isAndroid()) {
-                // doesn't work when running from inside eclipse.
-                // Needed for NIO selectors on Android 2.2, and to force IPv4.
-                System.setProperty("java.net.preferIPv4Stack", Boolean.TRUE.toString());
-                System.setProperty("java.net.preferIPv6Addresses", Boolean.FALSE.toString());
-            }
-
-            // java6 has stack overflow problems when loading certain classes in it's classloader. The result is a StackOverflow when
-            // loading them normally. This calls AND FIXES this issue.
-            if (OS.javaVersion == 6) {
-                if (PlatformDependent.hasUnsafe()) {
-                    //noinspection ResultOfMethodCallIgnored
-                    PlatformDependent.newFixedMpscQueue(8);
-                }
-            }
-        } catch (AccessControlException ignored) {
-        }
-    }
+class DnsClient extends EndPoint {
 
     /**
      * This is a list of all of the public DNS servers to query, when submitting DNS queries
@@ -241,13 +215,7 @@ class DnsClient {
      */
     public
     DnsClient(Collection<InetSocketAddress> nameServerAddresses) {
-        // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
-        SecurityManager s = System.getSecurityManager();
-        threadGroup = new ThreadGroup(s != null
-                                      ? s.getThreadGroup()
-                                      : Thread.currentThread()
-                                              .getThreadGroup(), THREAD_NAME);
-        threadGroup.setDaemon(true);
+        super(DnsClient.class);
 
         if (PlatformDependent.isAndroid()) {
             // android ONLY supports OIO (not NIO)
@@ -263,6 +231,8 @@ class DnsClient {
             eventLoopGroup = new NioEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-DNS", threadGroup));
             channelType = NioDatagramChannel.class;
         }
+
+        manageForShutdown(eventLoopGroup);
 
         // NOTE: A/AAAA use the built-in decoder
 
@@ -602,6 +572,35 @@ class DnsClient {
     }
 
     /**
+     * Clears the DNS resolver cache
+     */
+    public
+    void reset() {
+        if (resolver == null) {
+            start();
+        }
+
+        clearResolver();
+    }
+
+    private
+    void clearResolver() {
+        resolver.resolveCache()
+                .clear();
+    }
+
+    @Override
+    protected
+    void stopExtraActions() {
+        clearResolver();
+
+        if (resolver != null) {
+            resolver.close(); // also closes the UDP channel that DNS client uses
+        }
+    }
+
+
+    /**
      * Resolves a specific hostname A record
      *
      * @param hostname the hostname, ie: google.com, that you want to resolve
@@ -718,78 +717,6 @@ class DnsClient {
 
         logger.error("Could not ask question to DNS server for type: {}", type.getClass().getSimpleName());
         return null;
-    }
-
-
-    /**
-     * Clears the DNS resolver cache
-     */
-    public
-    void reset() {
-        if (resolver == null) {
-            start();
-        }
-
-        clearResolver();
-    }
-
-    private
-    void clearResolver() {
-        resolver.resolveCache()
-                .clear();
-    }
-
-
-    /**
-     * Safely closes all associated resources/threads/connections
-     */
-    public
-    void stop() {
-        // we also want to stop the thread group (but NOT in our current thread!)
-        if (Thread.currentThread()
-                  .getThreadGroup()
-                  .getName()
-                  .equals(THREAD_NAME)) {
-
-            Thread thread = new Thread(new Runnable() {
-                @Override
-                public
-                void run() {
-                    DnsClient.this.stopInThread();
-                }
-            });
-            thread.setDaemon(false);
-            thread.setName("DnsClient Shutdown");
-            thread.start();
-        }
-        else {
-            stopInThread();
-        }
-    }
-
-
-    private
-    void stopInThread() {
-        clearResolver();
-
-        if (resolver != null) {
-            resolver.close(); // also closes the UDP channel that DNS client uses
-        }
-
-        // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
-        long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
-
-
-
-        // we want to WAIT until after the event executors have completed shutting down.
-        List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
-
-        // now wait it them to finish!
-        // It can take a few seconds to shut down the executor. This will affect unit testing, where connections are quickly created/stopped
-        eventLoopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds, maxShutdownWaitTimeInMilliSeconds * 4, TimeUnit.MILLISECONDS)
-                      .syncUninterruptibly();
-
-        threadGroup.interrupt();
     }
 
     public

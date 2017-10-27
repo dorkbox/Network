@@ -22,7 +22,7 @@ import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.rmi.Rmi;
 import dorkbox.util.FastThreadLocal;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -33,7 +33,7 @@ import io.netty.handler.codec.MessageToMessageEncoder;
 public
 class LocalRmiEncoder extends MessageToMessageEncoder<Object> {
 
-    private static final Map<Class<?>, Boolean> transformObjectCache = new ConcurrentHashMap<Class<?>, Boolean>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
+    private static final Map<Class<?>, Boolean> transformObjectCache = new ConcurrentHashMap<Class<?>, Boolean>(EndPointBase.DEFAULT_THREAD_POOL_SIZE);
     private static final RmiFieldCache fieldCache = RmiFieldCache.INSTANCE();
 
     private final FastThreadLocal<Map<Object, Integer>> objectThreadLocals = new FastThreadLocal<Map<Object, Integer>>() {

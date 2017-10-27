@@ -15,7 +15,13 @@
  */
 package dorkbox.network.pipeline.udp;
 
-import dorkbox.network.connection.EndPoint;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.util.List;
+
+import org.slf4j.LoggerFactory;
+
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.util.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -23,11 +29,6 @@ import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageEncoder;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.util.List;
 
 @Sharable
 // UDP uses messages --- NOT bytebuf!
@@ -35,7 +36,7 @@ import java.util.List;
 public
 class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
 
-    private static final int maxSize = EndPoint.udpMaxSize;
+    private static final int maxSize = EndPointBase.udpMaxSize;
     private final CryptoSerializationManager serializationManager;
 
 

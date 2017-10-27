@@ -27,7 +27,7 @@ import dorkbox.util.exceptions.SecurityException;
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointServer<C extends Connection> extends EndPoint<C> {
+class EndPointServer<C extends Connection> extends EndPointBase<C> {
 
     public
     EndPointServer(final Configuration options) throws InitializationException, SecurityException, IOException {

@@ -22,7 +22,7 @@ import org.slf4j.Logger;
 
 import dorkbox.network.connection.BootstrapWrapper;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.EndPointClient;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
@@ -333,7 +333,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @SuppressWarnings("rawtypes")
     @Override
     public
-    EndPoint getEndPoint() {
+    EndPointBase getEndPoint() {
         return this;
     }
 
@@ -450,7 +450,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * <p/>
      * Make <b>sure</b> that you only call this <b>after</b> the client connects!
      * <p/>
-     * This is preferred to {@link EndPoint#getConnections()} getConnections()}, as it properly does some error checking
+     * This is preferred to {@link EndPointBase#getConnections()} getConnections()}, as it properly does some error checking
      */
     public
     C getConnection() {

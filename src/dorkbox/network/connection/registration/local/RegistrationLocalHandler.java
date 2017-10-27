@@ -15,6 +15,10 @@
  */
 package dorkbox.network.connection.registration.local;
 
+import static dorkbox.network.connection.EndPointBase.maxShutdownWaitTimeInMilliSeconds;
+
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -23,9 +27,6 @@ import dorkbox.network.pipeline.LocalRmiDecoder;
 import dorkbox.network.pipeline.LocalRmiEncoder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import org.slf4j.Logger;
-
-import static dorkbox.network.connection.EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
 public abstract
 class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler<C> {

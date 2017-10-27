@@ -22,7 +22,7 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionPointWriter;
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.UdpServer;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -166,7 +166,7 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
     @Override
     public
     void close(final Connection connection, final ISessionManager<C> sessionManager) {
-        long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
+        long maxShutdownWaitTimeInMilliSeconds = EndPointBase.maxShutdownWaitTimeInMilliSeconds;
 
         this.tcp.close(maxShutdownWaitTimeInMilliSeconds);
 

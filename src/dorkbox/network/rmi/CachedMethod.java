@@ -53,7 +53,7 @@ import com.esotericsoftware.kryo.util.Util;
 import com.esotericsoftware.reflectasm.MethodAccess;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.util.CryptoSerializationManager;
 import dorkbox.network.util.RmiSerializationManager;
@@ -101,7 +101,7 @@ class CachedMethod {
     };
 
     // the purpose of the method cache, is to accelerate looking up methods for specific class
-    private static final Map<Class<?>, CachedMethod[]> methodCache = new ConcurrentHashMap<Class<?>, CachedMethod[]>(EndPoint.DEFAULT_THREAD_POOL_SIZE);
+    private static final Map<Class<?>, CachedMethod[]> methodCache = new ConcurrentHashMap<Class<?>, CachedMethod[]>(EndPointBase.DEFAULT_THREAD_POOL_SIZE);
 
 
     /**

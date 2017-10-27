@@ -80,7 +80,7 @@ class PropertyStore extends SettingsStore {
     @Override
     public synchronized
     ECPrivateKeyParameters getPrivateKey() throws dorkbox.util.exceptions.SecurityException {
-        checkAccess(EndPoint.class);
+        checkAccess(EndPointBase.class);
 
         return servers.get(DB_Server.IP_SELF)
                       .getPrivateKey();
@@ -92,7 +92,7 @@ class PropertyStore extends SettingsStore {
     @Override
     public synchronized
     void savePrivateKey(final ECPrivateKeyParameters serverPrivateKey) throws SecurityException {
-        checkAccess(EndPoint.class);
+        checkAccess(EndPointBase.class);
 
         servers.get(DB_Server.IP_SELF)
                .setPrivateKey(serverPrivateKey);
@@ -107,7 +107,7 @@ class PropertyStore extends SettingsStore {
     @Override
     public synchronized
     ECPublicKeyParameters getPublicKey() throws SecurityException {
-        checkAccess(EndPoint.class);
+        checkAccess(EndPointBase.class);
 
         return servers.get(DB_Server.IP_SELF)
                       .getPublicKey();
@@ -119,7 +119,7 @@ class PropertyStore extends SettingsStore {
     @Override
     public synchronized
     void savePublicKey(final ECPublicKeyParameters serverPublicKey) throws SecurityException {
-        checkAccess(EndPoint.class);
+        checkAccess(EndPointBase.class);
 
         servers.get(DB_Server.IP_SELF)
                .setPublicKey(serverPublicKey);

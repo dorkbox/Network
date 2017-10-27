@@ -17,7 +17,7 @@ package dorkbox.network;
 
 import java.util.concurrent.Executor;
 
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.store.SettingsStore;
 import dorkbox.network.util.CryptoSerializationManager;
 
@@ -76,7 +76,7 @@ class Configuration {
     public static
     Configuration localOnly() {
         Configuration configuration = new Configuration();
-        configuration.localChannelName = EndPoint.LOCAL_CHANNEL;
+        configuration.localChannelName = EndPointBase.LOCAL_CHANNEL;
 
         return configuration;
     }

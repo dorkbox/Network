@@ -21,7 +21,7 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionPointWriter;
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.registration.MetaChannel;
 import io.netty.channel.Channel;
@@ -120,7 +120,7 @@ class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, Co
     @Override
     public
     void close(Connection connection, ISessionManager<C> sessionManager) {
-        long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
+        long maxShutdownWaitTimeInMilliSeconds = EndPointBase.maxShutdownWaitTimeInMilliSeconds;
 
         this.shouldFlush.set(false);
 

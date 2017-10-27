@@ -26,7 +26,7 @@ import dorkbox.network.Broadcast;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.CryptoSerializationManager;
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -266,7 +266,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
 
         // also, once we notify, we unregister this.
         if (registrationWrapper != null) {
-            return registrationWrapper.closeChannel(channel, EndPoint.maxShutdownWaitTimeInMilliSeconds);
+            return registrationWrapper.closeChannel(channel, EndPointBase.maxShutdownWaitTimeInMilliSeconds);
         }
 
         return null;

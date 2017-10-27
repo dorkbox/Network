@@ -47,7 +47,7 @@ interface Connection {
      * @return the endpoint associated with this connection
      */
     @SuppressWarnings("rawtypes")
-    EndPoint getEndPoint();
+    EndPointBase getEndPoint();
 
 
     /**
