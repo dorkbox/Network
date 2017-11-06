@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package io.nettyxbill.resolver.dns;
+package dorkbox.network.dns.resolver;
 
 import dorkbox.network.dns.records.DnsMessage;
 import io.netty.util.internal.UnstableApi;
