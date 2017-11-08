@@ -303,8 +303,7 @@ class DnsNameResolverContext<T> {
         resolveQuery(nameServerAddrStream,
                      nameServerAddrStreamIndex,
                      question,
-                     parent.dnsQueryLifecycleObserverFactory()
-                    .newDnsQueryLifecycleObserver(question),
+                     parent.dnsQueryLifecycleObserverFactory().newDnsQueryLifecycleObserver(question),
                      promise);
     }
 
@@ -387,6 +386,7 @@ class DnsNameResolverContext<T> {
         final DnsResponse res = envelope.content();
         final int code = res.getHeader()
                             .getRcode();
+
         if (code == DnsResponseCode.NOERROR) {
             if (handleRedirect(question, envelope, queryLifecycleObserver, promise)) {
                 // Was a redirect so return here as everything else is handled in handleRedirect(...)
@@ -409,7 +409,11 @@ class DnsNameResolverContext<T> {
 
         // Retry with the next server if the server did not tell us that the domain does not exist.
         if (code != DnsResponseCode.NXDOMAIN) {
-            resolveQuery(nameServerAddrStream, nameServerAddrStreamIndex + 1, question, queryLifecycleObserver.queryNoAnswer(code), promise);
+            resolveQuery(nameServerAddrStream,
+                         nameServerAddrStreamIndex + 1,
+                         question,
+                         queryLifecycleObserver.queryNoAnswer(code),
+                         promise);
         }
         else {
             queryLifecycleObserver.queryFailed(NXDOMAIN_QUERY_FAILED_EXCEPTION);
