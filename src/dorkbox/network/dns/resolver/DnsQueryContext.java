@@ -18,6 +18,7 @@ package dorkbox.network.dns.resolver;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 import java.net.InetSocketAddress;
+import java.util.concurrent.TimeUnit;
 
 import dorkbox.network.dns.DnsQuestion;
 import dorkbox.network.dns.DnsResponse;
@@ -135,20 +136,19 @@ class DnsQueryContext {
         // Schedule a query timeout task if necessary.
         final long queryTimeoutMillis = parent.queryTimeoutMillis();
         if (queryTimeoutMillis > 0) {
-            // TODO UNCOMMENT!
-            // timeoutFuture = parent.ch.eventLoop()
-            //                          .schedule(new Runnable() {
-            //                              @Override
-            //                              public
-            //                              void run() {
-            //                                  if (promise.isDone()) {
-            //                                      // Received a response before the query times out.
-            //                                      return;
-            //                                  }
-            //
-            //                                  setFailure("query timed out after " + queryTimeoutMillis + " milliseconds", null);
-            //                              }
-            //                          }, queryTimeoutMillis, TimeUnit.MILLISECONDS);
+            timeoutFuture = parent.ch.eventLoop()
+                                     .schedule(new Runnable() {
+                                         @Override
+                                         public
+                                         void run() {
+                                             if (promise.isDone()) {
+                                                 // Received a response before the query times out.
+                                                 return;
+                                             }
+
+                                             setFailure("query timed out after " + queryTimeoutMillis + " milliseconds", null);
+                                         }
+                                     }, queryTimeoutMillis, TimeUnit.MILLISECONDS);
         }
     }
 
