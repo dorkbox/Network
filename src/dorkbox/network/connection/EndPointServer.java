@@ -30,8 +30,8 @@ public
 class EndPointServer<C extends Connection> extends EndPointBase<C> {
 
     public
-    EndPointServer(final Configuration options) throws InitializationException, SecurityException, IOException {
-        super(Server.class, options);
+    EndPointServer(final Configuration config) throws InitializationException, SecurityException, IOException {
+        super(Server.class, config);
     }
 
     /**

@@ -95,21 +95,21 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     @SuppressWarnings("AutoBoxing")
     public
-    Client(final Configuration options) throws InitializationException, SecurityException, IOException {
-        super(options);
+    Client(final Configuration config) throws InitializationException, SecurityException, IOException {
+        super(config);
 
         String threadName = Client.class.getSimpleName();
 
         Logger logger2 = this.logger;
-        if (options.localChannelName != null && (options.tcpPort > 0 || options.udpPort > 0 || options.host != null) ||
-            options.localChannelName == null && (options.tcpPort == 0 || options.udpPort == 0 || options.host == null)) {
+        if (config.localChannelName != null && (config.tcpPort > 0 || config.udpPort > 0 || config.host != null) ||
+            config.localChannelName == null && (config.tcpPort == 0 || config.udpPort == 0 || config.host == null)) {
             String msg = threadName + " Local channel use and TCP/UDP use are MUTUALLY exclusive. Unable to determine intent.";
             logger2.error(msg);
             throw new IllegalArgumentException(msg);
         }
 
-        localChannelName = options.localChannelName;
-        hostName = options.host;
+        localChannelName = config.localChannelName;
+        hostName = config.host;
 
         boolean isAndroid = PlatformDependent.isAndroid();
 
@@ -130,33 +130,33 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
         manageForShutdown(boss);
 
-        if (options.localChannelName != null && options.tcpPort < 0 && options.udpPort < 0) {
+        if (config.localChannelName != null && config.tcpPort <= 0 && config.udpPort <= 0) {
             // no networked bootstraps. LOCAL connection only
             Bootstrap localBootstrap = new Bootstrap();
-            this.bootstraps.add(new BootstrapWrapper("LOCAL", options.localChannelName, -1, localBootstrap));
+            this.bootstraps.add(new BootstrapWrapper("LOCAL", config.localChannelName, -1, localBootstrap));
 
             EventLoopGroup localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-LOCAL",
                                                                                                                   threadGroup));
 
             localBootstrap.group(localBoss)
                           .channel(LocalChannel.class)
-                          .remoteAddress(new LocalAddress(options.localChannelName))
+                          .remoteAddress(new LocalAddress(config.localChannelName))
                           .handler(new RegistrationLocalHandlerClient<C>(threadName, registrationWrapper));
 
             manageForShutdown(localBoss);
         }
         else {
-            if (options.host == null) {
+            if (config.host == null) {
                 throw new IllegalArgumentException("You must define what host you want to connect to.");
             }
 
-            if (options.tcpPort < 0 && options.udpPort < 0) {
+            if (config.tcpPort <= 0 && config.udpPort <= 0) {
                 throw new IllegalArgumentException("You must define what port you want to connect to.");
             }
 
-            if (options.tcpPort > 0) {
+            if (config.tcpPort > 0) {
                 Bootstrap tcpBootstrap = new Bootstrap();
-                this.bootstraps.add(new BootstrapWrapper("TCP", options.host, options.tcpPort, tcpBootstrap));
+                this.bootstraps.add(new BootstrapWrapper("TCP", config.host, config.tcpPort, tcpBootstrap));
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
@@ -173,7 +173,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                 tcpBootstrap.group(boss)
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
-                            .remoteAddress(options.host, options.tcpPort)
+                            .remoteAddress(config.host, config.tcpPort)
                             .handler(new RegistrationRemoteHandlerClientTCP<C>(threadName,
                                                                                registrationWrapper,
                                                                                serializationManager));
@@ -184,9 +184,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
             }
 
 
-            if (options.udpPort > 0) {
+            if (config.udpPort > 0) {
                 Bootstrap udpBootstrap = new Bootstrap();
-                this.bootstraps.add(new BootstrapWrapper("UDP", options.host, options.udpPort, udpBootstrap));
+                this.bootstraps.add(new BootstrapWrapper("UDP", config.host, config.udpPort, udpBootstrap));
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
@@ -204,7 +204,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .localAddress(new InetSocketAddress(0))  // bind to wildcard
-                            .remoteAddress(new InetSocketAddress(options.host, options.udpPort))
+                            .remoteAddress(new InetSocketAddress(config.host, config.udpPort))
                             .handler(new RegistrationRemoteHandlerClientUDP<C>(threadName,
                                                                                registrationWrapper,
                                                                                serializationManager));

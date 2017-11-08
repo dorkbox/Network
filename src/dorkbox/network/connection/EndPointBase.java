@@ -115,32 +115,32 @@ class EndPointBase<C extends Connection> extends EndPoint {
 
     /**
      * @param type    this is either "Client" or "Server", depending on who is creating this endpoint.
-     * @param options these are the specific connection options
+     * @param config these are the specific connection options
      *
      * @throws InitializationException
      * @throws SecurityException
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public
-    EndPointBase(Class<? extends EndPointBase> type, final Configuration options) throws InitializationException, SecurityException, IOException {
+    EndPointBase(Class<? extends EndPointBase> type, final Configuration config) throws InitializationException, SecurityException, IOException {
         super(type);
 
         // make sure that 'localhost' is ALWAYS our specific loopback IP address
-        if (options.host != null && (options.host.equals("localhost") || options.host.startsWith("127."))) {
+        if (config.host != null && (config.host.equals("localhost") || config.host.startsWith("127."))) {
             // localhost IP might not always be 127.0.0.1
-            options.host = NetUtil.LOCALHOST.getHostAddress();
+            config.host = NetUtil.LOCALHOST.getHostAddress();
         }
 
         // serialization stuff
-        if (options.serialization != null) {
-            this.serializationManager = options.serialization;
+        if (config.serialization != null) {
+            this.serializationManager = config.serialization;
         } else {
             this.serializationManager = CryptoSerializationManager.DEFAULT();
         }
 
         // setup our RMI serialization managers. Can only be called once
         rmiEnabled = serializationManager.initRmiSerialization();
-        rmiExecutor = options.rmiExecutor;
+        rmiExecutor = config.rmiExecutor;
 
 
         // The registration wrapper permits the registration process to access protected/package fields/methods, that we don't want
@@ -153,17 +153,17 @@ class EndPointBase<C extends Connection> extends EndPoint {
 
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
-        if (options.settingsStore == null) {
+        if (config.settingsStore == null) {
             this.propertyStore = new PropertyStore();
         }
         else {
-            this.propertyStore = options.settingsStore;
+            this.propertyStore = config.settingsStore;
         }
 
         this.propertyStore.init(this.serializationManager, null);
 
         // null it out, since it is sensitive!
-        options.settingsStore = null;
+        config.settingsStore = null;
 
 
         if (!(this.propertyStore instanceof NullSettingsStore)) {
@@ -217,7 +217,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
         if (this.rmiEnabled) {
             // these register the listener for registering a class implementation for RMI (internal use only)
             this.connectionManager.add(new RegisterRmiSystemListener());
-            this.globalRmiBridge = new RmiBridge(logger, options.rmiExecutor, true);
+            this.globalRmiBridge = new RmiBridge(logger, config.rmiExecutor, true);
         }
         else {
             this.globalRmiBridge = null;

@@ -16,7 +16,7 @@
 package dorkbox.network;
 
 import java.io.IOException;
-import java.util.concurrent.CountDownLatch;
+import java.net.Socket;
 
 import org.slf4j.Logger;
 
@@ -59,6 +59,8 @@ import io.netty.channel.socket.oio.OioServerSocketChannel;
  */
 public
 class Server<C extends Connection> extends EndPointServer<C> {
+
+
     /**
      * Gets the version number.
      */
@@ -84,7 +86,8 @@ class Server<C extends Connection> extends EndPointServer<C> {
     private final String localChannelName;
     private final String hostName;
 
-    private final CountDownLatch blockUntilDone = new CountDownLatch(1);
+    private volatile boolean isRunning = false;
+
 
     /**
      * Starts a LOCAL <b>only</b> server, with the default serialization scheme.
@@ -99,21 +102,21 @@ class Server<C extends Connection> extends EndPointServer<C> {
      */
     @SuppressWarnings("AutoBoxing")
     public
-    Server(Configuration options) throws InitializationException, SecurityException, IOException {
+    Server(Configuration config) throws InitializationException, SecurityException, IOException {
         // watch-out for serialization... it can be NULL incoming. The EndPoint (superclass) sets it, if null, so
         // you have to make sure to use this.serialization
-        super(options);
+        super(config);
 
-        tcpPort = options.tcpPort;
-        udpPort = options.udpPort;
+        tcpPort = config.tcpPort;
+        udpPort = config.udpPort;
 
-        localChannelName = options.localChannelName;
+        localChannelName = config.localChannelName;
 
-        if (options.host == null) {
+        if (config.host == null) {
             hostName = "0.0.0.0";
         }
         else {
-            hostName = options.host;
+            hostName = config.host;
         }
 
 
@@ -213,7 +216,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                                                                                 serializationManager));
 
             // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
-            if (options.host != null) {
+            if (config.host != null) {
                 tcpBootstrap.localAddress(hostName, tcpPort);
             }
             else {
@@ -351,8 +354,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 future = udpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to address " + hostName + " UDP port " +
-                                                                    udpPort + " on the server.",
+                String errorMessage = stopWithErrorMessage(logger2,
+                                                           "Could not bind to address " + hostName + " UDP port " + udpPort +
+                                                           " on the server.",
                                                            e);
                 throw new IllegalArgumentException(errorMessage);
             }
@@ -369,11 +373,69 @@ class Server<C extends Connection> extends EndPointServer<C> {
             manageForShutdown(future);
         }
 
+        isRunning = true;
+
         // we now BLOCK until the stop method is called.
         // if we want to continue running code in the server, bind should be called in a separate, non-daemon thread.
         if (blockUntilTerminate) {
             waitForShutdown();
         }
+    }
+
+    @Override
+    protected
+    void stopExtraActions() {
+        isRunning = false;
+    }
+
+    /**
+     * @return true if this server has successfully bound to an IP address and is running
+     */
+    public
+    boolean isRunning() {
+        return isRunning;
+    }
+
+    /**
+     * Checks to see if different server (using the specified configuration) is already running. This will check across JVMs by checking the
+     * network socket directly, and assumes that if the port is in use and answers, then the server is "running". This does not try to
+     * authenticate or validate the connection.
+     * <p>
+     * This does not check local-channels (which are intra-JVM only) or UDP connections.
+     * </p>
+     *
+     * @return true if the configuration matches and can connect (but not verify) to the TCP control socket.
+     */
+    public static
+    boolean isRunning(Configuration config) {
+        String host = config.host;
+
+        // for us, we want a "null" host to connect to the "any" interface.
+        if (host == null) {
+            host = "0.0.0.0";
+        }
+
+        if (config.tcpPort == 0) {
+            return false;
+        }
+
+        Socket sock = null;
+
+        // since we check the socket, if we cannot connect to a socket, then we're done.
+        try {
+            sock = new Socket(host, config.tcpPort);
+            // if we can connect to the socket, it means that we are already running.
+            return sock.isConnected();
+        } catch (Exception ignored) {
+            if (sock != null) {
+                try {
+                    sock.close();
+                } catch (IOException ignored2) {
+                }
+            }
+        }
+
+        return false;
     }
 }
 

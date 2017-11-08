@@ -50,8 +50,8 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
 
 
     public
-    EndPointClient(Configuration options) throws InitializationException, SecurityException, IOException {
-        super(Client.class, options);
+    EndPointClient(Configuration config) throws InitializationException, SecurityException, IOException {
+        super(Client.class, config);
     }
 
     protected

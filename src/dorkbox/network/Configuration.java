@@ -30,15 +30,19 @@ class Configuration {
 
     /**
      * Specify the TCP port to use. The server will listen on this port, the client will connect to it.
+     * <p>
+     * Must be > 0 to be used
      */
-    public int tcpPort = -1;
+    public int tcpPort = 0;
 
     /**
      * Specify the UDP port to use. The server will listen on this port, the client will connect to it.
      * <p>
+     * Must be > 0 to be used
+     * <p>
      * UDP requires TCP to handshake
      */
-    public int udpPort = -1;
+    public int udpPort = 0;
 
     /**
      * Specify the local channel name to use, if the default is not wanted.
