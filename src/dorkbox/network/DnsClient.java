@@ -15,37 +15,39 @@
  */
 package dorkbox.network;
 
-import static io.netty.resolver.dns.DnsServerAddressStreamProviders.platformDefault;
+import static dorkbox.network.dns.resolver.addressProvider.DnsServerAddressStreamProviders.platformDefault;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 import static io.netty.util.internal.ObjectUtil.intValue;
 
-import java.net.IDN;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.slf4j.Logger;
 
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.dns.decoder.DomainDecoder;
-import dorkbox.network.dns.decoder.MailExchangerDecoder;
-import dorkbox.network.dns.decoder.RecordDecoder;
-import dorkbox.network.dns.decoder.ServiceDecoder;
-import dorkbox.network.dns.decoder.StartOfAuthorityDecoder;
-import dorkbox.network.dns.decoder.TextDecoder;
-import dorkbox.network.dns.record.MailExchangerRecord;
-import dorkbox.network.dns.record.ServiceRecord;
-import dorkbox.network.dns.record.StartOfAuthorityRecord;
+import dorkbox.network.dns.DnsQuestion;
+import dorkbox.network.dns.DnsResponse;
+import dorkbox.network.dns.constants.DnsRecordType;
+import dorkbox.network.dns.constants.DnsResponseCode;
+import dorkbox.network.dns.constants.DnsSection;
+import dorkbox.network.dns.records.DnsRecord;
+import dorkbox.network.dns.resolver.DnsNameResolver;
+import dorkbox.network.dns.resolver.DnsQueryLifecycleObserverFactory;
+import dorkbox.network.dns.resolver.NoopDnsQueryLifecycleObserverFactory;
+import dorkbox.network.dns.resolver.addressProvider.DefaultDnsServerAddressStreamProvider;
+import dorkbox.network.dns.resolver.addressProvider.DnsServerAddressStreamProvider;
+import dorkbox.network.dns.resolver.addressProvider.SequentialDnsServerAddressStreamProvider;
+import dorkbox.network.dns.resolver.cache.DefaultDnsCache;
+import dorkbox.network.dns.resolver.cache.DnsCache;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.EventLoopGroup;
@@ -58,25 +60,8 @@ import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.InternetProtocolFamily;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
-import io.netty.handler.codec.dns.DefaultDnsQuestion;
-import io.netty.handler.codec.dns.DnsPtrRecord;
-import io.netty.handler.codec.dns.DnsRawRecord;
-import io.netty.handler.codec.dns.DnsRecord;
-import io.netty.handler.codec.dns.DnsRecordType;
-import io.netty.handler.codec.dns.DnsResponse;
-import io.netty.handler.codec.dns.DnsResponseCode;
-import io.netty.handler.codec.dns.DnsSection;
 import io.netty.resolver.HostsFileEntriesResolver;
 import io.netty.resolver.ResolvedAddressTypes;
-import io.netty.resolver.dns.DefaultDnsCache;
-import io.netty.resolver.dns.DefaultDnsServerAddressStreamProvider;
-import io.netty.resolver.dns.DnsCache;
-import io.netty.resolver.dns.DnsNameResolver;
-import io.netty.resolver.dns.DnsNameResolverAccess;
-import io.netty.resolver.dns.DnsQueryLifecycleObserverFactory;
-import io.netty.resolver.dns.DnsServerAddressStreamProvider;
-import io.netty.resolver.dns.NoopDnsQueryLifecycleObserverFactory;
-import io.netty.resolver.dns.SequentialDnsServerAddressStreamProvider;
 import io.netty.util.concurrent.Future;
 import io.netty.util.internal.PlatformDependent;
 
@@ -86,6 +71,21 @@ import io.netty.util.internal.PlatformDependent;
 @SuppressWarnings({"unused", "WeakerAccess"})
 public
 class DnsClient extends EndPoint {
+
+    /*
+    http://bugs.java.com/view_bug.do?bug_id=8176361
+    Previous JDK releases documented how to configure `java.net.InetAddress` to use the JNDI DNS service provider as the name service. This mechanism, and the system properties to configure it, have been removed in JDK 9
+
+A new mechanism to configure the use of a hosts file has been introduced.
+
+A new system property `jdk.net.hosts.file` has been defined. When this system property is set, the name and address resolution calls of `InetAddress`, i.e `getByXXX`, retrieve the relevant mapping from the specified file. The structure of this file is equivalent to that of the `/etc/hosts` file.
+
+When the system property `jdk.net.hosts.file` is set, and the specified file doesn't exist, the name or address lookup will result in an UnknownHostException. Thus, a non existent hosts file is handled as if the file is empty.
+
+
+UP UNTIL java 1.8, one can use org/xbill/DNS/spi, ie: sun.net.dns.ResolverConfiguration
+     */
+
 
     /**
      * This is a list of all of the public DNS servers to query, when submitting DNS queries
@@ -109,6 +109,7 @@ class DnsClient extends EndPoint {
     public final static List<InetSocketAddress> DEFAULT_DNS_SERVER_LIST = DefaultDnsServerAddressStreamProvider.defaultAddressList();
 
     private static final String ptrSuffix = ".in-addr.arpa";
+    public static final InetAddress[] INET_ADDRESSES = new InetAddress[0];
 
     /**
      * Gets the version number.
@@ -128,22 +129,29 @@ class DnsClient extends EndPoint {
      * @return the public IP address if found, or null if it didn't find it
      */
     public static
-    String getPublicIp() {
+    InetAddress getPublicIp() {
         final InetSocketAddress dnsServer = new InetSocketAddress("208.67.222.222", 53);  // openDNS
 
         DnsClient dnsClient = new DnsClient(dnsServer);
-        final String resolve = dnsClient.resolve("myip.opendns.com", DnsRecordType.A);
+        List<InetAddress> resolved = null;
+        try {
+            resolved = dnsClient.resolve("myip.opendns.com");
+        } catch (Throwable ignored) {
+        }
 
         dnsClient.stop();
 
-        return resolve;
+        if (resolved != null && resolved.size() > 0) {
+            return resolved.get(0);
+        }
+
+        return null;
     }
 
-    private final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(getClass());
+    private final Logger logger = org.slf4j.LoggerFactory.getLogger(getClass());
     private Class<? extends DatagramChannel> channelType;
 
     private DnsNameResolver resolver;
-    private final Map<DnsRecordType, RecordDecoder<?>> customDecoders = new HashMap<DnsRecordType, RecordDecoder<?>>();
 
     private ThreadGroup threadGroup;
     private static final String THREAD_NAME = "DnsClient";
@@ -160,14 +168,12 @@ class DnsClient extends EndPoint {
     private Integer negativeTtl;
     private long queryTimeoutMillis = 5000;
 
-    private ResolvedAddressTypes resolvedAddressTypes = DnsNameResolverAccess.getDefaultResolvedAddressTypes();
+    private ResolvedAddressTypes resolvedAddressTypes = DnsNameResolver.DEFAULT_RESOLVE_ADDRESS_TYPES;
     private boolean recursionDesired = true;
     private int maxQueriesPerResolve = 16;
 
     private boolean traceEnabled;
     private int maxPayloadSize = 4096;
-
-    private boolean optResourceEnabled = true;
 
     private HostsFileEntriesResolver hostsFileEntriesResolver = HostsFileEntriesResolver.DEFAULT;
     private DnsServerAddressStreamProvider dnsServerAddressStreamProvider = platformDefault();
@@ -192,7 +198,17 @@ class DnsClient extends EndPoint {
      */
     public
     DnsClient(final String nameServerAddresses) {
-        this(Collections.singletonList(new InetSocketAddress(nameServerAddresses, 53)));
+        this(nameServerAddresses, 53);
+    }
+
+    /**
+     * Creates a new DNS client, using the provided server and por tfor DNS query resolution, with a cache that will obey the TTL of the response
+     *
+     * @param nameServerAddresses the server to receive your DNS questions.
+     */
+    public
+    DnsClient(final String nameServerAddresses, int port) {
+        this(Collections.singletonList(new InetSocketAddress(nameServerAddresses, port)));
     }
 
     /**
@@ -233,18 +249,6 @@ class DnsClient extends EndPoint {
         }
 
         manageForShutdown(eventLoopGroup);
-
-        // NOTE: A/AAAA use the built-in decoder
-
-        customDecoders.put(DnsRecordType.MX, new MailExchangerDecoder());
-        customDecoders.put(DnsRecordType.TXT, new TextDecoder());
-        customDecoders.put(DnsRecordType.SRV, new ServiceDecoder());
-
-        RecordDecoder<?> decoder = new DomainDecoder();
-        customDecoders.put(DnsRecordType.NS, decoder);
-        customDecoders.put(DnsRecordType.CNAME, decoder);
-        customDecoders.put(DnsRecordType.PTR, decoder);
-        customDecoders.put(DnsRecordType.SOA, new StartOfAuthorityDecoder());
 
         if (nameServerAddresses != null) {
             this.dnsServerAddressStreamProvider = new SequentialDnsServerAddressStreamProvider(nameServerAddresses);
@@ -405,21 +409,6 @@ class DnsClient extends EndPoint {
     }
 
     /**
-     * Enable the automatic inclusion of a optional records that tries to give the remote DNS server a hint about
-     * how much data the resolver can read per response. Some DNSServer may not support this and so fail to answer
-     * queries. If you find problems you may want to disable this.
-     *
-     * @param optResourceEnabled if optional records inclusion is enabled
-     *
-     * @return {@code this}
-     */
-    public
-    DnsClient optResourceEnabled(boolean optResourceEnabled) {
-        this.optResourceEnabled = optResourceEnabled;
-        return this;
-    }
-
-    /**
      * @param hostsFileEntriesResolver the {@link HostsFileEntriesResolver} used to first check
      *         if the hostname is locally aliased.
      *
@@ -519,7 +508,7 @@ class DnsClient extends EndPoint {
     public static
     ResolvedAddressTypes computeResolvedAddressTypes(InternetProtocolFamily... internetProtocolFamilies) {
         if (internetProtocolFamilies == null || internetProtocolFamilies.length == 0) {
-            return DnsNameResolverAccess.getDefaultResolvedAddressTypes();
+            return DnsNameResolver.DEFAULT_RESOLVE_ADDRESS_TYPES;
         }
         if (internetProtocolFamilies.length > 2) {
             throw new IllegalArgumentException("No more than 2 InternetProtocolFamilies");
@@ -563,10 +552,22 @@ class DnsClient extends EndPoint {
         DnsCache resolveCache = this.resolveCache != null ? this.resolveCache : newCache();
         DnsCache authoritativeDnsServerCache = this.authoritativeDnsServerCache != null ? this.authoritativeDnsServerCache : newCache();
 
-        resolver = new DnsNameResolver(eventLoopGroup.next(), channelFactory, resolveCache, authoritativeDnsServerCache,
-                                       dnsQueryLifecycleObserverFactory, queryTimeoutMillis, resolvedAddressTypes, recursionDesired,
-                                       maxQueriesPerResolve, traceEnabled, maxPayloadSize, optResourceEnabled, hostsFileEntriesResolver,
-                                       dnsServerAddressStreamProvider, searchDomains, ndots, decodeIdn);
+        resolver = new DnsNameResolver(eventLoopGroup.next(),
+                                       channelFactory,
+                                       resolveCache,
+                                       authoritativeDnsServerCache,
+                                       dnsQueryLifecycleObserverFactory,
+                                       queryTimeoutMillis,
+                                       resolvedAddressTypes,
+                                       recursionDesired,
+                                       maxQueriesPerResolve,
+                                       traceEnabled,
+                                       maxPayloadSize,
+                                       hostsFileEntriesResolver,
+                                       dnsServerAddressStreamProvider,
+                                       searchDomains,
+                                       ndots,
+                                       decodeIdn);
 
         return this;
     }
@@ -592,181 +593,116 @@ class DnsClient extends EndPoint {
     @Override
     protected
     void stopExtraActions() {
-        clearResolver();
-
         if (resolver != null) {
+            clearResolver();
+
             resolver.close(); // also closes the UDP channel that DNS client uses
         }
     }
 
 
     /**
-     * Resolves a specific hostname A record
+     * Resolves a specific hostname A/AAAA record.
      *
      * @param hostname the hostname, ie: google.com, that you want to resolve
+     * @return the list of resolved InetAddress or null
+     * @throws UnknownHostException if the hostname cannot be resolved
      */
     public
-    String resolve(String hostname) {
+    List<InetAddress> resolve(String hostname) throws UnknownHostException {
         if (resolver == null) {
             start();
         }
 
-        if (resolver.resolvedAddressTypes() == ResolvedAddressTypes.IPV4_ONLY) {
-            return resolve(hostname, DnsRecordType.A);
+        // use "resolve", since it handles A/AAAA records + redirects correctly
+        final Future<List<InetAddress>> resolve = resolver.resolveAll(hostname);
+        final Future<List<InetAddress>> result = resolve.awaitUninterruptibly();
+
+        // now return whatever value we had
+        if (result.isSuccess() && result.isDone()) {
+            try {
+                List<InetAddress> now = result.getNow();
+                return now;
+            } catch (Exception e) {
+                logger.error("Could not ask question to DNS server", e);
+                return null;
+            }
         }
-        else {
-            return resolve(hostname, DnsRecordType.AAAA);
+
+        logger.error("Could not ask question to DNS server for A/AAAA record: {}", hostname);
+
+        UnknownHostException cause = (UnknownHostException) result.cause();
+        if (cause != null) {
+            throw cause;
         }
+
+        return null;
     }
 
     /**
      * Resolves a specific hostname record, of the specified type (PTR, MX, TXT, etc)
      * <p/>
-     * Note that PTR absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
+     * <p/>
+     * Note: PTR queries absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
      * -- because of this, we will automatically fix this in case that clients are unaware of this requirement
+     * <p/>
+     * <p/>
+     * Note: A/AAAA queries absolutely MUST end in a '.' -- because of this we will automatically fix this in case that clients are
+     * unaware of this requirement
      *
      * @param hostname the hostname, ie: google.com, that you want to resolve
      * @param type     the DnsRecordType you want to resolve (PTR, MX, TXT, etc)
-     * @return null indicates there was an error resolving the hostname
+     * @return the DnsRecords or null if there was an error resolving the hostname
+     *
+     * @throws @throws UnknownHostException if the hostname cannot be resolved
      */
-    @SuppressWarnings("unchecked")
-    private
-    <T> T resolve(String hostname, DnsRecordType type) {
+    @SuppressWarnings({"unchecked", "Duplicates"})
+    public
+    DnsRecord[] query(String hostname, final int type) throws UnknownHostException {
         if (resolver == null) {
             start();
         }
 
-        hostname = IDN.toASCII(hostname);
-        final int value = type.intValue();
-
-
-        // we can use the included DNS resolver.
-        if (value == DnsRecordType.A.intValue() || value == DnsRecordType.AAAA.intValue()) {
-            // use "resolve", since it handles A/AAAA records
-            final Future<InetAddress> resolve = resolver.resolve(hostname); // made up port, because it doesn't matter
-            final Future<InetAddress> result = resolve.awaitUninterruptibly();
-
-            // now return whatever value we had
-            if (result.isSuccess() && result.isDone()) {
-                try {
-                    return (T) result.getNow().getHostAddress();
-                } catch (Exception e) {
-                    logger.error("Could not ask question to DNS server", e);
-                    return null;
-                }
-            }
-
-            Throwable cause = result.cause();
-
-            Logger logger2 = this.logger;
-            if (logger2.isDebugEnabled() && cause != null) {
-                logger2.error("Could not ask question to DNS server.", cause);
-                return null;
-            }
-        }
-        else {
-            // we use our own resolvers
-
-            final Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> query = resolver.query(new DefaultDnsQuestion(hostname, type));
-            final Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> result = query.awaitUninterruptibly();
-
-            // now return whatever value we had
-            if (result.isSuccess() && result.isDone()) {
-                AddressedEnvelope<DnsResponse, InetSocketAddress> envelope = result.getNow();
-                DnsResponse response = envelope.content();
-                try {
-                    final DnsResponseCode code = response.code();
-                    if (code == DnsResponseCode.NOERROR) {
-                        final RecordDecoder<?> decoder = customDecoders.get(type);
-                        if (decoder != null) {
-                            final int answerCount = response.count(DnsSection.ANSWER);
-                            for (int i = 0; i < answerCount; i++) {
-                                final DnsRecord r = response.recordAt(DnsSection.ANSWER, i);
-                                if (r.type() == type) {
-                                    // can be either RAW or it will be a PTR record
-                                    if (r instanceof DnsRawRecord) {
-                                        ByteBuf recordContent = ((DnsRawRecord) r).content();
-                                        return (T) decoder.decode(r, recordContent);
-                                    } else if (r instanceof DnsPtrRecord) {
-                                        return (T) ((DnsPtrRecord)r).hostname();
-                                    }
-                                }
-                            }
-                        }
-
-                        logger.error("Could not ask question to DNS server: Issue with decoder for type: {}", type);
-                        return null;
-                    }
-
-                    logger.error("Could not ask question to DNS server: Error code {}", code);
-                    return null;
-                } finally {
-                    response.release();
-                }
-            }
-            else {
-                Throwable cause = result.cause();
-
-                Logger logger2 = this.logger;
-                if (logger2.isDebugEnabled() && cause != null) {
-                    logger2.error("Could not ask question to DNS server.", cause);
-                    return null;
-                }
-            }
-        }
-
-        logger.error("Could not ask question to DNS server for type: {}", type.getClass().getSimpleName());
-        return null;
-    }
-
-    public
-    ServiceRecord resolveSRV(final String hostname) {
-        return resolve(hostname, DnsRecordType.SRV);
-    }
-
-    public
-    MailExchangerRecord resolveMX(final String hostname) {
-        return resolve(hostname, DnsRecordType.MX);
-    }
-
-    public
-    String resolveCNAME(final String hostname) {
-        return resolve(hostname, DnsRecordType.CNAME);
-    }
-
-    public
-    String resolveNS(final String hostname) {
-        return resolve(hostname, DnsRecordType.NS);
-    }
-
-    public
-    String resolvePTR(String hostname) {
-        // PTR absolutely MUST end in ".in-addr.arpa"
-        if (!hostname.endsWith(ptrSuffix)) {
+        if (type == DnsRecordType.PTR && !hostname.endsWith(ptrSuffix)) {
+            // PTR absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
+            // in this case, hostname is an ip address
             hostname += ptrSuffix;
         }
 
-        return resolve(hostname, DnsRecordType.PTR);
-    }
+        // we use our own resolvers
+        DnsQuestion dnsMessage = DnsQuestion.newQuery(hostname, type, recursionDesired);
 
-    public
-    String resolveA(final String hostname) {
-        return resolve(hostname, DnsRecordType.A);
-    }
+        final Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> query = resolver.query(dnsMessage);
+        final Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> result = query.awaitUninterruptibly();
 
-    public
-    String resolveAAAA(final String hostname) {
-        return resolve(hostname, DnsRecordType.AAAA);
-    }
+        // now return whatever value we had
+        if (result.isSuccess() && result.isDone()) {
+            AddressedEnvelope<DnsResponse, InetSocketAddress> envelope = result.getNow();
+            DnsResponse response = envelope.content();
+            try {
+                final int code = response.getHeader().getRcode();
+                if (code == DnsResponseCode.NOERROR) {
+                    return response.getSectionArray(DnsSection.ANSWER);
+                }
 
-    public
-    StartOfAuthorityRecord resolveSOA(final String hostname) {
-        return resolve(hostname, DnsRecordType.SOA);
-    }
+                logger.error("Could not ask question to DNS server: Error code {} for type: {} - {}",
+                             code, type, DnsRecordType.string(type));
 
-    public
-    List<String> resolveTXT(final String hostname) {
-        return resolve(hostname, DnsRecordType.TXT);
+                logger.error("Could not ask question to DNS server: Error code {}", code);
+                return null;
+            } finally {
+                response.release();
+            }
+        }
+
+        logger.error("Could not ask question to DNS server for type: {}", DnsRecordType.string(type));
+
+        UnknownHostException cause = (UnknownHostException) result.cause();
+        if (cause != null) {
+            throw cause;
+        }
+
+        return null;
     }
 }
 
