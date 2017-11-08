@@ -415,7 +415,7 @@ class Address {
         client.resolvedAddressTypes(ResolvedAddressTypes.IPV4_ONLY);
         DnsRecord[] records = new DnsRecord[0];
         try {
-            records = client.resolve(name.toString(true), DnsRecordType.PTR);
+            records = client.query(name.toString(true), DnsRecordType.PTR);
         } catch (Throwable ignored) {
         }
         client.stop();
