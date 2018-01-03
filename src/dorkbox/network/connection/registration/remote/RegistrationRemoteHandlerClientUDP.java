@@ -22,6 +22,7 @@ import java.net.InetSocketAddress;
 import org.slf4j.Logger;
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -33,6 +34,7 @@ import dorkbox.util.crypto.CryptoAES;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.FixedRecvByteBufAllocator;
 
 public
 class RegistrationRemoteHandlerClientUDP<C extends Connection> extends RegistrationRemoteHandlerClient<C> {
@@ -55,6 +57,10 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
             logger2.trace("Channel registered: " + channel.getClass()
                                                           .getSimpleName());
         }
+
+        // Netty4 has default of 2048 bytes as upper limit for datagram packets.
+        channel.config()
+               .setRecvByteBufAllocator(new FixedRecvByteBufAllocator(EndPointBase.udpMaxSize));
 
         ChannelPipeline pipeline = channel.pipeline();
 

@@ -38,6 +38,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageCodec;
 
@@ -73,6 +74,11 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
     @Override
     public
     void channelActive(final ChannelHandlerContext context) throws Exception {
+        // Netty4 has default of 2048 bytes as upper limit for datagram packets.
+        context.channel()
+               .config()
+               .setRecvByteBufAllocator(new FixedRecvByteBufAllocator(EndPointBase.udpMaxSize));
+
         // do NOT want to add UDP channels, since they are tracked differently for the server.
     }
 
