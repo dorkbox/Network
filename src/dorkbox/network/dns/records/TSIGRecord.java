@@ -22,7 +22,7 @@ import dorkbox.util.OS;
  * sender and receiver of a message, using a shared key.
  *
  * @author Brian Wellington
- * @see TSIGm
+ * @see TSIG
  */
 
 public
