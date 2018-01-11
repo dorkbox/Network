@@ -16,9 +16,9 @@
 package dorkbox.network.connection;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 
@@ -40,8 +40,10 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
 
     protected final Object registrationLock = new Object();
 
-    protected final AtomicInteger connectingBootstrap = new AtomicInteger(0);
+    protected final Object bootstrapLock = new Object();
     protected List<BootstrapWrapper> bootstraps = new LinkedList<BootstrapWrapper>();
+    protected Iterator<BootstrapWrapper> bootstrapIterator;
+
     protected volatile int connectionTimeout = 5000; // default
     protected volatile boolean registrationComplete = false;
     private volatile boolean rmiInitializationComplete = false;
@@ -56,39 +58,35 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
 
     protected
     void registerNextProtocol() {
-        this.registrationComplete = false; // always reset.
+        // always reset everything.
+        this.registrationComplete = false;
+        bootstrapIterator = bootstraps.iterator();
 
+        startProtocolRegistration();
+    }
+
+    private
+    void startProtocolRegistration() {
         new Thread(this, "Bootstrap registration").start();
     }
 
 
-    // not protected by synchronized
-    private
-    BootstrapWrapper getNextBootstrap() {
-        int bootstrapToRegister = this.connectingBootstrap.getAndIncrement();
-
-        if (bootstrapToRegister == this.bootstraps.size()) {
-            return null;
-        }
-
-        return this.bootstraps.get(bootstrapToRegister);
-    }
-
-    // not protected by synchronized
+    // protected by bootstrapLock
     private
     boolean isRegistrationComplete() {
-        return this.connectingBootstrap.get() == this.bootstraps.size();
+        return !bootstrapIterator.hasNext();
     }
 
     @SuppressWarnings("AutoBoxing")
     @Override
     public
     void run() {
-        synchronized (this.connectingBootstrap) {
-            BootstrapWrapper bootstrapWrapper = getNextBootstrap();
-            if (bootstrapWrapper == null) {
+        synchronized (this.bootstrapLock) {
+            if (isRegistrationComplete()) {
                 return;
             }
+
+            BootstrapWrapper bootstrapWrapper = bootstrapIterator.next();
 
             ChannelFuture future;
 
@@ -135,12 +133,16 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
     @Override
     protected
     boolean registerNextProtocol0() {
-        synchronized (this.connectingBootstrap) {
+        synchronized (this.bootstrapLock) {
             this.registrationComplete = isRegistrationComplete();
             if (!this.registrationComplete) {
-                registerNextProtocol();
+                startProtocolRegistration();
             }
+
+            // we're done with registration, so no need to keep this around
+            bootstrapIterator = null;
         }
+
 
         Logger logger2 = this.logger;
         if (logger2.isTraceEnabled()) {
