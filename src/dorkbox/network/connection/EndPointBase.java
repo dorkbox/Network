@@ -133,9 +133,9 @@ class EndPointBase<C extends Connection> extends EndPoint {
 
         // serialization stuff
         if (config.serialization != null) {
-            this.serializationManager = config.serialization;
+            serializationManager = config.serialization;
         } else {
-            this.serializationManager = CryptoSerializationManager.DEFAULT();
+            serializationManager = CryptoSerializationManager.DEFAULT();
         }
 
         // setup our RMI serialization managers. Can only be called once
@@ -146,31 +146,31 @@ class EndPointBase<C extends Connection> extends EndPoint {
         // The registration wrapper permits the registration process to access protected/package fields/methods, that we don't want
         // to expose to external code. "this" escaping can be ignored, because it is benign.
         //noinspection ThisEscapedInObjectConstruction
-        this.registrationWrapper = new RegistrationWrapper(this,
-                                                           this.logger,
-                                                           new KryoEncoder(this.serializationManager),
-                                                           new KryoEncoderCrypto(this.serializationManager));
+        registrationWrapper = new RegistrationWrapper(this,
+                                                      logger,
+                                                      new KryoEncoder(serializationManager),
+                                                      new KryoEncoderCrypto(serializationManager));
 
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
         if (config.settingsStore == null) {
-            this.propertyStore = new PropertyStore();
+            propertyStore = new PropertyStore();
         }
         else {
-            this.propertyStore = config.settingsStore;
+            propertyStore = config.settingsStore;
         }
 
-        this.propertyStore.init(this.serializationManager, null);
+        propertyStore.init(serializationManager, null);
 
         // null it out, since it is sensitive!
         config.settingsStore = null;
 
 
-        if (!(this.propertyStore instanceof NullSettingsStore)) {
+        if (!(propertyStore instanceof NullSettingsStore)) {
             // initialize the private/public keys used for negotiating ECC handshakes
             // these are ONLY used for IP connections. LOCAL connections do not need a handshake!
-            ECPrivateKeyParameters privateKey = this.propertyStore.getPrivateKey();
-            ECPublicKeyParameters publicKey = this.propertyStore.getPublicKey();
+            ECPrivateKeyParameters privateKey = propertyStore.getPrivateKey();
+            ECPublicKeyParameters publicKey = propertyStore.getPublicKey();
 
             if (privateKey == null || publicKey == null) {
                 try {
@@ -179,20 +179,20 @@ class EndPointBase<C extends Connection> extends EndPoint {
                     SecureRandom secureRandom = new SecureRandom(seedBytes);
                     secureRandom.nextBytes(seedBytes);
 
-                    this.logger.debug("Now generating ECC (" + CryptoECC.curve25519 + ") keys. Please wait!");
+                    logger.debug("Now generating ECC (" + CryptoECC.curve25519 + ") keys. Please wait!");
                     AsymmetricCipherKeyPair generateKeyPair = CryptoECC.generateKeyPair(CryptoECC.curve25519, secureRandom);
 
                     privateKey = (ECPrivateKeyParameters) generateKeyPair.getPrivate();
                     publicKey = (ECPublicKeyParameters) generateKeyPair.getPublic();
 
                     // save to properties file
-                    this.propertyStore.savePrivateKey(privateKey);
-                    this.propertyStore.savePublicKey(publicKey);
+                    propertyStore.savePrivateKey(privateKey);
+                    propertyStore.savePublicKey(publicKey);
 
-                    this.logger.debug("Done with ECC keys!");
+                    logger.debug("Done with ECC keys!");
                 } catch (Exception e) {
                     String message = "Unable to initialize/generate ECC keys. FORCED SHUTDOWN.";
-                    this.logger.error(message);
+                    logger.error(message);
                     throw new InitializationException(message);
                 }
             }
@@ -206,21 +206,21 @@ class EndPointBase<C extends Connection> extends EndPoint {
         }
 
 
-        this.secureRandom = new SecureRandom(this.propertyStore.getSalt());
+        secureRandom = new SecureRandom(propertyStore.getSalt());
 
         // we don't care about un-instantiated/constructed members, since the class type is the only interest.
-        this.connectionManager = new ConnectionManager<C>(type.getSimpleName(), connection0(null).getClass());
+        connectionManager = new ConnectionManager<C>(type.getSimpleName(), connection0(null).getClass());
 
         // add the ping listener (internal use only!)
-        this.connectionManager.add(new PingSystemListener());
+        connectionManager.add(new PingSystemListener());
 
-        if (this.rmiEnabled) {
+        if (rmiEnabled) {
             // these register the listener for registering a class implementation for RMI (internal use only)
-            this.connectionManager.add(new RegisterRmiSystemListener());
-            this.globalRmiBridge = new RmiBridge(logger, config.rmiExecutor, true);
+            connectionManager.add(new RegisterRmiSystemListener());
+            globalRmiBridge = new RmiBridge(logger, config.rmiExecutor, true);
         }
         else {
-            this.globalRmiBridge = null;
+            globalRmiBridge = null;
         }
 
         serializationManager.finishInit();
@@ -231,14 +231,12 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     public
     void disableRemoteKeyValidation() {
-        Logger logger2 = this.logger;
-
         if (isConnected()) {
-            logger2.error("Cannot disable the remote key validation after this endpoint is connected!");
+            logger.error("Cannot disable the remote key validation after this endpoint is connected!");
         }
         else {
-            logger2.info("WARNING: Disabling remote key validation is a security risk!!");
-            this.disableRemoteKeyValidation = true;
+            logger.info("WARNING: Disabling remote key validation is a security risk!!");
+            disableRemoteKeyValidation = true;
         }
     }
 
@@ -249,7 +247,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
     @SuppressWarnings("unchecked")
     public
     <S extends SettingsStore> S getPropertyStore() {
-        return (S) this.propertyStore;
+        return (S) propertyStore;
     }
 
     /**
@@ -267,7 +265,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     public
     int getIdleTimeout() {
-        return this.idleTimeoutMs;
+        return idleTimeoutMs;
     }
 
     /**
@@ -278,7 +276,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     public
     void setIdleTimeout(int idleTimeoutMs) {
-        this.idleTimeoutMs = idleTimeoutMs;
+        idleTimeoutMs = idleTimeoutMs;
     }
 
     /**
@@ -288,7 +286,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     public final
     boolean isConnected() {
-        return this.isConnected.get();
+        return isConnected.get();
     }
 
     /**
@@ -296,7 +294,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     public
     dorkbox.network.util.CryptoSerializationManager getSerialization() {
-        return this.serializationManager;
+        return serializationManager;
     }
 
     /**
@@ -344,7 +342,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
             }
             else {
                 if (this instanceof EndPointServer) {
-                    wrapper = new ChannelNetworkWrapper(metaChannel, this.registrationWrapper);
+                    wrapper = new ChannelNetworkWrapper(metaChannel, registrationWrapper);
                 }
                 else {
                     wrapper = new ChannelNetworkWrapper(metaChannel, null);
@@ -352,7 +350,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
             }
 
             // now initialize the connection channels with whatever extra info they might need.
-            connection.init(wrapper, (ConnectionManager<Connection>) this.connectionManager);
+            connection.init(wrapper, (ConnectionManager<Connection>) connectionManager);
 
             if (rmiBridge != null) {
                 // notify our remote object space that it is able to receive method calls.
@@ -378,12 +376,12 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     @SuppressWarnings("unchecked")
     void connectionConnected0(ConnectionImpl connection) {
-        this.isConnected.set(true);
+        isConnected.set(true);
 
         // prep the channel wrapper
         connection.prep();
 
-        this.connectionManager.onConnected((C) connection);
+        connectionManager.onConnected((C) connection);
     }
 
     /**
@@ -391,7 +389,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     public final
     Listeners listeners() {
-        return this.connectionManager;
+        return connectionManager;
     }
 
     /**
@@ -399,7 +397,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     public
     List<C> getConnections() {
-        return this.connectionManager.getConnections();
+        return connectionManager.getConnections();
     }
 
     /**
@@ -408,7 +406,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
     @SuppressWarnings("unchecked")
     public
     Collection<C> getConnectionsAs() {
-        return this.connectionManager.getConnections();
+        return connectionManager.getConnections();
     }
 
     /**
@@ -430,12 +428,12 @@ class EndPointBase<C extends Connection> extends EndPoint {
         Thread.yield();
 
         // stop does the same as this + more
-        this.connectionManager.closeConnections();
+        connectionManager.closeConnections();
 
         // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
-        this.registrationWrapper.closeChannels(maxShutdownWaitTimeInMilliSeconds);
+        registrationWrapper.closeChannels(maxShutdownWaitTimeInMilliSeconds);
 
-        this.isConnected.set(false);
+        isConnected.set(false);
     }
 
     /**
@@ -447,7 +445,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
     protected
     boolean shouldShutdownHookRun() {
         // connectionManager.shutdown accurately reflects the state of the app. Safe to use here
-        return (this.connectionManager != null && !this.connectionManager.shutdown.get());
+        return (connectionManager != null && !connectionManager.shutdown.get());
     }
 
     @Override
@@ -456,14 +454,14 @@ class EndPointBase<C extends Connection> extends EndPoint {
         closeConnections();
 
         // this does a closeConnections + clear_listeners
-        this.connectionManager.stop();
+        connectionManager.stop();
     }
 
     @Override
     protected
     void stopExtraActionsInternal() {
         // shutdown the database store
-        this.propertyStore.close();
+        propertyStore.close();
     }
 
     @Override
@@ -471,8 +469,8 @@ class EndPointBase<C extends Connection> extends EndPoint {
     int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + (this.privateKey == null ? 0 : this.privateKey.hashCode());
-        result = prime * result + (this.publicKey == null ? 0 : this.publicKey.hashCode());
+        result = prime * result + (privateKey == null ? 0 : privateKey.hashCode());
+        result = prime * result + (publicKey == null ? 0 : publicKey.hashCode());
         return result;
     }
 
@@ -491,20 +489,20 @@ class EndPointBase<C extends Connection> extends EndPoint {
         }
         EndPointBase other = (EndPointBase) obj;
 
-        if (this.privateKey == null) {
+        if (privateKey == null) {
             if (other.privateKey != null) {
                 return false;
             }
         }
-        else if (!CryptoECC.compare(this.privateKey, other.privateKey)) {
+        else if (!CryptoECC.compare(privateKey, other.privateKey)) {
             return false;
         }
-        if (this.publicKey == null) {
+        if (publicKey == null) {
             if (other.publicKey != null) {
                 return false;
             }
         }
-        else if (!CryptoECC.compare(this.publicKey, other.publicKey)) {
+        else if (!CryptoECC.compare(publicKey, other.publicKey)) {
             return false;
         }
         return true;

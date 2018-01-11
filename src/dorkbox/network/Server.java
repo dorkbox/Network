@@ -18,8 +18,6 @@ package dorkbox.network;
 import java.io.IOException;
 import java.net.Socket;
 
-import org.slf4j.Logger;
-
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointServer;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
@@ -66,7 +64,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
      */
     public static
     String getVersion() {
-        return "2.4";
+        return "2.5";
     }
 
     /**
@@ -305,22 +303,21 @@ class Server<C extends Connection> extends EndPointServer<C> {
         ChannelFuture future;
 
         // LOCAL
-        Logger logger2 = logger;
         if (localBootstrap != null) {
             try {
                 future = localBootstrap.bind();
                 future.await();
             } catch (InterruptedException e) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to LOCAL address on the server.", e);
+                String errorMessage = stopWithErrorMessage(logger, "Could not bind to LOCAL address on the server.", e);
                 throw new IllegalArgumentException(errorMessage);
             }
 
             if (!future.isSuccess()) {
-                String errorMessage = stopWithErrorMessage(logger2, "Could not bind to LOCAL address on the server.", future.cause());
+                String errorMessage = stopWithErrorMessage(logger, "Could not bind to LOCAL address on the server.", future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on LOCAL address: '{}'", localChannelName);
+            logger.info("Listening on LOCAL address: '{}'", localChannelName);
             manageForShutdown(future);
         }
 
@@ -332,7 +329,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 future = tcpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2,
+                String errorMessage = stopWithErrorMessage(logger,
                                                            "Could not bind to address " + hostName + " TCP port " + tcpPort +
                                                            " on the server.",
                                                            e);
@@ -340,14 +337,14 @@ class Server<C extends Connection> extends EndPointServer<C> {
             }
 
             if (!future.isSuccess()) {
-                String errorMessage = stopWithErrorMessage(logger2,
+                String errorMessage = stopWithErrorMessage(logger,
                                                            "Could not bind to address " + hostName + " TCP port " + tcpPort +
                                                            " on the server.",
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on address {} at TCP port: {}", hostName, tcpPort);
+            logger.info("Listening on address {} at TCP port: {}", hostName, tcpPort);
             manageForShutdown(future);
         }
 
@@ -358,7 +355,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 future = udpBootstrap.bind();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2,
+                String errorMessage = stopWithErrorMessage(logger,
                                                            "Could not bind to address " + hostName + " UDP port " + udpPort +
                                                            " on the server.",
                                                            e);
@@ -366,14 +363,14 @@ class Server<C extends Connection> extends EndPointServer<C> {
             }
 
             if (!future.isSuccess()) {
-                String errorMessage = stopWithErrorMessage(logger2,
+                String errorMessage = stopWithErrorMessage(logger,
                                                            "Could not bind to address " + hostName + " UDP port " + udpPort +
                                                            " on the server.",
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            logger2.info("Listening on address {} at UDP port: {}", hostName, udpPort);
+            logger.info("Listening on address {} at UDP port: {}", hostName, udpPort);
             manageForShutdown(future);
         }
 

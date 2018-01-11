@@ -20,8 +20,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
-import org.slf4j.Logger;
-
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.connection.bridge.ConnectionBridge;
@@ -95,7 +93,6 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
                 bootstrapWrapper.bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, this.connectionTimeout);
             }
 
-            Logger logger2 = this.logger;
             try {
                 // UDP : When this is CONNECT, a udp socket will ONLY accept UDP traffic from the remote address (ip/port combo).
                 //       If the reply isn't from the correct port, then the other end will receive a "Port Unreachable" exception.
@@ -103,7 +100,7 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
                 future = bootstrapWrapper.bootstrap.connect();
                 future.await();
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(logger2,
+                String errorMessage = stopWithErrorMessage(this.logger,
                                                            "Could not connect to the " + bootstrapWrapper.type + " server at " +
                                                            bootstrapWrapper.address + " on port: " + bootstrapWrapper.port,
                                                            e);
@@ -111,15 +108,15 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
             }
 
             if (!future.isSuccess()) {
-                String errorMessage = stopWithErrorMessage(logger2,
+                String errorMessage = stopWithErrorMessage(this.logger,
                                                            "Could not connect to the " + bootstrapWrapper.type + " server at " +
                                                            bootstrapWrapper.address + " on port: " + bootstrapWrapper.port,
                                                            future.cause());
                 throw new IllegalArgumentException(errorMessage);
             }
 
-            if (logger2.isTraceEnabled()) {
-                logger2.trace("Waiting for registration from server.");
+            if (this.logger.isTraceEnabled()) {
+                this.logger.trace("Waiting for registration from server.");
             }
             manageForShutdown(future);
         }
@@ -144,9 +141,8 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
         }
 
 
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("Registered protocol from server.");
+        if (this.logger.isTraceEnabled()) {
+            this.logger.trace("Registered protocol from server.");
         }
 
         // only let us continue with connections (this starts up the client/server implementations) once ALL of the

@@ -105,10 +105,10 @@ class EndPoint {
                                               .getThreadGroup(), type.getSimpleName() + " " + THREADGROUP_NAME);
         threadGroup.setDaemon(true);
 
-        this.logger = org.slf4j.LoggerFactory.getLogger(type.getSimpleName());
+        logger = org.slf4j.LoggerFactory.getLogger(type.getSimpleName());
 
 
-        this.shutdownHook = new Thread() {
+        shutdownHook = new Thread() {
             @Override
             public
             void run() {
@@ -117,10 +117,10 @@ class EndPoint {
                 }
             }
         };
-        this.shutdownHook.setName(shutdownHookName);
+        shutdownHook.setName(shutdownHookName);
         try {
             Runtime.getRuntime()
-                   .addShutdownHook(this.shutdownHook);
+                   .addShutdownHook(shutdownHook);
         } catch (Throwable ignored) {
             // if we are in the middle of shutdown, we cannot do this.
         }
@@ -131,8 +131,8 @@ class EndPoint {
      */
     protected final
     void manageForShutdown(ChannelFuture future) {
-        synchronized (this.shutdownChannelList) {
-            this.shutdownChannelList.add(future);
+        synchronized (shutdownChannelList) {
+            shutdownChannelList.add(future);
         }
     }
 
@@ -141,8 +141,8 @@ class EndPoint {
      */
     protected final
     void manageForShutdown(EventLoopGroup loopGroup) {
-        synchronized (this.eventLoopGroups) {
-            this.eventLoopGroups.add(loopGroup);
+        synchronized (eventLoopGroups) {
+            eventLoopGroups.add(loopGroup);
         }
     }
 
@@ -150,7 +150,7 @@ class EndPoint {
     void shutdownChannels() {
         synchronized (shutdownChannelList) {
             // now we stop all of our channels
-            for (ChannelFuture f : this.shutdownChannelList) {
+            for (ChannelFuture f : shutdownChannelList) {
                 Channel channel = f.channel();
                 if (channel.isOpen()) {
                     channel.close()
@@ -160,19 +160,19 @@ class EndPoint {
             }
 
             // we have to clear the shutdown list. (
-            this.shutdownChannelList.clear();
+            shutdownChannelList.clear();
         }
     }
 
 
     protected final
-    String stopWithErrorMessage(Logger logger2, String errorMessage, Throwable throwable) {
-        if (logger2.isDebugEnabled() && throwable != null) {
+    String stopWithErrorMessage(Logger logger, String errorMessage, Throwable throwable) {
+        if (logger.isDebugEnabled() && throwable != null) {
             // extra info if debug is enabled
-            logger2.error(errorMessage, throwable.getCause());
+            logger.error(errorMessage, throwable.getCause());
         }
         else {
-            logger2.error(errorMessage);
+            logger.error(errorMessage);
         }
 
         stop();
@@ -199,7 +199,7 @@ class EndPoint {
     public final
     void stop() {
         // only permit us to "stop" once!
-        if (!this.stopCalled.compareAndSet(false, true)) {
+        if (!stopCalled.compareAndSet(false, true)) {
             return;
         }
 
@@ -220,7 +220,7 @@ class EndPoint {
             // we have to make sure always run this from within it's OWN thread -- because if it's run from within
             // a client/server thread executor, it will deadlock while waiting for the threadpool to terminate.
             boolean isInEventLoop = false;
-            for (EventLoopGroup loopGroup : this.eventLoopGroups) {
+            for (EventLoopGroup loopGroup : eventLoopGroups) {
                 Iterator<EventExecutor> iterator = loopGroup.iterator();
                 while (iterator.hasNext()) {
                     EventExecutor next = iterator.next();
@@ -276,11 +276,11 @@ class EndPoint {
     void stopInThread() {
         // make sure we are not trying to stop during a startup procedure.
         // This will wait until we have finished starting up/shutting down.
-        synchronized (this.shutdownInProgress) {
+        synchronized (shutdownInProgress) {
             // we want to WAIT until after the event executors have completed shutting down.
             List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
 
-            for (EventLoopGroup loopGroup : this.eventLoopGroups) {
+            for (EventLoopGroup loopGroup : eventLoopGroups) {
                 shutdownThreadList.add(loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds,
                                                                     maxShutdownWaitTimeInMilliSeconds * 4,
                                                                     TimeUnit.MILLISECONDS));
@@ -298,7 +298,7 @@ class EndPoint {
 
             shutdownChannels();
 
-            this.logger.info("Stopping endpoint.");
+            logger.info("Stopping endpoint.");
 
             // there is no need to call "stop" again if we close the connection.
             // however, if this is called WHILE from the shutdown hook, blammo! problems!
@@ -310,7 +310,7 @@ class EndPoint {
                        .equals(shutdownHookName)) {
                 try {
                     Runtime.getRuntime()
-                           .removeShutdownHook(this.shutdownHook);
+                           .removeShutdownHook(shutdownHook);
                 } catch (Exception e) {
                     // ignore
                 }
@@ -326,7 +326,7 @@ class EndPoint {
         }
 
         // tell the blocked "bind" method that it may continue (and exit)
-        this.blockUntilDone.countDown();
+        blockUntilDone.countDown();
     }
 
     /**
@@ -336,9 +336,9 @@ class EndPoint {
     void waitForShutdown() {
         // we now BLOCK until the stop method is called.
         try {
-            this.blockUntilDone.await();
+            blockUntilDone.await();
         } catch (InterruptedException e) {
-            this.logger.error("Thread interrupted while waiting for stop!");
+            logger.error("Thread interrupted while waiting for stop!");
         }
     }
 
@@ -350,6 +350,6 @@ class EndPoint {
 
     public
     String getName() {
-        return this.type.getSimpleName();
+        return type.getSimpleName();
     }
 }
