@@ -594,6 +594,7 @@ class DnsRecord implements Cloneable, Comparable, Serializable {
     /**
      * Generates a hash code based on the Record's data.
      */
+    @Override
     public
     int hashCode() {
         byte[] array = toWireCanonical(true);
@@ -612,6 +613,7 @@ class DnsRecord implements Cloneable, Comparable, Serializable {
      *
      * @return true if the records are equal, false otherwise.
      */
+    @Override
     public
     boolean equals(Object arg) {
         if (arg == null || !(arg instanceof DnsRecord)) {
