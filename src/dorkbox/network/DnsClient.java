@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 
@@ -72,19 +73,23 @@ import io.netty.util.internal.PlatformDependent;
 public
 class DnsClient extends EndPoint {
 
-    /*
-    http://bugs.java.com/view_bug.do?bug_id=8176361
-    Previous JDK releases documented how to configure `java.net.InetAddress` to use the JNDI DNS service provider as the name service. This mechanism, and the system properties to configure it, have been removed in JDK 9
-
-A new mechanism to configure the use of a hosts file has been introduced.
-
-A new system property `jdk.net.hosts.file` has been defined. When this system property is set, the name and address resolution calls of `InetAddress`, i.e `getByXXX`, retrieve the relevant mapping from the specified file. The structure of this file is equivalent to that of the `/etc/hosts` file.
-
-When the system property `jdk.net.hosts.file` is set, and the specified file doesn't exist, the name or address lookup will result in an UnknownHostException. Thus, a non existent hosts file is handled as if the file is empty.
-
-
-UP UNTIL java 1.8, one can use org/xbill/DNS/spi, ie: sun.net.dns.ResolverConfiguration
-     */
+/*
+ * TODO: verify ResolverConfiguration works as expected!
+ * http://bugs.java.com/view_bug.do?bug_id=8176361
+ * Previous JDK releases documented how to configure `java.net.InetAddress` to use the JNDI DNS service provider as the name service.
+ * This mechanism, and the system properties to configure it, have been removed in JDK 9
+ *
+ * A new mechanism to configure the use of a hosts file has been introduced.
+ *
+ * A new system property `jdk.net.hosts.file` has been defined. When this system property is set, the name and address resolution calls
+ * of `InetAddress`, i.e `getByXXX`, retrieve the relevant mapping from the specified file. The structure of this file is equivalent to
+ * that of the `/etc/hosts` file.
+ *
+ * When the system property `jdk.net.hosts.file` is set, and the specified file doesn't exist, the name or address lookup will result in
+ * an UnknownHostException. Thus, a non existent hosts file is handled as if the file is empty.
+ *
+ * UP UNTIL java 1.8, one can use org/xbill/DNS/spi, ie: sun.net.dns.ResolverConfiguration
+ */
 
 
     /**
@@ -108,7 +113,6 @@ UP UNTIL java 1.8, one can use org/xbill/DNS/spi, ie: sun.net.dns.ResolverConfig
      */
     public final static List<InetSocketAddress> DEFAULT_DNS_SERVER_LIST = DefaultDnsServerAddressStreamProvider.defaultAddressList();
 
-    private static final String ptrSuffix = ".in-addr.arpa";
     public static final InetAddress[] INET_ADDRESSES = new InetAddress[0];
 
     /**
@@ -602,41 +606,87 @@ UP UNTIL java 1.8, one can use org/xbill/DNS/spi, ie: sun.net.dns.ResolverConfig
 
 
     /**
-     * Resolves a specific hostname A/AAAA record.
+     * Resolves a specific hostname A/AAAA record with the default timeout of 5 seconds
      *
      * @param hostname the hostname, ie: google.com, that you want to resolve
-     * @return the list of resolved InetAddress or null
+     *
+     * @return the list of resolved InetAddress or throws an exception if the hostname cannot be resolved
      * @throws UnknownHostException if the hostname cannot be resolved
      */
     public
     List<InetAddress> resolve(String hostname) throws UnknownHostException {
+        return resolve(hostname, 5);
+    }
+
+    /**
+     * Resolves a specific hostname A/AAAA record.
+     *
+     * @param hostname the hostname, ie: google.com, that you want to resolve
+     * @param queryTimeoutSeconds the number of seconds to wait for host resolution
+     *
+     * @return the list of resolved InetAddress or throws an exception if the hostname cannot be resolved
+     * @throws UnknownHostException if the hostname cannot be resolved
+     */
+    public
+    List<InetAddress> resolve(String hostname, int queryTimeoutSeconds) throws UnknownHostException {
+        if (hostname == null) {
+            throw new UnknownHostException("Cannot submit query for an unknown host");
+        }
+
         if (resolver == null) {
             start();
         }
 
         // use "resolve", since it handles A/AAAA records + redirects correctly
         final Future<List<InetAddress>> resolve = resolver.resolveAll(hostname);
-        final Future<List<InetAddress>> result = resolve.awaitUninterruptibly();
+
+        boolean finished = resolve.awaitUninterruptibly(queryTimeoutSeconds, TimeUnit.SECONDS);
 
         // now return whatever value we had
-        if (result.isSuccess() && result.isDone()) {
+        if (finished && resolve.isSuccess() && resolve.isDone()) {
             try {
-                List<InetAddress> now = result.getNow();
+                List<InetAddress> now = resolve.getNow();
                 return now;
             } catch (Exception e) {
-                logger.error("Could not ask question to DNS server", e);
-                return null;
+                String msg = "Could not ask question to DNS server";
+                logger.error(msg, e);
+                throw new UnknownHostException(msg);
             }
         }
 
-        logger.error("Could not ask question to DNS server for A/AAAA record: {}", hostname);
+        String msg = "Could not ask question to DNS server for A/AAAA record: {}";
+        logger.error(msg, hostname);
 
-        UnknownHostException cause = (UnknownHostException) result.cause();
+        UnknownHostException cause = (UnknownHostException) resolve.cause();
         if (cause != null) {
             throw cause;
         }
 
-        return null;
+        throw new UnknownHostException(msg);
+    }
+
+    /**
+     * Resolves a specific hostname record, of the specified type (PTR, MX, TXT, etc) with the default timeout of 5 seconds
+     * <p/>
+     * <p/>
+     * Note: PTR queries absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
+     * -- because of this, we will automatically fix this in case that clients are unaware of this requirement
+     * <p/>
+     * <p/>
+     * Note: A/AAAA queries absolutely MUST end in a '.' -- because of this we will automatically fix this in case that clients are
+     * unaware of this requirement
+     *
+     * @param hostname the hostname, ie: google.com, that you want to resolve
+     * @param type     the DnsRecordType you want to resolve (PTR, MX, TXT, etc)
+     *
+     * @return the DnsRecords or throws an exception if the hostname cannot be resolved
+     *
+     * @throws @throws UnknownHostException if the hostname cannot be resolved
+     */
+    @SuppressWarnings({"unchecked", "Duplicates"})
+    public
+    DnsRecord[] query(String hostname, final int type) throws UnknownHostException {
+        return query(hostname, type, 5);
     }
 
     /**
@@ -652,32 +702,32 @@ UP UNTIL java 1.8, one can use org/xbill/DNS/spi, ie: sun.net.dns.ResolverConfig
      *
      * @param hostname the hostname, ie: google.com, that you want to resolve
      * @param type     the DnsRecordType you want to resolve (PTR, MX, TXT, etc)
-     * @return the DnsRecords or null if there was an error resolving the hostname
+     * @param queryTimeoutSeconds the number of seconds to wait for host resolution
+     *
+     * @return the DnsRecords or throws an exception if the hostname cannot be resolved
      *
      * @throws @throws UnknownHostException if the hostname cannot be resolved
      */
     @SuppressWarnings({"unchecked", "Duplicates"})
     public
-    DnsRecord[] query(String hostname, final int type) throws UnknownHostException {
-        if (resolver == null) {
-            start();
+    DnsRecord[] query(String hostname, final int type, int queryTimeoutSeconds) throws UnknownHostException {
+        if (hostname == null) {
+            throw new UnknownHostException("Cannot submit query for an unknown host");
         }
 
-        if (type == DnsRecordType.PTR && !hostname.endsWith(ptrSuffix)) {
-            // PTR absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
-            // in this case, hostname is an ip address
-            hostname += ptrSuffix;
+        if (resolver == null) {
+            start();
         }
 
         // we use our own resolvers
         DnsQuestion dnsMessage = DnsQuestion.newQuery(hostname, type, recursionDesired);
 
         final Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> query = resolver.query(dnsMessage);
-        final Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> result = query.awaitUninterruptibly();
+        boolean finished = query.awaitUninterruptibly(queryTimeoutSeconds, TimeUnit.SECONDS);
 
         // now return whatever value we had
-        if (result.isSuccess() && result.isDone()) {
-            AddressedEnvelope<DnsResponse, InetSocketAddress> envelope = result.getNow();
+        if (finished && query.isSuccess() && query.isDone()) {
+            AddressedEnvelope<DnsResponse, InetSocketAddress> envelope = query.getNow();
             DnsResponse response = envelope.content();
             try {
                 final int code = response.getHeader().getRcode();
@@ -685,24 +735,24 @@ UP UNTIL java 1.8, one can use org/xbill/DNS/spi, ie: sun.net.dns.ResolverConfig
                     return response.getSectionArray(DnsSection.ANSWER);
                 }
 
-                logger.error("Could not ask question to DNS server: Error code {} for type: {} - {}",
-                             code, type, DnsRecordType.string(type));
+                String msg = "Could not ask question to DNS server: Error code " + code + " for type: " + type + " - " + DnsRecordType.string(type);
+                logger.error(msg);
 
-                logger.error("Could not ask question to DNS server: Error code {}", code);
-                return null;
+                throw new UnknownHostException(msg);
             } finally {
                 response.release();
             }
         }
 
-        logger.error("Could not ask question to DNS server for type: {}", DnsRecordType.string(type));
+        String msg = "Could not ask question to DNS server for type: " + DnsRecordType.string(type);
+        logger.error(msg);
 
-        UnknownHostException cause = (UnknownHostException) result.cause();
+        UnknownHostException cause = (UnknownHostException) query.cause();
         if (cause != null) {
             throw cause;
         }
 
-        return null;
+        throw new UnknownHostException(msg);
     }
 }
 
