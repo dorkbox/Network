@@ -32,7 +32,7 @@ class Address {
     private
     Address() {}
 
-    private static
+    public static
     byte[] parseV4(String s) {
         int numDigits;
         int currentOctet;
@@ -91,7 +91,7 @@ class Address {
         return values;
     }
 
-    private static
+    public static
     byte[] parseV6(String s) {
         int range = -1;
         byte[] data = new byte[16];
@@ -413,12 +413,14 @@ class Address {
 
         DnsClient client = new DnsClient();
         client.resolvedAddressTypes(ResolvedAddressTypes.IPV4_ONLY);
-        DnsRecord[] records = new DnsRecord[0];
+        DnsRecord[] records;
         try {
             records = client.query(name.toString(true), DnsRecordType.PTR);
         } catch (Throwable ignored) {
+            throw new UnknownHostException("unknown address");
+        } finally {
+            client.stop();
         }
-        client.stop();
 
         if (records == null) {
             throw new UnknownHostException("unknown address");
