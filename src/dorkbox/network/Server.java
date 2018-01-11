@@ -113,7 +113,11 @@ class Server<C extends Connection> extends EndPointServer<C> {
         localChannelName = config.localChannelName;
 
         if (config.host == null) {
+            // we set this to "0.0.0.0" so that it is clear that we are trying to bind to that address.
             hostName = "0.0.0.0";
+
+            // make it clear that this is what we do (configuration wise) so that variable examination is consistent
+            config.host = hostName;
         }
         else {
             hostName = config.host;
@@ -216,7 +220,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                                                                                 serializationManager));
 
             // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
-            if (config.host != null) {
+            if (hostName.equals("0.0.0.0")) {
                 tcpBootstrap.localAddress(hostName, tcpPort);
             }
             else {
