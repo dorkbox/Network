@@ -8,6 +8,7 @@ import dorkbox.network.dns.Mnemonic;
 import dorkbox.network.dns.exceptions.InvalidTypeException;
 import dorkbox.network.dns.records.DnsRecord;
 import dorkbox.network.dns.records.DnsTypeProtoAssignment;
+import io.netty.util.internal.StringUtil;
 
 /**
  * Constants and functions relating to DNS Types
@@ -560,6 +561,41 @@ class DnsRecordType {
                 return false;
             default:
                 return true;
+        }
+    }
+
+    private static final String ptrSuffix = ".in-addr.arpa";
+    public static
+    String ensureFQDN(int type, String hostName) {
+        // list of RecordTypes from: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/ResourceRecordTypes.html
+        switch (type) {
+            case PTR:
+                if (!hostName.endsWith(ptrSuffix)) {
+                    // PTR absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
+                    // in this case, hostname is an ip address
+                    return hostName + ptrSuffix;
+                }
+
+            case A:
+            case AAAA:
+            case CAA:
+            case CNAME:
+            case MX:
+            case NAPTR:
+            case NS:
+            case SOA:
+            case SPF:
+            case SRV:
+            case TXT:
+                // resolving a hostname -> ip address, the hostname MUST end in a dot
+                if (!StringUtil.endsWith(hostName, '.')) {
+                    return hostName + '.';
+                } else {
+                    return hostName;
+                }
+
+            default:
+                return hostName;
         }
     }
 }

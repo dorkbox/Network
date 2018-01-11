@@ -54,29 +54,31 @@ class DnsQuestion extends DnsMessage implements AddressedEnvelope<DnsQuestion, I
     }
 
 
-
     private static
     DnsQuestion newQuestion(final String inetHost, final int type, final boolean isRecursionDesired, boolean isResolveQuestion) {
 
-        // Convert to ASCII which will also check that the length is not too big.
+        // Convert to ASCII which will also check that the length is not too big. Throws null pointer if null.
         // See:
         //   - https://github.com/netty/netty/issues/4937
         //   - https://github.com/netty/netty/issues/4935
-        String hostname = hostname(checkNotNull(inetHost, "hostname"));
+        String hostName = hostNameAsciiFix(checkNotNull(inetHost, "hostname"));
 
-        if (hostname == null) {
+        hostName = hostName.toLowerCase(Locale.US);
+
+
+        // NOTE: have to make sure that the hostname is a FQDN name
+        hostName = DnsRecordType.ensureFQDN(type, hostName);
+
+        Name name;
+        try {
+            name = Name.fromString(hostName);
+        } catch (Exception e) {
+            // Name.fromString may throw a TextParseException if it fails to parse
             return null;
         }
 
-        hostname = hostname.toLowerCase(Locale.US);
-
-        if (type == DnsRecordType.A || type == DnsRecordType.AAAA) {
-            // resolving a hostname -> ip address, the hostname MUST end in a dot
-            hostname = appendTrailingDot(hostname);
-        }
-
         try {
-            DnsRecord questionRecord = DnsRecord.newRecord(Name.fromString(hostname), type, DnsClass.IN);
+            DnsRecord questionRecord = DnsRecord.newRecord(name, type, DnsClass.IN);
             DnsQuestion question = new DnsQuestion(isResolveQuestion);
             question.getHeader()
                     .setOpcode(DnsOpCode.QUERY);
@@ -92,36 +94,28 @@ class DnsQuestion extends DnsMessage implements AddressedEnvelope<DnsQuestion, I
 
             return question;
         } catch (Exception e) {
-            // Name.fromString may throw a TextParseException if it fails to parse
+            e.printStackTrace();
         }
 
         return null;
     }
 
     public static
-    String hostname(String inetHost) {
+    String hostNameAsciiFix(String inetHost) {
         try {
-            String hostname = java.net.IDN.toASCII(inetHost);
+            String hostName = java.net.IDN.toASCII(inetHost);
 
             // Check for http://bugs.java.com/bugdatabase/view_bug.do?bug_id=6894622
-            if (StringUtil.endsWith(inetHost, '.') && !StringUtil.endsWith(hostname, '.')) {
-                return hostname + '.';
+            if (StringUtil.endsWith(inetHost, '.') && !StringUtil.endsWith(hostName, '.')) {
+                return hostName + '.';
             }
 
-            return hostname;
+            return hostName;
         } catch (Exception e) {
             // java.net.IDN.toASCII(...) may throw an IllegalArgumentException if it fails to parse the hostname
         }
 
         return null;
-    }
-
-    private static
-    String appendTrailingDot(String hostname) {
-        if (!StringUtil.endsWith(hostname, '.')) {
-            return hostname + '.';
-        }
-        return hostname;
     }
 
     public
