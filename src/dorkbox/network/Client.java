@@ -18,8 +18,6 @@ package dorkbox.network;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
-import org.slf4j.Logger;
-
 import dorkbox.network.connection.BootstrapWrapper;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointBase;
@@ -59,7 +57,7 @@ import io.netty.util.internal.PlatformDependent;
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
  * ASYNC.
  */
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused", "WeakerAccess"})
 public
 class Client<C extends Connection> extends EndPointClient<C> implements Connection {
     /**
@@ -100,11 +98,12 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
         String threadName = Client.class.getSimpleName();
 
-        Logger logger2 = this.logger;
-        if (config.localChannelName != null && (config.tcpPort > 0 || config.udpPort > 0 || config.host != null) ||
-            config.localChannelName == null && (config.tcpPort == 0 || config.udpPort == 0 || config.host == null)) {
-            String msg = threadName + " Local channel use and TCP/UDP use are MUTUALLY exclusive. Unable to determine intent.";
-            logger2.error(msg);
+        boolean hostConfigured = (config.tcpPort > 0 || config.udpPort > 0) && config.host != null;
+        boolean isLocalChannel = config.localChannelName != null;
+
+        if (isLocalChannel && hostConfigured) {
+            String msg = threadName + " Local channel use and TCP/UDP use are MUTUALLY exclusive. Unable to determine what to do.";
+            logger.error(msg);
             throw new IllegalArgumentException(msg);
         }
 
@@ -287,7 +286,6 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         }
 
         // have to start the registration process
-        this.connectingBootstrap.set(0);
         registerNextProtocol();
 
         // have to BLOCK
