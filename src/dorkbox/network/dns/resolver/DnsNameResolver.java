@@ -375,12 +375,12 @@ class DnsNameResolver extends InetNameResolver {
         }
         final byte[] bytes = NetUtil.createByteArrayFromIpAddressString(inetHost);
         if (bytes != null) {
-            // The unresolvedAddress was created via a String that contains an ipaddress.
+            // The unresolvedAddress was created via a String that contains an ip address.
             promise.setSuccess(Collections.singletonList(InetAddress.getByAddress(bytes)));
             return;
         }
 
-        final String hostname = DnsQuestion.hostname(inetHost);
+        final String hostname = DnsQuestion.hostNameAsciiFix(inetHost);
 
         InetAddress hostsFileEntry = resolveHostsFileEntry(hostname);
         if (hostsFileEntry != null) {
@@ -443,10 +443,10 @@ class DnsNameResolver extends InetNameResolver {
 
     private
     void doResolveAllUncached(String hostname, Promise<List<InetAddress>> promise, DnsCache resolveCache) {
-        new DnsNameResolverListResolverContext(this,
-                                               hostname,
-                                               resolveCache,
-                                               dnsServerAddressStreamProvider.nameServerAddressStream(hostname)).resolve(promise);
+        DnsServerAddressStream nameServerAddrs = dnsServerAddressStreamProvider.nameServerAddressStream(hostname);
+
+        DnsNameResolverListResolverContext context = new DnsNameResolverListResolverContext(this, hostname, resolveCache, nameServerAddrs);
+        context.resolve(promise);
     }
 
     /**
@@ -468,7 +468,7 @@ class DnsNameResolver extends InetNameResolver {
             return;
         }
 
-        final String hostname = DnsQuestion.hostname(inetHost);
+        final String hostname = DnsQuestion.hostNameAsciiFix(inetHost);
 
         InetAddress hostsFileEntry = resolveHostsFileEntry(hostname);
         if (hostsFileEntry != null) {
