@@ -84,11 +84,6 @@
         Drop-in replacement for MinLog to log through SLF4j.
 
 
-    - Netty DNS - Apache 2.0 License
-      http://netty.io
-      Copyright 2013, The Netty Project
-
-
     - ReflectASM - BSD 3-clause License
       https://github.com/EsotericSoftware/reflectasm
       Copyright 2008, Nathan Sweet
@@ -97,3 +92,8 @@
     - SLF4J - MIT License
       http://www.slf4j.org
       Copyright 2004-2008, QOS.ch
+
+
+    - XBill DNS - BSD 3-clause License
+      http://www.xbill.org/dnsjava
+      Copyright 1999-2005, Brian Wellington
