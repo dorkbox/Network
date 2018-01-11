@@ -180,8 +180,8 @@ class DnsNameResolverContext<T> {
                                                                    nameServerAddrs);
         Promise<T> nextPromise = parent.executor()
                                        .newPromise();
-        nextContext.internalResolve(nextPromise);
         nextPromise.addListener(listener);
+        nextContext.internalResolve(nextPromise);
     }
 
     private
