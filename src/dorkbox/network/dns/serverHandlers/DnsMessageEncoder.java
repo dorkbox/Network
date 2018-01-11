@@ -1,4 +1,4 @@
-package dorkbox.network.dns.handlers;
+package dorkbox.network.dns.serverHandlers;
 
 import dorkbox.network.dns.DnsOutput;
 import dorkbox.network.dns.records.DnsMessage;

@@ -1,9 +1,8 @@
-package dorkbox.network.dns.handlers;
+package dorkbox.network.dns.serverHandlers;
 
 import java.util.List;
 
-import org.handwerkszeug.dns.DNSMessage;
-
+import dorkbox.network.dns.records.DnsMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
@@ -34,7 +33,8 @@ class DnsMessageDecoder extends MessageToMessageDecoder<DatagramPacket> {
 
         boolean success = false;
         try {
-            DNSMessage dnsMessage = new DNSMessage(buf);
+            DnsMessage dnsMessage = new DnsMessage(buf);
+            dnsMessage.retain();
             out.add(dnsMessage);
             success = true;
         } finally {
@@ -42,5 +42,5 @@ class DnsMessageDecoder extends MessageToMessageDecoder<DatagramPacket> {
                 buf.release();
             }
         }
-    }
+     }
 }

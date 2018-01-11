@@ -1,4 +1,4 @@
-package dorkbox.network.dns.handlers;
+package dorkbox.network.dns.serverHandlers;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +24,7 @@ public class ForwardingHandler extends ChannelOutboundHandlerAdapter {
     @Override
     public
     void read(final ChannelHandlerContext ctx) throws Exception {
+        System.err.println("FORWARD HANDLER READ");
         super.read(ctx);
     }
 
@@ -103,7 +104,7 @@ public class ForwardingHandler extends ChannelOutboundHandlerAdapter {
     }
 
 
-	protected class ClientHanler extends ChannelInboundHandlerAdapter {
+	protected class ClientHandler extends ChannelInboundHandlerAdapter {
 
 	// 	protected DNSMessage original;
     //

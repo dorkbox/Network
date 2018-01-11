@@ -1,6 +1,7 @@
-package dorkbox.network.dns.handlers;
+package dorkbox.network.dns.serverHandlers;
 
-import org.handwerkszeug.dns.server.DNSMessageDecoder;
+
+import org.slf4j.Logger;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -12,23 +13,24 @@ import io.netty.channel.ChannelPipeline;
  */
 public
 class DnsServerHandler extends ChannelInboundHandlerAdapter {
+    private static final Logger LOG = org.slf4j.LoggerFactory.getLogger(DnsServerHandler.class);
 
-    protected DNSMessageDecoder decoder = new DNSMessageDecoder();
+    protected final DnsMessageDecoder decoder = new DnsMessageDecoder();
 
     public
-    DnsServerHandler(final String threadName) {
+    DnsServerHandler() {
     }
 
     @Override
     public final
-    void channelRegistered(final ChannelHandlerContext context) throws Exception {
+    void channelRegistered(final ChannelHandlerContext context) {
         boolean success = false;
         try {
             initChannel(context.channel());
             context.fireChannelRegistered();
             success = true;
         } catch (Throwable t) {
-            // this.logger.error("Failed to initialize a channel. Closing: {}", context.channel(), t);
+            LOG.error("Failed to initialize a channel. Closing: {}", context.channel(), t);
         } finally {
             if (!success) {
                 context.close();
