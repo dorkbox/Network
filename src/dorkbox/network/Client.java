@@ -70,6 +70,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
     private final String localChannelName;
     private final String hostName;
+    private Configuration config;
 
     /**
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme
@@ -98,6 +99,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
         String threadName = Client.class.getSimpleName();
 
+        this.config = config;
         boolean hostConfigured = (config.tcpPort > 0 || config.udpPort > 0) && config.host != null;
         boolean isLocalChannel = config.localChannelName != null;
 
@@ -132,7 +134,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         if (config.localChannelName != null && config.tcpPort <= 0 && config.udpPort <= 0) {
             // no networked bootstraps. LOCAL connection only
             Bootstrap localBootstrap = new Bootstrap();
-            this.bootstraps.add(new BootstrapWrapper("LOCAL", config.localChannelName, -1, localBootstrap));
+            bootstraps.add(new BootstrapWrapper("LOCAL", config.localChannelName, -1, localBootstrap));
 
             EventLoopGroup localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-LOCAL",
                                                                                                                   threadGroup));
@@ -155,7 +157,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
             if (config.tcpPort > 0) {
                 Bootstrap tcpBootstrap = new Bootstrap();
-                this.bootstraps.add(new BootstrapWrapper("TCP", config.host, config.tcpPort, tcpBootstrap));
+                bootstraps.add(new BootstrapWrapper("TCP", config.host, config.tcpPort, tcpBootstrap));
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
@@ -185,7 +187,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
             if (config.udpPort > 0) {
                 Bootstrap udpBootstrap = new Bootstrap();
-                this.bootstraps.add(new BootstrapWrapper("UDP", config.host, config.udpPort, udpBootstrap));
+                bootstraps.add(new BootstrapWrapper("UDP", config.host, config.udpPort, udpBootstrap));
 
                 if (isAndroid) {
                     // android ONLY supports OIO (not NIO)
@@ -229,7 +231,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     public
     void reconnect() throws IOException {
-        reconnect(this.connectionTimeout);
+        reconnect(connectionTimeout);
     }
 
     /**
@@ -275,14 +277,18 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
         // make sure we are not trying to connect during a close or stop event.
         // This will wait until we have finished shutting down.
-        synchronized (this.shutdownInProgress) {
+        synchronized (shutdownInProgress) {
         }
 
         if (localChannelName != null) {
             logger.info("Connecting to local server: {}", localChannelName);
         }
         else {
-            logger.info("Connecting to server: {}", hostName);
+            if (config.tcpPort > 0 && config.udpPort > 0) {
+                logger.info("Connecting to server: {} at TCP/UDP port: {}", hostName, config.tcpPort, config.udpPort);
+            } else {
+                logger.info("Connecting to server: {} at TCP port: {}", hostName, config.tcpPort);
+            }
         }
 
         // have to start the registration process
@@ -290,10 +296,10 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
 
         // have to BLOCK
         // don't want the client to run before registration is complete
-        synchronized (this.registrationLock) {
+        synchronized (registrationLock) {
             if (!registrationComplete) {
                 try {
-                    this.registrationLock.wait(connectionTimeout);
+                    registrationLock.wait(connectionTimeout);
                 } catch (InterruptedException e) {
                     throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds", e);
                 }
@@ -307,7 +313,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     boolean hasRemoteKeyChanged() {
-        return this.connection.hasRemoteKeyChanged();
+        return connection.hasRemoteKeyChanged();
     }
 
     /**
@@ -316,7 +322,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     String getRemoteHost() {
-        return this.connection.getRemoteHost();
+        return connection.getRemoteHost();
     }
 
     /**
@@ -325,7 +331,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     boolean isLoopback() {
-        return this.connection.isLoopback();
+        return connection.isLoopback();
     }
 
     @SuppressWarnings("rawtypes")
@@ -341,7 +347,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     int id() {
-        return this.connection.id();
+        return connection.id();
     }
 
     /**
@@ -350,13 +356,13 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     String idAsHex() {
-        return this.connection.idAsHex();
+        return connection.idAsHex();
     }
 
     @Override
     public
     boolean hasUDP() {
-        return this.connection.hasUDP();
+        return connection.hasUDP();
     }
 
     /**
@@ -365,7 +371,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     IdleBridge sendOnIdle(IdleSender<?, ?> sender) {
-        return this.connection.sendOnIdle(sender);
+        return connection.sendOnIdle(sender);
     }
 
     /**
@@ -374,7 +380,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     IdleBridge sendOnIdle(Object message) {
-        return this.connection.sendOnIdle(message);
+        return connection.sendOnIdle(message);
     }
 
     /**
@@ -384,7 +390,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     void closeAsap() {
-        this.connection.closeAsap();
+        connection.closeAsap();
     }
 
     /**
@@ -412,7 +418,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     <Iface> void getRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) throws IOException {
-        this.connectionManager.getConnection0().getRemoteObject(interfaceClass, callback);
+        connectionManager.getConnection0().getRemoteObject(interfaceClass, callback);
     }
 
     /**
@@ -440,7 +446,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     @Override
     public
     <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) throws IOException {
-        this.connectionManager.getConnection0().getRemoteObject(objectId, callback);
+        connectionManager.getConnection0().getRemoteObject(objectId, callback);
     }
 
     /**
@@ -452,7 +458,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     public
     C getConnection() {
-        return this.connection;
+        return connection;
     }
 
     /**
