@@ -57,7 +57,7 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
     protected
     void registerNextProtocol() {
         // always reset everything.
-        this.registrationComplete = false;
+        registrationComplete = false;
         bootstrapIterator = bootstraps.iterator();
 
         startProtocolRegistration();
@@ -79,7 +79,8 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
     @Override
     public
     void run() {
-        synchronized (this.bootstrapLock) {
+        // NOTE: Throwing exceptions in this method is pointless, since it runs from it's own thread
+        synchronized (bootstrapLock) {
             if (isRegistrationComplete()) {
                 return;
             }
@@ -88,9 +89,9 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
 
             ChannelFuture future;
 
-            if (this.connectionTimeout != 0) {
+            if (connectionTimeout != 0) {
                 // must be before connect
-                bootstrapWrapper.bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, this.connectionTimeout);
+                bootstrapWrapper.bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectionTimeout);
             }
 
             try {
@@ -98,25 +99,39 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
                 //       If the reply isn't from the correct port, then the other end will receive a "Port Unreachable" exception.
 
                 future = bootstrapWrapper.bootstrap.connect();
-                future.await();
+                future.await(connectionTimeout);
             } catch (Exception e) {
-                String errorMessage = stopWithErrorMessage(this.logger,
-                                                           "Could not connect to the " + bootstrapWrapper.type + " server at " +
-                                                           bootstrapWrapper.address + " on port: " + bootstrapWrapper.port,
-                                                           e);
-                throw new IllegalArgumentException(errorMessage);
+                String errorMessage = "Could not connect to the " + bootstrapWrapper.type + " server at " + bootstrapWrapper.address + " on port: " + bootstrapWrapper.port;
+                if (logger.isDebugEnabled()) {
+                    // extra info if debug is enabled
+                    logger.error(errorMessage, e);
+                }
+                else {
+                    logger.error(errorMessage);
+                }
+
+                return;
             }
 
             if (!future.isSuccess()) {
-                String errorMessage = stopWithErrorMessage(this.logger,
-                                                           "Could not connect to the " + bootstrapWrapper.type + " server at " +
-                                                           bootstrapWrapper.address + " on port: " + bootstrapWrapper.port,
-                                                           future.cause());
-                throw new IllegalArgumentException(errorMessage);
+                Throwable cause = future.cause();
+                if (cause instanceof java.net.ConnectException) {
+                    if (cause.getMessage()
+                             .contains("refused")) {
+                        String errorMessage = "Connection refused to the " + bootstrapWrapper.type + " server at " + bootstrapWrapper.address + " on port: " + bootstrapWrapper.port;
+                        logger.error(errorMessage, cause);
+                    }
+
+                } else {
+                    String errorMessage = "Connection failed to the " + bootstrapWrapper.type + " server at " + bootstrapWrapper.address + " on port: " + bootstrapWrapper.port;
+                    logger.error(errorMessage, cause);
+                }
+
+                return;
             }
 
-            if (this.logger.isTraceEnabled()) {
-                this.logger.trace("Waiting for registration from server.");
+            if (logger.isTraceEnabled()) {
+                logger.trace("Waiting for registration from server.");
             }
             manageForShutdown(future);
         }
@@ -130,9 +145,9 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
     @Override
     protected
     boolean registerNextProtocol0() {
-        synchronized (this.bootstrapLock) {
-            this.registrationComplete = isRegistrationComplete();
-            if (!this.registrationComplete) {
+        synchronized (bootstrapLock) {
+            registrationComplete = isRegistrationComplete();
+            if (!registrationComplete) {
                 startProtocolRegistration();
             }
 
@@ -141,13 +156,13 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
         }
 
 
-        if (this.logger.isTraceEnabled()) {
-            this.logger.trace("Registered protocol from server.");
+        if (logger.isTraceEnabled()) {
+            logger.trace("Registered protocol from server.");
         }
 
         // only let us continue with connections (this starts up the client/server implementations) once ALL of the
         // bootstraps have connected
-        return this.registrationComplete;
+        return registrationComplete;
     }
 
     /**
@@ -160,7 +175,7 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
         // invokes the listener.connection() method, and initialize the connection channels with whatever extra info they might need.
         super.connectionConnected0(connection);
 
-        this.connectionBridgeFlushAlways = new ConnectionBridge() {
+        connectionBridgeFlushAlways = new ConnectionBridge() {
             @Override
             public
             void self(Object message) {
@@ -206,8 +221,8 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
         rmiInitializationComplete = connection.rmiCallbacksIsEmpty();
 
         // notify the registration we are done!
-        synchronized (this.registrationLock) {
-            this.registrationLock.notify();
+        synchronized (registrationLock) {
+            registrationLock.notify();
         }
     }
 
@@ -235,7 +250,7 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
     @Override
     public
     ConnectionBridge send() {
-        return this.connectionBridgeFlushAlways;
+        return connectionBridgeFlushAlways;
     }
 
     /**
@@ -253,8 +268,8 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
 
         // make sure we're not waiting on registration
         registrationComplete = true;
-        synchronized (this.registrationLock) {
-            this.registrationLock.notify();
+        synchronized (registrationLock) {
+            registrationLock.notify();
         }
         registrationComplete = false;
 
@@ -268,8 +283,8 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
      * Internal call to abort registration if the shutdown command is issued during channel registration.
      */
     void abortRegistration() {
-        synchronized (this.registrationLock) {
-            this.registrationLock.notify();
+        synchronized (registrationLock) {
+            registrationLock.notify();
         }
 
         // Always unblock the waiting client.connect().
