@@ -15,12 +15,12 @@
  */
 package dorkbox.network.pipeline;
 
+import java.io.IOException;
+
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-
-import java.io.IOException;
 
 // on client this is MessageToMessage (because of the UdpDecoder in the pipeline!)
 

@@ -43,7 +43,7 @@ import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.Rmi;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.rmi.RmiRegistration;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.collections.IntMap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;

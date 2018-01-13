@@ -48,9 +48,9 @@ import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
+import dorkbox.network.serialization.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -170,7 +170,7 @@ class RmiTest extends BaseTest {
     }
 
     public static
-    void register(dorkbox.network.util.CryptoSerializationManager manager) {
+    void register(dorkbox.network.serialization.CryptoSerializationManager manager) {
         manager.register(Object.class); // Needed for Object#toString, hashCode, etc.
         manager.register(MessageWithTestCow.class);
         manager.register(UnsupportedOperationException.class);
@@ -184,7 +184,7 @@ class RmiTest extends BaseTest {
         configuration.udpPort = udpPort;
         configuration.host = host;
 
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         register(configuration.serialization);
 
         // for Client -> Server RMI (ID 1)
@@ -248,7 +248,7 @@ class RmiTest extends BaseTest {
         configuration.udpPort = udpPort;
         configuration.host = host;
 
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         register(configuration.serialization);
 
         // for Client -> Server RMI (ID 1)

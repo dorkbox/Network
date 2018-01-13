@@ -29,10 +29,9 @@ import org.junit.Test;
 
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.util.SerializationManager;
+import dorkbox.network.serialization.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -55,7 +54,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
@@ -66,7 +65,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.UDP);
@@ -151,7 +150,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         data.Booleans = new Boolean[] {true, false};
     }
 
-    private void register (SerializationManager manager) {
+    private void register (dorkbox.util.SerializationManager manager) {
         manager.register(int[].class);
         manager.register(short[].class);
         manager.register(float[].class);

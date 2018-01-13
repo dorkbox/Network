@@ -3,10 +3,10 @@ package dorkbox.network.rmi.multiJVM;
 import java.io.IOException;
 
 import dorkbox.network.Server;
-import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.rmi.RmiTest;
 import dorkbox.network.rmi.TestCow;
 import dorkbox.network.rmi.TestCowImpl;
+import dorkbox.network.serialization.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -24,7 +24,7 @@ class TestServer
         configuration.tcpPort = 2000;
         configuration.udpPort = 2001;
 
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         RmiTest.register(configuration.serialization);
         configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
 

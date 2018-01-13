@@ -28,9 +28,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.util.SerializationManager;
+import dorkbox.network.serialization.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -51,7 +50,7 @@ class LargeResizeBufferTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         register(configuration.serialization);
 
         Server server = new Server(configuration);
@@ -141,7 +140,7 @@ class LargeResizeBufferTest extends BaseTest {
     }
 
     private
-    void register(SerializationManager manager) {
+    void register(dorkbox.util.SerializationManager manager) {
         manager.register(byte[].class);
         manager.register(LargeMessage.class);
     }

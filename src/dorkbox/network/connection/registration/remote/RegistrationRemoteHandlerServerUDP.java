@@ -31,6 +31,7 @@ import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.wrapper.UdpWrapper;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.crypto.CryptoAES;
 import io.netty.buffer.ByteBuf;
@@ -51,13 +52,13 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
     private final org.slf4j.Logger logger;
     private final ByteBuf discoverResponseBuffer;
     private final RegistrationWrapper<C> registrationWrapper;
-    private final dorkbox.network.util.CryptoSerializationManager serializationManager;
+    private final CryptoSerializationManager serializationManager;
 
 
     public
     RegistrationRemoteHandlerServerUDP(final String name,
                                        final RegistrationWrapper<C> registrationWrapper,
-                                       final dorkbox.network.util.CryptoSerializationManager serializationManager) {
+                                       final CryptoSerializationManager serializationManager) {
         final String name1 = name + " Registration-UDP-Server";
         this.logger = org.slf4j.LoggerFactory.getLogger(name1);
         this.registrationWrapper = registrationWrapper;
@@ -176,7 +177,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
         // registration is the ONLY thing NOT encrypted
         Logger logger2 = this.logger;
         RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
-        dorkbox.network.util.CryptoSerializationManager serializationManager2 = this.serializationManager;
+        CryptoSerializationManager serializationManager2 = this.serializationManager;
 
         if (KryoExtra.isEncrypted(message)) {
             // we need to FORWARD this message "down the pipeline".

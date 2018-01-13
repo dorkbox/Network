@@ -17,7 +17,7 @@ package dorkbox.network.connection.registration.remote;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.network.serialization.CryptoSerializationManager;
 
 public
 class RegistrationRemoteHandlerClient<C extends Connection> extends RegistrationRemoteHandler<C> {

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection;
+package dorkbox.network.serialization;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -42,6 +42,8 @@ import com.esotericsoftware.kryo.util.IdentityMap;
 import com.esotericsoftware.kryo.util.IntMap;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
 
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.rmi.InvocationHandlerSerializer;
 import dorkbox.network.rmi.InvocationResultSerializer;
@@ -50,7 +52,6 @@ import dorkbox.network.rmi.InvokeMethodResult;
 import dorkbox.network.rmi.InvokeMethodSerializer;
 import dorkbox.network.rmi.RemoteObjectSerializer;
 import dorkbox.network.rmi.RmiRegistration;
-import dorkbox.network.util.RmiSerializationManager;
 import dorkbox.objectPool.ObjectPool;
 import dorkbox.objectPool.PoolableObject;
 import dorkbox.util.Property;
@@ -70,9 +71,9 @@ import io.netty.buffer.ByteBuf;
  */
 @SuppressWarnings({"unused", "StaticNonFinalField"})
 public
-class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializationManager, RmiSerializationManager {
+class SerializationManager implements CryptoSerializationManager, RmiSerializationManager {
 
-    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(CryptoSerializationManager.class);
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(SerializationManager.class);
 
     /**
      * Specify if we want KRYO to use unsafe memory for serialization, or to use the ASM backend. Unsafe memory use is WAY faster, but is
@@ -82,20 +83,20 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     public static boolean useUnsafeMemory = false;
 
     public static
-    CryptoSerializationManager DEFAULT() {
+    SerializationManager DEFAULT() {
         return DEFAULT(true, true);
     }
 
     public static
-    CryptoSerializationManager DEFAULT(final boolean references, final boolean registrationRequired) {
+    SerializationManager DEFAULT(final boolean references, final boolean registrationRequired) {
         // ignore fields that have the "@IgnoreSerialization" annotation.
         Collection<Class<? extends Annotation>> marks = new ArrayList<Class<? extends Annotation>>();
         marks.add(IgnoreSerialization.class);
         SerializerFactory disregardingFactory = new FieldAnnotationAwareSerializer.Factory(marks, true);
 
-        final CryptoSerializationManager serializationManager = new CryptoSerializationManager(references,
-                                                                                               registrationRequired,
-                                                                                               disregardingFactory);
+        final SerializationManager serializationManager = new SerializationManager(references,
+                                                                                   registrationRequired,
+                                                                                   disregardingFactory);
 
         serializationManager.register(PingMessage.class);
         serializationManager.register(byte[].class);
@@ -213,13 +214,13 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
      *                 <p>
      */
     public
-    CryptoSerializationManager(final boolean references, final boolean registrationRequired, final SerializerFactory factory) {
+    SerializationManager(final boolean references, final boolean registrationRequired, final SerializerFactory factory) {
         kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra>() {
             @Override
             public
             KryoExtra create() {
-                synchronized (CryptoSerializationManager.this) {
-                    KryoExtra kryo = new KryoExtra(CryptoSerializationManager.this);
+                synchronized (SerializationManager.this) {
+                    KryoExtra kryo = new KryoExtra(SerializationManager.this);
 
                     // we HAVE to pre-allocate the KRYOs
                     boolean useAsm = !useUnsafeMemory;

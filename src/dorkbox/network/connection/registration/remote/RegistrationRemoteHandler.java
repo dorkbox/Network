@@ -36,7 +36,7 @@ import dorkbox.network.pipeline.KryoDecoder;
 import dorkbox.network.pipeline.KryoDecoderCrypto;
 import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.FastThreadLocal;
 import dorkbox.util.crypto.CryptoECC;
 import io.netty.channel.Channel;

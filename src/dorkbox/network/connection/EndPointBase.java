@@ -37,6 +37,7 @@ import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.serialization.SerializationManager;
 import dorkbox.network.store.NullSettingsStore;
 import dorkbox.network.store.SettingsStore;
 import dorkbox.util.Property;
@@ -90,7 +91,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
     public static int udpMaxSize = 508;
 
     protected final ConnectionManager<C> connectionManager;
-    protected final dorkbox.network.util.CryptoSerializationManager serializationManager;
+    protected final dorkbox.network.serialization.CryptoSerializationManager serializationManager;
     protected final RegistrationWrapper<C> registrationWrapper;
 
     final ECPrivateKeyParameters privateKey;
@@ -135,7 +136,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
         if (config.serialization != null) {
             serializationManager = config.serialization;
         } else {
-            serializationManager = CryptoSerializationManager.DEFAULT();
+            serializationManager = SerializationManager.DEFAULT();
         }
 
         // setup our RMI serialization managers. Can only be called once
@@ -293,7 +294,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
      */
     public
-    dorkbox.network.util.CryptoSerializationManager getSerialization() {
+    dorkbox.network.serialization.CryptoSerializationManager getSerialization() {
         return serializationManager;
     }
 

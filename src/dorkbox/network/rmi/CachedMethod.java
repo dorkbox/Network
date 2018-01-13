@@ -55,8 +55,8 @@ import com.esotericsoftware.reflectasm.MethodAccess;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.KryoExtra;
-import dorkbox.network.util.CryptoSerializationManager;
-import dorkbox.network.util.RmiSerializationManager;
+import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.RmiSerializationManager;
 import dorkbox.util.ClassHelper;
 
 public

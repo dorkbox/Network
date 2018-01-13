@@ -25,6 +25,7 @@ import com.esotericsoftware.kryo.Kryo;
 
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.bytes.BigEndian;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
@@ -97,10 +98,10 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
     private byte[] decompressOutput;
     private ByteBuf decompressBuf;
 
-    private dorkbox.network.util.CryptoSerializationManager serializationManager;
+    private CryptoSerializationManager serializationManager;
 
     public
-    KryoExtra(final dorkbox.network.util.CryptoSerializationManager serializationManager) {
+    KryoExtra(final CryptoSerializationManager serializationManager) {
         this.serializationManager = serializationManager;
     }
 
@@ -599,7 +600,7 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
     }
 
     public
-    dorkbox.network.util.CryptoSerializationManager getSerializationManager() {
+    CryptoSerializationManager getSerializationManager() {
         return serializationManager;
     }
 }

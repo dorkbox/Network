@@ -28,8 +28,8 @@ import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
+import dorkbox.network.serialization.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.IgnoreSerialization;
@@ -71,7 +71,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.host = host;
 
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         configuration.serialization.registerRmiImplementation(TestObject.class, TestObjectImpl.class);
         configuration.serialization.registerRmiImplementation(OtherObject.class, OtherObjectImpl.class);
 
@@ -105,7 +105,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.host = host;
 
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         configuration.serialization.registerRmiInterface(TestObject.class);
         configuration.serialization.registerRmiInterface(OtherObject.class);
 

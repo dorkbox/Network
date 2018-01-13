@@ -22,7 +22,7 @@ import java.util.List;
 import org.slf4j.LoggerFactory;
 
 import dorkbox.network.connection.EndPointBase;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler.Sharable;

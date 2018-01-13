@@ -27,9 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.Listener;
-import dorkbox.util.SerializationManager;
+import dorkbox.network.serialization.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -44,7 +43,7 @@ class ClientSendTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         register(configuration.serialization);
 
         Server server = new Server(configuration);
@@ -87,7 +86,7 @@ class ClientSendTest extends BaseTest {
     }
 
     private static
-    void register(SerializationManager manager) {
+    void register(dorkbox.util.SerializationManager manager) {
         manager.register(AMessage.class);
     }
 

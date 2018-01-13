@@ -21,6 +21,7 @@ import java.util.List;
 import org.slf4j.LoggerFactory;
 
 import dorkbox.network.connection.KryoExtra;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -31,10 +32,10 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 public
 class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
 
-    private final dorkbox.network.util.CryptoSerializationManager serializationManager;
+    private final CryptoSerializationManager serializationManager;
 
     public
-    KryoDecoderUdp(dorkbox.network.util.CryptoSerializationManager serializationManager) {
+    KryoDecoderUdp(CryptoSerializationManager serializationManager) {
         this.serializationManager = serializationManager;
     }
 

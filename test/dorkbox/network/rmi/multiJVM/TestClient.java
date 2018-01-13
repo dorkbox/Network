@@ -16,10 +16,10 @@ import ch.qos.logback.core.ConsoleAppender;
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.RmiTest;
 import dorkbox.network.rmi.TestCow;
+import dorkbox.network.serialization.SerializationManager;
 import io.netty.util.ResourceLeakDetector;
 
 /**
@@ -82,7 +82,7 @@ class TestClient
         configuration.udpPort = 2001;
         configuration.host = "localhost";
 
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         RmiTest.register(configuration.serialization);
         configuration.serialization.registerRmiInterface(TestCow.class);
 

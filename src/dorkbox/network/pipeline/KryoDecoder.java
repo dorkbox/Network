@@ -15,14 +15,14 @@
  */
 package dorkbox.network.pipeline;
 
-import dorkbox.network.util.CryptoSerializationManager;
+import java.io.IOException;
+import java.util.List;
+
+import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
-
-import java.io.IOException;
-import java.util.List;
 
 public
 class KryoDecoder extends ByteToMessageDecoder {

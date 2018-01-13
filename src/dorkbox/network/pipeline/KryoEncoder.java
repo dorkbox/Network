@@ -15,14 +15,14 @@
  */
 package dorkbox.network.pipeline;
 
-import dorkbox.network.util.CryptoSerializationManager;
+import java.io.IOException;
+
+import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
-
-import java.io.IOException;
 
 @Sharable
 public

@@ -18,8 +18,8 @@ package dorkbox.network;
 import java.util.concurrent.Executor;
 
 import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.network.store.SettingsStore;
-import dorkbox.network.util.CryptoSerializationManager;
 
 public
 class Configuration {

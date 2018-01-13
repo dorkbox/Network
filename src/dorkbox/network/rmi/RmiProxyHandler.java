@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointBase;
-import dorkbox.network.util.RmiSerializationManager;
+import dorkbox.network.serialization.RmiSerializationManager;
 
 /**
  * Handles network communication when methods are invoked on a proxy.

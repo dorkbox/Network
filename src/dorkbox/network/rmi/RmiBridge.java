@@ -51,7 +51,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.util.RmiSerializationManager;
+import dorkbox.network.serialization.RmiSerializationManager;
 import dorkbox.util.collections.ObjectIntMap;
 
 /**

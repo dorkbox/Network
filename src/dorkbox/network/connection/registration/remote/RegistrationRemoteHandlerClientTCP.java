@@ -38,7 +38,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
-import dorkbox.network.util.CryptoSerializationManager;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.crypto.CryptoAES;
 import dorkbox.util.crypto.CryptoECC;

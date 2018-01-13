@@ -29,11 +29,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
-import dorkbox.util.SerializationManager;
+import dorkbox.network.serialization.SerializationManager;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -61,7 +60,7 @@ class PingPongTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = CryptoSerializationManager.DEFAULT();
+        configuration.serialization = SerializationManager.DEFAULT();
         register(configuration.serialization);
 
 
@@ -261,7 +260,7 @@ class PingPongTest extends BaseTest {
     }
 
     private
-    void register(SerializationManager manager) {
+    void register(dorkbox.util.SerializationManager manager) {
         manager.register(int[].class);
         manager.register(short[].class);
         manager.register(float[].class);
