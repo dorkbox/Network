@@ -25,8 +25,8 @@ import org.slf4j.Logger;
 import dorkbox.network.Broadcast;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.CryptoSerializationManager;
 import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -178,7 +178,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
         RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
         dorkbox.network.util.CryptoSerializationManager serializationManager2 = this.serializationManager;
 
-        if (CryptoSerializationManager.isEncrypted(message)) {
+        if (KryoExtra.isEncrypted(message)) {
             // we need to FORWARD this message "down the pipeline".
 
             ConnectionImpl connection = registrationWrapper2.getServerUDP(udpRemoteAddress);

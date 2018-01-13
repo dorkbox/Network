@@ -20,7 +20,7 @@ import java.util.List;
 
 import org.slf4j.LoggerFactory;
 
-import dorkbox.network.connection.CryptoSerializationManager;
+import dorkbox.network.connection.KryoExtra;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -48,7 +48,7 @@ class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
                 // there is a REMOTE possibility that UDP traffic BEAT the TCP registration traffic, which means that THIS packet
                 // COULD be encrypted!
 
-                if (CryptoSerializationManager.isEncrypted(data)) {
+                if (KryoExtra.isEncrypted(data)) {
                     String message = "Encrypted UDP packet received before registration complete.";
                     LoggerFactory.getLogger(this.getClass()).error(message);
                     throw new IOException(message);

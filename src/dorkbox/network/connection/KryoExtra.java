@@ -44,6 +44,18 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
      */
     static final byte crypto = (byte) (1 << 1);
 
+    /**
+     * Determines if this buffer is encrypted or not.
+     */
+    public static
+    boolean isEncrypted(final ByteBuf buffer) {
+        // read off the magic byte
+        byte magicByte = buffer.getByte(buffer.readerIndex());
+        return (magicByte & crypto) == crypto;
+    }
+
+
+
     // snappycomp   :       7.534 micros/op;  518.5 MB/s (output: 55.1%)
     // snappyuncomp :       1.391 micros/op; 2808.1 MB/s
     // lz4comp      :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
