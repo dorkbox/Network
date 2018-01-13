@@ -40,6 +40,21 @@ interface RmiSerializationManager extends SerializationManager {
     RmiSerializationManager register(Class<?> clazz);
 
     /**
+     * Registers the class using the specified ID. If the ID is
+     * already in use by the same type, the old entry is overwritten. If the ID
+     * is already in use by a different type, a {@link KryoException} is thrown.
+     * Registering a primitive also affects the corresponding primitive wrapper.
+     * <p/>
+     * IDs must be the same at deserialization as they were for serialization.
+     *
+     * @param id Must be >= 0. Smaller IDs are serialized more efficiently. IDs
+     *         0-8 are used by default for primitive types and String, but
+     *         these IDs can be repurposed.
+     */
+    @Override
+    RmiSerializationManager register(Class<?> clazz, int id);
+
+    /**
      * Registers the class using the lowest, next available integer ID and the
      * specified serializer. If the class is already registered, the existing
      * entry is updated with the new serializer. Registering a primitive also
@@ -134,16 +149,4 @@ interface RmiSerializationManager extends SerializationManager {
      * @param implClass The implementation class of the interface
      */
     <Iface, Impl extends Iface> RmiSerializationManager registerRmiImplementation(Class<Iface> ifaceClass, Class<Impl> implClass);
-
-    /**
-     * This method overrides the interface -> implementation. This is so incoming proxy objects will get auto-changed into their correct
-     * implementation type, so this side of the connection knows what to do with the proxy object.
-     * <p>
-     * NOTE: You must have ALREADY registered the implementation class. This method just enables the proxy magic.
-     * This is for the "server" side, where "server" means the connection side where the implementation is used.
-     *
-     * @param ifaceClass The interface used to access the remote object
-     * @param implClass The implementation class of the interface
-     */
-    // RmiSerializationManager rmiImplementation();
 }

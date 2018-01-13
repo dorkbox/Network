@@ -66,7 +66,7 @@ import io.netty.buffer.ByteBuf;
 
 /**
  * Threads reading/writing, it messes up a single instance. it is possible to use a single kryo with the use of synchronize, however - that
- * defeats the point of multi-threaded
+ * defeats the point of having multi-threaded serialization
  */
 @SuppressWarnings({"unused", "StaticNonFinalField"})
 public
@@ -80,8 +80,6 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
      */
     @Property
     public static boolean useUnsafeMemory = false;
-
-    private static final String OBJECT_ID = "objectID";
 
     public static
     CryptoSerializationManager DEFAULT() {
@@ -133,6 +131,15 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
             this.serializer = serializer;
         }
     }
+    private static class ClassSerializer1 {
+        final Class<?> clazz;
+        final int id;
+
+        ClassSerializer1(final Class<?> clazz, final int id) {
+            this.clazz = clazz;
+            this.id = id;
+        }
+    }
     private static class ClassSerializer2 {
         final Class<?> clazz;
         final Serializer<?> serializer;
@@ -178,7 +185,7 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     // used to track which interface -> implementation, for use by RMI
     private final IntMap<Class<?>> rmiIdToImpl = new IntMap<Class<?>>();
     private final IntMap<Class<?>> rmiIdToIface = new IntMap<Class<?>>();
-    private final IdentityMap<Class<?>, Class<?>> rmiIfacetoImpl = new IdentityMap<Class<?>, Class<?>>();
+    private final IdentityMap<Class<?>, Class<?>> rmiIfaceToImpl = new IdentityMap<Class<?>, Class<?>>();
     private final IdentityMap<Class<?>, Class<?>> rmiImplToIface = new IdentityMap<Class<?>, Class<?>>();
 
     /**
@@ -230,7 +237,7 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
 
                         // This has to be for each kryo instance!
                         InvocationResultSerializer resultSerializer = new InvocationResultSerializer(kryo);
-                        resultSerializer.removeField(OBJECT_ID);
+                        resultSerializer.removeField("objectID");
 
                         kryo.register(InvokeMethodResult.class, resultSerializer);
                         kryo.register(InvocationHandler.class, invocationSerializer);
@@ -245,6 +252,10 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
                         else if (clazz instanceof ClassSerializer) {
                             ClassSerializer classSerializer = (ClassSerializer) clazz;
                             kryo.register(classSerializer.clazz, classSerializer.serializer);
+                        }
+                        else if (clazz instanceof ClassSerializer1) {
+                            ClassSerializer1 classSerializer = (ClassSerializer1) clazz;
+                            kryo.register(classSerializer.clazz, classSerializer.id);
                         }
                         else if (clazz instanceof ClassSerializer2) {
                             ClassSerializer2 classSerializer = (ClassSerializer2) clazz;
@@ -313,6 +324,34 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     }
 
     /**
+     * Registers the class using the specified ID. If the ID is
+     * already in use by the same type, the old entry is overwritten. If the ID
+     * is already in use by a different type, a {@link KryoException} is thrown.
+     * Registering a primitive also affects the corresponding primitive wrapper.
+     * <p/>
+     * IDs must be the same at deserialization as they were for serialization.
+     *
+     * @param id Must be >= 0. Smaller IDs are serialized more efficiently. IDs
+     *         0-8 are used by default for primitive types and String, but
+     *         these IDs can be repurposed.
+     */
+    @Override
+    public synchronized
+    RmiSerializationManager register(Class<?> clazz, int id) {
+        if (initialized) {
+            logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, int) call.");
+        }
+        else if (clazz.isInterface()) {
+            throw new IllegalArgumentException("Cannot register an interface for serialization. It must be an implementation.");
+        }
+        else {
+            classesToRegister.add(new ClassSerializer1(clazz, id));
+        }
+
+        return this;
+    }
+
+    /**
      * Registers the class using the lowest, next available integer ID and the specified serializer. If the class is already registered, the
      * existing entry is updated with the new serializer. Registering a primitive also affects the corresponding primitive wrapper.
      * <p>
@@ -372,7 +411,7 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     public synchronized
     RmiSerializationManager registerRmiInterface(Class<?> ifaceClass) {
         if (initialized) {
-            logger.warn("Serialization manager already initialized. Ignoring duplicate registerRemote(Class, Class) call.");
+            logger.warn("Serialization manager already initialized. Ignoring duplicate registerRemote(Class) call.");
             return this;
         }
 
@@ -404,11 +443,10 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
         usesRmi = true;
         classesToRegister.add(new RemoteImplClass(ifaceClass, implClass));
 
-        // this MUST BE UNIQUE otherwise unexpected things can happen.
-        Class<?> a = this.rmiIfacetoImpl.put(ifaceClass, implClass);
+        // this MUST BE UNIQUE otherwise unexpected and BAD things can happen.
+        Class<?> a = this.rmiIfaceToImpl.put(ifaceClass, implClass);
         Class<?> b = this.rmiImplToIface.put(implClass, ifaceClass);
 
-        // this MUST BE UNIQUE otherwise unexpected things can happen.
         if (a != null || b != null) {
             throw new IllegalArgumentException("Unable to override interface (" + ifaceClass + ") and implementation (" + implClass + ") " +
                                                "because they have already been overridden by something else. It is critical that they are" +
@@ -494,7 +532,7 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     @Override
     public
     Class<?> getRmiImpl(Class<?> iface) {
-        return rmiIfacetoImpl.get(iface);
+        return rmiIfaceToImpl.get(iface);
     }
 
     /**
@@ -524,16 +562,6 @@ class CryptoSerializationManager implements dorkbox.network.util.CryptoSerializa
     public
     void returnKryo(KryoExtra kryo) {
         kryoPool.put(kryo);
-    }
-
-    /**
-     * Determines if this buffer is encrypted or not.
-     */
-    public static
-    boolean isEncrypted(final ByteBuf buffer) {
-        // read off the magic byte
-        byte magicByte = buffer.getByte(buffer.readerIndex());
-        return (magicByte & KryoExtra.crypto) == KryoExtra.crypto;
     }
 
     /**
