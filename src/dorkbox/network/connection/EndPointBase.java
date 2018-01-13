@@ -115,7 +115,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
 
 
     /**
-     * @param type    this is either "Client" or "Server", depending on who is creating this endpoint.
+     * @param type this is either "Client" or "Server", depending on who is creating this endpoint.
      * @param config these are the specific connection options
      *
      * @throws InitializationException
