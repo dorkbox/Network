@@ -36,10 +36,11 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.WriteBufferWaterMark;
-import io.netty.channel.epoll.EpollChannelOption;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerSocketChannel;
+import io.netty.channel.kqueue.KQueueDatagramChannel;
+import io.netty.channel.kqueue.KQueueServerSocketChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -48,6 +49,7 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
+import io.netty.channel.unix.UnixChannelOption;
 
 /**
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
@@ -200,6 +202,10 @@ class Server<C extends Connection> extends EndPointServer<C> {
                 // JNI network stack is MUCH faster (but only on linux)
                 tcpBootstrap.channel(EpollServerSocketChannel.class);
             }
+            else if (OS.isMacOsX()) {
+                // JNI network stack is MUCH faster (but only on macosx)
+                tcpBootstrap.channel(KQueueServerSocketChannel.class);
+            }
             else {
                 tcpBootstrap.channel(NioServerSocketChannel.class);
             }
@@ -235,14 +241,21 @@ class Server<C extends Connection> extends EndPointServer<C> {
         if (udpBootstrap != null) {
             if (OS.isAndroid()) {
                 // android ONLY supports OIO (not NIO)
-                udpBootstrap.channel(OioDatagramChannel.class);
+                udpBootstrap.channel(OioDatagramChannel.class)
+                            .option(UnixChannelOption.SO_REUSEPORT, true);
             }
             else if (OS.isLinux()) {
                 // JNI network stack is MUCH faster (but only on linux)
                 udpBootstrap.channel(EpollDatagramChannel.class)
-                            .option(EpollChannelOption.SO_REUSEPORT, true);
+                            .option(UnixChannelOption.SO_REUSEPORT, true);
+            }
+            else if (OS.isMacOsX()) {
+                // JNI network stack is MUCH faster (but only on macosx)
+                udpBootstrap.channel(KQueueDatagramChannel.class)
+                            .option(UnixChannelOption.SO_REUSEPORT, true);
             }
             else {
+                // windows
                 udpBootstrap.channel(NioDatagramChannel.class);
             }
 

@@ -20,6 +20,7 @@ import java.lang.reflect.Field;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -93,7 +94,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private boolean remoteKeyChanged;
 
-    private final EndPointBase<Connection> endPointBaseConnection;
+    private final EndPointBase endPoint;
 
     // when true, the connection will be closed (either as RMI or as 'normal' listener execution) when the thread execution returns control
     // back to the network stack
@@ -107,6 +108,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     //
     // RMI fields
     //
+    protected CountDownLatch rmi;
     private final RmiBridge rmiBridge;
     private final Map<Integer, RemoteObject> proxyIdCache = new WeakHashMap<Integer, RemoteObject>(8);
     private final IntMap<RemoteObjectCallback> rmiRegistrationCallbacks = new IntMap<RemoteObjectCallback>();
@@ -117,9 +119,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
     public
-    ConnectionImpl(final Logger logger, final EndPointBase endPointBaseConnection, final RmiBridge rmiBridge) {
+    ConnectionImpl(final Logger logger, final EndPointBase endPoint, final RmiBridge rmiBridge) {
         this.logger = logger;
-        this.endPointBaseConnection = endPointBaseConnection;
+        this.endPoint = endPoint;
         this.rmiBridge = rmiBridge;
     }
 
@@ -215,7 +217,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public
     EndPointBase<Connection> getEndPoint() {
-        return this.endPointBaseConnection;
+        return this.endPoint;
     }
 
     /**
@@ -328,7 +330,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     private
     void controlBackPressure(ConnectionPoint c) {
-        while (!c.isWritable()) {
+        while (!closeInProgress.get() && !c.isWritable()) {
             needsLock.set(true);
             writeSignalNeeded.set(true);
 
@@ -590,6 +592,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                                     .toString());
         }
 
+        if (this.endPoint instanceof EndPointClient) {
+            ((EndPointClient) this.endPoint).abortRegistration();
+        }
+
         // our master channels are TCP/LOCAL (which are mutually exclusive). Only key disconnect events based on the status of them.
         if (isTCP || channelClass == LocalChannel.class) {
             // this is because channelInactive can ONLY happen when netty shuts down the channel.
@@ -614,7 +620,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     void close() {
         // only close if we aren't already in the middle of closing.
         if (this.closeInProgress.compareAndSet(false, true)) {
-            int idleTimeoutMs = this.endPointBaseConnection.getIdleTimeout();
+            int idleTimeoutMs = this.endPoint.getIdleTimeout();
             if (idleTimeoutMs == 0) {
                 // default is 2 second timeout, in milliseconds.
                 idleTimeoutMs = 2000;
@@ -714,7 +720,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     Listeners add(Listener listener) {
-        if (this.endPointBaseConnection instanceof EndPointServer) {
+        if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
             //   I add one listener, and ALL connections are notified of that listener.
@@ -726,15 +732,15 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             // is empty, we can remove it from this connection.
             synchronized (this) {
                 if (this.localListenerManager == null) {
-                    this.localListenerManager = ((EndPointServer<Connection>) this.endPointBaseConnection).addListenerManager(this);
+                    this.localListenerManager = ((EndPointServer) this.endPoint).addListenerManager(this);
                 }
                 this.localListenerManager.add(listener);
             }
 
         }
         else {
-            this.endPointBaseConnection.listeners()
-                                       .add(listener);
+            this.endPoint.listeners()
+                         .add(listener);
         }
 
         return this;
@@ -756,7 +762,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     Listeners remove(Listener listener) {
-        if (this.endPointBaseConnection instanceof EndPointServer) {
+        if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
             //   I add one listener, and ALL connections are notified of that listener.
@@ -771,14 +777,14 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                     this.localListenerManager.remove(listener);
 
                     if (!this.localListenerManager.hasListeners()) {
-                        ((EndPointServer<Connection>) this.endPointBaseConnection).removeListenerManager(this);
+                        ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
         }
         else {
-            this.endPointBaseConnection.listeners()
-                                       .remove(listener);
+            this.endPoint.listeners()
+                         .remove(listener);
         }
 
         return this;
@@ -791,7 +797,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     Listeners removeAll() {
-        if (this.endPointBaseConnection instanceof EndPointServer) {
+        if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
             //   I add one listener, and ALL connections are notified of that listener.
@@ -806,13 +812,13 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                     this.localListenerManager.removeAll();
                     this.localListenerManager = null;
 
-                    ((EndPointServer<Connection>) this.endPointBaseConnection).removeListenerManager(this);
+                    ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
                 }
             }
         }
         else {
-            this.endPointBaseConnection.listeners()
-                                       .removeAll();
+            this.endPoint.listeners()
+                         .removeAll();
         }
 
         return this;
@@ -826,7 +832,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     Listeners removeAll(Class<?> classType) {
-        if (this.endPointBaseConnection instanceof EndPointServer) {
+        if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
             //   I add one listener, and ALL connections are notified of that listener.
@@ -842,14 +848,14 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
                     if (!this.localListenerManager.hasListeners()) {
                         this.localListenerManager = null;
-                        ((EndPointServer<Connection>) this.endPointBaseConnection).removeListenerManager(this);
+                        ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
         }
         else {
-            this.endPointBaseConnection.listeners()
-                                       .removeAll(classType);
+            this.endPoint.listeners()
+                         .removeAll(classType);
         }
 
         return this;
@@ -899,62 +905,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     // RMI methods
     //
 
-    /**
-     * Internal call CLIENT ONLY.
-     * <p>
-     * RMI methods are usually created during the connection phase. We should wait until they are finished
-     */
-    void waitForRmi(final int connectionTimeout) {
-        synchronized (rmiRegistrationCallbacks) {
-            try {
-                rmiRegistrationCallbacks.wait(connectionTimeout);
-            } catch (InterruptedException e) {
-                logger.error("Interrupted waiting for RMI to finish.", e);
-            }
-        }
-    }
-
-    /**
-     * Internal call CLIENT ONLY.
-     * <p>
-     * RMI methods are usually created during the connection phase. If there are none, we should unblock the waiting client.connect().
-     */
-    boolean rmiCallbacksIsEmpty() {
-        synchronized (rmiRegistrationCallbacks) {
-            return rmiRegistrationCallbacks.size == 0;
-        }
-    }
-
-    /**
-     * Internal call CLIENT ONLY.
-     * <p>
-     * RMI methods are usually created during the connection phase. If there are none, we should unblock the waiting client.connect().
-     */
-    void rmiCallbacksNotify() {
-        synchronized (rmiRegistrationCallbacks) {
-            rmiRegistrationCallbacks.notify();
-        }
-    }
-
-    /**
-     * Internal call CLIENT ONLY.
-     * <p>
-     * RMI methods are usually created during the connection phase. If there are none, we should unblock the waiting client.connect().
-     */
-    private
-    void rmiCallbacksNotifyIfEmpty() {
-        synchronized (rmiRegistrationCallbacks) {
-            if (rmiRegistrationCallbacks.size == 0) {
-                rmiRegistrationCallbacks.notify();
-            }
-        }
-    }
-
-
     @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked", "Duplicates"})
     @Override
     public final
-    <Iface> void getRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) throws IOException {
+    <Iface> void getRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("Cannot create a proxy for RMI access. It must be an interface.");
         }
@@ -977,7 +931,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked", "Duplicates"})
     @Override
     public final
-    <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) throws IOException {
+    <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) {
         RmiRegistration message;
 
         synchronized (rmiRegistrationCallbacks) {
@@ -1079,12 +1033,14 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             }
         }
         else {
-            // THIS IS ON THE LOCAL CONNECTION SIDE, which is the side that called 'getRemoteObject()'
+            // THIS IS ON THE LOCAL CONNECTION SIDE, which is the side that called 'getRemoteObject()'   This can be Server or Client.
 
             // this will be null if there was an error
             Object remoteObject = remoteRegistration.remoteObject;
 
+            boolean noMoreRmiRemaining ;
             RemoteObjectCallback callback;
+
             synchronized (rmiRegistrationCallbacks) {
                 callback = rmiRegistrationCallbacks.remove(remoteRegistration.rmiID);
             }
@@ -1095,9 +1051,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             } catch (Exception e) {
                 logger.error("Error getting remote object " + remoteObject.getClass() + ", ID: " + rmiID, e);
             }
-
-            // tell the client that we are finished with all RMI callbacks
-            rmiCallbacksNotifyIfEmpty();
         }
     }
 
@@ -1111,7 +1064,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     public
     <T> int getRegisteredId(final T object) {
         // always check local before checking global, because less contention on the synchronization
-        RmiBridge globalRmiBridge = endPointBaseConnection.globalRmiBridge;
+        RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
 
         if (globalRmiBridge == null) {
             throw new NullPointerException("Unable to call 'getRegisteredId' when the globalRmiBridge is null!");
@@ -1155,7 +1108,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     public
     Object getImplementationObject(final int objectID) {
         if (RmiBridge.isGlobal(objectID)) {
-            RmiBridge globalRmiBridge = endPointBaseConnection.globalRmiBridge;
+            RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
 
             if (globalRmiBridge == null) {
                 throw new NullPointerException("Unable to call 'getRegisteredId' when the gloablRmiBridge is null!");

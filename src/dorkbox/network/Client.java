@@ -43,6 +43,8 @@ import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
+import io.netty.channel.kqueue.KQueueDatagramChannel;
+import io.netty.channel.kqueue.KQueueSocketChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -167,6 +169,10 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                     // JNI network stack is MUCH faster (but only on linux)
                     tcpBootstrap.channel(EpollSocketChannel.class);
                 }
+                else if (OS.isMacOsX()) {
+                    // JNI network stack is MUCH faster (but only on macosx)
+                    tcpBootstrap.channel(KQueueSocketChannel.class);
+                }
                 else {
                     tcpBootstrap.channel(NioSocketChannel.class);
                 }
@@ -197,7 +203,12 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                     // JNI network stack is MUCH faster (but only on linux)
                     udpBootstrap.channel(EpollDatagramChannel.class);
                 }
+                else if (OS.isMacOsX()) {
+                    // JNI network stack is MUCH faster (but only on macosx)
+                    udpBootstrap.channel(KQueueDatagramChannel.class);
+                }
                 else {
+                    // windows
                     udpBootstrap.channel(NioDatagramChannel.class);
                 }
 
@@ -241,7 +252,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      *                 if the client is unable to reconnect in the requested time
      */
     public
-    void reconnect(int connectionTimeout) throws IOException {
+    void reconnect(final int connectionTimeout) throws IOException {
         // close out all old connections
         closeConnections();
 
@@ -291,23 +302,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
             }
         }
 
-        // have to start the registration process
-        registerNextProtocol();
-
-        // have to BLOCK
-        // don't want the client to run before registration is complete
-        synchronized (registrationLock) {
-            if (!registrationComplete) {
-                try {
-                    registrationLock.wait(connectionTimeout);
-                } catch (InterruptedException e) {
-                    throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds", e);
-                }
-            }
-        }
-
-        // RMI methods are usually created during the connection phase. We should wait until they are finished
-        waitForRmi(connectionTimeout);
+        // have to start the registration process. This will wait until registration is complete and RMI methods are initialized
+        startRegistration();
     }
 
     @Override

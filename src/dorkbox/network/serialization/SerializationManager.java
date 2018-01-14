@@ -84,11 +84,11 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
 
     public static
     SerializationManager DEFAULT() {
-        return DEFAULT(true, true);
+        return DEFAULT(true, true, true);
     }
 
     public static
-    SerializationManager DEFAULT(final boolean references, final boolean registrationRequired) {
+    SerializationManager DEFAULT(final boolean references, final boolean registrationRequired, final boolean forbidInterfaceRegistration) {
         // ignore fields that have the "@IgnoreSerialization" annotation.
         Collection<Class<? extends Annotation>> marks = new ArrayList<Class<? extends Annotation>>();
         marks.add(IgnoreSerialization.class);
@@ -96,6 +96,7 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
 
         final SerializationManager serializationManager = new SerializationManager(references,
                                                                                    registrationRequired,
+                                                                                   forbidInterfaceRegistration,
                                                                                    disregardingFactory);
 
         serializationManager.register(PingMessage.class);
@@ -170,8 +171,13 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
         }
     }
 
+
+
     private boolean initialized = false;
     private final ObjectPool<KryoExtra> kryoPool;
+
+    // used to determine if we should forbid interface registration OUTSIDE of RMI registration.
+    private final boolean forbidInterfaceRegistration;
 
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class)
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
@@ -207,6 +213,15 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
      *                 Registered classes are serialized as an int id, avoiding the overhead of serializing the class name, but have the
      *                 drawback of needing to know the classes to be serialized up front.
      *                 <p>
+     * @param forbidInterfaceRegistration
+     *                 If true, interfaces are not permitted to be registered, outside of the {@link #registerRmiInterface(Class)} and
+     *                 {@link #registerRmiImplementation(Class, Class)} methods. If false, then interfaces can also be registered.
+     *                 <p>
+     *                 Enabling interface registration permits matching a different RMI client/server serialization scheme, since
+     *                 interfaces are generally in a "common" package, accessible to both the RMI client and server.
+     *                 <p>
+     *                 Generally, one should not register interfaces, because they have no meaning (ignoring "default" implementations in
+     *                 newer versions of java...)
      * @param factory
      *                 Sets the serializer factory to use when no {@link Kryo#addDefaultSerializer(Class, Class) default serializers} match
      *                 an object's type. Default is {@link ReflectionSerializerFactory} with {@link FieldSerializer}. @see
@@ -214,8 +229,9 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
      *                 <p>
      */
     public
-    SerializationManager(final boolean references, final boolean registrationRequired, final SerializerFactory factory) {
-        kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra>() {
+    SerializationManager(final boolean references, final boolean registrationRequired, final boolean forbidInterfaceRegistration, final SerializerFactory factory) {
+        this.forbidInterfaceRegistration = forbidInterfaceRegistration;
+        this.kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra>() {
             @Override
             public
             KryoExtra create() {
@@ -316,7 +332,7 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class) call.");
         }
-        else if (clazz.isInterface()) {
+        else if (forbidInterfaceRegistration && clazz.isInterface()) {
             throw new IllegalArgumentException("Cannot register an interface for serialization. It must be an implementation.");
         } else {
             classesToRegister.add(clazz);
@@ -342,7 +358,7 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, int) call.");
         }
-        else if (clazz.isInterface()) {
+        else if (forbidInterfaceRegistration && clazz.isInterface()) {
             throw new IllegalArgumentException("Cannot register an interface for serialization. It must be an implementation.");
         }
         else {
@@ -367,7 +383,7 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer) call.");
         }
-        else if (clazz.isInterface()) {
+        else if (forbidInterfaceRegistration && clazz.isInterface()) {
             throw new IllegalArgumentException("Cannot register an interface for serialization. It must be an implementation.");
         }
         else {
@@ -394,7 +410,7 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer, int) call.");
         }
-        else if (clazz.isInterface()) {
+        else if (forbidInterfaceRegistration && clazz.isInterface()) {
             throw new IllegalArgumentException("Cannot register an interface for serialization. It must be an implementation.");
         }
         else {
@@ -449,6 +465,13 @@ class SerializationManager implements CryptoSerializationManager, RmiSerializati
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate registerRemote(Class, Class) call.");
             return this;
+        }
+
+        if (!ifaceClass.isInterface()) {
+            throw new IllegalArgumentException("Cannot register an implementation for RMI access. It must be an interface.");
+        }
+        if (implClass.isInterface()) {
+            throw new IllegalArgumentException("Cannot register an interface for RMI implementations. It must be an implementation.");
         }
 
         usesRmi = true;

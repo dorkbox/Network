@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
@@ -32,19 +34,18 @@ import io.netty.channel.ChannelOption;
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointClient<C extends Connection> extends EndPointBase<C> implements Runnable {
+class EndPointClient<C extends Connection> extends EndPointBase<C> {
 
     protected C connection;
 
-    protected final Object registrationLock = new Object();
+    private CountDownLatch registration;
 
-    protected final Object bootstrapLock = new Object();
+    private final Object bootstrapLock = new Object();
     protected List<BootstrapWrapper> bootstraps = new LinkedList<BootstrapWrapper>();
-    protected Iterator<BootstrapWrapper> bootstrapIterator;
+    private Iterator<BootstrapWrapper> bootstrapIterator;
 
-    protected volatile int connectionTimeout = 5000; // default
-    protected volatile boolean registrationComplete = false;
-    private volatile boolean rmiInitializationComplete = false;
+    protected volatile int connectionTimeout = 5000; // default is 5 seconds
+
 
     private volatile ConnectionBridge connectionBridgeFlushAlways;
 
@@ -55,19 +56,26 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
     }
 
     protected
-    void registerNextProtocol() {
-        // always reset everything.
-        registrationComplete = false;
-        bootstrapIterator = bootstraps.iterator();
+    void startRegistration() throws IOException {
+        synchronized (bootstrapLock) {
+            // always reset everything.
+            registration = new CountDownLatch(1);
 
-        startProtocolRegistration();
+            bootstrapIterator = bootstraps.iterator();
+        }
+
+        doRegistration();
+
+        // have to BLOCK
+        // don't want the client to run before registration is complete
+        try {
+            if (!registration.await(connectionTimeout, TimeUnit.MILLISECONDS)) {
+                throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds");
+            }
+        } catch (InterruptedException e) {
+            throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds", e);
+        }
     }
-
-    private
-    void startProtocolRegistration() {
-        new Thread(this, "Bootstrap registration").start();
-    }
-
 
     // protected by bootstrapLock
     private
@@ -75,16 +83,9 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
         return !bootstrapIterator.hasNext();
     }
 
-    @SuppressWarnings("AutoBoxing")
-    @Override
-    public
-    void run() {
-        // NOTE: Throwing exceptions in this method is pointless, since it runs from it's own thread
+    // this is called by 2 threads. The startup thread, and the registration-in-progress thread
+    private void doRegistration() {
         synchronized (bootstrapLock) {
-            if (isRegistrationComplete()) {
-                return;
-            }
-
             BootstrapWrapper bootstrapWrapper = bootstrapIterator.next();
 
             ChannelFuture future;
@@ -130,12 +131,13 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
                 return;
             }
 
-            if (logger.isTraceEnabled()) {
-                logger.trace("Waiting for registration from server.");
-            }
+            logger.trace("Waiting for registration from server.");
+
             manageForShutdown(future);
         }
     }
+
+
 
     /**
      * Internal call by the pipeline to notify the client to continue registering the different session protocols.
@@ -145,20 +147,16 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
     @Override
     protected
     boolean registerNextProtocol0() {
+        boolean registrationComplete;
+
         synchronized (bootstrapLock) {
             registrationComplete = isRegistrationComplete();
             if (!registrationComplete) {
-                startProtocolRegistration();
+                doRegistration();
             }
-
-            // we're done with registration, so no need to keep this around
-            bootstrapIterator = null;
         }
 
-
-        if (logger.isTraceEnabled()) {
-            logger.trace("Registered protocol from server.");
-        }
+        logger.trace("Registered protocol from server.");
 
         // only let us continue with connections (this starts up the client/server implementations) once ALL of the
         // bootstraps have connected
@@ -172,9 +170,6 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
     @Override
     final
     void connectionConnected0(final ConnectionImpl connection) {
-        // invokes the listener.connection() method, and initialize the connection channels with whatever extra info they might need.
-        super.connectionConnected0(connection);
-
         connectionBridgeFlushAlways = new ConnectionBridge() {
             @Override
             public
@@ -217,27 +212,24 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
         //noinspection unchecked
         this.connection = (C) connection;
 
-        // check if there were any RMI callbacks during the connect phase.
-        rmiInitializationComplete = connection.rmiCallbacksIsEmpty();
-
-        // notify the registration we are done!
-        synchronized (registrationLock) {
-            registrationLock.notify();
+        synchronized (bootstrapLock) {
+            // we're done with registration, so no need to keep this around
+            bootstrapIterator = null;
+            registration.countDown();
         }
+
+        // invokes the listener.connection() method, and initialize the connection channels with whatever extra info they might need.
+        // This will also start the RMI (if necessary) initialization/creation of objects
+        super.connectionConnected0(connection);
     }
 
-    /**
-     * Internal call.
-     * <p>
-     * RMI methods are usually created during the connection phase. We should wait until they are finished, but ONLY if there is
-     * something we need to wait for.
-     *
-     * This is called AFTER registration is finished.
-     */
-    protected
-    void waitForRmi(final int connectionTimeout) {
-        if (!rmiInitializationComplete && connection instanceof ConnectionImpl) {
-            ((ConnectionImpl) connection).waitForRmi(connectionTimeout);
+    private
+    void registrationCompleted() {
+        // make sure we're not waiting on registration
+        synchronized (bootstrapLock) {
+            // we're done with registration, so no need to keep this around
+            bootstrapIterator = null;
+            registration.countDown();
         }
     }
 
@@ -263,34 +255,18 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> implements Ru
     void closeConnections() {
         super.closeConnections();
 
+        // make sure we're not waiting on registration
+        registrationCompleted();
+
         // for the CLIENT only, we clear these connections! (the server only clears them on shutdown)
         shutdownChannels();
-
-        // make sure we're not waiting on registration
-        registrationComplete = true;
-        synchronized (registrationLock) {
-            registrationLock.notify();
-        }
-        registrationComplete = false;
-
-        // Always unblock the waiting client.connect().
-        if (connection instanceof ConnectionImpl) {
-            ((ConnectionImpl) connection).rmiCallbacksNotify();
-        }
     }
 
     /**
      * Internal call to abort registration if the shutdown command is issued during channel registration.
      */
     void abortRegistration() {
-        synchronized (registrationLock) {
-            registrationLock.notify();
-        }
-
-        // Always unblock the waiting client.connect().
-        if (connection instanceof ConnectionImpl) {
-            ((ConnectionImpl) connection).rmiCallbacksNotify();
-        }
-        stop();
+        // make sure we're not waiting on registration
+        registrationCompleted();
     }
 }

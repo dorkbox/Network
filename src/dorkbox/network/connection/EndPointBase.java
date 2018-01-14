@@ -17,7 +17,6 @@ package dorkbox.network.connection;
 
 import java.io.IOException;
 import java.security.SecureRandom;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -277,7 +276,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     public
     void setIdleTimeout(int idleTimeoutMs) {
-        idleTimeoutMs = idleTimeoutMs;
+        this.idleTimeoutMs = idleTimeoutMs;
     }
 
     /**
@@ -308,8 +307,8 @@ class EndPointBase<C extends Connection> extends EndPoint {
      * @return a new network connection
      */
     protected
-    ConnectionImpl newConnection(final Logger logger, final EndPointBase<C> endPointBaseConnection, final RmiBridge rmiBridge) {
-        return new ConnectionImpl(logger, endPointBaseConnection, rmiBridge);
+    ConnectionImpl newConnection(final Logger logger, final EndPointBase endPoint, final RmiBridge rmiBridge) {
+        return new ConnectionImpl(logger, endPoint, rmiBridge);
     }
 
     /**
@@ -398,15 +397,6 @@ class EndPointBase<C extends Connection> extends EndPoint {
      */
     public
     List<C> getConnections() {
-        return connectionManager.getConnections();
-    }
-
-    /**
-     * Returns a non-modifiable list of active connections
-     */
-    @SuppressWarnings("unchecked")
-    public
-    Collection<C> getConnectionsAs() {
         return connectionManager.getConnections();
     }
 

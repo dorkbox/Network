@@ -54,7 +54,7 @@ class UnregisteredClassTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = SerializationManager.DEFAULT(false, false);
+        configuration.serialization = SerializationManager.DEFAULT(false, false, true);
 
 
         System.err.println("Running test " + this.tries + " times, please wait for it to finish.");

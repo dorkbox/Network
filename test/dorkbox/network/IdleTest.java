@@ -60,7 +60,7 @@ class IdleTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = SerializationManager.DEFAULT(false, false);
+        configuration.serialization = SerializationManager.DEFAULT(false, false, true);
 
         streamSpecificType(largeDataSize, configuration, ConnectionType.TCP);
 
@@ -70,7 +70,7 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = SerializationManager.DEFAULT(false, false);
+        configuration.serialization = SerializationManager.DEFAULT(false, false, true);
 
         streamSpecificType(largeDataSize, configuration, ConnectionType.UDP);
     }
