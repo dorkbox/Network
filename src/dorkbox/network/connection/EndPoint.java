@@ -25,7 +25,6 @@ import io.netty.util.internal.PlatformDependent;
  */
 public
 class EndPoint {
-    // duplicated in DnsClient
     static {
         //noinspection Duplicates
         try {
