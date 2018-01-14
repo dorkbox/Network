@@ -2,7 +2,6 @@ package dorkbox.network.connection;
 
 import java.security.AccessControlException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -188,6 +187,25 @@ class EndPoint {
         return true;
     }
 
+
+    /**
+     * Check to see if the current thread is running from it's OWN thread, or from Netty... This is used to prevent deadlocks.
+     *
+     * @return true if the specified thread is as Netty thread, false if it's own thread.
+     */
+    protected
+    boolean isInEventLoop(Thread thread) {
+        for (EventLoopGroup loopGroup : eventLoopGroups) {
+            for (EventExecutor next : loopGroup) {
+                if (next.inEventLoop(thread)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Safely closes all associated resources/threads/connections.
      * <p/>
@@ -207,44 +225,24 @@ class EndPoint {
         // This occurs when calling stop from within a listener callback.
         Thread currentThread = Thread.currentThread();
         String threadName = currentThread.getName();
-        boolean inShutdownThread = !threadName.equals(shutdownHookName) && !threadName.equals(stopTreadName);
+        boolean isShutdownThread = !threadName.equals(shutdownHookName) && !threadName.equals(stopTreadName);
 
         // used to check the event groups to see if we are running from one of them. NOW we force to
         // ALWAYS shutdown inside a NEW thread
-
-        if (!inShutdownThread) {
+        if (!isShutdownThread || !isInEventLoop(currentThread)) {
             stopInThread();
         }
         else {
-            // we have to make sure always run this from within it's OWN thread -- because if it's run from within
-            // a client/server thread executor, it will deadlock while waiting for the threadpool to terminate.
-            boolean isInEventLoop = false;
-            for (EventLoopGroup loopGroup : eventLoopGroups) {
-                Iterator<EventExecutor> iterator = loopGroup.iterator();
-                while (iterator.hasNext()) {
-                    EventExecutor next = iterator.next();
-                    if (next.inEventLoop()) {
-                        isInEventLoop = true;
-                        break;
-                    }
+            Thread thread = new Thread(new Runnable() {
+                @Override
+                public
+                void run() {
+                    EndPoint.this.stopInThread();
                 }
-            }
-
-            if (!isInEventLoop) {
-                EndPoint.this.stopInThread();
-            }
-            else {
-                Thread thread = new Thread(new Runnable() {
-                    @Override
-                    public
-                    void run() {
-                        EndPoint.this.stopInThread();
-                    }
-                });
-                thread.setDaemon(false);
-                thread.setName(stopTreadName);
-                thread.start();
-            }
+            });
+            thread.setDaemon(false);
+            thread.setName(stopTreadName);
+            thread.start();
         }
     }
 
