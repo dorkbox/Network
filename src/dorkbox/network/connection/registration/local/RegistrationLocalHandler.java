@@ -17,8 +17,6 @@ package dorkbox.network.connection.registration.local;
 
 import static dorkbox.network.connection.EndPointBase.maxShutdownWaitTimeInMilliSeconds;
 
-import org.slf4j.Logger;
-
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -50,14 +48,11 @@ class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler
         MetaChannel metaChannel = new MetaChannel();
         metaChannel.localChannel = channel;
 
-        this.registrationWrapper.addChannel(channel.hashCode(), metaChannel);
+        registrationWrapper.addChannel(channel.hashCode(), metaChannel);
 
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("New LOCAL connection.");
-        }
+        logger.trace("New LOCAL connection.");
 
-        this.registrationWrapper.connection0(metaChannel);
+        registrationWrapper.connection0(metaChannel);
     }
 
     @Override
@@ -65,10 +60,10 @@ class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler
     void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
         Channel channel = context.channel();
 
-        this.logger.error(
-                        "Unexpected exception while trying to receive data on LOCAL channel.  ({})" + System.getProperty("line.separator"),
-                        channel.remoteAddress(),
-                        cause);
+        logger.error("Unexpected exception while trying to receive data on LOCAL channel.  ({})" + System.getProperty("line.separator"),
+                     channel.remoteAddress(),
+                     cause);
+
         if (channel.isOpen()) {
             channel.close();
         }
@@ -86,7 +81,7 @@ class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler
     void channelInactive(ChannelHandlerContext context) throws Exception {
         Channel channel = context.channel();
 
-        this.logger.info("Closed LOCAL connection: {}", channel.remoteAddress());
+        logger.info("Closed LOCAL connection: {}", channel.remoteAddress());
 
         // also, once we notify, we unregister this.
         registrationWrapper.closeChannel(channel, maxShutdownWaitTimeInMilliSeconds);

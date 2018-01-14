@@ -50,10 +50,10 @@ class RegistrationLocalHandlerClient<C extends Connection> extends RegistrationL
         super.channelActive(context);
 
         Channel channel = context.channel();
-        this.logger.info("Connected to LOCAL connection. [{} ==> {}]",
-                         context.channel()
-                                .localAddress(),
-                         channel.remoteAddress());
+        logger.info("Connected to LOCAL connection. [{} ==> {}]",
+                    context.channel()
+                           .localAddress(),
+                    channel.remoteAddress());
 
         // client starts the registration process
         channel.writeAndFlush(new Registration());

@@ -23,7 +23,6 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.util.ReferenceCountUtil;
-import org.slf4j.Logger;
 
 public
 class RegistrationLocalHandlerServer<C extends Connection> extends RegistrationLocalHandler<C> {
@@ -48,10 +47,10 @@ class RegistrationLocalHandlerServer<C extends Connection> extends RegistrationL
     public
     void channelActive(ChannelHandlerContext context) throws Exception {
         Channel channel = context.channel();
-        this.logger.info("Connected to LOCAL connection. [{} <== {}]",
-                         context.channel()
-                                .localAddress(),
-                         channel.remoteAddress());
+        logger.info("Connected to LOCAL connection. [{} <== {}]",
+                    context.channel()
+                           .localAddress(),
+                    channel.remoteAddress());
 
 
         super.channelActive(context);
@@ -70,13 +69,10 @@ class RegistrationLocalHandlerServer<C extends Connection> extends RegistrationL
         channel.writeAndFlush(message);
 
         ReferenceCountUtil.release(message);
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("Sent registration");
-        }
+        logger.trace("Sent registration");
 
         ConnectionImpl connection = null;
-        MetaChannel metaChannel = this.registrationWrapper.removeChannel(channel.hashCode());
+        MetaChannel metaChannel = registrationWrapper.removeChannel(channel.hashCode());
         if (metaChannel != null) {
             connection = metaChannel.connection;
         }
@@ -99,7 +95,7 @@ class RegistrationLocalHandlerServer<C extends Connection> extends RegistrationL
             // have to setup connection handler
             pipeline.addLast(CONNECTION_HANDLER, connection);
 
-            this.registrationWrapper.connectionConnected0(connection);
+            registrationWrapper.connectionConnected0(connection);
         }
     }
 }
