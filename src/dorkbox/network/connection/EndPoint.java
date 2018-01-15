@@ -79,6 +79,7 @@ class EndPoint {
     protected final Class<? extends EndPoint> type;
 
     protected final Object shutdownInProgress = new Object();
+    private volatile boolean isShutdown = false;
 
     // the eventLoop groups are used to track and manage the event loops for startup/shutdown
     private final List<EventLoopGroup> eventLoopGroups = new ArrayList<EventLoopGroup>(8);
@@ -320,6 +321,8 @@ class EndPoint {
 
             // we also want to stop the thread group
             threadGroup.interrupt();
+
+            isShutdown = true;
         }
 
         // tell the blocked "bind" method that it may continue (and exit)
@@ -336,6 +339,16 @@ class EndPoint {
             blockUntilDone.await();
         } catch (InterruptedException e) {
             logger.error("Thread interrupted while waiting for stop!");
+        }
+    }
+
+    /**
+     * @return true if we have already shutdown, false otherwise
+     */
+    public final
+    boolean isShutdown() {
+        synchronized (shutdownInProgress) {
+            return isShutdown;
         }
     }
 
