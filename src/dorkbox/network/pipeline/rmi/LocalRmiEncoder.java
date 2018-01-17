@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.pipeline;
+package dorkbox.network.pipeline.rmi;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -29,6 +29,9 @@ import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
 
+/**
+ * This is for a LOCAL connection (same-JVM)
+ */
 @Sharable
 public
 class LocalRmiEncoder extends MessageToMessageEncoder<Object> {

@@ -13,11 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.pipeline;
+package dorkbox.network.pipeline.rmi;
 
+/**
+ * This is for a LOCAL connection (same-JVM)
+ */
 class LocalRmiClassEncoder {
     public Object rmiObject;
 
     // these are the "in order" rmi ID's for the fields of 'rmiObject'
     public int[] rmiFieldIds;
+
+    public
+    LocalRmiClassEncoder() {
+    }
 }

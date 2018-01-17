@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.pipeline;
+package dorkbox.network.pipeline.rmi;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -25,6 +25,9 @@ import dorkbox.network.rmi.Rmi;
 
 /**
  * Uses the "single writer principle" for fast access, but disregards 'single writer', because duplicates are OK
+ *
+ * This is for a LOCAL connection (same-JVM)
+ *
  */
 class RmiFieldCache {
     private volatile IdentityMap<Class<?>, Field[]> fieldCache = new IdentityMap<Class<?>, Field[]>();

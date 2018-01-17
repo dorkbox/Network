@@ -13,16 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.pipeline;
+package dorkbox.network.pipeline.rmi;
 
 import java.lang.reflect.Field;
 import java.util.List;
 
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.rmi.RemoteObject;
+import dorkbox.network.serialization.CryptoSerializationManager;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageDecoder;
 
+/**
+ * This is for a LOCAL connection (same-JVM)
+ */
 public
 class LocalRmiDecoder extends MessageToMessageDecoder<Object> {
 
@@ -69,9 +73,11 @@ class LocalRmiDecoder extends MessageToMessageDecoder<Object> {
                     }
 
 
-                    final Class<?> iface = connection.getEndPoint()
-                                                     .getSerialization()
-                                                     .getRmiIface(localRmiObject.getClass());
+                    CryptoSerializationManager serialization = connection.getEndPoint()
+                                                                         .getSerialization();
+
+                    // TODO: see what's up with this.
+                    final Class<?> iface = serialization.getRmiIface(localRmiObject.getClass());
                     if (iface == null) {
                         throw new RuntimeException("Unable to get interface for RMI implementation");
                     }

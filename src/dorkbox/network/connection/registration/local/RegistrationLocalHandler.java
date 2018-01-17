@@ -21,8 +21,8 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
-import dorkbox.network.pipeline.LocalRmiDecoder;
-import dorkbox.network.pipeline.LocalRmiEncoder;
+import dorkbox.network.pipeline.rmi.LocalRmiDecoder;
+import dorkbox.network.pipeline.rmi.LocalRmiEncoder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 
