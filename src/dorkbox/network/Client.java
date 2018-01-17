@@ -291,6 +291,10 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
         synchronized (shutdownInProgress) {
         }
 
+        if (isShutdown()) {
+            throw new IOException("Unable to connect when shutdown...");
+        }
+
         if (localChannelName != null) {
             logger.info("Connecting to local server: {}", localChannelName);
         }
