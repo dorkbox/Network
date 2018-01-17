@@ -116,15 +116,16 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> {
 
             if (!future.isSuccess()) {
                 Throwable cause = future.cause();
+                String errorMessage = "Connection refused  :" + bootstrapWrapper.address + " at " + bootstrapWrapper.type + " port: " + bootstrapWrapper.port;
+
                 if (cause instanceof java.net.ConnectException) {
                     if (cause.getMessage()
                              .contains("refused")) {
-                        String errorMessage = "Connection refused to the " + bootstrapWrapper.type + " server at " + bootstrapWrapper.address + " on port: " + bootstrapWrapper.port;
-                        logger.error(errorMessage, cause);
+                        // extra space here is so it aligns with "Connecting to server:"
+                        logger.error(errorMessage);
                     }
 
                 } else {
-                    String errorMessage = "Connection failed to the " + bootstrapWrapper.type + " server at " + bootstrapWrapper.address + " on port: " + bootstrapWrapper.port;
                     logger.error(errorMessage, cause);
                 }
 
