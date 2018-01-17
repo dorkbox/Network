@@ -50,7 +50,7 @@ import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -64,10 +64,10 @@ class RmiGlobalTest extends BaseTest {
     private final TestCow globalRemoteClientObject = new TestCowImpl();
 
     private static
-    void runTest(final Connection connection, final TestCow rObject, final TestCow test, final int remoteObjectID) {
+    void runTest(final Connection connection, final TestCow globalObject, final TestCow test, final int remoteObjectID) {
         System.err.println("Starting test for: " + remoteObjectID);
 
-        assertEquals(rObject.hashCode(), test.hashCode());
+        assertEquals(globalObject.hashCode(), test.hashCode());
         RemoteObject remoteObject = (RemoteObject) test;
 
         // Default behavior. RMI is transparent, method calls behave like normal
@@ -110,7 +110,7 @@ class RmiGlobalTest extends BaseTest {
         try {
             test.throwException();
         } catch (UnsupportedOperationException ex) {
-            System.err.println("\tExpected.");
+            System.err.println("\tExpected exception! " + ex.getMessage());
             caught = true;
         }
         assertTrue(caught);
@@ -195,15 +195,14 @@ class RmiGlobalTest extends BaseTest {
         configuration.udpPort = udpPort;
         configuration.host = host;
 
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
-        // for Server -> Client RMI (ID: CLIENT_GLOBAL_OBJECT_ID)
+        // for Server -> Client RMI (ID: CLIENT_GLOBAL_OBJECT_ID) - NOTICE: none of the super classes/interfaces are registered!
         configuration.serialization.registerRmiInterface(TestCow.class);
 
-        // for Client -> Server RMI (ID: SERVER_GLOBAL_OBJECT_ID)
+        // for Client -> Server RMI (ID: SERVER_GLOBAL_OBJECT_ID) - NOTICE: none of the super classes/interfaces are registered!
         configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
-
 
         final Server server = new Server(configuration);
         server.setIdleTimeout(0);
@@ -267,7 +266,7 @@ class RmiGlobalTest extends BaseTest {
         configuration.udpPort = udpPort;
         configuration.host = host;
 
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
         // for Server -> Client RMI (ID: CLIENT_GLOBAL_OBJECT_ID)

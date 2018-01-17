@@ -20,6 +20,7 @@ import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Serializer;
 
 import dorkbox.network.connection.KryoExtra;
+import dorkbox.network.rmi.CachedMethod;
 import dorkbox.util.SerializationManager;
 
 public
@@ -95,31 +96,6 @@ interface RmiSerializationManager extends SerializationManager {
     void returnKryo(KryoExtra kryo);
 
     /**
-     * Gets the RMI interface based on the specified ID (which is the ID for the registered implementation)
-     *
-     * @param objectId ID of the registered interface, which will map to the corresponding implementation.
-     *
-     * @return the implementation for the interface, or null
-     */
-    Class<?> getRmiIface(int objectId);
-
-    /**
-     * Gets the RMI implementation based on the specified ID (which is the ID for the registered interface)
-     *
-     * @param objectId ID of the registered interface, which will map to the corresponding implementation.
-     *
-     * @return the implementation for the interface, or null
-     */
-    Class<?> getRmiImpl(int objectId);
-
-    /**
-     * Gets the RMI implementation based on the specified interface
-     *
-     * @return the corresponding implementation
-     */
-    Class<?> getRmiImpl(Class<?> iface);
-
-    /**
      * Gets the RMI interface based on the specified implementation
      *
      * @return the corresponding interface
@@ -151,4 +127,9 @@ interface RmiSerializationManager extends SerializationManager {
      * @throws IllegalArgumentException if the iface/impl have previously been overridden
      */
     <Iface, Impl extends Iface> RmiSerializationManager registerRmiImplementation(Class<Iface> ifaceClass, Class<Impl> implClass);
+
+    /**
+     * Gets the cached methods for the specified class ID
+     */
+    CachedMethod[] getMethods(int classID);
 }

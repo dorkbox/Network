@@ -48,10 +48,13 @@ import org.slf4j.LoggerFactory;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.serialization.RmiSerializationManager;
 
 /**
  * Handles network communication when methods are invoked on a proxy.
+ * <p>
+ * The only methods than can be invoked are INTERFACE methods and OBJECT methods
  */
 class RmiProxyHandler implements InvocationHandler {
     private final Logger logger;
@@ -63,7 +66,11 @@ class RmiProxyHandler implements InvocationHandler {
     private final boolean[] pendingResponses = new boolean[64];
 
     private final Connection connection;
-    public final int objectID;
+    private final Class<?> iFace;
+    public final int objectID; // this is the RMI id
+    public final int ID; // this is the KRYO id
+
+
     private final String proxyString;
     private final RemoteInvocationResponse<Connection> responseListener;
 
@@ -80,14 +87,34 @@ class RmiProxyHandler implements InvocationHandler {
     private Byte lastResponseID;
     private byte nextResponseId = (byte) 1;
 
-    RmiProxyHandler(final Connection connection, final int objectID) {
+    /**
+     * @param connection this is really the network client -- there is ONLY ever 1 connection
+     * @param objectID this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
+     * @param iFace this is the RMI interface
+     */
+    RmiProxyHandler(final Connection connection, final int objectID, final Class<?> iFace) {
         super();
 
         this.connection = connection;
+        this.iFace = iFace;
         this.objectID = objectID;
         this.proxyString = "<proxy #" + objectID + ">";
 
-        logger = LoggerFactory.getLogger(connection.getEndPoint().getName() + ":" + this.getClass().getSimpleName());
+        EndPointBase endPointBaseConnection = this.connection.getEndPoint();
+        final RmiSerializationManager serializationManager = endPointBaseConnection.getSerialization();
+
+        KryoExtra kryoExtra = null;
+        try {
+            kryoExtra = serializationManager.takeKryo();
+            this.ID = kryoExtra.getRegistration(iFace)
+                          .getId();
+        } finally {
+            if (kryoExtra != null) {
+                serializationManager.returnKryo(kryoExtra);
+            }
+        }
+
+        this.logger = LoggerFactory.getLogger(connection.getEndPoint().getName() + ":" + this.getClass().getSimpleName());
 
 
         this.responseListener = new RemoteInvocationResponse<Connection>() {
@@ -195,39 +222,18 @@ class RmiProxyHandler implements InvocationHandler {
             return proxyString;
         }
 
-        EndPointBase endPointBaseConnection = this.connection.getEndPoint();
-        final RmiSerializationManager serializationManager = endPointBaseConnection.getSerialization();
-
         InvokeMethod invokeMethod = new InvokeMethod();
         invokeMethod.objectID = this.objectID;
         invokeMethod.args = args;
 
-
         // which method do we access?
-        CachedMethod[] cachedMethods = CachedMethod.getMethods(serializationManager, method.getDeclaringClass(), invokeMethod.objectID);
+        CachedMethod[] cachedMethods = connection.getEndPoint()
+                                                 .getSerialization()
+                                                 .getMethods(ID);
 
         for (int i = 0, n = cachedMethods.length; i < n; i++) {
             CachedMethod cachedMethod = cachedMethods[i];
-            Method checkMethod = cachedMethod.origMethod;
-            if (checkMethod == null) {
-                checkMethod = cachedMethod.method;
-            }
-
-            // In situations where we want to pass in the Connection (to an RMI method), we have to be able to override method A, with method B.
-            // This is to support calling RMI methods from an interface (that does pass the connection reference) to
-            // an implType, that DOES pass the connection reference. The remote side (that initiates the RMI calls), MUST use
-            // the interface, and the implType may override the method, so that we add the connection as the first in
-            // the list of parameters.
-            //
-            // for example:
-            // Interface: foo(String x)
-            //      Impl: foo(Connection c, String x)
-            //
-            // The implType (if it exists, with the same name, and with the same signature+connection) will be called from the interface.
-            // This MUST hold valid for both remote and local connection types.
-
-            // To facilitate this functionality, for methods with the same name, the "overriding" method is the one that inherits the Connection
-            // interface as the first parameter, and  .registerRemote(ifaceClass, implClass)  must be called.
+            Method checkMethod = cachedMethod.method;
 
             if (checkMethod.equals(method)) {
                 invokeMethod.cachedMethod = cachedMethod;

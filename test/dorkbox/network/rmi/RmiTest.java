@@ -50,7 +50,7 @@ import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -167,6 +167,7 @@ class RmiTest extends BaseTest {
                   .TCP(m)
                   .flush();
 
+        System.out.println("Finished tests");
     }
 
     public static
@@ -184,7 +185,7 @@ class RmiTest extends BaseTest {
         configuration.udpPort = udpPort;
         configuration.host = host;
 
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
         // for Client -> Server RMI (ID 1)
@@ -248,7 +249,7 @@ class RmiTest extends BaseTest {
         configuration.udpPort = udpPort;
         configuration.host = host;
 
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
         // for Client -> Server RMI (ID 1)

@@ -40,6 +40,8 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import dorkbox.network.connection.KryoExtra;
+
 /**
  * Internal message to invoke methods remotely.
  */
@@ -84,38 +86,60 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
     @Override
     public
     InvokeMethod read(final Kryo kryo, final Input input, final Class<InvokeMethod> type) {
-        InvokeMethod invokeMethod = new InvokeMethod();
-
-        invokeMethod.objectID = input.readInt(true);
-
+        int objectID = input.readInt(true);
         int methodClassID = input.readInt(true);
-        Class<?> methodClass = kryo.getRegistration(methodClassID)
-                                       .getType();
-
         byte methodIndex = input.readByte();
+
+        // System.err.println(":: objectID " + objectID);
+        // System.err.println(":: methodClassID " + methodClassID);
+        // System.err.println(":: methodIndex " + methodIndex);
+
         CachedMethod cachedMethod;
         try {
-            cachedMethod = CachedMethod.getMethods(kryo, methodClass, methodClassID)[methodIndex];
-            invokeMethod.cachedMethod = cachedMethod;
-        } catch (IndexOutOfBoundsException ex) {
+            cachedMethod = ((KryoExtra) kryo).getSerializationManager().getMethods(methodClassID)[methodIndex];
+        } catch (Exception ex) {
+            Class<?> methodClass = kryo.getRegistration(methodClassID)
+                                       .getType();
             throw new KryoException("Invalid method index " + methodIndex + " for class: " + methodClass.getName());
         }
 
-        Serializer<?>[] serializers = cachedMethod.serializers;
-        Class<?>[] parameterTypes = cachedMethod.method.getParameterTypes();
-        Object[] args = new Object[serializers.length];
-        invokeMethod.args = args;
 
-        for (int i = 0, n = args.length; i < n; i++) {
+        Object[] args;
+        Serializer<?>[] serializers = cachedMethod.serializers;
+
+        int argStartIndex;
+
+        if (cachedMethod.overriddenMethod) {
+            // did we override our cached method? This is not common.
+            // this is specifically when we override an interface method, with an implementation method + Connection parameter (@ index 0)
+            argStartIndex = 1;
+
+            args = new Object[serializers.length + 1];
+            args[0] = ((KryoExtra) kryo).connection;
+        }
+        else {
+            argStartIndex = 0;
+            args = new Object[serializers.length];
+        }
+
+        Class<?>[] parameterTypes = cachedMethod.method.getParameterTypes();
+
+        for (int i = 0, n = serializers.length, j = argStartIndex; i < n; i++, j++) {
             Serializer<?> serializer = serializers[i];
+
             if (serializer != null) {
-                args[i] = kryo.readObjectOrNull(input, parameterTypes[i], serializer);
+                args[j] = kryo.readObjectOrNull(input, parameterTypes[i], serializer);
             }
             else {
-                args[i] = kryo.readClassAndObject(input);
+                args[j] = kryo.readClassAndObject(input);
             }
         }
 
+
+        InvokeMethod invokeMethod = new InvokeMethod();
+        invokeMethod.objectID = objectID;
+        invokeMethod.cachedMethod = cachedMethod;
+        invokeMethod.args = args;
         invokeMethod.responseData = input.readByte();
 
         return invokeMethod;

@@ -36,7 +36,7 @@ import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.network.store.NullSettingsStore;
 import dorkbox.network.store.SettingsStore;
 import dorkbox.util.Property;
@@ -135,7 +135,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
         if (config.serialization != null) {
             serializationManager = config.serialization;
         } else {
-            serializationManager = SerializationManager.DEFAULT();
+            serializationManager = Serialization.DEFAULT();
         }
 
         // setup our RMI serialization managers. Can only be called once

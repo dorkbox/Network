@@ -24,16 +24,9 @@ import java.lang.annotation.Target;
 /**
  * This specifies to the serializer, that this class contains an RMI object, and that a specific field is an RMI object. Both are
  * necessary.
- * <p/>
- * Additional behavior of RMI methods, is if there is another method (of the same name and signature), with the addition of a Connection
- * parameter in the first position, THAT method will be called instead, an will have the current connection object passed into the method.
- * <p/>
- * It is mandatory for the correct implementation (as per the interface guideline) to exist, and should return null.
- * <p/>
- * IE: foo(String something)...  ->  foo(Connection connection, String something)....
  */
 @Retention(value = RetentionPolicy.RUNTIME)
 @Inherited
-@Target(value = {ElementType.TYPE, ElementType.FIELD})
+@Target(value = {ElementType.FIELD})
 public
 @interface Rmi {}

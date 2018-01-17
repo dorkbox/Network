@@ -1,17 +1,11 @@
 package dorkbox.network.rmi;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 /**
  *
  */
 public
-class TestCowImpl implements TestCow {
-    // has to start at 1, because UDP method invocations ignore return values
-    static final AtomicInteger ID_COUNTER = new AtomicInteger(1);
-
-    public long value = System.currentTimeMillis();
-    public int moos;
+class TestCowImpl extends TestCowBaseImpl implements TestCow {
+    private int moos;
     private final int id = ID_COUNTER.getAndIncrement();
 
     public
@@ -20,29 +14,23 @@ class TestCowImpl implements TestCow {
 
     @Override
     public
-    void throwException() {
-        throw new UnsupportedOperationException("Why would I do that?");
-    }
-
-    @Override
-    public
     void moo() {
         this.moos++;
-        System.out.println("Moo!");
+        System.out.println("Moo! " + this.moos);
     }
 
     @Override
     public
     void moo(String value) {
         this.moos += 2;
-        System.out.println("Moo: " + value);
+        System.out.println("Moo! " + this.moos + " :" + value);
     }
 
     @Override
     public
     void moo(String value, long delay) {
         this.moos += 4;
-        System.out.println("Moo: " + value + " (" + delay + ")");
+        System.out.println("Moo! " + this.moos + " :" + value + " (" + delay + ")");
         try {
             Thread.sleep(delay);
         } catch (InterruptedException e) {

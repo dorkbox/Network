@@ -28,7 +28,7 @@ import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -43,7 +43,7 @@ class ClientSendTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
         Server server = new Server(configuration);

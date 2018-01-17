@@ -19,7 +19,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.RmiTest;
 import dorkbox.network.rmi.TestCow;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import io.netty.util.ResourceLeakDetector;
 
 /**
@@ -82,13 +82,13 @@ class TestClient
         configuration.udpPort = 2001;
         configuration.host = "localhost";
 
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         RmiTest.register(configuration.serialization);
         configuration.serialization.registerRmiInterface(TestCow.class);
 
 
         try {
-            Client client = new Client(configuration);
+            final Client client = new Client(configuration);
             // client.setIdleTimeout(0);
 
             client.listeners()
@@ -110,7 +110,15 @@ class TestClient
                                           public
                                           void run() {
                                               RmiTest.runTests(connection, remoteObject, 1);
+
+                                              try {
+                                                  Thread.sleep(1000L);
+                                              } catch (InterruptedException e) {
+                                                  e.printStackTrace();
+                                              }
+
                                               System.err.println("DONE");
+                                              client.stop();
                                           }
                                       }.start();
                                   }
@@ -124,7 +132,7 @@ class TestClient
 
             client.connect(3330);
 
-            Thread.sleep(999999999);
+            client.waitForShutdown();
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -27,7 +27,17 @@ import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
 
 /**
+ * from: https://blog.cloudflare.com/how-the-consumer-product-safety-commission-is-inadvertently-behind-the-internets-largest-ddos-attacks/
  *
+ * NOTE: CloudFlare has anti-DNS reflection protections in place. Specifically, we automatically upgrade from UDP to TCP when a DNS response
+ * is particularly large (generally, over 512 bytes). Since TCP requires a handshake, it prevents source IP address spoofing which is
+ * necessary for a DNS amplification attack.
+ *
+ * In addition, we rate limit unknown resolvers. Again, this helps ensure that our infrastructure can't be abused to amplify attacks.
+ *
+ * Finally, across our DNS infrastructure we have deprecated ANY queries and have proposed to the IETF to restrict ANY queries to only
+ * authorized parties. By neutering ANY, we've significantly reduced the maximum size of responses even for zone files that need to be
+ * large due to a large number of records.
  */
 public
 class DnsServer extends EndPoint {

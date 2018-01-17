@@ -35,32 +35,18 @@
 package dorkbox.network.rmi;
 
 import com.esotericsoftware.reflectasm.MethodAccess;
-import dorkbox.network.connection.Connection;
 
-import java.lang.reflect.InvocationTargetException;
+import dorkbox.network.connection.Connection;
 
 public
 class AsmCachedMethod extends CachedMethod {
+    public String name;
     public MethodAccess methodAccess;
     public int methodAccessIndex = -1;
 
     @Override
     public
-    Object invoke(final Connection connection, Object target, Object[] args) throws IllegalAccessException, InvocationTargetException {
-        try {
-            if (origMethod == method) {
-                return this.methodAccess.invoke(target, this.methodAccessIndex, args);
-            }
-            else {
-                int length = args.length;
-                Object[] newArgs = new Object[length + 1];
-                newArgs[0] = connection;
-                System.arraycopy(args, 0, newArgs, 1, length);
-
-                return this.methodAccess.invoke(target, this.methodAccessIndex, newArgs);
-            }
-        } catch (Exception ex) {
-            throw new InvocationTargetException(ex);
-        }
+    Object invoke(final Connection connection, Object target, Object[] args) {
+        return this.methodAccess.invoke(target, this.methodAccessIndex, args);
     }
 }

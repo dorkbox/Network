@@ -68,21 +68,18 @@ import dorkbox.util.collections.ObjectIntMap;
  * <p/>
  * <p/>
  * In situations where we want to pass in the Connection (to an RMI method), we have to be able to override method A, with method B.
- * <p/>
- * This is to support calling RMI methods from an interface (that does pass the connection reference) to an implementation, that DOES pass
- * the connection reference. The remote side (that initiates the RMI calls), MUST use the interface, and the implementation may override the
- * method, so that we add the connection as the first in the list of parameters.
+ * This is to support calling RMI methods from an interface (that does pass the connection reference) to
+ * an implType, that DOES pass the connection reference. The remote side (that initiates the RMI calls), MUST use
+ * the interface, and the implType may override the method, so that we add the connection as the first in
+ * the list of parameters.
  * <p/>
  * for example:
- *   Interface: foo(String x)
- *   Impl: foo(Connection c, String x)
+ * Interface: foo(String x)
+ *      Impl: foo(Connection c, String x)
  * <p/>
- * The implementation (if it exists, with the same name, and with the same signature+connection) will be called from the interface. This
- * MUST hold valid for both remote and local connection types.
- *
- * To facilitate this functionality, for methods with the same name, the "overriding" method is the one that inherits the Connection
- * interface as the first parameter, and  CachedMethod.registerOverridden(ifaceClass, implClass)  must be called.
- *
+ * The implType (if it exists, with the same name, and with the same signature + connection parameter) will be called from the interface
+ * instead of the method that would NORMALLY be called.
+ * <p/>
  *
  * @author Nathan Sweet <misc@n4te.com>, Nathan Robinson
  */
@@ -199,6 +196,8 @@ class RmiBridge {
      * Invokes the method on the object and, if necessary, sends the result back to the connection that made the invocation request. This
      * method is invoked on the update thread of the {@link EndPointBase} for this RmiBridge and unless an executor has been set.
      *
+     * This is the response to the invoke method in the RmiProxyHandler
+     *
      * @param connection
      *                 The remote side of this connection requested the invocation.
      */
@@ -229,7 +228,8 @@ class RmiBridge {
                          .append(argString)
                          .append(")");
 
-            if (cachedMethod.origMethod != null) {
+            if (cachedMethod.overriddenMethod) {
+                // did we override our cached method? This is not common.
                 stringBuilder.append(" [Connection method override]");
             }
             logger2.trace(stringBuilder.toString());
@@ -259,8 +259,10 @@ class RmiBridge {
                 result = cause;
             }
             else {
-                throw new IOException("Error invoking method: " + cachedMethod.method.getDeclaringClass()
-                                                                                     .getName() + "." + cachedMethod.method.getName(), ex);
+                String message = "Error invoking method: " + cachedMethod.method.getDeclaringClass()
+                                                                                .getName() + "." + cachedMethod.method.getName();
+                logger.error(message, ex);
+                throw new IOException(message, ex);
             }
         }
 
@@ -439,6 +441,9 @@ class RmiBridge {
         if (iface == null) {
             throw new IllegalArgumentException("iface cannot be null.");
         }
+        if (!iface.isInterface()) {
+            throw new IllegalArgumentException("iface must be an interface.");
+        }
 
         Class<?>[] temp = new Class<?>[2];
         temp[0] = RemoteObject.class;
@@ -446,6 +451,6 @@ class RmiBridge {
 
         return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(),
                                                      temp,
-                                                     new RmiProxyHandler(connection, objectID));
+                                                     new RmiProxyHandler(connection, objectID, iface));
     }
 }

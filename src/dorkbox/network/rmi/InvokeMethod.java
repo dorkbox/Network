@@ -40,7 +40,7 @@ package dorkbox.network.rmi;
  */
 public
 class InvokeMethod implements RmiMessages {
-    public int objectID;
+    public int objectID; // the registered kryo ID for the object
     public CachedMethod cachedMethod;
     public Object[] args;
 

@@ -27,8 +27,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.slf4j.Logger;
 
-import com.esotericsoftware.kryo.Registration;
-
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
@@ -44,7 +42,7 @@ import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.Rmi;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.rmi.RmiRegistration;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.RmiSerializationManager;
 import dorkbox.util.collections.IntMap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -947,70 +945,93 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         TCP(message).flush();
     }
 
+    private
+    void collectRmiFields(final RmiBridge rmiBridge,
+                          final LinkedList<ClassObject> classesToCheck, final ClassObject remoteClassObject, final Field[] fields) {
+
+
+    }
+
     final
     void registerInternal(final ConnectionImpl connection, final RmiRegistration remoteRegistration) {
         final Class<?> interfaceClass = remoteRegistration.interfaceClass;
         final int rmiID = remoteRegistration.rmiID;
 
         if (interfaceClass != null) {
-            // THIS IS ON THE REMOTE CONNECTION (where the object will really exist)
+            // THIS IS ON THE REMOTE CONNECTION (where the object will really exist as an implementation)
             //
             // CREATE a new ID, and register the ID and new object (must create a new one) in the object maps
-            Class<?> implementationClass;
 
-            // have to find the implementation from the specified interface
-            CryptoSerializationManager manager = getEndPoint().serializationManager;
-            KryoExtra kryo = manager.takeKryo();
-            Registration registration = kryo.getRegistration(interfaceClass);
+            // the interface class kryo ID == implementation class kryo ID, so they switcheroo automatically.
+            final Class<?> implementationClass = interfaceClass;
 
+            final RmiSerializationManager manager = getEndPoint().serializationManager;
 
-            if (registration == null) {
-                // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
-                manager.returnKryo(kryo);
-
-                logger.error("Error getting RMI class interface for " + interfaceClass);
-                connection.TCP(new RmiRegistration(rmiID)).flush();
+            KryoExtra kryo = null;
+            final Object remotePrimaryObject;
+            try {
+                kryo = manager.takeKryo();
+                // this is what creates a new instance of the impl class, and stores it as an ID.
+                remotePrimaryObject = kryo.newInstance(implementationClass);
+            } catch (Exception e) {
+                logger.error("Error creating RMI class " + implementationClass, e);
+                connection.TCP(new RmiRegistration(rmiID))
+                          .flush();
                 return;
+            } finally {
+                if (kryo != null) {
+                    // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
+                    manager.returnKryo(kryo);
+                }
             }
 
-
-            implementationClass = manager.getRmiImpl(registration.getId());
-            if (implementationClass == null) {
-                // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
-                manager.returnKryo(kryo);
-
-                logger.error("Error getting RMI class implementation for " + interfaceClass);
-                connection.TCP(new RmiRegistration(rmiID)).flush();
-                return;
-            }
 
             try {
-                // this is what creates a new instance of the impl class, and stores it as an ID.
-                final Object remotePrimaryObject = kryo.newInstance(implementationClass);
-
-                // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
-                manager.returnKryo(kryo);
-
                 rmiBridge.register(rmiBridge.nextObjectId(), remotePrimaryObject);
 
-                LinkedList<ClassObject> remoteClasses = new LinkedList<ClassObject>();
-                remoteClasses.add(new ClassObject(implementationClass, remotePrimaryObject));
+
+                // the @Rmi annotation allows an RMI object to have fields with objects that are ALSO RMI
+                LinkedList<ClassObject> classesToCheck = new LinkedList<ClassObject>();
+                classesToCheck.add(new ClassObject(implementationClass, remotePrimaryObject));
 
                 ClassObject remoteClassObject;
-                while ((remoteClassObject = remoteClasses.pollFirst()) != null) {
-                    // we have to check for any additional fields that will have proxy information
+                while (!classesToCheck.isEmpty()) {
+                    remoteClassObject = classesToCheck.removeFirst();
+
+                    // we have to check the IMPLEMENTATION for any additional fields that will have proxy information.
+                    // we use getDeclaredFields() + walking the object hierarchy, so we get ALL the fields possible.
                     for (Field field : remoteClassObject.clazz.getDeclaredFields()) {
                         if (field.getAnnotation(Rmi.class) != null) {
-                            boolean prev = field.isAccessible();
-                            field.setAccessible(true);
-                            final Object o = field.get(remoteClassObject.object);
-                            field.setAccessible(prev);
-
                             final Class<?> type = field.getType();
 
-                            rmiBridge.register(rmiBridge.nextObjectId(), o);
-                            remoteClasses.offerLast(new ClassObject(type, o));
+                            if (!type.isInterface()) {
+                                // the type must be an interface, otherwise RMI cannot create a proxy object
+                                logger.error("Error checking RMI fields for: {}.{} -- It is not an interface!", remoteClassObject.clazz, field.getName());
+                                continue;
+                            }
+
+
+                            boolean prev = field.isAccessible();
+                            field.setAccessible(true);
+                            final Object o;
+                            try {
+                                o = field.get(remoteClassObject.object);
+
+                                rmiBridge.register(rmiBridge.nextObjectId(), o);
+                                classesToCheck.add(new ClassObject(type, o));
+                            } catch (IllegalAccessException e) {
+                                logger.error("Error checking RMI fields for: {}.{}", remoteClassObject.clazz, field.getName(), e);
+                            } finally {
+                                field.setAccessible(prev);
+                            }
                         }
+                    }
+
+
+                    // have to check the object hierarchy as well
+                    Class<?> superclass = remoteClassObject.clazz.getSuperclass();
+                    if (superclass != null && superclass != Object.class) {
+                        classesToCheck.add(new ClassObject(superclass, remoteClassObject.object));
                     }
                 }
 
@@ -1021,7 +1042,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             }
         }
         else if (remoteRegistration.remoteObjectId > RmiBridge.INVALID_RMI) {
-            // THIS IS ON THE REMOTE CONNECTION (where the object will really exist)
+            // THIS IS ON THE REMOTE CONNECTION (where the object implementation will really exist)
             //
             // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
             Object object = getImplementationObject(remoteRegistration.remoteObjectId);
@@ -1057,8 +1078,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     /**
      * Used by RMI
      *
-     * @return the registered ID for a specific object. This is used by the "local" side when setting up the to fetch an object for the
-     * "remote" side for RMI
+     * @return the registered ID for a specific object. This is used by the "client" side when setting up the to fetch an object for the
+     * "service" side for RMI
      */
     @Override
     public
@@ -1070,17 +1091,18 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             throw new NullPointerException("Unable to call 'getRegisteredId' when the globalRmiBridge is null!");
         }
 
-        int object1 = globalRmiBridge.getRegisteredId(object);
-        if (object1 == Integer.MAX_VALUE) {
+        int objectId = globalRmiBridge.getRegisteredId(object);
+        if (objectId == Integer.MAX_VALUE) {
             return rmiBridge.getRegisteredId(object);
         } else {
-            return object1;
+            return objectId;
         }
     }
 
     /**
-     * Used by RMI for the LOCAL side, to get the proxy object as an interface
+     * Used by RMI for the CLIENT side, to get the proxy object as an interface
      *
+     * @param objectID is the RMI object ID
      * @param type must be the interface the proxy will bind to
      */
     @Override

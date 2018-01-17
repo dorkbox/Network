@@ -48,10 +48,9 @@ import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import dorkbox.util.serialization.IgnoreSerialization;
 
 @SuppressWarnings("Duplicates")
 public
@@ -68,7 +67,7 @@ class RmiSendObjectTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.host = host;
 
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         configuration.serialization.registerRmiImplementation(TestObject.class, TestObjectImpl.class);
         configuration.serialization.registerRmiImplementation(OtherObject.class, OtherObjectImpl.class);
 
@@ -103,7 +102,7 @@ class RmiSendObjectTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.host = host;
 
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         configuration.serialization.registerRmiInterface(TestObject.class);
         configuration.serialization.registerRmiInterface(OtherObject.class);
 
@@ -180,8 +179,7 @@ class RmiSendObjectTest extends BaseTest {
 
     private static
     class TestObjectImpl implements TestObject {
-        @IgnoreSerialization
-        private final int ID = idCounter.getAndIncrement();
+        private final transient int ID = idCounter.getAndIncrement();
 
         @Rmi
         private final OtherObject otherObject = new OtherObjectImpl();
@@ -216,8 +214,7 @@ class RmiSendObjectTest extends BaseTest {
 
     private static
     class OtherObjectImpl implements OtherObject {
-        @IgnoreSerialization
-        private final int ID = idCounter.getAndIncrement();
+        private final transient int ID = idCounter.getAndIncrement();
 
         private float aFloat;
 

@@ -32,7 +32,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -54,7 +54,7 @@ class UnregisteredClassTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = SerializationManager.DEFAULT(false, false, true);
+        configuration.serialization = Serialization.DEFAULT(false, false, true, null);
 
 
         System.err.println("Running test " + this.tries + " times, please wait for it to finish.");

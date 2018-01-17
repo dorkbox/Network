@@ -4,9 +4,7 @@ package dorkbox.network.rmi;
  *
  */
 public
-interface TestCow {
-    void throwException();
-
+interface TestCow extends TestCowBase {
     void moo();
 
     void moo(String value);

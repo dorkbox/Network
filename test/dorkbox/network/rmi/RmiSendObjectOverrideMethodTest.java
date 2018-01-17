@@ -29,10 +29,9 @@ import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
-import dorkbox.util.serialization.IgnoreSerialization;
 
 @SuppressWarnings("Duplicates")
 public
@@ -48,21 +47,18 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
      *
      * Specifically, from CachedMethod.java
      *
-     // In situations where we want to pass in the Connection (to an RMI method), we have to be able to override method A, with method B.
-     // This is to support calling RMI methods from an interface (that does pass the connection reference) to
-     // an implType, that DOES pass the connection reference. The remote side (that initiates the RMI calls), MUST use
-     // the interface, and the implType may override the method, so that we add the connection as the first in
-     // the list of parameters.
-     //
-     // for example:
-     // Interface: foo(String x)
-     //      Impl: foo(Connection c, String x)
-     //
-     // The implType (if it exists, with the same name, and with the same signature+connection) will be called from the interface.
-     // This MUST hold valid for both remote and local connection types.
-
-     // To facilitate this functionality, for methods with the same name, the "overriding" method is the one that inherits the Connection
-     // interface as the first parameter, and  .registerRemote(ifaceClass, implClass)  must be called.
+     * In situations where we want to pass in the Connection (to an RMI method), we have to be able to override method A, with method B.
+     * This is to support calling RMI methods from an interface (that does pass the connection reference) to
+     * an implType, that DOES pass the connection reference. The remote side (that initiates the RMI calls), MUST use
+     * the interface, and the implType may override the method, so that we add the connection as the first in
+     * the list of parameters.
+     *
+     * for example:
+     * Interface: foo(String x)
+     *      Impl: foo(Connection c, String x)
+     *
+     * The implType (if it exists, with the same name, and with the same signature + connection parameter) will be called from the interface
+     * instead of the method that would NORMALLY be called.
      */
     @Test
     public
@@ -71,7 +67,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.host = host;
 
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         configuration.serialization.registerRmiImplementation(TestObject.class, TestObjectImpl.class);
         configuration.serialization.registerRmiImplementation(OtherObject.class, OtherObjectImpl.class);
 
@@ -81,7 +77,6 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
 
         addEndPoint(server);
         server.bind(false);
-
 
         server.listeners()
               .add(new Listener.OnMessageReceived<Connection, OtherObjectImpl>() {
@@ -105,7 +100,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.host = host;
 
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         configuration.serialization.registerRmiInterface(TestObject.class);
         configuration.serialization.registerRmiInterface(OtherObject.class);
 
@@ -124,7 +119,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
                               @Override
                               public
                               void created(final TestObject remoteObject) {
-                              // MUST run on a separate thread because remote object method invocations are blocking
+                                  // MUST run on a separate thread because remote object method invocations are blocking
                                   new Thread() {
                                       @Override
                                       public
@@ -190,8 +185,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
 
     private static
     class TestObjectImpl implements TestObject {
-        @IgnoreSerialization
-        private final int ID = idCounter.getAndIncrement();
+        private final transient int ID = idCounter.getAndIncrement();
 
         @Rmi
         private final OtherObject otherObject = new OtherObjectImpl();
@@ -241,8 +235,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
 
     private static
     class OtherObjectImpl implements OtherObject {
-        @IgnoreSerialization
-        private final int ID = idCounter.getAndIncrement();
+        private final transient int ID = idCounter.getAndIncrement();
 
         private float aFloat;
 

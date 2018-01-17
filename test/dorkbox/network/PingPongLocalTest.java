@@ -30,7 +30,7 @@ import org.junit.Test;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -47,7 +47,7 @@ class PingPongLocalTest extends BaseTest {
         populateData(dataLOCAL);
 
         Configuration configuration = Configuration.localOnly();
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
 

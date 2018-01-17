@@ -36,7 +36,7 @@ import dorkbox.network.connection.idle.IdleListener;
 import dorkbox.network.connection.idle.IdleListenerTCP;
 import dorkbox.network.connection.idle.IdleListenerUDP;
 import dorkbox.network.connection.idle.InputStreamSender;
-import dorkbox.network.serialization.SerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -60,7 +60,7 @@ class IdleTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = SerializationManager.DEFAULT(false, false, true);
+        configuration.serialization = Serialization.DEFAULT(false, false, true, null);
 
         streamSpecificType(largeDataSize, configuration, ConnectionType.TCP);
 
@@ -70,7 +70,7 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = SerializationManager.DEFAULT(false, false, true);
+        configuration.serialization = Serialization.DEFAULT(false, false, true, null);
 
         streamSpecificType(largeDataSize, configuration, ConnectionType.UDP);
     }
@@ -89,7 +89,7 @@ class IdleTest extends BaseTest {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
@@ -100,7 +100,7 @@ class IdleTest extends BaseTest {
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
-        configuration.serialization = SerializationManager.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
