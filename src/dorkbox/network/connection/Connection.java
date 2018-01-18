@@ -15,8 +15,6 @@
  */
 package dorkbox.network.connection;
 
-import java.io.IOException;
-
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
@@ -117,10 +115,10 @@ interface Connection {
      *
      * @see RemoteObject
      */
-    <Iface> void getRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) throws IOException;
+    <Iface> void createRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback);
 
     /**
-     * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
+     * Tells the remote connection to access an already created proxy object that implements the specified interface. The methods on this object "map"
      * to an object that is created remotely.
      * <p>
      * The callback will be notified when the remote object has been created.
@@ -141,5 +139,5 @@ interface Connection {
      *
      * @see RemoteObject
      */
-    <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) throws IOException;
+    <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback);
 }

@@ -417,8 +417,13 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     @Override
     public
-    <Iface> void getRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) throws IOException {
-        connectionManager.getConnection0().getRemoteObject(interfaceClass, callback);
+    <Iface> void createRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) {
+        try {
+            C connection0 = connectionManager.getConnection0();
+            connection0.createRemoteObject(interfaceClass, callback);
+        } catch (IOException e) {
+            logger.error("Error creating remote object!", e);
+        }
     }
 
     /**
@@ -445,8 +450,13 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     @Override
     public
-    <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) throws IOException {
-        connectionManager.getConnection0().getRemoteObject(objectId, callback);
+    <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) {
+        try {
+            C connection0 = connectionManager.getConnection0();
+            connection0.getRemoteObject(objectId, callback);
+        } catch (IOException e) {
+            logger.error("Error getting remote object!", e);
+        }
     }
 
     /**
