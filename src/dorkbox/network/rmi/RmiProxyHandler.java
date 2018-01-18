@@ -171,6 +171,9 @@ class RmiProxyHandler implements InvocationHandler {
                 this.timeoutMillis = (Integer) args[0];
                 return null;
             }
+            else if (name.equals("getResponseTimeout")) {
+                return this.timeoutMillis;
+            }
             else if (name.equals("setAsync")) {
                 this.isAsync = (Boolean) args[0];
                 return null;

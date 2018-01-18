@@ -49,6 +49,13 @@ interface RemoteObject {
     void setResponseTimeout(int timeoutMillis);
 
     /**
+     * Returns the ResponseTimeout, which is the the milliseconds to wait for a method to return a value. Default is 3000, 0 disables (waits forever)
+     *
+     * @return the number of milliseconds a method will wait for a response
+     */
+    int getResponseTimeout();
+
+    /**
      * Sets the blocking behavior when invoking a remote method. Default is false (blocking)
      *
      * @param enable
