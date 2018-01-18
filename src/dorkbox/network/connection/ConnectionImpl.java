@@ -1103,11 +1103,11 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      * Used by RMI for the CLIENT side, to get the proxy object as an interface
      *
      * @param objectID is the RMI object ID
-     * @param type must be the interface the proxy will bind to
+     * @param iFace must be the interface the proxy will bind to
      */
     @Override
     public
-    RemoteObject getProxyObject(final int objectID, final Class<?> type) {
+    RemoteObject getProxyObject(final int objectID, final Class<?> iFace) {
         synchronized (proxyIdCache) {
             // we want to have a connection specific cache of IDs, using weak references.
             // because this is PER CONNECTION, this is safe.
@@ -1115,7 +1115,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
             if (remoteObject == null) {
                 // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-                remoteObject = rmiBridge.createProxyObject(this, objectID, type);
+                remoteObject = rmiBridge.createProxyObject(this, objectID, iFace);
                 proxyIdCache.put(objectID, remoteObject);
             }
 
