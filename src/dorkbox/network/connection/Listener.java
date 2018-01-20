@@ -65,7 +65,6 @@ interface Listener {
      * Called when the connection is idle for longer than the {@link EndPointBase#setIdleTimeout(int)} idle threshold.
      */
     interface OnIdle<C extends Connection> extends Listener {
-
         /**
          * Called when the connection is idle for longer than the {@link EndPointBase#setIdleTimeout(int)} idle threshold.
          */
@@ -86,7 +85,7 @@ interface Listener {
      * Permits a listener to specify it's own referenced object type, if passing in a generic parameter doesn't work. This is necessary since
      * the system looks up incoming message types to determine what listeners to dispatch them to.
      */
-    interface SelfDefinedType {
+    interface SelfDefinedType extends Listener {
         /**
          * Permits a listener to specify it's own referenced object type, if passing in a generic parameter doesn't work. This is necessary since
          * the system looks up incoming message types to determine what listeners to dispatch them to.
