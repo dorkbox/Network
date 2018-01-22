@@ -24,9 +24,9 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
 import dorkbox.network.store.DB_Server;
 import dorkbox.network.store.SettingsStore;
-import dorkbox.util.SerializationManager;
 import dorkbox.util.bytes.ByteArrayWrapper;
 import dorkbox.util.exceptions.SecurityException;
+import dorkbox.util.serialization.SerializationManager;
 import dorkbox.util.storage.Storage;
 import dorkbox.util.storage.StorageSystem;
 

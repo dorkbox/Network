@@ -21,8 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dorkbox.util.OS;
-import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.SecurityException;
+import dorkbox.util.serialization.SerializationManager;
 import dorkbox.util.storage.Storage;
 
 /**

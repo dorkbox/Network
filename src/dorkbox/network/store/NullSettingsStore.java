@@ -20,8 +20,8 @@ import java.security.SecureRandom;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
-import dorkbox.util.SerializationManager;
 import dorkbox.util.exceptions.SecurityException;
+import dorkbox.util.serialization.SerializationManager;
 import dorkbox.util.storage.Storage;
 
 public
