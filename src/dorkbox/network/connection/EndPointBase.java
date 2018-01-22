@@ -216,7 +216,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
 
         if (rmiEnabled) {
             // these register the listener for registering a class implementation for RMI (internal use only)
-            connectionManager.add(new RegisterRmiSystemListener());
+            connectionManager.add(new RegisterRmiNetworkHandler());
             globalRmiBridge = new RmiBridge(logger, config.rmiExecutor, true);
         }
         else {
