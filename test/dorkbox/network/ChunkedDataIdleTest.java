@@ -34,6 +34,7 @@ import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
+import dorkbox.util.serialization.SerializationManager;
 
 public class ChunkedDataIdleTest extends BaseTest {
     private volatile boolean success = false;
@@ -150,7 +151,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         data.Booleans = new Boolean[] {true, false};
     }
 
-    private void register (dorkbox.util.SerializationManager manager) {
+    private void register (SerializationManager manager) {
         manager.register(int[].class);
         manager.register(short[].class);
         manager.register(float[].class);

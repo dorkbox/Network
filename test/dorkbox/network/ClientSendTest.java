@@ -31,6 +31,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
+import dorkbox.util.serialization.SerializationManager;
 
 public
 class ClientSendTest extends BaseTest {
@@ -86,7 +87,7 @@ class ClientSendTest extends BaseTest {
     }
 
     private static
-    void register(dorkbox.util.SerializationManager manager) {
+    void register(SerializationManager manager) {
         manager.register(AMessage.class);
     }
 

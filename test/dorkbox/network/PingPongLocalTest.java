@@ -33,6 +33,7 @@ import dorkbox.network.connection.Listeners;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
+import dorkbox.util.serialization.SerializationManager;
 
 public
 class PingPongLocalTest extends BaseTest {
@@ -168,7 +169,7 @@ class PingPongLocalTest extends BaseTest {
         data.Booleans = new Boolean[] {true,false};
     }
 
-    private void register(dorkbox.util.SerializationManager manager) {
+    private void register(SerializationManager manager) {
         manager.register(int[].class);
         manager.register(short[].class);
         manager.register(float[].class);

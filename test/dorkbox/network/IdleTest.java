@@ -39,6 +39,7 @@ import dorkbox.network.connection.idle.InputStreamSender;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
+import dorkbox.util.serialization.SerializationManager;
 
 @SuppressWarnings({"rawtypes"})
 public
@@ -283,7 +284,7 @@ class IdleTest extends BaseTest {
     }
 
     private static
-    void register(dorkbox.util.SerializationManager manager) {
+    void register(SerializationManager manager) {
         manager.register(int[].class);
         manager.register(short[].class);
         manager.register(float[].class);
