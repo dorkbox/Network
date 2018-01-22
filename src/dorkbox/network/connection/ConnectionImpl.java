@@ -17,6 +17,7 @@ package dorkbox.network.connection;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.AbstractMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -42,7 +43,8 @@ import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.Rmi;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.rmi.RmiRegistration;
-import dorkbox.network.serialization.RmiSerializationManager;
+import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.util.ClassHelper;
 import dorkbox.util.collections.IntMap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -110,7 +112,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     private final RmiBridge rmiBridge;
     private final Map<Integer, RemoteObject> proxyIdCache = new WeakHashMap<Integer, RemoteObject>(8);
     private final IntMap<RemoteObjectCallback> rmiRegistrationCallbacks = new IntMap<RemoteObjectCallback>();
-    private int rmiRegistrationID = 0; // protected by synchronized (rmiRegistrationCallbacks)
+    private int rmiCallbackId = 0; // protected by synchronized (rmiRegistrationCallbacks)
 
     /**
      * All of the parameters can be null, when metaChannel wants to get the base class type
@@ -902,11 +904,14 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     //
     // RMI methods
     //
+    //
+
+
 
     @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked", "Duplicates"})
     @Override
     public final
-    <Iface> void getRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) {
+    <Iface> void createRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) {
         if (!interfaceClass.isInterface()) {
             throw new IllegalArgumentException("Cannot create a proxy for RMI access. It must be an interface.");
         }
@@ -914,9 +919,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         RmiRegistration message;
 
         synchronized (rmiRegistrationCallbacks) {
-            int nextRmiID = rmiRegistrationID++;
-            rmiRegistrationCallbacks.put(nextRmiID, callback);
-            message = new RmiRegistration(interfaceClass, nextRmiID);
+            int nextRmiCallbackId = rmiCallbackId++;
+            rmiRegistrationCallbacks.put(nextRmiCallbackId, callback);
+            message = new RmiRegistration(interfaceClass, RmiBridge.INVALID_RMI, nextRmiCallbackId);
         }
 
         // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
@@ -932,10 +937,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) {
         RmiRegistration message;
 
+        Class<?> iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback.class, callback.getClass(), 0);
+
         synchronized (rmiRegistrationCallbacks) {
-            int nextRmiID = rmiRegistrationID++;
-            rmiRegistrationCallbacks.put(nextRmiID, callback);
-            message = new RmiRegistration(objectId, nextRmiID);
+            int nextRmiCallbackId = rmiCallbackId++;
+            rmiRegistrationCallbacks.put(nextRmiCallbackId, callback);
+            message = new RmiRegistration(iFaceClass, objectId, nextRmiCallbackId);
         }
 
         // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
@@ -945,146 +952,129 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         TCP(message).flush();
     }
 
-    private
-    void collectRmiFields(final RmiBridge rmiBridge,
-                          final LinkedList<ClassObject> classesToCheck, final ClassObject remoteClassObject, final Field[] fields) {
+    // default false
+    public static boolean ENABLE_PROXY_OBJECTS = true;
 
 
-    }
+    /**
+     * For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
+     * For local connections, we have to switch it appropriately in the LocalRmiProxy
+     *
+     * @param implementationClass
+     * @param callbackId
+     * @return
+     */
+    public final
+    RmiRegistration createNewRmiObject(final Class<?> interfaceClass, final Class<?> implementationClass, final int callbackId) {
 
-    final
-    void registerInternal(final ConnectionImpl connection, final RmiRegistration remoteRegistration) {
-        final Class<?> interfaceClass = remoteRegistration.interfaceClass;
-        final int rmiID = remoteRegistration.rmiID;
+        CryptoSerializationManager manager = getEndPoint().serializationManager;
 
-        if (interfaceClass != null) {
-            // THIS IS ON THE REMOTE CONNECTION (where the object will really exist as an implementation)
-            //
-            // CREATE a new ID, and register the ID and new object (must create a new one) in the object maps
+        KryoExtra kryo = null;
+        Object object = null;
+        int rmiId = 0;
 
-            // the interface class kryo ID == implementation class kryo ID, so they switcheroo automatically.
-            final Class<?> implementationClass = interfaceClass;
+        try {
+            kryo = manager.takeKryo();
+            // this is what creates a new instance of the impl class, and stores it as an ID.
+            object = kryo.newInstance(implementationClass);
 
-            final RmiSerializationManager manager = getEndPoint().serializationManager;
-
-            KryoExtra kryo = null;
-            final Object remotePrimaryObject;
-            try {
-                kryo = manager.takeKryo();
-                // this is what creates a new instance of the impl class, and stores it as an ID.
-                remotePrimaryObject = kryo.newInstance(implementationClass);
-            } catch (Exception e) {
-                logger.error("Error creating RMI class " + implementationClass, e);
-                connection.TCP(new RmiRegistration(rmiID))
-                          .flush();
-                return;
-            } finally {
-                if (kryo != null) {
-                    // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
-                    manager.returnKryo(kryo);
-                }
-            }
+            rmiId = rmiBridge.nextObjectId();
+            rmiBridge.register(rmiId, object);
 
 
-            try {
-                rmiBridge.register(rmiBridge.nextObjectId(), remotePrimaryObject);
+
+            // the @Rmi annotation allows an RMI object to have fields with objects that are ALSO RMI objects
+            LinkedList<Map.Entry<Class<?>, Object>> classesToCheck = new LinkedList<Map.Entry<Class<?>, Object>>();
+            classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(implementationClass, object));
 
 
-                // the @Rmi annotation allows an RMI object to have fields with objects that are ALSO RMI
-                LinkedList<ClassObject> classesToCheck = new LinkedList<ClassObject>();
-                classesToCheck.add(new ClassObject(implementationClass, remotePrimaryObject));
+            Map.Entry<Class<?>, Object> remoteClassObject;
+            while (!classesToCheck.isEmpty()) {
+                remoteClassObject = classesToCheck.removeFirst();
 
-                ClassObject remoteClassObject;
-                while (!classesToCheck.isEmpty()) {
-                    remoteClassObject = classesToCheck.removeFirst();
+                // we have to check the IMPLEMENTATION for any additional fields that will have proxy information.
+                // we use getDeclaredFields() + walking the object hierarchy, so we get ALL the fields possible (public + private).
+                for (Field field : remoteClassObject.getKey()
+                                                    .getDeclaredFields()) {
+                    if (field.getAnnotation(Rmi.class) != null) {
+                        final Class<?> type = field.getType();
 
-                    // we have to check the IMPLEMENTATION for any additional fields that will have proxy information.
-                    // we use getDeclaredFields() + walking the object hierarchy, so we get ALL the fields possible.
-                    for (Field field : remoteClassObject.clazz.getDeclaredFields()) {
-                        if (field.getAnnotation(Rmi.class) != null) {
-                            final Class<?> type = field.getType();
-
-                            if (!type.isInterface()) {
-                                // the type must be an interface, otherwise RMI cannot create a proxy object
-                                logger.error("Error checking RMI fields for: {}.{} -- It is not an interface!", remoteClassObject.clazz, field.getName());
-                                continue;
-                            }
+                        if (!type.isInterface()) {
+                            // the type must be an interface, otherwise RMI cannot create a proxy object
+                            logger.error("Error checking RMI fields for: {}.{} -- It is not an interface!",
+                                         remoteClassObject.getKey(),
+                                         field.getName());
+                            continue;
+                        }
 
 
-                            boolean prev = field.isAccessible();
-                            field.setAccessible(true);
-                            final Object o;
-                            try {
-                                o = field.get(remoteClassObject.object);
+                        boolean prev = field.isAccessible();
+                        field.setAccessible(true);
+                        final Object o;
+                        try {
+                            o = field.get(remoteClassObject.getValue());
 
-                                rmiBridge.register(rmiBridge.nextObjectId(), o);
-                                classesToCheck.add(new ClassObject(type, o));
-                            } catch (IllegalAccessException e) {
-                                logger.error("Error checking RMI fields for: {}.{}", remoteClassObject.clazz, field.getName(), e);
-                            } finally {
-                                field.setAccessible(prev);
-                            }
+                            rmiBridge.register(rmiBridge.nextObjectId(), o);
+                            classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(type, o));
+                        } catch (IllegalAccessException e) {
+                            logger.error("Error checking RMI fields for: {}.{}", remoteClassObject.getKey(), field.getName(), e);
+                        } finally {
+                            field.setAccessible(prev);
                         }
                     }
-
-
-                    // have to check the object hierarchy as well
-                    Class<?> superclass = remoteClassObject.clazz.getSuperclass();
-                    if (superclass != null && superclass != Object.class) {
-                        classesToCheck.add(new ClassObject(superclass, remoteClassObject.object));
-                    }
                 }
 
-                connection.TCP(new RmiRegistration(remotePrimaryObject, rmiID)).flush();
-            } catch (Exception e) {
-                logger.error("Error registering RMI class " + implementationClass, e);
-                connection.TCP(new RmiRegistration(rmiID)).flush();
+
+                // have to check the object hierarchy as well
+                Class<?> superclass = remoteClassObject.getKey()
+                                                       .getSuperclass();
+                if (superclass != null && superclass != Object.class) {
+                    classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(superclass, remoteClassObject.getValue()));
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error registering RMI class " + implementationClass, e);
+        } finally {
+            if (kryo != null) {
+                // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
+                manager.returnKryo(kryo);
             }
         }
-        else if (remoteRegistration.remoteObjectId > RmiBridge.INVALID_RMI) {
-            // THIS IS ON THE REMOTE CONNECTION (where the object implementation will really exist)
-            //
-            // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
-            Object object = getImplementationObject(remoteRegistration.remoteObjectId);
 
-            if (object != null) {
-                connection.TCP(new RmiRegistration(object, rmiID)).flush();
-            } else {
-                connection.TCP(new RmiRegistration(rmiID)).flush();
-            }
+        return new RmiRegistration(interfaceClass, rmiId, callbackId, object);
+    }
+
+    public final
+    RmiRegistration getExistingRmiObject(final Class<?> interfaceClass, final int rmiId, final int callbackId) {
+        Object object = getImplementationObject(rmiId);
+
+        return new RmiRegistration(interfaceClass, rmiId, callbackId, object);
+    }
+
+    public final
+    void runRmiCallback(final Class<?> interfaceClass, final int callbackId, final Object remoteObject) {
+        RemoteObjectCallback callback;
+        synchronized (rmiRegistrationCallbacks) {
+            callback = rmiRegistrationCallbacks.remove(callbackId);
         }
-        else {
-            // THIS IS ON THE LOCAL CONNECTION SIDE, which is the side that called 'getRemoteObject()'   This can be Server or Client.
 
-            // this will be null if there was an error
-            Object remoteObject = remoteRegistration.remoteObject;
-
-            boolean noMoreRmiRemaining ;
-            RemoteObjectCallback callback;
-
-            synchronized (rmiRegistrationCallbacks) {
-                callback = rmiRegistrationCallbacks.remove(remoteRegistration.rmiID);
-            }
-
-            try {
-                //noinspection unchecked
-                callback.created(remoteObject);
-            } catch (Exception e) {
-                logger.error("Error getting remote object " + remoteObject.getClass() + ", ID: " + rmiID, e);
-            }
+        try {
+            //noinspection unchecked
+            callback.created(remoteObject);
+        } catch (Exception e) {
+            logger.error("Error getting or creating the remote object " + interfaceClass, e);
         }
     }
 
     /**
-     * Used by RMI
+     * Used by RMI by the LOCAL side when setting up the to fetch an object for the REMOTE side
      *
-     * @return the registered ID for a specific object. This is used by the "client" side when setting up the to fetch an object for the
-     * "service" side for RMI
+     * @return the registered ID for a specific object.
      */
     @Override
     public
     <T> int getRegisteredId(final T object) {
-        // always check local before checking global, because less contention on the synchronization
+        // always check global before checking local, because less contention on the synchronization
         RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
 
         if (globalRmiBridge == null) {
@@ -1100,7 +1090,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     }
 
     /**
-     * Used by RMI for the CLIENT side, to get the proxy object as an interface
+     * Used by RMI for the LOCAL side, to get the proxy object as an interface
      *
      * @param objectID is the RMI object ID
      * @param iFace must be the interface the proxy will bind to

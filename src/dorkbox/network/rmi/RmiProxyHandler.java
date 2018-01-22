@@ -56,6 +56,7 @@ import dorkbox.network.serialization.RmiSerializationManager;
  * <p>
  * The only methods than can be invoked are INTERFACE methods and OBJECT methods
  */
+public
 class RmiProxyHandler implements InvocationHandler {
     private final Logger logger;
 
@@ -66,7 +67,6 @@ class RmiProxyHandler implements InvocationHandler {
     private final boolean[] pendingResponses = new boolean[64];
 
     private final Connection connection;
-    private final Class<?> iFace;
     public final int objectID; // this is the RMI id
     public final int ID; // this is the KRYO id
 
@@ -96,7 +96,6 @@ class RmiProxyHandler implements InvocationHandler {
         super();
 
         this.connection = connection;
-        this.iFace = iFace;
         this.objectID = objectID;
         this.proxyString = "<proxy #" + objectID + ">";
 

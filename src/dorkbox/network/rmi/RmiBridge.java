@@ -60,7 +60,7 @@ import dorkbox.util.collections.ObjectIntMap;
  * <p/>
  * <p/>
  * Objects are {@link RmiSerializationManager#registerRmiInterface(Class)}, and endpoint connections can then {@link
- * Connection#getRemoteObject(Class, RemoteObjectCallback)} for the registered objects.
+ * Connection#createRemoteObject(Class, RemoteObjectCallback)} for the registered objects.
  * <p/>
  * It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a return value which
  * is not {@link RemoteObject#setAsync(boolean) ignored}, an extra byte is written. If the type of a parameter is not final (note that
@@ -414,7 +414,7 @@ class RmiBridge {
     }
 
     /**
-     * Warning. This is an advanced method. You should probably be using {@link Connection#getRemoteObject(Class, RemoteObjectCallback)}
+     * Warning. This is an advanced method. You should probably be using {@link Connection#createRemoteObject(Class, RemoteObjectCallback)}
      * <p>
      * <p>
      * Returns a proxy object that implements the specified interfaces. Methods invoked on the proxy object will be invoked remotely on the
@@ -432,25 +432,29 @@ class RmiBridge {
      * have the proxy object replaced with the registered object.
      *
      * @see RemoteObject
+     *
+     * @param connection this is really the network client -- there is ONLY ever 1 connection
+     * @param objectID this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
+     * @param iFace this is the RMI interface
      */
     public
-    RemoteObject createProxyObject(Connection connection, int objectID, Class<?> iface) {
+    RemoteObject createProxyObject(Connection connection, int objectID, Class<?> iFace) {
         if (connection == null) {
             throw new IllegalArgumentException("connection cannot be null.");
         }
-        if (iface == null) {
+        if (iFace == null) {
             throw new IllegalArgumentException("iface cannot be null.");
         }
-        if (!iface.isInterface()) {
+        if (!iFace.isInterface()) {
             throw new IllegalArgumentException("iface must be an interface.");
         }
 
         Class<?>[] temp = new Class<?>[2];
         temp[0] = RemoteObject.class;
-        temp[1] = iface;
+        temp[1] = iFace;
 
         return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(),
                                                      temp,
-                                                     new RmiProxyHandler(connection, objectID, iface));
+                                                     new RmiProxyHandler(connection, objectID, iFace));
     }
 }

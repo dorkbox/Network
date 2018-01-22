@@ -84,13 +84,7 @@ class RegistrationLocalHandlerClient<C extends Connection> extends RegistrationL
                 ///////////////////////
                 // DECODE (or upstream)
                 ///////////////////////
-                pipeline.addFirst(LOCAL_RMI_ENCODER, decoder);
-
-
-                /////////////////////////
-                // ENCODE (or downstream)
-                /////////////////////////
-                pipeline.addFirst(LOCAL_RMI_DECODER, encoder);
+                pipeline.addFirst(LOCAL_RMI_HANDLER, rmiLocalHandler);
             }
 
             // have to setup connection handler

@@ -42,7 +42,7 @@ import java.io.IOException;
  *
  * @author Nathan Sweet <misc@n4te.com>
  * @see dorkbox.network.connection.Connection#getRemoteObject(int, RemoteObjectCallback)
- * @see dorkbox.network.connection.Connection#getRemoteObject(Class, RemoteObjectCallback)
+ * @see dorkbox.network.connection.Connection#createRemoteObject(Class, RemoteObjectCallback)
  */
 public
 class TimeoutException extends IOException {

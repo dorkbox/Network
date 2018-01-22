@@ -18,23 +18,18 @@ package dorkbox.network.connection.registration.local;
 import static dorkbox.network.connection.EndPointBase.maxShutdownWaitTimeInMilliSeconds;
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.RegisterRmiLocalHandler;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
-import dorkbox.network.pipeline.rmi.LocalRmiDecoder;
-import dorkbox.network.pipeline.rmi.LocalRmiEncoder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 
 public abstract
 class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler<C> {
-    protected static final String LOCAL_RMI_ENCODER = "localRmiEncoder";
-    protected static final String LOCAL_RMI_DECODER = "localRmiDecoder";
+    static final String LOCAL_RMI_HANDLER = "localRmiHandler";
+    final RegisterRmiLocalHandler rmiLocalHandler = new RegisterRmiLocalHandler();
 
-    protected final LocalRmiEncoder encoder = new LocalRmiEncoder();
-    protected final LocalRmiDecoder decoder = new LocalRmiDecoder();
-
-    public
     RegistrationLocalHandler(String name, RegistrationWrapper<C> registrationWrapper) {
         super(name, registrationWrapper);
     }

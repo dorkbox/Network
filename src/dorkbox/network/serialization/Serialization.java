@@ -261,8 +261,8 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
     private RemoteObjectSerializer remoteObjectSerializer;
 
     // used to track which interface -> implementation, for use by RMI
-    private final IntMap<Class<?>> rmiIdToImpl = new IntMap<Class<?>>();
-    private final IntMap<Class<?>> rmiIdToIface = new IntMap<Class<?>>();
+    private final IntMap<Class<?>> rmiKryoIdToImpl = new IntMap<Class<?>>();
+    private final IntMap<Class<?>> rmiKryoIdToIface = new IntMap<Class<?>>();
 
     private final IdentityMap<Class<?>, Class<?>> rmiIfaceToImpl = new IdentityMap<Class<?>, Class<?>>();
     private final IdentityMap<Class<?>, Class<?>> rmiImplToIface = new IdentityMap<Class<?>, Class<?>>();
@@ -380,8 +380,8 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
 
                             // sets up the RMI, so when we receive the iface class from the client, we know what impl to use
                             // if this is over-written, we don't care.
-                            rmiIdToImpl.put(id, remoteImplClass.implClass);   // the "server" translates the ID back to the impl on kryo read
-                            rmiIdToIface.put(id, remoteImplClass.ifaceClass); // the "server" translates the ID to the iface on kryo write
+                            rmiKryoIdToImpl.put(id, remoteImplClass.implClass);   // the "server" translates the ID back to the impl on kryo read
+                            rmiKryoIdToIface.put(id, remoteImplClass.ifaceClass); // the "server" translates the ID to the iface on kryo write
                         }
                     }
 
@@ -575,8 +575,8 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
      */
     @Override
     public
-    Class<?> getRmiIface(Class<?> implementation) {
-        return rmiImplToIface.get(implementation);
+    Class<?> getRmiImpl(Class<?> iface) {
+        return rmiIfaceToImpl.get(iface);
     }
 
     /**
@@ -802,6 +802,12 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
     public
     CachedMethod[] getMethods(final int classId) {
         return methodCache.get(classId);
+    }
+
+    @Override
+    public
+    boolean isRmiEnabled() {
+        return usesRmi;
     }
 
     @Override

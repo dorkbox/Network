@@ -20,13 +20,27 @@ package dorkbox.network.rmi;
  */
 public
 class RmiRegistration {
+    public boolean isRequest;
+
+    /**
+     * this is null if there are problems creating an object on the remote side, otherwise it is non-null.
+     */
     public Object remoteObject;
+
+    /**
+     * this is used to create a NEW rmi object on the REMOTE side (these are bound the to connection. They are NOT GLOBAL, ie: available on all connections)
+     */
     public Class<?> interfaceClass;
 
-    // this is used to get specific, GLOBAL rmi objects (objects that are not bound to a single connection)
-    public int remoteObjectId;
+    /**
+     * this is used to get specific, GLOBAL rmi objects (objects that are not bound to a single connection)
+     */
+    public int rmiId;
 
-    public int rmiID;
+    /**
+     * this is the callback ID assigned by the LOCAL side, to know WHICH RMI callback to call when we have a remote object available
+     */
+    public int callbackId;
 
     @SuppressWarnings("unused")
     private
@@ -34,35 +48,35 @@ class RmiRegistration {
         // for serialization
     }
 
-    // When requesting a new remote object to be created.
-    // SENT FROM "client" -> "server"
+    /**
+     * When requesting a new or existing remote object
+     * SENT FROM "local" -> "remote"
+     *
+     *  @param interfaceClass the class to create
+     * @param rmiId the RMI id to get from the REMOTE side
+     * @param callbackId the rmi callback ID on the LOCAL side, to know which callback to use
+     */
     public
-    RmiRegistration(final Class<?> interfaceClass, final int rmiID) {
+    RmiRegistration(final Class<?> interfaceClass, final int rmiId, final int callbackId) {
+        isRequest = true;
         this.interfaceClass = interfaceClass;
-        this.rmiID = rmiID;
-    }
-
-    // When requesting a new remote object to be created.
-    // SENT FROM "client" -> "server"
-    public
-    RmiRegistration(final int remoteObjectId, final int rmiID) {
-        this.remoteObjectId = remoteObjectId;
-        this.rmiID = rmiID;
+        this.rmiId = rmiId;
+        this.callbackId = callbackId;
     }
 
 
-    // When there was an error creating the remote object.
-    // SENT FROM "server" -> "client"
+    /**
+     * This is when we successfully created a new object (if there was an error, remoteObject is null)
+     * SENT FROM "remote" -> "local"
+     *
+     * @param callbackId the rmi callback ID on the LOCAL side, to know which callback to use
+     */
     public
-    RmiRegistration(final int rmiID) {
-        this.rmiID = rmiID;
-    }
-
-    // This is when we successfully created a new object
-    // SENT FROM "server" -> "client"
-    public
-    RmiRegistration(final Object remoteObject, final int rmiID) {
+    RmiRegistration(final Class<?> interfaceClass, final int rmiId, final int callbackId, final Object remoteObject) {
+        isRequest = false;
+        this.interfaceClass = interfaceClass;
+        this.rmiId = rmiId;
+        this.callbackId = callbackId;
         this.remoteObject = remoteObject;
-        this.rmiID = rmiID;
     }
 }

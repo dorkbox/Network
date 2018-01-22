@@ -22,8 +22,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * This specifies to the serializer, that this class contains an RMI object, and that a specific field is an RMI object. Both are
- * necessary.
+ * This specifies to the RMI system that a specific field in this RMI object is ALSO an RMI object
  */
 @Retention(value = RetentionPolicy.RUNTIME)
 @Inherited
