@@ -15,9 +15,19 @@
  */
 package dorkbox.network.connection.listenerManagement;
 
+import static dorkbox.util.collections.ConcurrentIterator.headREF;
+
+import java.lang.reflect.Type;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+
+import org.slf4j.Logger;
+
 import com.esotericsoftware.kryo.util.IdentityMap;
+
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionManager;
+import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listener.OnError;
 import dorkbox.network.connection.Listener.OnMessageReceived;
 import dorkbox.network.connection.Listener.SelfDefinedType;
@@ -25,13 +35,6 @@ import dorkbox.network.rmi.RmiMessages;
 import dorkbox.util.ClassHelper;
 import dorkbox.util.collections.ConcurrentEntry;
 import dorkbox.util.collections.ConcurrentIterator;
-import org.slf4j.Logger;
-
-import java.lang.reflect.Type;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
-
-import static dorkbox.util.collections.ConcurrentIterator.headREF;
 
 /**
  * Called when the remote end has been connected. This will be invoked before any objects are received by the network.
@@ -297,14 +300,15 @@ class OnMessageReceivedManager<C extends Connection> {
      * This works for compile time code. The generic type parameter #2 (index 1) is pulled from type arguments.
      * generic parameters cannot be primitive types
      */
-    private static Class<?> identifyType(final Object listener) {
+    private static
+    Class<?> identifyType(final OnMessageReceived listener) {
         final Class<?> clazz = listener.getClass();
-        Class<?> objectType = ClassHelper.getGenericParameterAsClassForSuperClass(clazz, 1);
+        Class<?> objectType = ClassHelper.getGenericParameterAsClassForSuperClass(Listener.OnMessageReceived.class, clazz, 1);
 
         if (objectType != null) {
             // SOMETIMES generics get confused on which parameter we actually mean (when sub-classing)
             if (objectType != Object.class && ClassHelper.hasInterface(Connection.class, objectType)) {
-                Class<?> objectType2 = ClassHelper.getGenericParameterAsClassForSuperClass(clazz, 2);
+                Class<?> objectType2 = ClassHelper.getGenericParameterAsClassForSuperClass(Listener.OnMessageReceived.class, clazz, 2);
                 if (objectType2 != null) {
                     objectType = objectType2;
                 }

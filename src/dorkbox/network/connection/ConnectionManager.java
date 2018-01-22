@@ -32,6 +32,7 @@ import dorkbox.network.connection.listenerManagement.OnIdleManager;
 import dorkbox.network.connection.listenerManagement.OnMessageReceivedManager;
 import dorkbox.util.ClassHelper;
 import dorkbox.util.Property;
+import dorkbox.util.TypeResolver;
 import dorkbox.util.collections.ConcurrentEntry;
 
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
@@ -124,23 +125,12 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             throw new IllegalArgumentException("listener cannot be null.");
         }
 
-        // find the class that uses Listener.class.
-        Class<?> clazz = listener.getClass();
-
-//        Class<?>[] interfaces = clazz.getInterfaces();
-//        for (Class<?> anInterface : interfaces) {
-//        }
-//
-//        while (!(clazz.getSuperclass() != Object.class)) {
-//            clazz = clazz.getSuperclass();
-//        }
-
-        // this is the connection generic parameter for the listener
-        Class<?> genericClass = ClassHelper.getGenericParameterAsClassForSuperClass(clazz, 0);
+        // this is the connection generic parameter for the listener, works for lambda expressions as well
+        Class<?> genericClass = ClassHelper.getGenericParameterAsClassForSuperClass(Listener.class, listener.getClass(), 0);
 
         // if we are null, it means that we have no generics specified for our listener!
         //noinspection IfStatementWithIdenticalBranches
-        if (genericClass == this.baseClass || genericClass == null) {
+        if (genericClass == this.baseClass || genericClass == TypeResolver.Unknown.class || genericClass == null) {
             // we are the base class, so we are fine.
             addListener0(listener);
             return this;
