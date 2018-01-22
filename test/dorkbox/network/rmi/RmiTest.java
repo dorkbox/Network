@@ -37,7 +37,6 @@ package dorkbox.network.rmi;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.io.IOException;
 
@@ -48,6 +47,7 @@ import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
 import dorkbox.network.serialization.Serialization;
@@ -159,10 +159,9 @@ class RmiTest extends BaseTest {
 
 
         // Test sending a reference to a remote object.
-        MessageWithTestCow m = new MessageWithTestCow();
+        MessageWithTestCow m = new MessageWithTestCow(test);
         m.number = 678;
         m.text = "sometext";
-        m.testCow = test;
         connection.send()
                   .TCP(m)
                   .flush();
@@ -179,11 +178,45 @@ class RmiTest extends BaseTest {
 
     @Test
     public
-    void rmi() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void rmiNetwork() throws InitializationException, SecurityException, IOException, InterruptedException {
+        rmi(new Config() {
+            @Override
+            public
+            void apply(final Configuration configuration) {
+                configuration.tcpPort = tcpPort;
+                configuration.udpPort = udpPort;
+                configuration.host = host;
+            }
+        });
+
+        // have to reset the object ID counter
+        TestCowImpl.ID_COUNTER.set(1);
+
+        Thread.sleep(2000L);
+    }
+
+    @Test
+    public
+    void rmiLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
+        rmi(new Config() {
+            @Override
+            public
+            void apply(final Configuration configuration) {
+                configuration.localChannelName = EndPointBase.LOCAL_CHANNEL;
+            }
+        });
+
+        // have to reset the object ID counter
+        TestCowImpl.ID_COUNTER.set(1);
+
+        Thread.sleep(2000L);
+    }
+
+
+    public
+    void rmi(final Config config) throws InitializationException, SecurityException, IOException, InterruptedException {
         Configuration configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
-        configuration.udpPort = udpPort;
-        configuration.host = host;
+        config.apply(configuration);
 
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
@@ -208,7 +241,7 @@ class RmiTest extends BaseTest {
             void received(final Connection connection, MessageWithTestCow m) {
                 System.err.println("Received finish signal for test for: Client -> Server");
 
-                TestCow object = m.testCow;
+                TestCow object = m.getTestCow();
                 final int id = object.id();
                 assertEquals(1, id);
                 System.err.println("Finished test for: Client -> Server");
@@ -217,37 +250,30 @@ class RmiTest extends BaseTest {
                 System.err.println("Starting test for: Server -> Client");
 
                 // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
-                try {
-                    // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
-                    connection.getRemoteObject(TestCow.class, new RemoteObjectCallback<TestCow>() {
-                        @Override
-                        public
-                        void created(final TestCow remoteObject) {
-                            // MUST run on a separate thread because remote object method invocations are blocking
-                            new Thread() {
-                                @Override
-                                public
-                                void run() {
-                                    System.err.println("Running test for: Server -> Client");
-                                    runTests(connection, remoteObject, 2);
-                                    System.err.println("Done with test for: Server -> Client");
-                                }
-                            }.start();
-                        }
-                    });
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    fail();
-                }
+                // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
+                connection.createRemoteObject(TestCow.class, new RemoteObjectCallback<TestCow>() {
+                    @Override
+                    public
+                    void created(final TestCow remoteObject) {
+                        // MUST run on a separate thread because remote object method invocations are blocking
+                        new Thread() {
+                            @Override
+                            public
+                            void run() {
+                                System.err.println("Running test for: Server -> Client");
+                                runTests(connection, remoteObject, 2);
+                                System.err.println("Done with test for: Server -> Client");
+                            }
+                        }.start();
+                    }
+                });
             }
         });
 
 
         // ----
         configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
-        configuration.udpPort = udpPort;
-        configuration.host = host;
+        config.apply(configuration);
 
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
@@ -271,28 +297,23 @@ class RmiTest extends BaseTest {
             void connected(final Connection connection) {
                 System.err.println("Starting test for: Client -> Server");
 
-                try {
-                    // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
-                    connection.getRemoteObject(TestCow.class, new RemoteObjectCallback<TestCow>() {
-                        @Override
-                        public
-                        void created(final TestCow remoteObject) {
-                            // MUST run on a separate thread because remote object method invocations are blocking
-                            new Thread() {
-                                @Override
-                                public
-                                void run() {
-                                    System.err.println("Running test for: Client -> Server");
-                                    runTests(connection, remoteObject, 1);
-                                    System.err.println("Done with test for: Client -> Server");
-                                }
-                            }.start();
-                        }
-                    });
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    fail();
-                }
+                // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
+                connection.createRemoteObject(TestCow.class, new RemoteObjectCallback<TestCow>() {
+                    @Override
+                    public
+                    void created(final TestCow remoteObject) {
+                        // MUST run on a separate thread because remote object method invocations are blocking
+                        new Thread() {
+                            @Override
+                            public
+                            void run() {
+                                System.err.println("Running test for: Client -> Server");
+                                runTests(connection, remoteObject, 1);
+                                System.err.println("Done with test for: Client -> Server");
+                            }
+                        }.start();
+                    }
+                });
             }
         });
 
@@ -303,7 +324,7 @@ class RmiTest extends BaseTest {
                   void received(Connection connection, MessageWithTestCow m) {
                       System.err.println("Received finish signal for test for: Client -> Server");
 
-                      TestCow object = m.testCow;
+                      TestCow object = m.getTestCow();
                       final int id = object.id();
                       assertEquals(2, id);
                       System.err.println("Finished test for: Client -> Server");

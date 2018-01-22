@@ -1,9 +1,5 @@
 package dorkbox.network.rmi.multiJVM;
 
-import static org.junit.Assert.fail;
-
-import java.io.IOException;
-
 import org.slf4j.LoggerFactory;
 
 import ch.qos.logback.classic.Level;
@@ -98,35 +94,30 @@ class TestClient
                       void connected(final Connection connection) {
                           System.err.println("Starting test for: Client -> Server");
 
-                          try {
-                              // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
-                              connection.getRemoteObject(TestCow.class, new RemoteObjectCallback<TestCow>() {
-                                  @Override
-                                  public
-                                  void created(final TestCow remoteObject) {
-                                      // MUST run on a separate thread because remote object method invocations are blocking
-                                      new Thread() {
-                                          @Override
-                                          public
-                                          void run() {
-                                              RmiTest.runTests(connection, remoteObject, 1);
+                          // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
+                          connection.createRemoteObject(TestCow.class, new RemoteObjectCallback<TestCow>() {
+                              @Override
+                              public
+                              void created(final TestCow remoteObject) {
+                                  // MUST run on a separate thread because remote object method invocations are blocking
+                                  new Thread() {
+                                      @Override
+                                      public
+                                      void run() {
+                                          RmiTest.runTests(connection, remoteObject, 1);
 
-                                              try {
-                                                  Thread.sleep(1000L);
-                                              } catch (InterruptedException e) {
-                                                  e.printStackTrace();
-                                              }
-
-                                              System.err.println("DONE");
-                                              client.stop();
+                                          try {
+                                              Thread.sleep(1000L);
+                                          } catch (InterruptedException e) {
+                                              e.printStackTrace();
                                           }
-                                      }.start();
-                                  }
-                              });
-                          } catch (IOException e) {
-                              e.printStackTrace();
-                              fail();
-                          }
+
+                                          System.err.println("DONE");
+                                          client.stop();
+                                      }
+                                  }.start();
+                              }
+                          });
                       }
                   });
 
