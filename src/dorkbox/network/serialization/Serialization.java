@@ -805,12 +805,6 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
     }
 
     @Override
-    public
-    boolean isRmiEnabled() {
-        return usesRmi;
-    }
-
-    @Override
     public synchronized
     boolean initialized() {
         return initialized;

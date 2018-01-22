@@ -21,7 +21,7 @@ import com.esotericsoftware.kryo.Serializer;
 
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.rmi.CachedMethod;
-import dorkbox.util.SerializationManager;
+import dorkbox.util.serialization.SerializationManager;
 
 public
 interface RmiSerializationManager extends SerializationManager {
@@ -96,11 +96,11 @@ interface RmiSerializationManager extends SerializationManager {
     void returnKryo(KryoExtra kryo);
 
     /**
-     * Gets the RMI interface based on the specified implementation
+     * Gets the RMI implementation based on the specified interface
      *
-     * @return the corresponding interface
+     * @return the corresponding implementation
      */
-    Class<?> getRmiIface(Class<?> implementation);
+    Class<?> getRmiImpl(Class<?> iFace);
 
     /**
      * Enable remote method invocation (RMI) for this connection. There is additional overhead to using RMI.
