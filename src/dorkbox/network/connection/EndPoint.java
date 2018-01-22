@@ -278,7 +278,13 @@ class EndPoint {
             // we want to WAIT until after the event executors have completed shutting down.
             List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
 
-            for (EventLoopGroup loopGroup : eventLoopGroups) {
+            List<EventLoopGroup> loopGroups;
+            synchronized (eventLoopGroups) {
+                loopGroups = new ArrayList<EventLoopGroup>(eventLoopGroups.size());
+                loopGroups.addAll(eventLoopGroups);
+            }
+
+            for (EventLoopGroup loopGroup : loopGroups) {
                 shutdownThreadList.add(loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds,
                                                                     maxShutdownWaitTimeInMilliSeconds * 4,
                                                                     TimeUnit.MILLISECONDS));
