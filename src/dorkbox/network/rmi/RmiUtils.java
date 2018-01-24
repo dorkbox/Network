@@ -17,7 +17,7 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.reflectasm.MethodAccess;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.util.ClassHelper;
+import dorkbox.util.generics.ClassHelper;
 
 /**
  * Utility methods for creating a method cache for a class or interface.
