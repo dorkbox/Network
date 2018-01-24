@@ -94,6 +94,12 @@
       Copyright 2004-2008, QOS.ch
 
 
+    - TypeTools - Apache 2.0 License
+      https://github.com/jhalterman/typetools/
+      Copyright 2002-2017, Jonathan Halterman
+        Tools for resolving generic types
+
+
     - XBill DNS - BSD 3-clause License
       http://www.xbill.org/dnsjava
       Copyright 1999-2005, Brian Wellington
