@@ -32,9 +32,9 @@ import dorkbox.network.connection.Listener.OnError;
 import dorkbox.network.connection.Listener.OnMessageReceived;
 import dorkbox.network.connection.Listener.SelfDefinedType;
 import dorkbox.network.rmi.RmiMessages;
-import dorkbox.util.ClassHelper;
 import dorkbox.util.collections.ConcurrentEntry;
 import dorkbox.util.collections.ConcurrentIterator;
+import dorkbox.util.generics.ClassHelper;
 
 /**
  * Called when the remote end has been connected. This will be invoked before any objects are received by the network.

@@ -30,10 +30,10 @@ import dorkbox.network.connection.listenerManagement.OnConnectedManager;
 import dorkbox.network.connection.listenerManagement.OnDisconnectedManager;
 import dorkbox.network.connection.listenerManagement.OnIdleManager;
 import dorkbox.network.connection.listenerManagement.OnMessageReceivedManager;
-import dorkbox.util.ClassHelper;
 import dorkbox.util.Property;
-import dorkbox.util.TypeResolver;
 import dorkbox.util.collections.ConcurrentEntry;
+import dorkbox.util.generics.ClassHelper;
+import dorkbox.util.generics.TypeResolver;
 
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
 @SuppressWarnings("unchecked")
