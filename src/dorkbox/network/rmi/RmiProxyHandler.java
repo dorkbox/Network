@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.RmiSerializationManager;
@@ -103,8 +103,8 @@ class RmiProxyHandler implements InvocationHandler {
         this.objectID = objectID;
         this.proxyString = "<proxy #" + objectID + ">";
 
-        EndPointBase endPointBaseConnection = this.connection.getEndPoint();
-        final RmiSerializationManager serializationManager = endPointBaseConnection.getSerialization();
+        EndPoint endPointConnection = this.connection.getEndPoint();
+        final RmiSerializationManager serializationManager = endPointConnection.getSerialization();
 
         KryoExtra kryoExtra = null;
         try {

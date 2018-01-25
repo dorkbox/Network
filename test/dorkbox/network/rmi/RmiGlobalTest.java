@@ -48,7 +48,7 @@ import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
@@ -208,7 +208,7 @@ class RmiGlobalTest extends BaseTest {
             @Override
             public
             void apply(final Configuration configuration) {
-                configuration.localChannelName = EndPointBase.LOCAL_CHANNEL;
+                configuration.localChannelName = EndPoint.LOCAL_CHANNEL;
             }
         });
     }

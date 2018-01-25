@@ -120,7 +120,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private boolean remoteKeyChanged;
 
-    private final EndPointBase endPoint;
+    private final EndPoint endPoint;
 
     // when true, the connection will be closed (either as RMI or as 'normal' listener execution) when the thread execution returns control
     // back to the network stack
@@ -145,7 +145,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      * All of the parameters can be null, when metaChannel wants to get the base class type
      */
     public
-    ConnectionImpl(final Logger logger, final EndPointBase endPoint, final RmiBridge rmiBridge) {
+    ConnectionImpl(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
         this.logger = logger;
         this.endPoint = endPoint;
         this.rmiBridge = rmiBridge;
@@ -253,7 +253,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @Override
     public
-    EndPointBase getEndPoint() {
+    EndPoint getEndPoint() {
         return this.endPoint;
     }
 

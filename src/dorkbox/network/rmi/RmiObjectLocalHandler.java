@@ -25,7 +25,7 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.util.IdentityMap;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.CryptoSerializationManager;
@@ -145,7 +145,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
 
 
                 // have to convert the iFace -> Impl
-                EndPointBase endPoint = connection.getEndPoint();
+                EndPoint endPoint = connection.getEndPoint();
                 CryptoSerializationManager serialization = endPoint.getSerialization();
 
                 Class<?> rmiImpl = serialization.getRmiImpl(registration.interfaceClass);

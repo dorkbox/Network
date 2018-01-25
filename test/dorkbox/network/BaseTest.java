@@ -20,7 +20,7 @@
 package dorkbox.network;
 
 
-import static dorkbox.network.connection.EndPointBase.THREADGROUP_NAME;
+import static dorkbox.network.connection.EndPoint.THREADGROUP_NAME;
 import static org.junit.Assert.fail;
 
 import java.util.ArrayList;
@@ -34,7 +34,7 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
 import ch.qos.logback.classic.joran.JoranConfigurator;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.ConsoleAppender;
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.entropy.SimpleEntropy;
 import dorkbox.util.exceptions.InitializationException;
@@ -57,7 +57,7 @@ class BaseTest {
     }
 
     volatile boolean fail_check;
-    private final ArrayList<EndPointBase> endPointBaseConnections = new ArrayList<EndPointBase>();
+    private final ArrayList<EndPoint> endPointConnections = new ArrayList<EndPoint>();
 
     public
     BaseTest() {
@@ -107,8 +107,8 @@ class BaseTest {
     }
 
     public
-    void addEndPoint(final EndPointBase endPointBaseConnection) {
-        this.endPointBaseConnections.add(endPointBaseConnection);
+    void addEndPoint(final EndPoint endPointConnection) {
+        this.endPointConnections.add(endPointConnection);
     }
 
     /**
@@ -157,12 +157,12 @@ class BaseTest {
 
     private
     void stopEndPoints_outsideThread() {
-        synchronized (BaseTest.this.endPointBaseConnections) {
-            for (EndPointBase endPointBaseConnection : BaseTest.this.endPointBaseConnections) {
-                endPointBaseConnection.stop();
-                endPointBaseConnection.waitForShutdown();
+        synchronized (BaseTest.this.endPointConnections) {
+            for (EndPoint endPointConnection : BaseTest.this.endPointConnections) {
+                endPointConnection.stop();
+                endPointConnection.waitForShutdown();
             }
-            BaseTest.this.endPointBaseConnections.clear();
+            BaseTest.this.endPointConnections.clear();
         }
     }
 
@@ -226,8 +226,8 @@ class BaseTest {
         }
 
         while (true) {
-            synchronized (this.endPointBaseConnections) {
-                if (this.endPointBaseConnections.isEmpty()) {
+            synchronized (this.endPointConnections) {
+                if (this.endPointConnections.isEmpty()) {
                     break;
                 }
             }

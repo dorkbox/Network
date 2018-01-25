@@ -278,7 +278,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      * Invoked when a message object was received from a remote peer.
      * <p/>
      * If data is sent in response to this event, the connection data is automatically flushed to the wire. If the data is sent in a separate thread,
-     * {@link EndPointBase#send().flush()} must be called manually.
+     * {@link EndPoint#send().flush()} must be called manually.
      * <p/>
      * {@link ISessionManager}
      */

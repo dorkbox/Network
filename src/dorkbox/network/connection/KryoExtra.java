@@ -74,7 +74,7 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
 
 
     // writing data
-    private final ByteBuf tempBuffer = Unpooled.buffer(EndPointBase.udpMaxSize);
+    private final ByteBuf tempBuffer = Unpooled.buffer(EndPoint.udpMaxSize);
     private LZ4Compressor compressor = factory.fastCompressor();
 
     private int inputArrayLength = -1;

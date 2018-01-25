@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
 import dorkbox.network.serialization.Serialization;
@@ -47,8 +47,8 @@ class UnregisteredClassTest extends BaseTest {
     @Test
     public
     void unregisteredClasses() throws InitializationException, SecurityException, IOException, InterruptedException {
-        int origSize = EndPointBase.udpMaxSize;
-        EndPointBase.udpMaxSize = 2048;
+        int origSize = EndPoint.udpMaxSize;
+        EndPoint.udpMaxSize = 2048;
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
@@ -179,7 +179,7 @@ class UnregisteredClassTest extends BaseTest {
             fail(this.fail);
         }
 
-        EndPointBase.udpMaxSize = origSize;
+        EndPoint.udpMaxSize = origSize;
     }
 
     private

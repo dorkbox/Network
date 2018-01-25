@@ -48,7 +48,7 @@ import com.esotericsoftware.kryo.util.IntMap;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.RmiSerializationManager;
 import dorkbox.util.collections.ObjectIntMap;
@@ -193,7 +193,7 @@ class RmiBridge {
 
     /**
      * Invokes the method on the object and, if necessary, sends the result back to the connection that made the invocation request. This
-     * method is invoked on the update thread of the {@link EndPointBase} for this RmiBridge and unless an executor has been set.
+     * method is invoked on the update thread of the {@link EndPoint} for this RmiBridge and unless an executor has been set.
      *
      * This is the response to the invoke method in the RmiProxyHandler
      *

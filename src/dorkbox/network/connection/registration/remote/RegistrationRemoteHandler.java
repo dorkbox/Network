@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection.registration.remote;
 
-import static dorkbox.network.connection.EndPointBase.maxShutdownWaitTimeInMilliSeconds;
+import static dorkbox.network.connection.EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;

@@ -51,7 +51,7 @@ import io.netty.util.NetUtil;
  * represents the base of a client/server end point
  */
 public abstract
-class EndPointBase extends Shutdownable {
+class EndPoint extends Shutdownable {
     // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
     // it results in severe UDP packet loss and contention.
     //
@@ -126,7 +126,7 @@ class EndPointBase extends Shutdownable {
      * @throws SecurityException if unable to initialize/generate ECC keys
      */
     public
-    EndPointBase(Class<? extends EndPointBase> type, final Configuration config) throws SecurityException {
+    EndPoint(Class<? extends EndPoint> type, final Configuration config) throws SecurityException {
         super(type);
 
         // make sure that 'localhost' is ALWAYS our specific loopback IP address
@@ -316,7 +316,7 @@ class EndPointBase extends Shutdownable {
      * @return a new network connection
      */
     protected
-    <E extends EndPointBase> ConnectionImpl newConnection(final Logger logger, final E endPoint, final RmiBridge rmiBridge) {
+    <E extends EndPoint> ConnectionImpl newConnection(final Logger logger, final E endPoint, final RmiBridge rmiBridge) {
         return new ConnectionImpl(logger, endPoint, rmiBridge);
     }
 
@@ -488,7 +488,7 @@ class EndPointBase extends Shutdownable {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        EndPointBase other = (EndPointBase) obj;
+        EndPoint other = (EndPoint) obj;
 
         if (privateKey == null) {
             if (other.privateKey != null) {

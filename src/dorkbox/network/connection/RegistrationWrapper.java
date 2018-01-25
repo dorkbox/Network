@@ -53,7 +53,7 @@ class RegistrationWrapper implements UdpServer {
     private final KryoEncoder kryoEncoder;
     private final KryoEncoderCrypto kryoEncoderCrypto;
 
-    private final EndPointBase endPointBaseConnection;
+    private final EndPoint endPointConnection;
 
     // keeps track of connections (TCP/UDP-client)
     private final ReentrantLock channelMapLock = new ReentrantLock();
@@ -77,16 +77,16 @@ class RegistrationWrapper implements UdpServer {
 
 
     public
-    RegistrationWrapper(final EndPointBase endPointBaseConnection,
+    RegistrationWrapper(final EndPoint endPointConnection,
                         final Logger logger,
                         final KryoEncoder kryoEncoder,
                         final KryoEncoderCrypto kryoEncoderCrypto) {
-        this.endPointBaseConnection = endPointBaseConnection;
+        this.endPointConnection = endPointConnection;
         this.logger = logger;
         this.kryoEncoder = kryoEncoder;
         this.kryoEncoderCrypto = kryoEncoderCrypto;
 
-        if (endPointBaseConnection instanceof EndPointServer) {
+        if (endPointConnection instanceof EndPointServer) {
             this.udpRemoteMap = new ObjectMap<InetSocketAddress, ConnectionImpl>(32, ConnectionManager.LOAD_FACTOR);
         }
         else {
@@ -127,7 +127,7 @@ class RegistrationWrapper implements UdpServer {
      */
     public
     int getIdleTimeout() {
-        return this.endPointBaseConnection.getIdleTimeout();
+        return this.endPointConnection.getIdleTimeout();
     }
 
     /**
@@ -138,7 +138,7 @@ class RegistrationWrapper implements UdpServer {
      */
     public
     boolean registerNextProtocol0() {
-        return this.endPointBaseConnection.registerNextProtocol0();
+        return this.endPointConnection.registerNextProtocol0();
     }
 
     /**
@@ -147,7 +147,7 @@ class RegistrationWrapper implements UdpServer {
      */
     public
     void connectionConnected0(ConnectionImpl networkConnection) {
-        this.endPointBaseConnection.connectionConnected0(networkConnection);
+        this.endPointConnection.connectionConnected0(networkConnection);
     }
 
     /**
@@ -157,22 +157,22 @@ class RegistrationWrapper implements UdpServer {
      */
     public
     Connection connection0(MetaChannel metaChannel) {
-        return this.endPointBaseConnection.connection0(metaChannel);
+        return this.endPointConnection.connection0(metaChannel);
     }
 
     public
     SecureRandom getSecureRandom() {
-        return this.endPointBaseConnection.secureRandom;
+        return this.endPointConnection.secureRandom;
     }
 
     public
     ECPublicKeyParameters getPublicKey() {
-        return this.endPointBaseConnection.publicKey;
+        return this.endPointConnection.publicKey;
     }
 
     public
     CipherParameters getPrivateKey() {
-        return this.endPointBaseConnection.privateKey;
+        return this.endPointConnection.privateKey;
     }
 
 
@@ -188,13 +188,13 @@ class RegistrationWrapper implements UdpServer {
         InetAddress address = tcpRemoteServer.getAddress();
         byte[] hostAddress = address.getAddress();
 
-        ECPublicKeyParameters savedPublicKey = this.endPointBaseConnection.propertyStore.getRegisteredServerKey(hostAddress);
+        ECPublicKeyParameters savedPublicKey = this.endPointConnection.propertyStore.getRegisteredServerKey(hostAddress);
         Logger logger2 = this.logger;
         if (savedPublicKey == null) {
             if (logger2.isDebugEnabled()) {
                 logger2.debug("Adding new remote IP address key for {}", address.getHostAddress());
             }
-            this.endPointBaseConnection.propertyStore.addRegisteredServerKey(hostAddress, publicKey);
+            this.endPointConnection.propertyStore.addRegisteredServerKey(hostAddress, publicKey);
         }
         else {
             // COMPARE!
@@ -207,7 +207,7 @@ class RegistrationWrapper implements UdpServer {
                     byAddress = "Unknown Address";
                 }
 
-                if (this.endPointBaseConnection.disableRemoteKeyValidation) {
+                if (this.endPointConnection.disableRemoteKeyValidation) {
                     logger2.warn("Invalid or non-matching public key from remote server. Their public key has changed. To fix, remove entry for: {}", byAddress);
                     return true;
                 }
@@ -225,7 +225,7 @@ class RegistrationWrapper implements UdpServer {
     @SuppressWarnings("AutoBoxing")
     public
     void removeRegisteredServerKey(final byte[] hostAddress) throws SecurityException {
-        ECPublicKeyParameters savedPublicKey = this.endPointBaseConnection.propertyStore.getRegisteredServerKey(hostAddress);
+        ECPublicKeyParameters savedPublicKey = this.endPointConnection.propertyStore.getRegisteredServerKey(hostAddress);
         if (savedPublicKey != null) {
             Logger logger2 = this.logger;
             if (logger2.isDebugEnabled()) {
@@ -235,7 +235,7 @@ class RegistrationWrapper implements UdpServer {
                               hostAddress[2],
                               hostAddress[3]);
             }
-            this.endPointBaseConnection.propertyStore.removeRegisteredServerKey(hostAddress);
+            this.endPointConnection.propertyStore.removeRegisteredServerKey(hostAddress);
         }
     }
 
@@ -307,8 +307,8 @@ class RegistrationWrapper implements UdpServer {
 
     public
     void abortRegistrationIfClient() {
-        if (this.endPointBaseConnection instanceof EndPointClient) {
-            ((EndPointClient) this.endPointBaseConnection).abortRegistration();
+        if (this.endPointConnection instanceof EndPointClient) {
+            ((EndPointClient) this.endPointConnection).abortRegistration();
         }
     }
 

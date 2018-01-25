@@ -26,7 +26,7 @@ import java.util.TimerTask;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.InitializationException;
@@ -42,7 +42,7 @@ class ConnectionTest extends BaseTest {
         System.out.println("---- " + "Local");
 
         Configuration configuration = new Configuration();
-        configuration.localChannelName = EndPointBase.LOCAL_CHANNEL;
+        configuration.localChannelName = EndPoint.LOCAL_CHANNEL;
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 

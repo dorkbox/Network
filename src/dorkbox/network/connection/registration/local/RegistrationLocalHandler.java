@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection.registration.local;
 
-import static dorkbox.network.connection.EndPointBase.maxShutdownWaitTimeInMilliSeconds;
+import static dorkbox.network.connection.EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;

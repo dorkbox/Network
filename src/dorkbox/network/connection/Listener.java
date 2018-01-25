@@ -62,11 +62,11 @@ interface Listener {
 
 
     /**
-     * Called when the connection is idle for longer than the {@link EndPointBase#setIdleTimeout(int)} idle threshold.
+     * Called when the connection is idle for longer than the {@link EndPoint#setIdleTimeout(int)} idle threshold.
      */
     interface OnIdle<C extends Connection> extends Listener {
         /**
-         * Called when the connection is idle for longer than the {@link EndPointBase#setIdleTimeout(int)} idle threshold.
+         * Called when the connection is idle for longer than the {@link EndPoint#setIdleTimeout(int)} idle threshold.
          */
         void idle(C connection) throws IOException;
     }

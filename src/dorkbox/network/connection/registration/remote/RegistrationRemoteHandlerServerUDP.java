@@ -24,7 +24,7 @@ import org.slf4j.Logger;
 
 import dorkbox.network.Broadcast;
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -76,7 +76,7 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
         // Netty4 has default of 2048 bytes as upper limit for datagram packets.
         context.channel()
                .config()
-               .setRecvByteBufAllocator(new FixedRecvByteBufAllocator(EndPointBase.udpMaxSize));
+               .setRecvByteBufAllocator(new FixedRecvByteBufAllocator(EndPoint.udpMaxSize));
 
         // do NOT want to add UDP channels, since they are tracked differently for the server.
     }
@@ -271,7 +271,7 @@ class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramP
 
         // also, once we notify, we unregister this.
         if (registrationWrapper != null) {
-            return registrationWrapper.closeChannel(channel, EndPointBase.maxShutdownWaitTimeInMilliSeconds);
+            return registrationWrapper.closeChannel(channel, EndPoint.maxShutdownWaitTimeInMilliSeconds);
         }
 
         return null;

@@ -33,7 +33,7 @@ import io.netty.channel.ChannelOption;
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointClient extends EndPointBase {
+class EndPointClient extends EndPoint {
 
     // is valid when there is a connection to the server, otherwise it is null
     protected volatile Connection connection;

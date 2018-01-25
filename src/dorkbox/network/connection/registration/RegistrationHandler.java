@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection.registration;
 
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -93,7 +93,7 @@ class RegistrationHandler extends ChannelInboundHandlerAdapter {
 
         // also, once we notify, we unregister this.
         if (registrationWrapper != null) {
-            MetaChannel metaChannel = registrationWrapper.closeChannel(channel, EndPointBase.maxShutdownWaitTimeInMilliSeconds);
+            MetaChannel metaChannel = registrationWrapper.closeChannel(channel, EndPoint.maxShutdownWaitTimeInMilliSeconds);
             registrationWrapper.abortRegistrationIfClient();
 
             return metaChannel;

@@ -2,7 +2,7 @@ package dorkbox.network;
 
 import org.slf4j.Logger;
 
-import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Shutdownable;
 import dorkbox.network.dns.serverHandlers.DnsServerHandler;
 import dorkbox.util.NamedThreadFactory;
@@ -84,12 +84,12 @@ class DnsServer extends Shutdownable {
         }
         else if (OS.isLinux()) {
             // JNI network stack is MUCH faster (but only on linux)
-            boss = new EpollEventLoopGroup(EndPointBase.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new EpollEventLoopGroup(EndPointBase.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            boss = new EpollEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new EpollEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else {
-            boss = new NioEventLoopGroup(EndPointBase.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new NioEventLoopGroup(EndPointBase.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            boss = new NioEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new NioEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
 
 
@@ -121,7 +121,7 @@ class DnsServer extends Shutdownable {
                         .option(ChannelOption.SO_REUSEADDR, true)
                         .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .childOption(ChannelOption.SO_KEEPALIVE, true)
-                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPointBase.WRITE_BUFF_LOW, EndPointBase.WRITE_BUFF_HIGH))
+                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
                         .childHandler(new DnsServerHandler());
 
             // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
@@ -153,7 +153,7 @@ class DnsServer extends Shutdownable {
 
             udpBootstrap.group(worker)
                         .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPointBase.WRITE_BUFF_LOW, EndPointBase.WRITE_BUFF_HIGH))
+                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
 
                         // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
                         .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
