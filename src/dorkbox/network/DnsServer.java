@@ -2,8 +2,8 @@ package dorkbox.network;
 
 import org.slf4j.Logger;
 
-import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.EndPointBase;
+import dorkbox.network.connection.Shutdownable;
 import dorkbox.network.dns.serverHandlers.DnsServerHandler;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
@@ -40,7 +40,7 @@ import io.netty.channel.socket.oio.OioServerSocketChannel;
  * large due to a large number of records.
  */
 public
-class DnsServer extends EndPoint {
+class DnsServer extends Shutdownable {
 
     /**
      * The maximum queue length for incoming connection indications (a request to connect). If a connection indication arrives when the

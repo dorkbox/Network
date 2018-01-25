@@ -23,7 +23,7 @@ import io.netty.util.internal.PlatformDependent;
  * This is the highest level endpoint, for lifecycle support/management.
  */
 public
-class EndPoint {
+class Shutdownable {
     static {
         //noinspection Duplicates
         try {
@@ -76,7 +76,7 @@ class EndPoint {
 
     protected final ThreadGroup threadGroup;
 
-    protected final Class<? extends EndPoint> type;
+    protected final Class<? extends Shutdownable> type;
 
     protected final Object shutdownInProgress = new Object();
     private volatile boolean isShutdown = false;
@@ -93,7 +93,7 @@ class EndPoint {
     private AtomicBoolean stopCalled = new AtomicBoolean(false);
 
     public
-    EndPoint(final Class<? extends EndPoint> type) {
+    Shutdownable(final Class<? extends Shutdownable> type) {
         this.type = type;
 
         // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
@@ -111,8 +111,8 @@ class EndPoint {
             @Override
             public
             void run() {
-                if (EndPoint.this.shouldShutdownHookRun()) {
-                    EndPoint.this.stop();
+                if (Shutdownable.this.shouldShutdownHookRun()) {
+                    Shutdownable.this.stop();
                 }
             }
         };
@@ -238,7 +238,7 @@ class EndPoint {
                 @Override
                 public
                 void run() {
-                    EndPoint.this.stopInThread();
+                    Shutdownable.this.stopInThread();
                 }
             });
             thread.setDaemon(false);

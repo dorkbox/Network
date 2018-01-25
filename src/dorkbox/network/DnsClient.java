@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 
-import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.Shutdownable;
 import dorkbox.network.dns.DnsQuestion;
 import dorkbox.network.dns.DnsResponse;
 import dorkbox.network.dns.constants.DnsRecordType;
@@ -71,7 +71,7 @@ import io.netty.util.internal.PlatformDependent;
  */
 @SuppressWarnings({"unused", "WeakerAccess"})
 public
-class DnsClient extends EndPoint {
+class DnsClient extends Shutdownable {
 
 /*
  * TODO: verify ResolverConfiguration works as expected!

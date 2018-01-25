@@ -51,7 +51,7 @@ import io.netty.util.NetUtil;
  * represents the base of a client/server end point
  */
 public abstract
-class EndPointBase extends EndPoint {
+class EndPointBase extends Shutdownable {
     // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
     // it results in severe UDP packet loss and contention.
     //
@@ -316,7 +316,7 @@ class EndPointBase extends EndPoint {
      * @return a new network connection
      */
     protected
-    ConnectionImpl newConnection(final Logger logger, final EndPointBase endPoint, final RmiBridge rmiBridge) {
+    <E extends EndPointBase> ConnectionImpl newConnection(final Logger logger, final E endPoint, final RmiBridge rmiBridge) {
         return new ConnectionImpl(logger, endPoint, rmiBridge);
     }
 
