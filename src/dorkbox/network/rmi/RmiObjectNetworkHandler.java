@@ -1,31 +1,40 @@
 /*
- * Copyright 2010 dorkbox, llc
+ * Copyright 2018 dorkbox, llc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
  */
-package dorkbox.network.connection;
+package dorkbox.network.rmi;
 
-import dorkbox.network.rmi.RmiBridge;
-import dorkbox.network.rmi.RmiRegistration;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.Listener;
 
-class RegisterRmiNetworkHandler implements Listener.OnMessageReceived<ConnectionImpl, RmiRegistration> {
+public
+class RmiObjectNetworkHandler extends RmiObjectHandler {
 
-    RegisterRmiNetworkHandler() {
+    public
+    RmiObjectNetworkHandler() {
     }
 
     @Override
     public
-    void received(final ConnectionImpl connection, final RmiRegistration registration) {
+    void invoke(final ConnectionImpl connection, final InvokeMethod message, final Listener.OnMessageReceived<ConnectionImpl, InvokeMethod> rmiInvokeListener) {
+        // default, nothing fancy
+        rmiInvokeListener.received(connection, message);
+    }
+
+    @Override
+    public
+    void registration(final ConnectionImpl connection, final RmiRegistration registration) {
         // manage creating/getting/notifying this RMI object
 
         // these fields are ALWAYS present!
@@ -42,7 +51,8 @@ class RegisterRmiNetworkHandler implements Listener.OnMessageReceived<Connection
 
                 // For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
                 RmiRegistration registrationResult = connection.createNewRmiObject(interfaceClass, interfaceClass, callbackId);
-                connection.TCP(registrationResult).flush();
+                connection.TCP(registrationResult)
+                          .flush();
             }
 
             // Check if we are getting an already existing REMOTE object. This check is always AFTER the check to create a new object
@@ -51,7 +61,8 @@ class RegisterRmiNetworkHandler implements Listener.OnMessageReceived<Connection
                 //
                 // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
                 RmiRegistration registrationResult = connection.getExistingRmiObject(interfaceClass, registration.rmiId, callbackId);
-                connection.TCP(registrationResult).flush();
+                connection.TCP(registrationResult)
+                          .flush();
             }
         }
         else {

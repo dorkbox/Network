@@ -19,7 +19,7 @@ package dorkbox.network.rmi;
  * Message specifically to register a class implementation for RMI
  */
 public
-class RmiRegistration {
+class RmiRegistration implements RmiMessage {
     public boolean isRequest;
 
     /**

@@ -308,7 +308,9 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
                   final boolean registrationRequired,
                   final boolean implementationRequired,
                   final SerializerFactory factory) {
+
         this.forbidInterfaceRegistration = implementationRequired;
+
         this.kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra>() {
             @Override
             public

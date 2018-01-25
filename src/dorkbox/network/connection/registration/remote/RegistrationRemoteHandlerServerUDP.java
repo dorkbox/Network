@@ -23,7 +23,6 @@ import java.util.List;
 import org.slf4j.Logger;
 
 import dorkbox.network.Broadcast;
-import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.KryoExtra;
@@ -45,19 +44,18 @@ import io.netty.handler.codec.MessageToMessageCodec;
 
 @Sharable
 public
-class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageToMessageCodec<DatagramPacket, UdpWrapper> {
+class RegistrationRemoteHandlerServerUDP extends MessageToMessageCodec<DatagramPacket, UdpWrapper> {
 
     // this is for the SERVER only. UDP channel is ALWAYS the SAME channel (it's the server's listening channel).
 
     private final org.slf4j.Logger logger;
     private final ByteBuf discoverResponseBuffer;
-    private final RegistrationWrapper<C> registrationWrapper;
+    private final RegistrationWrapper registrationWrapper;
     private final CryptoSerializationManager serializationManager;
-
 
     public
     RegistrationRemoteHandlerServerUDP(final String name,
-                                       final RegistrationWrapper<C> registrationWrapper,
+                                       final RegistrationWrapper registrationWrapper,
                                        final CryptoSerializationManager serializationManager) {
         final String name1 = name + " Registration-UDP-Server";
         this.logger = org.slf4j.LoggerFactory.getLogger(name1);
@@ -176,7 +174,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
 
         // registration is the ONLY thing NOT encrypted
         Logger logger2 = this.logger;
-        RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
+        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
         CryptoSerializationManager serializationManager2 = this.serializationManager;
 
         if (KryoExtra.isEncrypted(message)) {
@@ -262,7 +260,7 @@ class RegistrationRemoteHandlerServerUDP<C extends Connection> extends MessageTo
      * Copied from RegistrationHandler. There were issues accessing it as static with generics.
      */
     public
-    MetaChannel shutdown(final RegistrationWrapper<C> registrationWrapper, final Channel channel) {
+    MetaChannel shutdown(final RegistrationWrapper registrationWrapper, final Channel channel) {
         this.logger.error("SHUTDOWN HANDLER REACHED! SOMETHING MESSED UP! TRYING TO ABORT");
 
         // shutdown. Something messed up. Only reach this is something messed up.

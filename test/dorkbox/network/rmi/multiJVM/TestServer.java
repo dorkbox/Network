@@ -1,13 +1,10 @@
 package dorkbox.network.rmi.multiJVM;
 
-import java.io.IOException;
-
 import dorkbox.network.Server;
 import dorkbox.network.rmi.RmiTest;
 import dorkbox.network.rmi.TestCow;
 import dorkbox.network.rmi.TestCowImpl;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
 /**
@@ -31,11 +28,7 @@ class TestServer
         Server server = null;
         try {
             server = new Server(configuration);
-        } catch (InitializationException e) {
-            e.printStackTrace();
         } catch (SecurityException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
             e.printStackTrace();
         }
 

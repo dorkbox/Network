@@ -17,16 +17,16 @@ package dorkbox.network.connection.wrapper;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPointWriter;
 import dorkbox.network.connection.ISessionManager;
+import dorkbox.network.rmi.RmiObjectHandler;
 import io.netty.channel.EventLoop;
 
 public
-interface ChannelWrapper<C extends Connection> {
+interface ChannelWrapper {
 
     ConnectionPointWriter tcp();
-
     ConnectionPointWriter udp();
 
     /**
@@ -54,12 +54,14 @@ interface ChannelWrapper<C extends Connection> {
      */
     boolean isLoopback();
 
+    RmiObjectHandler manageRmi();
+
     /**
      * @return the remote host (can be local, tcp, udp)
      */
     String getRemoteHost();
 
-    void close(final Connection connection, final ISessionManager<C> sessionManager);
+    void close(ConnectionImpl connection, ISessionManager sessionManager);
 
     int id();
 

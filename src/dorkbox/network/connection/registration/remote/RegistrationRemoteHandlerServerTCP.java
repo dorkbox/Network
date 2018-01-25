@@ -32,10 +32,10 @@ import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.util.Arrays;
 import org.slf4j.Logger;
 
+import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -49,7 +49,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
 
 public
-class RegistrationRemoteHandlerServerTCP<C extends Connection> extends RegistrationRemoteHandlerServer<C> {
+class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer {
 
     private static final long ECDH_TIMEOUT = 10L * 60L * 60L * 1000L * 1000L * 1000L; // 10 minutes in nanoseconds
 
@@ -61,7 +61,7 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
 
     public
     RegistrationRemoteHandlerServerTCP(final String name,
-                                       final RegistrationWrapper<C> registrationWrapper,
+                                       final RegistrationWrapper registrationWrapper,
                                        final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }
@@ -264,8 +264,10 @@ class RegistrationRemoteHandlerServerTCP<C extends Connection> extends Registrat
                              * Diffie-Hellman-Merkle key exchange for the AES key
                              * see http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
                              */
-                            ECPublicKeyParameters ecdhPubKey = EccPublicKeySerializer.read(new Input(payload));
-                            if (ecdhPubKey == null) {
+                            ECPublicKeyParameters ecdhPubKey;
+                            try {
+                                ecdhPubKey = EccPublicKeySerializer.read(new Input(payload));
+                            } catch (KryoException e) {
                                 logger2.error("Invalid decode of ecdh public key. Aborting.");
                                 shutdown(registrationWrapper2, channel);
 

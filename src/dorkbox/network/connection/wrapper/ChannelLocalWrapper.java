@@ -19,27 +19,30 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPointWriter;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.network.rmi.RmiObjectHandler;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
 import io.netty.channel.local.LocalAddress;
 
 public
-class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, ConnectionPointWriter {
+class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
 
     private final Channel channel;
+    private final RmiObjectHandler rmiObjectHandler;
+
     private final AtomicBoolean shouldFlush = new AtomicBoolean(false);
     private String remoteAddress;
 
     public
-    ChannelLocalWrapper(MetaChannel metaChannel) {
+    ChannelLocalWrapper(MetaChannel metaChannel, final RmiObjectHandler rmiObjectHandler) {
         this.channel = metaChannel.localChannel;
+        this.rmiObjectHandler = rmiObjectHandler;
     }
-
 
     /**
      * Write an object to the underlying channel
@@ -112,6 +115,12 @@ class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, Co
     }
 
     @Override
+    public
+    RmiObjectHandler manageRmi() {
+        return rmiObjectHandler;
+    }
+
+    @Override
     public final
     String getRemoteHost() {
         return this.remoteAddress;
@@ -119,7 +128,7 @@ class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, Co
 
     @Override
     public
-    void close(Connection connection, ISessionManager<C> sessionManager) {
+    void close(ConnectionImpl connection, ISessionManager sessionManager) {
         long maxShutdownWaitTimeInMilliSeconds = EndPointBase.maxShutdownWaitTimeInMilliSeconds;
 
         this.shouldFlush.set(false);
@@ -153,7 +162,7 @@ class ChannelLocalWrapper<C extends Connection> implements ChannelWrapper<C>, Co
         if (getClass() != obj.getClass()) {
             return false;
         }
-        ChannelLocalWrapper<C> other = (ChannelLocalWrapper<C>) obj;
+        ChannelLocalWrapper other = (ChannelLocalWrapper) obj;
         if (this.remoteAddress == null) {
             if (other.remoteAddress != null) {
                 return false;

@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection.registration.local;
 
-import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -26,10 +25,10 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.util.ReferenceCountUtil;
 
 public
-class RegistrationLocalHandlerClient<C extends Connection> extends RegistrationLocalHandler<C> {
+class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
 
     public
-    RegistrationLocalHandlerClient(String name, RegistrationWrapper<C> registrationWrapper) {
+    RegistrationLocalHandlerClient(String name, RegistrationWrapper registrationWrapper) {
         super(name, registrationWrapper);
     }
 
@@ -77,15 +76,6 @@ class RegistrationLocalHandlerClient<C extends Connection> extends RegistrationL
             registrationWrapper.registerNextProtocol0();
 
             ConnectionImpl connection = metaChannel.connection;
-
-
-            // add our RMI handlers
-            if (registrationWrapper.rmiEnabled()) {
-                ///////////////////////
-                // DECODE (or upstream)
-                ///////////////////////
-                pipeline.addFirst(LOCAL_RMI_HANDLER, rmiLocalHandler);
-            }
 
             // have to setup connection handler
             pipeline.addLast(CONNECTION_HANDLER, connection);

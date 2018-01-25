@@ -18,24 +18,29 @@ package dorkbox.network.connection;
 import java.util.Collection;
 
 public
-interface ISessionManager<C extends Connection> {
+interface ISessionManager {
     /**
      * Called when a message is received
      */
-    void onMessage(C connection, Object message);
+    void onMessage(ConnectionImpl connection, Object message);
 
     /**
      * Called when the connection has been idle (read & write) for 2 seconds
      */
-    void onIdle(C connection);
+    void onIdle(Connection connection);
 
+    /**
+     * Invoked when a Channel is open, bound to a local address, and connected to a remote address.
+     */
+    void onConnected(Connection connection);
 
-    void onConnected(C connection);
-
-    void onDisconnected(C connection);
+    /**
+     * Invoked when a Channel was disconnected from its remote peer.
+     */
+    void onDisconnected(Connection connection);
 
     /**
      * Returns a non-modifiable list of active connections. This is extremely slow, and not recommended!
      */
-    Collection<C> getConnections();
+    <C extends Connection> Collection<C> getConnections();
 }

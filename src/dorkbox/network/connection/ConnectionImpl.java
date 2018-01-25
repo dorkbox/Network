@@ -17,11 +17,12 @@ package dorkbox.network.connection;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Proxy;
 import java.util.AbstractMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
-import java.util.WeakHashMap;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -38,13 +39,20 @@ import dorkbox.network.connection.ping.PingTuple;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
+import dorkbox.network.rmi.InvokeMethod;
+import dorkbox.network.rmi.InvokeMethodResult;
 import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.Rmi;
 import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.rmi.RmiMessage;
+import dorkbox.network.rmi.RmiObjectHandler;
+import dorkbox.network.rmi.RmiProxyHandler;
 import dorkbox.network.rmi.RmiRegistration;
+import dorkbox.network.rmi.TimeoutException;
 import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.collections.IntMap;
+import dorkbox.util.collections.LockFreeHashMap;
 import dorkbox.util.generics.ClassHelper;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -68,6 +76,24 @@ import io.netty.util.concurrent.Promise;
 @Sharable
 public
 class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConnection, Connection, Listeners, ConnectionBridge {
+    // default false
+    public static boolean ENABLE_PROXY_OBJECTS = true;
+
+    public static
+    boolean isTcp(Class<? extends Channel> channelClass) {
+        return channelClass == NioSocketChannel.class || channelClass == EpollSocketChannel.class;
+    }
+
+    public static
+    boolean isUdp(Class<? extends Channel> channelClass) {
+        return channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class;
+    }
+
+    public static
+    boolean isLocal(Class<? extends Channel> channelClass) {
+        return channelClass == LocalChannel.class;
+    }
+
 
     private final org.slf4j.Logger logger;
 
@@ -82,14 +108,14 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     private final Object messageInProgressLock = new Object();
     private final AtomicBoolean messageInProgress = new AtomicBoolean(false);
 
-    private ISessionManager<Connection> sessionManager;
-    private ChannelWrapper<Connection> channelWrapper;
+    private ISessionManager sessionManager;
+    private ChannelWrapper channelWrapper;
     private boolean isLoopback;
 
     private volatile PingFuture pingFuture = null;
 
     // used to store connection local listeners (instead of global listeners). Only possible on the server.
-    private volatile ConnectionManager<Connection> localListenerManager;
+    private volatile ConnectionManager localListenerManager;
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private boolean remoteKeyChanged;
@@ -108,21 +134,32 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     //
     // RMI fields
     //
-    protected CountDownLatch rmi;
     private final RmiBridge rmiBridge;
-    private final Map<Integer, RemoteObject> proxyIdCache = new WeakHashMap<Integer, RemoteObject>(8);
-    private final IntMap<RemoteObjectCallback> rmiRegistrationCallbacks = new IntMap<RemoteObjectCallback>();
+    private final Map<Integer, RemoteObject> proxyIdCache;
+    private final List<Listener.OnMessageReceived<Connection, InvokeMethodResult>> proxyListeners;
+
+    private final IntMap<RemoteObjectCallback> rmiRegistrationCallbacks;
     private int rmiCallbackId = 0; // protected by synchronized (rmiRegistrationCallbacks)
 
     /**
      * All of the parameters can be null, when metaChannel wants to get the base class type
      */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     public
     ConnectionImpl(final Logger logger, final EndPointBase endPoint, final RmiBridge rmiBridge) {
         this.logger = logger;
         this.endPoint = endPoint;
         this.rmiBridge = rmiBridge;
+
+        if (endPoint != null && endPoint.globalRmiBridge != null) {
+            // rmi is enabled.
+            proxyIdCache = new LockFreeHashMap<Integer, RemoteObject>();
+            proxyListeners = new CopyOnWriteArrayList<Listener.OnMessageReceived<Connection, InvokeMethodResult>>();
+            rmiRegistrationCallbacks = new IntMap<RemoteObjectCallback>();
+        } else {
+            proxyIdCache = null;
+            proxyListeners = null;
+            rmiRegistrationCallbacks = null;
+        }
     }
 
     /**
@@ -130,8 +167,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      * <p/>
      * This happens BEFORE prep.
      */
-    @SuppressWarnings("unchecked")
-    void init(final ChannelWrapper channelWrapper, final ConnectionManager<Connection> sessionManager) {
+    final
+    void init(final ChannelWrapper channelWrapper, final ISessionManager sessionManager) {
         this.sessionManager = sessionManager;
         this.channelWrapper = channelWrapper;
 
@@ -151,6 +188,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      * <p/>
      * This happens AFTER init.
      */
+    final
     void prep() {
         if (this.channelWrapper != null) {
             this.channelWrapper.init();
@@ -201,7 +239,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         return this.channelWrapper.getRemoteHost();
     }
 
-
     /**
      * @return true if this connection is established on the loopback interface
      */
@@ -216,7 +253,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @Override
     public
-    EndPointBase<Connection> getEndPoint() {
+    EndPointBase getEndPoint() {
         return this.endPoint;
     }
 
@@ -529,7 +566,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
     public
     void channelRead(Object object) throws Exception {
-
         // prevent close from occurring SMACK in the middle of a message in progress.
         // delay close until it's finished.
         this.messageInProgress.set(true);
@@ -568,7 +604,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         Channel channel = context.channel();
         Class<? extends Channel> channelClass = channel.getClass();
 
-        boolean isTCP = channelClass == NioSocketChannel.class || channelClass == EpollSocketChannel.class;
+        boolean isTCP = isTcp(channelClass);
+        boolean isLocal = isLocal(channelClass);
 
         if (this.logger.isInfoEnabled()) {
             String type;
@@ -576,10 +613,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             if (isTCP) {
                 type = "TCP";
             }
-            else if (channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class) {
+            else if (isUdp(channelClass)) {
                 type = "UDP";
             }
-            else if (channelClass == LocalChannel.class) {
+            else if (isLocal) {
                 type = "LOCAL";
             }
             else {
@@ -597,7 +634,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         }
 
         // our master channels are TCP/LOCAL (which are mutually exclusive). Only key disconnect events based on the status of them.
-        if (isTCP || channelClass == LocalChannel.class) {
+        if (isTCP || isLocal) {
             // this is because channelInactive can ONLY happen when netty shuts down the channel.
             //   and connection.close() can be called by the user.
             this.sessionManager.onDisconnected(this);
@@ -618,6 +655,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     void close() {
+        close(false);
+    }
+
+
+    final
+    void close(final boolean keepListeners) {
         // only close if we aren't already in the middle of closing.
         if (this.closeInProgress.compareAndSet(false, true)) {
             int idleTimeoutMs = this.endPoint.getIdleTimeout();
@@ -657,8 +700,28 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                     }
                 }
             }
+
+            // remove all listeners, but ONLY if we are the server. If we remove all listeners and we are the client, then we remove
+            // ALL logic from the client! The server is OK because the server listeners per connection are dynamically added
+            if (!keepListeners) {
+                removeAll();
+            }
+
+            // proxy listeners are cleared in the removeAll() call
+            if (proxyIdCache != null) {
+                synchronized (proxyIdCache) {
+                    proxyIdCache.clear();
+                }
+            }
+
+            if (rmiRegistrationCallbacks != null) {
+                synchronized (rmiRegistrationCallbacks) {
+                    rmiRegistrationCallbacks.clear();
+                }
+            }
         }
     }
+
 
     /**
      * Marks the connection to be closed as soon as possible. This is evaluated when the current
@@ -716,7 +779,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      * (via connection.addListener), meaning that ONLY that listener attached to
      * the connection is notified on that event (ie, admin type listeners)
      */
-    @SuppressWarnings("rawtypes")
     @Override
     public final
     Listeners add(Listener listener) {
@@ -758,7 +820,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      * connection.removeListener), meaning that ONLY that listener attached to
      * the connection is removed
      */
-    @SuppressWarnings("rawtypes")
     @Override
     public final
     Listeners remove(Listener listener) {
@@ -777,7 +838,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                     this.localListenerManager.remove(listener);
 
                     if (!this.localListenerManager.hasListeners()) {
-                        ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
+                        ((EndPointServer) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
@@ -793,10 +854,16 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     /**
      * Removes all registered listeners from this connection/endpoint to NO
      * LONGER be notified of connect/disconnect/idle/receive(object) events.
+     *
+     * This includes all proxy listeners
      */
     @Override
     public final
     Listeners removeAll() {
+        if (proxyListeners != null) {
+            proxyListeners.clear();
+        }
+
         if (this.endPoint instanceof EndPointServer) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
             // meaning --
@@ -812,7 +879,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                     this.localListenerManager.removeAll();
                     this.localListenerManager = null;
 
-                    ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
+                    ((EndPointServer) this.endPoint).removeListenerManager(this);
                 }
             }
         }
@@ -825,8 +892,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     }
 
     /**
-     * Removes all registered listeners (of the object type) from this
-     * connection/endpoint to NO LONGER be notified of
+     * Removes all registered listeners (of the object type) from this connection/endpoint to NO LONGER be notified of
      * connect/disconnect/idle/receive(object) events.
      */
     @Override
@@ -848,7 +914,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
                     if (!this.localListenerManager.hasListeners()) {
                         this.localListenerManager = null;
-                        ((EndPointServer<Connection>) this.endPoint).removeListenerManager(this);
+                        ((EndPointServer) this.endPoint).removeListenerManager(this);
                     }
                 }
             }
@@ -908,7 +974,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
 
 
-    @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked", "Duplicates"})
     @Override
     public final
     <Iface> void createRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) {
@@ -931,7 +996,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         TCP(message).flush();
     }
 
-    @SuppressWarnings({"UnnecessaryLocalVariable", "unchecked", "Duplicates"})
     @Override
     public final
     <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) {
@@ -952,21 +1016,59 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         TCP(message).flush();
     }
 
-    // default false
-    public static boolean ENABLE_PROXY_OBJECTS = true;
+
+    /**
+     * Manages the RMI stuff for a connection.
+     *
+     * @return true if there was RMI stuff done, false if the message was "normal" and nothing was done
+     */
+    boolean manageRmi(final Object message) {
+        if (message instanceof RmiMessage) {
+            RmiObjectHandler rmiObjectHandler = channelWrapper.manageRmi();
+
+            if (message instanceof InvokeMethod) {
+                rmiObjectHandler.invoke(this, (InvokeMethod) message, rmiBridge.getListener());
+            }
+            else if (message instanceof InvokeMethodResult) {
+                for (Listener.OnMessageReceived<Connection, InvokeMethodResult> proxyListener : proxyListeners) {
+                    proxyListener.received(this, (InvokeMethodResult) message);
+                }
+            }
+            else if (message instanceof RmiRegistration) {
+                rmiObjectHandler.registration(this, (RmiRegistration) message);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Objects that are on the "local" in-jvm connection have fixup their objects. For "network" connections, this is automatically done.
+     */
+    Object fixupRmi(final Object message) {
+        // "local RMI" objects have to be modified, this part does that
+        RmiObjectHandler rmiObjectHandler = channelWrapper.manageRmi();
+        return rmiObjectHandler.normalMessages(this, message);
+    }
+
+    /**
+     * This will remove the invoke and invoke response listeners for this the remote object
+     */
+    public
+    void removeRmiListeners(final int objectID, final Listener listener) {
+
+    }
+
 
 
     /**
      * For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
      * For local connections, we have to switch it appropriately in the LocalRmiProxy
-     *
-     * @param implementationClass
-     * @param callbackId
-     * @return
      */
     public final
     RmiRegistration createNewRmiObject(final Class<?> interfaceClass, final Class<?> implementationClass, final int callbackId) {
-
         CryptoSerializationManager manager = getEndPoint().serializationManager;
 
         KryoExtra kryo = null;
@@ -1090,14 +1192,37 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     }
 
     /**
-     * Used by RMI for the LOCAL side, to get the proxy object as an interface
+     * Warning. This is an advanced method. You should probably be using {@link Connection#createRemoteObject(Class, RemoteObjectCallback)}
+     * <p>
+     * <p>
+     * Returns a proxy object that implements the specified interface, and the methods invoked on the proxy object will be invoked
+     * remotely.
+     * <p>
+     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
+     * RemoteObject#setResponseTimeout(int) response timeout}.
+     * <p/>
+     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must not be
+     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
+     * called on the update thread.
+     * <p/>
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
+     * have the proxy object replaced with the registered object.
      *
-     * @param objectID is the RMI object ID
-     * @param iFace must be the interface the proxy will bind to
+     * @see RemoteObject
+     *
+     * @param objectID this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
+     * @param iFace this is the RMI interface
      */
     @Override
     public
     RemoteObject getProxyObject(final int objectID, final Class<?> iFace) {
+        if (iFace == null) {
+            throw new IllegalArgumentException("iface cannot be null.");
+        }
+        if (!iFace.isInterface()) {
+            throw new IllegalArgumentException("iface must be an interface.");
+        }
+
         synchronized (proxyIdCache) {
             // we want to have a connection specific cache of IDs, using weak references.
             // because this is PER CONNECTION, this is safe.
@@ -1105,7 +1230,18 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
             if (remoteObject == null) {
                 // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-                remoteObject = rmiBridge.createProxyObject(this, objectID, iFace);
+                // remoteObject = rmiBridge.createProxyObject(this, objectID, iFace);
+
+                // the ACTUAL proxy is created in the connection impl.
+                RmiProxyHandler proxyObject = new RmiProxyHandler(this, objectID, iFace);
+                proxyListeners.add(proxyObject.getListener());
+
+                Class<?>[] temp = new Class<?>[2];
+                temp[0] = RemoteObject.class;
+                temp[1] = iFace;
+
+                remoteObject = (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(), temp, proxyObject);
+
                 proxyIdCache.put(objectID, remoteObject);
             }
 

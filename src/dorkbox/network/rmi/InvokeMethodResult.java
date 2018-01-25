@@ -38,8 +38,9 @@ package dorkbox.network.rmi;
  * Internal message to return the result of a remotely invoked method.
  */
 public
-class InvokeMethodResult implements RmiMessages {
+class InvokeMethodResult implements RmiMessage {
     public int objectID;
+
     public byte responseID;
     public Object result;
 }

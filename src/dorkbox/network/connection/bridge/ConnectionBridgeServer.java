@@ -15,14 +15,12 @@
  */
 package dorkbox.network.connection.bridge;
 
-import dorkbox.network.connection.Connection;
-
 public
-interface ConnectionBridgeServer<C extends Connection> extends ConnectionBridgeBase {
+interface ConnectionBridgeServer extends ConnectionBridgeBase {
 
     /**
      * Exposes methods to send the object to all server connections (except the specified one) over the network. (or via LOCAL when it's a
      * local channel).
      */
-    ConnectionExceptSpecifiedBridgeServer<C> except();
+    ConnectionExceptSpecifiedBridgeServer except();
 }

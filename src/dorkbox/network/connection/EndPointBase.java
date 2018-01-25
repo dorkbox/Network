@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection;
 
-import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -36,13 +35,15 @@ import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.pipeline.KryoEncoder;
 import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.rmi.RmiObjectHandler;
+import dorkbox.network.rmi.RmiObjectLocalHandler;
+import dorkbox.network.rmi.RmiObjectNetworkHandler;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.network.store.NullSettingsStore;
 import dorkbox.network.store.SettingsStore;
 import dorkbox.util.Property;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.entropy.Entropy;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.util.NetUtil;
 
@@ -50,7 +51,7 @@ import io.netty.util.NetUtil;
  * represents the base of a client/server end point
  */
 public abstract
-class EndPointBase<C extends Connection> extends EndPoint {
+class EndPointBase extends EndPoint {
     // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
     // it results in severe UDP packet loss and contention.
     //
@@ -89,14 +90,19 @@ class EndPointBase<C extends Connection> extends EndPoint {
     @Property
     public static int udpMaxSize = 508;
 
-    protected final ConnectionManager<C> connectionManager;
+    protected final ConnectionManager connectionManager;
     protected final dorkbox.network.serialization.CryptoSerializationManager serializationManager;
-    protected final RegistrationWrapper<C> registrationWrapper;
+    protected final RegistrationWrapper registrationWrapper;
 
     final ECPrivateKeyParameters privateKey;
     final ECPublicKeyParameters publicKey;
 
     final SecureRandom secureRandom;
+
+    // we only want one instance of these created. These will be called appropriately
+    private final RmiObjectHandler rmiHandler;
+    private final RmiObjectLocalHandler localRmiHandler;
+    private final RmiObjectNetworkHandler networkRmiHandler;
     final RmiBridge globalRmiBridge;
 
     private final Executor rmiExecutor;
@@ -117,12 +123,10 @@ class EndPointBase<C extends Connection> extends EndPoint {
      * @param type this is either "Client" or "Server", depending on who is creating this endpoint.
      * @param config these are the specific connection options
      *
-     * @throws InitializationException
-     * @throws SecurityException
+     * @throws SecurityException if unable to initialize/generate ECC keys
      */
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public
-    EndPointBase(Class<? extends EndPointBase> type, final Configuration config) throws InitializationException, SecurityException, IOException {
+    EndPointBase(Class<? extends EndPointBase> type, final Configuration config) throws SecurityException {
         super(type);
 
         // make sure that 'localhost' is ALWAYS our specific loopback IP address
@@ -193,7 +197,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
                 } catch (Exception e) {
                     String message = "Unable to initialize/generate ECC keys. FORCED SHUTDOWN.";
                     logger.error(message);
-                    throw new InitializationException(message);
+                    throw new SecurityException(message);
                 }
             }
 
@@ -209,17 +213,22 @@ class EndPointBase<C extends Connection> extends EndPoint {
         secureRandom = new SecureRandom(propertyStore.getSalt());
 
         // we don't care about un-instantiated/constructed members, since the class type is the only interest.
-        connectionManager = new ConnectionManager<C>(type.getSimpleName(), connection0(null).getClass());
+        //noinspection unchecked
+        connectionManager = new ConnectionManager(type.getSimpleName(), connection0(null).getClass());
 
         // add the ping listener (internal use only!)
         connectionManager.add(new PingSystemListener());
 
         if (rmiEnabled) {
-            // these register the listener for registering a class implementation for RMI (internal use only)
-            connectionManager.add(new RegisterRmiNetworkHandler());
+            rmiHandler = null;
+            localRmiHandler = new RmiObjectLocalHandler();
+            networkRmiHandler = new RmiObjectNetworkHandler();
             globalRmiBridge = new RmiBridge(logger, config.rmiExecutor, true);
         }
         else {
+            rmiHandler = new RmiObjectHandler();
+            localRmiHandler = null;
+            networkRmiHandler = null;
             globalRmiBridge = null;
         }
 
@@ -318,7 +327,6 @@ class EndPointBase<C extends Connection> extends EndPoint {
      *
      * @param metaChannel can be NULL (when getting the baseClass)
      */
-    @SuppressWarnings("unchecked")
     protected final
     Connection connection0(MetaChannel metaChannel) {
         ConnectionImpl connection;
@@ -332,31 +340,35 @@ class EndPointBase<C extends Connection> extends EndPoint {
         // These properties are ASSIGNED in the same thread that CREATED the object. Only the AES info needs to be
         // volatile since it is the only thing that changes.
         if (metaChannel != null) {
-            ChannelWrapper<C> wrapper;
+            ChannelWrapper wrapper;
 
             connection = newConnection(logger, this, rmiBridge);
             metaChannel.connection = connection;
 
             if (metaChannel.localChannel != null) {
-                wrapper = new ChannelLocalWrapper(metaChannel);
-            }
-            else {
-                if (this instanceof EndPointServer) {
-                    wrapper = new ChannelNetworkWrapper(metaChannel, registrationWrapper);
+                if (rmiEnabled) {
+                    wrapper = new ChannelLocalWrapper(metaChannel, localRmiHandler);
                 }
                 else {
-                    wrapper = new ChannelNetworkWrapper(metaChannel, null);
+                    wrapper = new ChannelLocalWrapper(metaChannel, rmiHandler);
+                }
+            }
+            else {
+                RmiObjectHandler rmiObjectHandler = rmiHandler;
+                if (rmiEnabled) {
+                    rmiObjectHandler = networkRmiHandler;
+                }
+
+                if (this instanceof EndPointServer) {
+                    wrapper = new ChannelNetworkWrapper(metaChannel, registrationWrapper, rmiObjectHandler);
+                }
+                else {
+                    wrapper = new ChannelNetworkWrapper(metaChannel, null, rmiObjectHandler);
                 }
             }
 
             // now initialize the connection channels with whatever extra info they might need.
-            connection.init(wrapper, (ConnectionManager<Connection>) connectionManager);
-
-            if (rmiBridge != null) {
-                // notify our remote object space that it is able to receive method calls.
-                connection.listeners()
-                          .add(rmiBridge.getListener());
-            }
+            connection.init(wrapper, connectionManager);
         }
         else {
             // getting the connection baseClass
@@ -374,14 +386,13 @@ class EndPointBase<C extends Connection> extends EndPoint {
      * <p/>
      * Only the CLIENT injects in front of this)
      */
-    @SuppressWarnings("unchecked")
     void connectionConnected0(ConnectionImpl connection) {
         isConnected.set(true);
 
         // prep the channel wrapper
         connection.prep();
 
-        connectionManager.onConnected((C) connection);
+        connectionManager.onConnected(connection);
     }
 
     /**
@@ -396,7 +407,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
      * Returns a non-modifiable list of active connections
      */
     public
-    List<C> getConnections() {
+    <C extends Connection> List<C> getConnections() {
         return connectionManager.getConnections();
     }
 
@@ -413,13 +424,13 @@ class EndPointBase<C extends Connection> extends EndPoint {
      * <p/>
      * The server should ALWAYS use STOP.
      */
-    public
-    void closeConnections() {
+    void closeConnections(boolean shouldKeepListeners) {
         // give a chance to other threads.
         Thread.yield();
 
-        // stop does the same as this + more
-        connectionManager.closeConnections();
+        // stop does the same as this + more.  Only keep the listeners for connections IF we are the client. If we remove listeners as a client,
+        // ALL of the client logic will be lost. The server is reactive, so listeners are added to connections as needed (instead of before startup)
+        connectionManager.closeConnections(shouldKeepListeners);
 
         // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
         registrationWrapper.closeChannels(maxShutdownWaitTimeInMilliSeconds);
@@ -442,7 +453,7 @@ class EndPointBase<C extends Connection> extends EndPoint {
     @Override
     protected
     void shutdownChannelsPre() {
-        closeConnections();
+        closeConnections(false);
 
         // this does a closeConnections + clear_listeners
         connectionManager.stop();
@@ -465,7 +476,6 @@ class EndPointBase<C extends Connection> extends EndPoint {
         return result;
     }
 
-    @SuppressWarnings("rawtypes")
     @Override
     public
     boolean equals(Object obj) {

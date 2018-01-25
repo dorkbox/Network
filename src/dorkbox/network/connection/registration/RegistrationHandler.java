@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection.registration;
 
-import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.RegistrationWrapper;
 import io.netty.channel.Channel;
@@ -25,16 +24,16 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 
 @Sharable
 public abstract
-class RegistrationHandler<C extends Connection> extends ChannelInboundHandlerAdapter {
+class RegistrationHandler extends ChannelInboundHandlerAdapter {
     protected static final String CONNECTION_HANDLER = "connectionHandler";
 
-    protected final RegistrationWrapper<C> registrationWrapper;
+    protected final RegistrationWrapper registrationWrapper;
     protected final org.slf4j.Logger logger;
     protected final String name;
 
 
     public
-    RegistrationHandler(final String name, RegistrationWrapper<C> registrationWrapper) {
+    RegistrationHandler(final String name, RegistrationWrapper registrationWrapper) {
         this.name = name;
         this.logger = org.slf4j.LoggerFactory.getLogger(this.name);
         this.registrationWrapper = registrationWrapper;
@@ -85,7 +84,7 @@ class RegistrationHandler<C extends Connection> extends ChannelInboundHandlerAda
     void exceptionCaught(final ChannelHandlerContext context, final Throwable cause) throws Exception;
 
     public
-    MetaChannel shutdown(final RegistrationWrapper<C> registrationWrapper, final Channel channel) {
+    MetaChannel shutdown(final RegistrationWrapper registrationWrapper, final Channel channel) {
         // shutdown. Something messed up or was incorrect
         // properly shutdown the TCP/UDP channels.
         if (channel.isOpen()) {

@@ -20,19 +20,20 @@ import java.net.InetSocketAddress;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPointWriter;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.UdpServer;
 import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.network.rmi.RmiObjectHandler;
 import dorkbox.util.FastThreadLocal;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
 import io.netty.util.NetUtil;
 
 public
-class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
+class ChannelNetworkWrapper implements ChannelWrapper {
 
     private final ChannelNetwork tcp;
     private final ChannelNetwork udp;
@@ -49,12 +50,16 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
     private final byte[] aesIV; // AES-GCM requires 12 bytes
 
     private final FastThreadLocal<ParametersWithIV> cryptoParameters;
+    private final RmiObjectHandler rmiObjectHandler;
 
     /**
      * @param udpServer is null when created by the client, non-null when created by the server
+     * @param rmiObjectHandler is a no-op handler if RMI is disabled, otherwise handles RMI object registration
      */
     public
-    ChannelNetworkWrapper(MetaChannel metaChannel, UdpServer udpServer) {
+    ChannelNetworkWrapper(MetaChannel metaChannel, UdpServer udpServer, final RmiObjectHandler rmiObjectHandler) {
+
+        this.rmiObjectHandler = rmiObjectHandler;
 
         Channel tcpChannel = metaChannel.tcpChannel;
         this.eventLoop = tcpChannel.eventLoop();
@@ -138,7 +143,6 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
         return this.eventLoop;
     }
 
-
     /**
      * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal
      *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
@@ -158,14 +162,19 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
 
     @Override
     public
+    RmiObjectHandler manageRmi() {
+        return rmiObjectHandler;
+    }
+
+    @Override
+    public
     String getRemoteHost() {
         return this.remoteAddress;
     }
 
-
     @Override
     public
-    void close(final Connection connection, final ISessionManager<C> sessionManager) {
+    void close(final ConnectionImpl connection, final ISessionManager sessionManager) {
         long maxShutdownWaitTimeInMilliSeconds = EndPointBase.maxShutdownWaitTimeInMilliSeconds;
 
         this.tcp.close(maxShutdownWaitTimeInMilliSeconds);
@@ -203,7 +212,6 @@ class ChannelNetworkWrapper<C extends Connection> implements ChannelWrapper<C> {
             return false;
         }
 
-        @SuppressWarnings("rawtypes")
         ChannelNetworkWrapper other = (ChannelNetworkWrapper) obj;
         if (this.remoteAddress == null) {
             if (other.remoteAddress != null) {

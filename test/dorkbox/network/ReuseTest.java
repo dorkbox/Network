@@ -29,7 +29,6 @@ import org.junit.Test;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
 public
@@ -39,7 +38,7 @@ class ReuseTest extends BaseTest {
 
     @Test
     public
-    void socketReuse() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void socketReuse() throws SecurityException, IOException {
         this.serverCount = new AtomicInteger(0);
         this.clientCount = new AtomicInteger(0);
 
@@ -104,7 +103,7 @@ class ReuseTest extends BaseTest {
                 System.err.println("Waiting...");
                 try {
                     Thread.sleep(100);
-                } catch (InterruptedException ex) {
+                } catch (InterruptedException ignored) {
                 }
             }
 
@@ -119,7 +118,7 @@ class ReuseTest extends BaseTest {
 
     @Test
     public
-    void localReuse() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void localReuse() throws SecurityException, IOException {
         this.serverCount = new AtomicInteger(0);
         this.clientCount = new AtomicInteger(0);
 

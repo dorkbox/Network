@@ -17,8 +17,6 @@ package dorkbox.network.connection.registration.local;
 
 import static dorkbox.network.connection.EndPointBase.maxShutdownWaitTimeInMilliSeconds;
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.RegisterRmiLocalHandler;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
@@ -26,11 +24,9 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 
 public abstract
-class RegistrationLocalHandler<C extends Connection> extends RegistrationHandler<C> {
-    static final String LOCAL_RMI_HANDLER = "localRmiHandler";
-    final RegisterRmiLocalHandler rmiLocalHandler = new RegisterRmiLocalHandler();
+class RegistrationLocalHandler extends RegistrationHandler {
 
-    RegistrationLocalHandler(String name, RegistrationWrapper<C> registrationWrapper) {
+    RegistrationLocalHandler(String name, RegistrationWrapper registrationWrapper) {
         super(name, registrationWrapper);
     }
 

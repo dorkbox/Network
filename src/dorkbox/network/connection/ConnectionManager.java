@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
@@ -38,54 +37,52 @@ import dorkbox.util.generics.TypeResolver;
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
 @SuppressWarnings("unchecked")
 public
-class ConnectionManager<C extends Connection> implements Listeners, ISessionManager<C>, ConnectionPoint, ConnectionBridgeServer<C>,
-                                                         ConnectionExceptSpecifiedBridgeServer<C> {
+class ConnectionManager<C extends Connection> implements Listeners, ISessionManager, ConnectionPoint, ConnectionBridgeServer,
+                                                         ConnectionExceptSpecifiedBridgeServer {
     /**
      * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
      */
     @Property
     public static final float LOAD_FACTOR = 0.8F;
 
+    // Recommended for best performance while adhering to the "single writer principle". Must be static-final
+    private static final AtomicReferenceFieldUpdater<ConnectionManager, IdentityMap> localManagersREF = AtomicReferenceFieldUpdater.newUpdater(
+            ConnectionManager.class,
+            IdentityMap.class,
+            "localManagers");
+
+
+
+    // Recommended for best performance while adhering to the "single writer principle". Must be static-final
+    private static final AtomicReferenceFieldUpdater<ConnectionManager, ConcurrentEntry> connectionsREF = AtomicReferenceFieldUpdater.newUpdater(
+            ConnectionManager.class,
+            ConcurrentEntry.class,
+            "connectionsHead");
+
+
     private final String loggerName;
 
-    private final OnConnectedManager<C> onConnectedManager;
-    private final OnDisconnectedManager<C> onDisconnectedManager;
-    private final OnIdleManager<C> onIdleManager;
-    private final OnMessageReceivedManager<C> onMessageReceivedManager;
-
-
+    private final OnConnectedManager onConnectedManager;
+    private final OnDisconnectedManager onDisconnectedManager;
+    private final OnIdleManager onIdleManager;
+    private final OnMessageReceivedManager onMessageReceivedManager;
 
     @SuppressWarnings({"FieldCanBeLocal", "unused"})
-    private volatile ConcurrentEntry<C> connectionsHead = null; // reference to the first element
+    private volatile ConcurrentEntry<Connection> connectionsHead = null; // reference to the first element
 
     // This is ONLY touched by a single thread, maintains a map of entries for FAST lookup during connection remove.
-    private final IdentityMap<C, ConcurrentEntry> connectionEntries = new IdentityMap<C, ConcurrentEntry>(32, ConnectionManager.LOAD_FACTOR);
+    private final IdentityMap<Connection, ConcurrentEntry> connectionEntries = new IdentityMap<Connection, ConcurrentEntry>(32, ConnectionManager.LOAD_FACTOR);
 
 
     @SuppressWarnings("unused")
-    private volatile IdentityMap<Connection, ConnectionManager<C>> localManagers = new IdentityMap<Connection, ConnectionManager<C>>(8, ConnectionManager.LOAD_FACTOR);
+    private volatile IdentityMap<Connection, ConnectionManager> localManagers = new IdentityMap<Connection, ConnectionManager>(8, ConnectionManager.LOAD_FACTOR);
 
 
     // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
     // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
     // use-case 99% of the time)
-    private final Object singleWriterLock2 = new Object();
-    private final Object singleWriterLock3 = new Object();
-
-
-    // Recommended for best performance while adhering to the "single writer principle". Must be static-final
-    private static final AtomicReferenceFieldUpdater<ConnectionManager, IdentityMap> localManagersREF =
-                    AtomicReferenceFieldUpdater.newUpdater(ConnectionManager.class,
-                                                           IdentityMap.class,
-                                                           "localManagers");
-
-
-
-    // Recommended for best performance while adhering to the "single writer principle". Must be static-final
-    private static final AtomicReferenceFieldUpdater<ConnectionManager, ConcurrentEntry> connectionsREF =
-                    AtomicReferenceFieldUpdater.newUpdater(ConnectionManager.class,
-                                                           ConcurrentEntry.class,
-                                                           "connectionsHead");
+    private final Object singleWriterConnectionsLock = new Object();
+    private final Object singleWriterLocalManagerLock = new Object();
 
 
     /**
@@ -102,10 +99,10 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         this.logger = org.slf4j.LoggerFactory.getLogger(loggerName);
         this.baseClass = baseClass;
 
-        onConnectedManager = new OnConnectedManager<C>(logger);
-        onDisconnectedManager = new OnDisconnectedManager<C>(logger);
-        onIdleManager = new OnIdleManager<C>(logger);
-        onMessageReceivedManager = new OnMessageReceivedManager<C>(logger);
+        onConnectedManager = new OnConnectedManager(logger);
+        onDisconnectedManager = new OnDisconnectedManager(logger);
+        onIdleManager = new OnIdleManager(logger);
+        onMessageReceivedManager = new OnMessageReceivedManager(logger);
     }
 
     /**
@@ -117,7 +114,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      * It is POSSIBLE to add a server connection ONLY (ie, not global) listener (via connection.addListener), meaning that ONLY that
      * listener attached to the connection is notified on that event (ie, admin type listeners)
      */
-    @SuppressWarnings("rawtypes")
     @Override
     public final
     Listeners add(final Listener listener) {
@@ -149,25 +145,24 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     /**
      * INTERNAL USE ONLY
      */
-    @SuppressWarnings({"unchecked", "rawtypes"})
     private
     void addListener0(final Listener listener) {
         boolean found = false;
         if (listener instanceof Listener.OnConnected) {
-            onConnectedManager.add((Listener.OnConnected<C>) listener);
+            onConnectedManager.add((Listener.OnConnected) listener);
             found = true;
         }
         if (listener instanceof Listener.OnDisconnected) {
-            onDisconnectedManager.add((Listener.OnDisconnected<C>) listener);
+            onDisconnectedManager.add((Listener.OnDisconnected) listener);
             found = true;
         }
         if (listener instanceof Listener.OnIdle) {
-            onIdleManager.add((Listener.OnIdle<C>) listener);
+            onIdleManager.add((Listener.OnIdle) listener);
             found = true;
         }
 
         if (listener instanceof Listener.OnMessageReceived) {
-            onMessageReceivedManager.add((Listener.OnMessageReceived<C, Object>) listener);
+            onMessageReceivedManager.add((Listener.OnMessageReceived) listener);
             found = true;
         }
 
@@ -196,7 +191,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      * It is POSSIBLE to remove a server-connection 'non-global' listener (via connection.removeListener), meaning that ONLY that listener
      * attached to the connection is removed
      */
-    @SuppressWarnings("rawtypes")
     @Override
     public final
     Listeners remove(final Listener listener) {
@@ -206,16 +200,16 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
         boolean found = false;
         if (listener instanceof Listener.OnConnected) {
-            found = onConnectedManager.remove((Listener.OnConnected<C>) listener);
+            found = onConnectedManager.remove((Listener.OnConnected) listener);
         }
         if (listener instanceof Listener.OnDisconnected) {
-            found |= onDisconnectedManager.remove((Listener.OnDisconnected<C>) listener);
+            found |= onDisconnectedManager.remove((Listener.OnDisconnected) listener);
         }
         if (listener instanceof Listener.OnIdle) {
-            found |= onIdleManager.remove((Listener.OnIdle<C>) listener);
+            found |= onIdleManager.remove((Listener.OnIdle) listener);
         }
         if (listener instanceof Listener.OnMessageReceived) {
-            found |= onMessageReceivedManager.remove((Listener.OnMessageReceived<C, Object>) listener);
+            found |= onMessageReceivedManager.remove((Listener.OnMessageReceived) listener);
         }
 
         final Logger logger2 = this.logger;
@@ -290,13 +284,22 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public final
-    void onMessage(final C connection, final Object message) {
+    void onMessage(final ConnectionImpl connection, final Object message) {
         notifyOnMessage0(connection, message, false);
     }
 
     @SuppressWarnings("Duplicates")
     private
-    boolean notifyOnMessage0(final C connection, final Object message, boolean foundListener) {
+    boolean notifyOnMessage0(final ConnectionImpl connection, Object message, boolean foundListener) {
+        if (connection.manageRmi(message)) {
+            // if we are an RMI message/registration, we have very specific, defined behavior. We do not use the "normal" listener callback pattern
+            // because these methods are rare, and require special functionality
+            return true;
+        }
+
+        message = connection.fixupRmi(message);
+
+
         foundListener |= onMessageReceivedManager.notifyReceived(connection, message, shutdown);
 
         // now have to account for additional connection listener managers (non-global).
@@ -316,23 +319,19 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
                       .flush();
         }
         else {
-            if (this.logger.isErrorEnabled()) {
-                this.logger.warn("----------- LISTENER NOT REGISTERED FOR TYPE: {}",
-                                  message.getClass()
-                                         .getSimpleName());
-            }
+            this.logger.warn("----------- LISTENER NOT REGISTERED FOR TYPE: {}",
+                              message.getClass()
+                                     .getSimpleName());
         }
         return foundListener;
     }
 
     /**
      * Invoked when a Connection has been idle for a while.
-     * <p/>
-     * {@link ISessionManager}
      */
     @Override
     public final
-    void onIdle(final C connection) {
+    void onIdle(final Connection connection) {
         boolean foundListener = onIdleManager.notifyIdle(connection, shutdown);
 
         if (foundListener) {
@@ -342,8 +341,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
         // now have to account for additional (local) listener managers.
         // access a snapshot of the managers (single-writer-principle)
-        final IdentityMap<Connection, ConnectionManager<C>> localManagers = localManagersREF.get(this);
-        ConnectionManager<C> localManager = localManagers.get(connection);
+        final IdentityMap<Connection, ConnectionManager> localManagers = localManagersREF.get(this);
+        ConnectionManager localManager = localManagers.get(connection);
         if (localManager != null) {
             localManager.onIdle(connection);
         }
@@ -351,13 +350,10 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
     /**
      * Invoked when a Channel is open, bound to a local address, and connected to a remote address.
-     * <p/>
-     * {@link ISessionManager}
      */
-    @SuppressWarnings("Duplicates")
     @Override
     public
-    void onConnected(final C connection) {
+    void onConnected(final Connection connection) {
         addConnection(connection);
 
         boolean foundListener = onConnectedManager.notifyConnected(connection, shutdown);
@@ -369,8 +365,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
         // now have to account for additional (local) listener managers.
         // access a snapshot of the managers (single-writer-principle)
-        final IdentityMap<Connection, ConnectionManager<C>> localManagers = localManagersREF.get(this);
-        ConnectionManager<C> localManager = localManagers.get(connection);
+        final IdentityMap<Connection, ConnectionManager> localManagers = localManagersREF.get(this);
+        ConnectionManager localManager = localManagers.get(connection);
         if (localManager != null) {
             localManager.onConnected(connection);
         }
@@ -378,13 +374,10 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
     /**
      * Invoked when a Channel was disconnected from its remote peer.
-     * <p/>
-     * {@link ISessionManager}
      */
-    @SuppressWarnings("Duplicates")
     @Override
     public
-    void onDisconnected(final C connection) {
+    void onDisconnected(final Connection connection) {
         boolean foundListener = onDisconnectedManager.notifyDisconnected(connection, shutdown);
 
         if (foundListener) {
@@ -395,8 +388,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         // now have to account for additional (local) listener managers.
 
         // access a snapshot of the managers (single-writer-principle)
-        final IdentityMap<Connection, ConnectionManager<C>> localManagers = localManagersREF.get(this);
-        ConnectionManager<C> localManager = localManagers.get(connection);
+        final IdentityMap<Connection, ConnectionManager> localManagers = localManagersREF.get(this);
+        ConnectionManager localManager = localManagers.get(connection);
         if (localManager != null) {
             localManager.onDisconnected(connection);
 
@@ -415,11 +408,11 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      *
      * @param connection the connection to add
      */
-    void addConnection(final C connection) {
+    void addConnection(final Connection connection) {
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
         // use-case 99% of the time)
-        synchronized (singleWriterLock2) {
+        synchronized (singleWriterConnectionsLock) {
             // access a snapshot of the connections (single-writer-principle)
             ConcurrentEntry head = connectionsREF.get(this);
 
@@ -442,12 +435,12 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      *
      * @param connection the connection to remove
      */
-    private
-    void removeConnection(C connection) {
+    public
+    void removeConnection(Connection connection) {
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
         // use-case 99% of the time)
-        synchronized (singleWriterLock2) {
+        synchronized (singleWriterConnectionsLock) {
             // access a snapshot of the connections (single-writer-principle)
             ConcurrentEntry concurrentEntry = connectionEntries.get(connection);
 
@@ -477,36 +470,34 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public
     List<C> getConnections() {
-        synchronized (singleWriterLock2) {
-            final IdentityMap.Keys<C> keys = this.connectionEntries.keys();
-            return keys.toArray();
+        synchronized (singleWriterConnectionsLock) {
+            final IdentityMap.Keys<Connection> keys = this.connectionEntries.keys();
+            return (List<C>) keys.toArray();
         }
     }
 
-
     final
-    ConnectionManager<C> addListenerManager(final Connection connection) {
+    ConnectionManager addListenerManager(final Connection connection) {
         // when we are a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections
         // are notified of that listener.
         // it is POSSIBLE to add a connection-specific listener (via connection.addListener), meaning that ONLY
         // that listener is notified on that event (ie, admin type listeners)
 
-        ConnectionManager<C> manager;
+        ConnectionManager manager;
         boolean created = false;
 
 
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
         // use-case 99% of the time)
-        synchronized (singleWriterLock3) {
+        synchronized (singleWriterLocalManagerLock) {
             // access a snapshot of the managers (single-writer-principle)
-            final IdentityMap<Connection, ConnectionManager<C>> localManagers = localManagersREF.get(this);
+            final IdentityMap<Connection, ConnectionManager> localManagers = localManagersREF.get(this);
 
             manager = localManagers.get(connection);
             if (manager == null) {
                 created = true;
-                manager = new ConnectionManager<C>(loggerName + "-" + connection.toString() + " Specific",
-                                                   ConnectionManager.this.baseClass);
+                manager = new ConnectionManager(loggerName + "-" + connection.toString() + " Specific", ConnectionManager.this.baseClass);
                 localManagers.put(connection, manager);
 
                 // save this snapshot back to the original (single writer principle)
@@ -531,11 +522,11 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
         // use-case 99% of the time)
-        synchronized (singleWriterLock3) {
+        synchronized (singleWriterLocalManagerLock) {
             // access a snapshot of the managers (single-writer-principle)
-            final IdentityMap<Connection, ConnectionManager<C>> localManagers = localManagersREF.get(this);
+            final IdentityMap<Connection, ConnectionManager> localManagers = localManagersREF.get(this);
 
-            final ConnectionManager<C> removed = localManagers.remove(connection);
+            final ConnectionManager removed = localManagers.remove(connection);
             if (removed != null) {
                 wasRemoved = true;
 
@@ -549,23 +540,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             if (logger2.isTraceEnabled()) {
                 logger2.trace("Connection specific Listener Manager removed for connection: {}", connection);
             }
-        }
-    }
-
-
-    /**
-     * BE CAREFUL! Only for internal use!
-     *
-     * @return Returns a FAST first connection (for client!).
-     */
-    public final
-    C getConnection0() throws IOException {
-        ConcurrentEntry<C> head1 = connectionsREF.get(this);
-        if (head1 != null) {
-            return head1.getValue();
-        }
-        else {
-            throw new IOException("Not connected to a remote computer. Unable to continue!");
         }
     }
 
@@ -587,7 +561,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         this.shutdown.set(true);
 
         // disconnect the sessions
-        closeConnections();
+        closeConnections(false);
 
         onConnectedManager.clear();
         onDisconnectedManager.clear();
@@ -596,22 +570,31 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     }
 
     /**
-     * Close all connections ONLY
+     * Close all connections ONLY.
+     *
+     * Only keep the listeners for connections IF we are the client. If we remove listeners as a client, ALL of the client logic will
+     * be lost. The server is reactive, so listeners are added to connections as needed (instead of before startup, which is what the client does).
      */
     final
-    void closeConnections() {
-
+    void closeConnections(boolean keepListeners) {
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
         // use-case 99% of the time)
-        synchronized (singleWriterLock2) {
+        synchronized (singleWriterConnectionsLock) {
             // don't need anything fast or fancy here, because this method will only be called once
-            final IdentityMap.Keys<C> keys = connectionEntries.keys();
-            for (C connection : keys) {
+            final IdentityMap.Keys<Connection> keys = connectionEntries.keys();
+            for (Connection connection : keys) {
                 // Close the connection.  Make sure the close operation ends because
                 // all I/O operations are asynchronous in Netty.
                 // Also necessary otherwise workers won't close.
-                connection.close();
+
+
+                if (keepListeners && connection instanceof ConnectionImpl) {
+                    ((ConnectionImpl) connection).close(true);
+                }
+                else {
+                    connection.close();
+                }
             }
 
             this.connectionEntries.clear();
@@ -636,7 +619,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public
-    ConnectionExceptSpecifiedBridgeServer<C> except() {
+    ConnectionExceptSpecifiedBridgeServer except() {
         return this;
     }
 
@@ -650,8 +633,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public
     void flush() {
-        ConcurrentEntry<C> current = connectionsREF.get(this);
-        C c;
+        ConcurrentEntry<Connection> current = connectionsREF.get(this);
+        Connection c;
         while (current != null) {
             c = current.getValue();
             current = current.next();
@@ -667,9 +650,9 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public
-    ConnectionPoint TCP(final C connection, final Object message) {
-        ConcurrentEntry<C> current = connectionsREF.get(this);
-        C c;
+    ConnectionPoint TCP(final Connection connection, final Object message) {
+        ConcurrentEntry<Connection> current = connectionsREF.get(this);
+        Connection c;
         while (current != null) {
             c = current.getValue();
             current = current.next();
@@ -688,9 +671,9 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public
-    ConnectionPoint UDP(final C connection, final Object message) {
-        ConcurrentEntry<C> current = connectionsREF.get(this);
-        C c;
+    ConnectionPoint UDP(final Connection connection, final Object message) {
+        ConcurrentEntry<Connection> current = connectionsREF.get(this);
+        Connection c;
         while (current != null) {
             c = current.getValue();
             current = current.next();
@@ -709,8 +692,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public
     void self(final Object message) {
-        ConcurrentEntry<C> current = connectionsREF.get(this);
-        C c;
+        ConcurrentEntry<ConnectionImpl> current = connectionsREF.get(this);
+        ConnectionImpl c;
         while (current != null) {
             c = current.getValue();
             current = current.next();
@@ -725,8 +708,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public
     ConnectionPoint TCP(final Object message) {
-        ConcurrentEntry<C> current = connectionsREF.get(this);
-        C c;
+        ConcurrentEntry<Connection> current = connectionsREF.get(this);
+        Connection c;
         while (current != null) {
             c = current.getValue();
             current = current.next();
@@ -743,8 +726,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public
     ConnectionPoint UDP(final Object message) {
-        ConcurrentEntry<C> current = connectionsREF.get(this);
-        C c;
+        ConcurrentEntry<Connection> current = connectionsREF.get(this);
+        Connection c;
         while (current != null) {
             c = current.getValue();
             current = current.next();

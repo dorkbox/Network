@@ -26,7 +26,6 @@ import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerS
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
@@ -58,7 +57,7 @@ import io.netty.channel.unix.UnixChannelOption;
  * To put it bluntly, ONLY have the server do work inside of a listener!
  */
 public
-class Server<C extends Connection> extends EndPointServer<C> {
+class Server<C extends Connection> extends EndPointServer {
 
 
     /**
@@ -93,7 +92,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
      * Starts a LOCAL <b>only</b> server, with the default serialization scheme.
      */
     public
-    Server() throws InitializationException, SecurityException, IOException {
+    Server() throws  SecurityException {
         this(Configuration.localOnly());
     }
 
@@ -102,7 +101,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
      */
     @SuppressWarnings("AutoBoxing")
     public
-    Server(Configuration config) throws InitializationException, SecurityException, IOException {
+    Server(Configuration config) throws SecurityException {
         // watch-out for serialization... it can be NULL incoming. The EndPoint (superclass) sets it, if null, so
         // you have to make sure to use this.serialization
         super(config);
@@ -186,7 +185,7 @@ class Server<C extends Connection> extends EndPointServer<C> {
                               .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                               .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                               .localAddress(new LocalAddress(localChannelName))
-                              .childHandler(new RegistrationLocalHandlerServer<C>(threadName, registrationWrapper));
+                              .childHandler(new RegistrationLocalHandlerServer(threadName, registrationWrapper));
 
                 manageForShutdown(localBoss);
                 manageForShutdown(localWorker);
@@ -219,9 +218,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
                         .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .childOption(ChannelOption.SO_KEEPALIVE, true)
                         .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
-                        .childHandler(new RegistrationRemoteHandlerServerTCP<C>(threadName,
-                                                                                registrationWrapper,
-                                                                                serializationManager));
+                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName,
+                                                                             registrationWrapper,
+                                                                             serializationManager));
 
             // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
             if (hostName.equals("0.0.0.0")) {
@@ -265,9 +264,9 @@ class Server<C extends Connection> extends EndPointServer<C> {
 
                         // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
                         .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
-                        .handler(new RegistrationRemoteHandlerServerUDP<C>(threadName,
-                                                                           registrationWrapper,
-                                                                           serializationManager));
+                        .handler(new RegistrationRemoteHandlerServerUDP(threadName,
+                                                                        registrationWrapper,
+                                                                        serializationManager));
 
 
             // Enable to READ from MULTICAST data (ie, 192.168.1.0)

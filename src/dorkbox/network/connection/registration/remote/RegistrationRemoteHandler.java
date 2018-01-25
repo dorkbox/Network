@@ -27,7 +27,6 @@ import org.bouncycastle.crypto.engines.IESEngine;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
 import org.slf4j.Logger;
 
-import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -42,15 +41,11 @@ import dorkbox.util.crypto.CryptoECC;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.epoll.EpollDatagramChannel;
-import io.netty.channel.epoll.EpollSocketChannel;
-import io.netty.channel.socket.nio.NioDatagramChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.ReferenceCountUtil;
 
 public abstract
-class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandler<C> {
+class RegistrationRemoteHandler extends RegistrationHandler {
     static final String KRYO_ENCODER = "kryoEncoder";
     static final String KRYO_DECODER = "kryoDecoder";
 
@@ -100,7 +95,7 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
     protected final CryptoSerializationManager serializationManager;
 
     RegistrationRemoteHandler(final String name,
-                              final RegistrationWrapper<C> registrationWrapper,
+                              final RegistrationWrapper registrationWrapper,
                               final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper);
 
@@ -143,46 +138,50 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
         // add the channel so we can access it later.
         // do NOT want to add UDP channels, since they are tracked differently.
 
+        if (this.logger.isInfoEnabled()) {
+            Channel channel = context.channel();
+            Class<? extends Channel> channelClass = channel.getClass();
+            boolean isUdp = ConnectionImpl.isUdp(channelClass);
 
-        // this whole bit is inside a if (logger.isDebugEnabled()) section.
-        Channel channel = context.channel();
-        Class<? extends Channel> channelClass = channel.getClass();
+            StringBuilder stringBuilder = new StringBuilder(96);
 
-
-        StringBuilder stringBuilder = new StringBuilder(96);
-
-        stringBuilder.append("Connected to remote ");
-        if (channelClass == NioSocketChannel.class || channelClass == EpollSocketChannel.class) {
-            stringBuilder.append("TCP");
-        }
-        else if (channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class) {
-            stringBuilder.append("UDP");
-        }
-        else {
-            stringBuilder.append("UNKNOWN");
-        }
-        stringBuilder.append(" connection. [");
-        stringBuilder.append(channel.localAddress());
-
-        boolean isSessionless = channel instanceof NioDatagramChannel;
-        if (isSessionless) {
-            if (channel.remoteAddress() != null) {
-                stringBuilder.append(" ==> ");
-                stringBuilder.append(channel.remoteAddress());
+            stringBuilder.append("Connected to remote ");
+            if (ConnectionImpl.isTcp(channelClass)) {
+                stringBuilder.append("TCP");
+            }
+            else if (isUdp) {
+                stringBuilder.append("UDP");
+            }
+            else if (ConnectionImpl.isLocal(channelClass)) {
+                stringBuilder.append("LOCAL");
             }
             else {
-                // this means we are LISTENING.
-                stringBuilder.append(" <== ");
-                stringBuilder.append("?????");
+                stringBuilder.append("UNKNOWN");
             }
-        }
-        else {
-            stringBuilder.append(getConnectionDirection());
-            stringBuilder.append(channel.remoteAddress());
-        }
-        stringBuilder.append("]");
 
-        this.logger.info(stringBuilder.toString());
+            stringBuilder.append(" connection. [");
+            stringBuilder.append(channel.localAddress());
+
+            // this means we are "Sessionless"
+            if (isUdp) {
+                if (channel.remoteAddress() != null) {
+                    stringBuilder.append(" ==> ");
+                    stringBuilder.append(channel.remoteAddress());
+                }
+                else {
+                    // this means we are LISTENING.
+                    stringBuilder.append(" <== ");
+                    stringBuilder.append("?????");
+                }
+            }
+            else {
+                stringBuilder.append(getConnectionDirection());
+                stringBuilder.append(channel.remoteAddress());
+            }
+            stringBuilder.append("]");
+
+            this.logger.info(stringBuilder.toString());
+        }
     }
 
     @Override
@@ -276,7 +275,7 @@ class RegistrationRemoteHandler<C extends Connection> extends RegistrationHandle
     final
     boolean verifyAesInfo(final Object message,
                           final Channel channel,
-                          final RegistrationWrapper<C> registrationWrapper,
+                          final RegistrationWrapper registrationWrapper,
                           final MetaChannel metaChannel,
                           final Logger logger) {
 

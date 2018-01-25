@@ -47,8 +47,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.KryoExtra;
+import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.RmiSerializationManager;
 
 /**
@@ -66,13 +68,14 @@ class RmiProxyHandler implements InvocationHandler {
     private final InvokeMethodResult[] responseTable = new InvokeMethodResult[64];
     private final boolean[] pendingResponses = new boolean[64];
 
-    private final Connection connection;
+    private final ConnectionImpl connection;
     public final int objectID; // this is the RMI id
     public final int ID; // this is the KRYO id
 
 
     private final String proxyString;
-    private final RemoteInvocationResponse<Connection> responseListener;
+    private final
+    Listener.OnMessageReceived<Connection, InvokeMethodResult> responseListener;
 
     private int timeoutMillis = 3000;
     private boolean isAsync = false;
@@ -92,7 +95,8 @@ class RmiProxyHandler implements InvocationHandler {
      * @param objectID this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
      * @param iFace this is the RMI interface
      */
-    RmiProxyHandler(final Connection connection, final int objectID, final Class<?> iFace) {
+    public
+    RmiProxyHandler(final ConnectionImpl connection, final int objectID, final Class<?> iFace) {
         super();
 
         this.connection = connection;
@@ -115,14 +119,7 @@ class RmiProxyHandler implements InvocationHandler {
 
         this.logger = LoggerFactory.getLogger(connection.getEndPoint().getName() + ":" + this.getClass().getSimpleName());
 
-
-        this.responseListener = new RemoteInvocationResponse<Connection>() {
-            @Override
-            public
-            void disconnected(Connection connection) {
-                close();
-            }
-
+        this.responseListener = new Listener.OnMessageReceived<Connection, InvokeMethodResult>() {
             @Override
             public
             void received(Connection connection, InvokeMethodResult invokeMethodResult) {
@@ -146,12 +143,12 @@ class RmiProxyHandler implements InvocationHandler {
                 }
             }
         };
-
-        connection.listeners()
-                  .add(this.responseListener);
     }
 
-
+    public
+    Listener.OnMessageReceived<Connection, InvokeMethodResult> getListener() {
+        return responseListener;
+    }
 
     @SuppressWarnings({"AutoUnboxing", "AutoBoxing", "NumericCastThatLosesPrecision", "IfCanBeSwitch"})
     @Override
@@ -163,7 +160,7 @@ class RmiProxyHandler implements InvocationHandler {
 
             String name = method.getName();
             if (name.equals("close")) {
-                close();
+                connection.removeRmiListeners(objectID, getListener());
                 return null;
             }
             else if (name.equals("setResponseTimeout")) {
@@ -401,12 +398,6 @@ class RmiProxyHandler implements InvocationHandler {
 
         // only get here if we timeout
         throw new TimeoutException("Response timed out.");
-    }
-
-    private
-    void close() {
-        this.connection.listeners()
-                       .remove(this.responseListener);
     }
 
     @Override

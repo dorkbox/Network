@@ -47,7 +47,6 @@ interface Connection {
     @SuppressWarnings("rawtypes")
     EndPointBase getEndPoint();
 
-
     /**
      * @return the connection (TCP or LOCAL) id of this connection.
      */

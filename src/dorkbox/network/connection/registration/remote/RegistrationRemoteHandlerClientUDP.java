@@ -21,7 +21,6 @@ import java.net.InetSocketAddress;
 
 import org.slf4j.Logger;
 
-import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPointBase;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
@@ -37,11 +36,11 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.FixedRecvByteBufAllocator;
 
 public
-class RegistrationRemoteHandlerClientUDP<C extends Connection> extends RegistrationRemoteHandlerClient<C> {
+class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient {
 
     public
     RegistrationRemoteHandlerClientUDP(final String name,
-                                       final RegistrationWrapper<C> registrationWrapper,
+                                       final RegistrationWrapper registrationWrapper,
                                        final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }
@@ -118,7 +117,7 @@ class RegistrationRemoteHandlerClientUDP<C extends Connection> extends Registrat
 
         // if we also have a UDP channel, we will receive the "connected" message on UDP (otherwise it will be on TCP)
 
-        RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
+        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
         MetaChannel metaChannel = registrationWrapper2.getChannel(channel.hashCode());
 
         if (metaChannel != null) {

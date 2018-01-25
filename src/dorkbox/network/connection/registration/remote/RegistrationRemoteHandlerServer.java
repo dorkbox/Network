@@ -15,17 +15,15 @@
  */
 package dorkbox.network.connection.registration.remote;
 
-import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.serialization.CryptoSerializationManager;
 
 public
-class RegistrationRemoteHandlerServer<C extends Connection> extends RegistrationRemoteHandler<C> {
+class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
 
-    public
     RegistrationRemoteHandlerServer(final String name,
-                                    final RegistrationWrapper<C> registrationWrapper,
+                                    final RegistrationWrapper registrationWrapper,
                                     final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
     }

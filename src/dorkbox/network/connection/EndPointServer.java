@@ -15,22 +15,19 @@
  */
 package dorkbox.network.connection;
 
-import java.io.IOException;
-
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.bridge.ConnectionBridgeServer;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
 /**
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointServer<C extends Connection> extends EndPointBase<C> {
+class EndPointServer extends EndPointBase {
 
     public
-    EndPointServer(final Configuration config) throws InitializationException, SecurityException, IOException {
+    EndPointServer(final Configuration config) throws SecurityException {
         super(Server.class, config);
     }
 
@@ -39,7 +36,7 @@ class EndPointServer<C extends Connection> extends EndPointBase<C> {
      */
     @Override
     public
-    ConnectionBridgeServer<C> send() {
+    ConnectionBridgeServer send() {
         return this.connectionManager;
     }
 
@@ -53,7 +50,7 @@ class EndPointServer<C extends Connection> extends EndPointBase<C> {
      * @return a newly created listener manager for the connection
      */
     final
-    ConnectionManager<C> addListenerManager(final C connection) {
+    ConnectionManager addListenerManager(final Connection connection) {
         return this.connectionManager.addListenerManager(connection);
     }
 
@@ -67,7 +64,7 @@ class EndPointServer<C extends Connection> extends EndPointBase<C> {
      * This removes the listener manager for that specific connection
      */
     final
-    void removeListenerManager(final C connection) {
+    void removeListenerManager(final Connection connection) {
         this.connectionManager.removeListenerManager(connection);
     }
 
@@ -80,7 +77,7 @@ class EndPointServer<C extends Connection> extends EndPointBase<C> {
      * @param connection the connection to add
      */
     public
-    void add(C connection) {
+    void add(Connection connection) {
         connectionManager.addConnection(connection);
     }
 
@@ -93,7 +90,7 @@ class EndPointServer<C extends Connection> extends EndPointBase<C> {
      * @param connection the connection to remove
      */
     public
-    void remove(C connection) {
-        connectionManager.addConnection(connection);
+    void remove(Connection connection) {
+        connectionManager.removeConnection(connection);
     }
 }

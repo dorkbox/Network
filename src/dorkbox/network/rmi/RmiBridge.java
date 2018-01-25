@@ -35,7 +35,6 @@
 package dorkbox.network.rmi;
 
 import java.io.IOException;
-import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -188,7 +187,7 @@ class RmiBridge {
      */
     @SuppressWarnings("rawtypes")
     public
-    Listener getListener() {
+    Listener.OnMessageReceived<ConnectionImpl, InvokeMethod> getListener() {
         return this.invokeListener;
     }
 
@@ -411,50 +410,5 @@ class RmiBridge {
         readLock.unlock();
 
         return id;
-    }
-
-    /**
-     * Warning. This is an advanced method. You should probably be using {@link Connection#createRemoteObject(Class, RemoteObjectCallback)}
-     * <p>
-     * <p>
-     * Returns a proxy object that implements the specified interfaces. Methods invoked on the proxy object will be invoked remotely on the
-     * object with the specified ID in the ObjectSpace for the specified connection. If the remote end of the connection has not {@link
-     * RmiBridge#register(int, Object)} added the connection to the ObjectSpace, the remote method invocations will be ignored.
-     * <p/>
-     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
-     * RemoteObject#setResponseTimeout(int) response timeout}.
-     * <p/>
-     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must not be
-     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
-     * called on the update thread.
-     * <p/>
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
-     * have the proxy object replaced with the registered object.
-     *
-     * @see RemoteObject
-     *
-     * @param connection this is really the network client -- there is ONLY ever 1 connection
-     * @param objectID this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
-     * @param iFace this is the RMI interface
-     */
-    public
-    RemoteObject createProxyObject(Connection connection, int objectID, Class<?> iFace) {
-        if (connection == null) {
-            throw new IllegalArgumentException("connection cannot be null.");
-        }
-        if (iFace == null) {
-            throw new IllegalArgumentException("iface cannot be null.");
-        }
-        if (!iFace.isInterface()) {
-            throw new IllegalArgumentException("iface must be an interface.");
-        }
-
-        Class<?>[] temp = new Class<?>[2];
-        temp[0] = RemoteObject.class;
-        temp[1] = iFace;
-
-        return (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(),
-                                                     temp,
-                                                     new RmiProxyHandler(connection, objectID, iFace));
     }
 }

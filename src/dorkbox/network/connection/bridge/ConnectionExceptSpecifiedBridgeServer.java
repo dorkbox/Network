@@ -19,17 +19,17 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.ConnectionPoint;
 
 public
-interface ConnectionExceptSpecifiedBridgeServer<C extends Connection> {
+interface ConnectionExceptSpecifiedBridgeServer {
 
     /**
      * Sends the object to all server connections (except the specified one) over the network using TCP. (or via LOCAL when it's a local
      * channel).
      */
-    ConnectionPoint TCP(C connection, Object message);
+    ConnectionPoint TCP(Connection connection, Object message);
 
     /**
      * Sends the object to all server connections (except the specified one) over the network using UDP (or via LOCAL when it's a local
      * channel).
      */
-    ConnectionPoint UDP(C connection, Object message);
+    ConnectionPoint UDP(Connection connection, Object message);
 }

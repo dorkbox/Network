@@ -25,7 +25,6 @@ import java.util.concurrent.TimeUnit;
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
 import dorkbox.network.connection.bridge.ConnectionBridge;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
@@ -34,9 +33,10 @@ import io.netty.channel.ChannelOption;
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointClient<C extends Connection> extends EndPointBase<C> {
+class EndPointClient extends EndPointBase {
 
-    protected C connection;
+    // is valid when there is a connection to the server, otherwise it is null
+    protected volatile Connection connection;
 
     private CountDownLatch registration;
 
@@ -51,7 +51,7 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> {
 
 
     public
-    EndPointClient(Configuration config) throws InitializationException, SecurityException, IOException {
+    EndPointClient(Configuration config) throws SecurityException {
         super(Client.class, config);
     }
 
@@ -211,7 +211,7 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> {
         };
 
         //noinspection unchecked
-        this.connection = (C) connection;
+        this.connection = connection;
 
         synchronized (bootstrapLock) {
             // we're done with registration, so no need to keep this around
@@ -251,16 +251,19 @@ class EndPointClient<C extends Connection> extends EndPointBase<C> {
      * <p/>
      * This is used, for example, when reconnecting to a server.
      */
-    @Override
     public
     void closeConnections() {
-        super.closeConnections();
+        // Only keep the listeners for connections IF we are the client. If we remove listeners as a client,
+        // ALL of the client logic will be lost. The server is reactive, so listeners are added to connections as needed (instead of before startup)
+        closeConnections(true);
 
         // make sure we're not waiting on registration
         registrationCompleted();
 
         // for the CLIENT only, we clear these connections! (the server only clears them on shutdown)
         shutdownChannels();
+
+        connection = null;
     }
 
     /**

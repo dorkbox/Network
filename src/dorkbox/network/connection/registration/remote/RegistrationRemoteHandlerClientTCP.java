@@ -31,10 +31,10 @@ import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.slf4j.Logger;
 
+import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -49,14 +49,14 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
 
 public
-class RegistrationRemoteHandlerClientTCP<C extends Connection> extends RegistrationRemoteHandlerClient<C> {
+class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient {
 
     private static final String DELETE_IP = "eleteIP"; // purposefully missing the "D", since that is a system parameter, which starts with "-D"
     private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.curve25519);
 
     public
     RegistrationRemoteHandlerClientTCP(final String name,
-                                       final RegistrationWrapper<C> registrationWrapper,
+                                       final RegistrationWrapper registrationWrapper,
                                        final CryptoSerializationManager serializationManager) {
         super(name, registrationWrapper, serializationManager);
 
@@ -151,7 +151,7 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
     void channelRead(final ChannelHandlerContext context, final Object message) throws Exception {
         Channel channel = context.channel();
 
-        RegistrationWrapper<C> registrationWrapper2 = this.registrationWrapper;
+        RegistrationWrapper registrationWrapper2 = this.registrationWrapper;
         Logger logger2 = this.logger;
         if (message instanceof Registration) {
             // make sure this connection was properly registered in the map. (IT SHOULD BE)
@@ -232,8 +232,10 @@ class RegistrationRemoteHandlerClientTCP<C extends Connection> extends Registrat
                      * see http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
                      */
                     byte[] ecdhPubKeyBytes = Arrays.copyOfRange(payload, intLength, payload.length);
-                    ECPublicKeyParameters ecdhPubKey = EccPublicKeySerializer.read(new Input(ecdhPubKeyBytes));
-                    if (ecdhPubKey == null) {
+                    ECPublicKeyParameters ecdhPubKey;
+                    try {
+                        ecdhPubKey = EccPublicKeySerializer.read(new Input(ecdhPubKeyBytes));
+                    } catch (KryoException e) {
                         logger2.error("Invalid decode of ecdh public key. Aborting.");
                         shutdown(registrationWrapper2, channel);
 

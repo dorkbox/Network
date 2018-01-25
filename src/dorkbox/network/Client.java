@@ -32,7 +32,6 @@ import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.TimeoutException;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -61,7 +60,7 @@ import io.netty.util.internal.PlatformDependent;
  */
 @SuppressWarnings({"unused", "WeakerAccess"})
 public
-class Client<C extends Connection> extends EndPointClient<C> implements Connection {
+class Client<C extends Connection> extends EndPointClient implements Connection {
     /**
      * Gets the version number.
      */
@@ -78,7 +77,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * Starts a LOCAL <b>only</b> client, with the default local channel name and serialization scheme
      */
     public
-    Client() throws InitializationException, SecurityException, IOException {
+    Client() throws SecurityException {
         this(Configuration.localOnly());
     }
 
@@ -86,8 +85,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * Starts a TCP & UDP client (or a LOCAL client), with the specified serialization scheme
      */
     public
-    Client(String host, int tcpPort, int udpPort, String localChannelName)
-                    throws InitializationException, SecurityException, IOException {
+    Client(String host, int tcpPort, int udpPort, String localChannelName) throws SecurityException {
         this(new Configuration(host, tcpPort, udpPort, localChannelName));
     }
 
@@ -96,7 +94,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      */
     @SuppressWarnings("AutoBoxing")
     public
-    Client(final Configuration config) throws InitializationException, SecurityException, IOException {
+    Client(final Configuration config) throws SecurityException {
         super(config);
 
         String threadName = Client.class.getSimpleName();
@@ -144,7 +142,7 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
             localBootstrap.group(localBoss)
                           .channel(LocalChannel.class)
                           .remoteAddress(new LocalAddress(config.localChannelName))
-                          .handler(new RegistrationLocalHandlerClient<C>(threadName, registrationWrapper));
+                          .handler(new RegistrationLocalHandlerClient(threadName, registrationWrapper));
 
             manageForShutdown(localBoss);
         }
@@ -181,9 +179,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .remoteAddress(config.host, config.tcpPort)
-                            .handler(new RegistrationRemoteHandlerClientTCP<C>(threadName,
-                                                                               registrationWrapper,
-                                                                               serializationManager));
+                            .handler(new RegistrationRemoteHandlerClientTCP(threadName,
+                                                                            registrationWrapper,
+                                                                            serializationManager));
 
                 // android screws up on this!!
                 tcpBootstrap.option(ChannelOption.TCP_NODELAY, !isAndroid)
@@ -217,9 +215,9 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .localAddress(new InetSocketAddress(0))  // bind to wildcard
                             .remoteAddress(new InetSocketAddress(config.host, config.udpPort))
-                            .handler(new RegistrationRemoteHandlerClientUDP<C>(threadName,
-                                                                               registrationWrapper,
-                                                                               serializationManager));
+                            .handler(new RegistrationRemoteHandlerClientUDP(threadName,
+                                                                            registrationWrapper,
+                                                                            serializationManager));
 
                 // Enable to READ and WRITE MULTICAST data (ie, 192.168.1.0)
                 // in order to WRITE: write as normal, just make sure it ends in .255
@@ -419,9 +417,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     public
     <Iface> void createRemoteObject(final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) {
         try {
-            C connection0 = connectionManager.getConnection0();
-            connection0.createRemoteObject(interfaceClass, callback);
-        } catch (IOException e) {
+            connection.createRemoteObject(interfaceClass, callback);
+        } catch (NullPointerException e) {
             logger.error("Error creating remote object!", e);
         }
     }
@@ -452,9 +449,8 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
     public
     <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) {
         try {
-            C connection0 = connectionManager.getConnection0();
-            connection0.getRemoteObject(objectId, callback);
-        } catch (IOException e) {
+            connection.getRemoteObject(objectId, callback);
+        } catch (NullPointerException e) {
             logger.error("Error getting remote object!", e);
         }
     }
@@ -464,11 +460,12 @@ class Client<C extends Connection> extends EndPointClient<C> implements Connecti
      * <p/>
      * Make <b>sure</b> that you only call this <b>after</b> the client connects!
      * <p/>
-     * This is preferred to {@link EndPointBase#getConnections()} getConnections()}, as it properly does some error checking
+     * This is preferred to {@link EndPointBase#getConnections()}, as it properly does some error checking
      */
+    @SuppressWarnings("unchecked")
     public
     C getConnection() {
-        return connection;
+        return (C) connection;
     }
 
     /**

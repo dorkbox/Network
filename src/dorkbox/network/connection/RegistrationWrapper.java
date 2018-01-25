@@ -47,13 +47,13 @@ import io.netty.channel.ChannelPipeline;
  * This is in the connection package, so it can access the endpoint methods that it needs to (without having to publicly expose them)
  */
 public
-class RegistrationWrapper<C extends Connection> implements UdpServer {
+class RegistrationWrapper implements UdpServer {
     private final org.slf4j.Logger logger;
 
     private final KryoEncoder kryoEncoder;
     private final KryoEncoderCrypto kryoEncoderCrypto;
 
-    private final EndPointBase<C> endPointBaseConnection;
+    private final EndPointBase endPointBaseConnection;
 
     // keeps track of connections (TCP/UDP-client)
     private final ReentrantLock channelMapLock = new ReentrantLock();
@@ -77,7 +77,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
 
 
     public
-    RegistrationWrapper(final EndPointBase<C> endPointBaseConnection,
+    RegistrationWrapper(final EndPointBase endPointBaseConnection,
                         final Logger logger,
                         final KryoEncoder kryoEncoder,
                         final KryoEncoderCrypto kryoEncoderCrypto) {
@@ -92,14 +92,6 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
         else {
             this.udpRemoteMap = null;
         }
-    }
-
-    /**
-     * @return true if RMI is enabled
-     */
-    public
-    boolean rmiEnabled() {
-        return endPointBaseConnection.globalRmiBridge != null;
     }
 
     public
@@ -161,8 +153,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     /**
      * Internal call by the pipeline when: - creating a new network connection - when determining the baseClass for generics
      *
-     * @param metaChannel
-     *                 can be NULL (when getting the baseClass)
+     * @param metaChannel can be NULL (when getting the baseClass)
      */
     public
     Connection connection0(MetaChannel metaChannel) {
@@ -317,7 +308,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
     public
     void abortRegistrationIfClient() {
         if (this.endPointBaseConnection instanceof EndPointClient) {
-            ((EndPointClient<C>) this.endPointBaseConnection).abortRegistration();
+            ((EndPointClient) this.endPointBaseConnection).abortRegistration();
         }
     }
 
@@ -411,7 +402,7 @@ class RegistrationWrapper<C extends Connection> implements UdpServer {
      * they will be ADDED in another map, in the followup handler!!
      */
     public
-    boolean setupChannels(final RegistrationRemoteHandler<C> handler, final MetaChannel metaChannel) {
+    boolean setupChannels(final RegistrationRemoteHandler handler, final MetaChannel metaChannel) {
         boolean registerServer = false;
 
         try {
