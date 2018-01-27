@@ -39,17 +39,7 @@ import dorkbox.network.connection.ping.PingTuple;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
-import dorkbox.network.rmi.InvokeMethod;
-import dorkbox.network.rmi.InvokeMethodResult;
-import dorkbox.network.rmi.RemoteObject;
-import dorkbox.network.rmi.RemoteObjectCallback;
-import dorkbox.network.rmi.Rmi;
-import dorkbox.network.rmi.RmiBridge;
-import dorkbox.network.rmi.RmiMessage;
-import dorkbox.network.rmi.RmiObjectHandler;
-import dorkbox.network.rmi.RmiProxyHandler;
-import dorkbox.network.rmi.RmiRegistration;
-import dorkbox.network.rmi.TimeoutException;
+import dorkbox.network.rmi.*;
 import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.LockFreeHashMap;
@@ -1080,8 +1070,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             // this is what creates a new instance of the impl class, and stores it as an ID.
             object = kryo.newInstance(implementationClass);
 
-            rmiId = rmiBridge.nextObjectId();
-            rmiBridge.register(rmiId, object);
+            rmiId = rmiBridge.register(object);
 
 
 
@@ -1116,7 +1105,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
                         try {
                             o = field.get(remoteClassObject.getValue());
 
-                            rmiBridge.register(rmiBridge.nextObjectId(), o);
+                            rmiBridge.register(o);
                             classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(type, o));
                         } catch (IllegalAccessException e) {
                             logger.error("Error checking RMI fields for: {}.{}", remoteClassObject.getKey(), field.getName(), e);
@@ -1184,7 +1173,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         }
 
         int objectId = globalRmiBridge.getRegisteredId(object);
-        if (objectId == Integer.MAX_VALUE) {
+        if (objectId == RmiBridge.INVALID_RMI) {
             return rmiBridge.getRegisteredId(object);
         } else {
             return objectId;
