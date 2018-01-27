@@ -19,15 +19,15 @@
  */
 package dorkbox.network;
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
-import dorkbox.util.exceptions.InitializationException;
-import dorkbox.util.exceptions.SecurityException;
-import org.junit.Test;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 
-import static org.junit.Assert.fail;
+import org.junit.Test;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.Listener;
+import dorkbox.util.exceptions.SecurityException;
 
 public
 class DiscoverHostTest extends BaseTest {
@@ -35,7 +35,7 @@ class DiscoverHostTest extends BaseTest {
 
     @Test
     public
-    void broadcast() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void broadcast() throws SecurityException, IOException {
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;

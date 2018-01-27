@@ -50,7 +50,6 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
 @SuppressWarnings("Duplicates")
@@ -59,7 +58,7 @@ class RmiSendObjectTest extends BaseTest {
 
     @Test
     public
-    void rmiNetwork() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void rmiNetwork() throws SecurityException, IOException {
         rmi(new Config() {
             @Override
             public
@@ -72,7 +71,7 @@ class RmiSendObjectTest extends BaseTest {
 
     @Test
     public
-    void rmiLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void rmiLocal() throws SecurityException, IOException {
         rmi(new Config() {
             @Override
             public
@@ -87,7 +86,7 @@ class RmiSendObjectTest extends BaseTest {
      * uses the first remote object to get the second remote object.
      */
     public
-    void rmi(final Config config) throws InitializationException, SecurityException, IOException, InterruptedException {
+    void rmi(final Config config) throws SecurityException, IOException {
         Configuration configuration = new Configuration();
         config.apply(configuration);
 

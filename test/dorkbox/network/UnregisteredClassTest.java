@@ -33,7 +33,6 @@ import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
 public
@@ -46,7 +45,7 @@ class UnregisteredClassTest extends BaseTest {
 
     @Test
     public
-    void unregisteredClasses() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void unregisteredClasses() throws SecurityException, IOException {
         int origSize = EndPoint.udpMaxSize;
         EndPoint.udpMaxSize = 2048;
 

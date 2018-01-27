@@ -29,7 +29,6 @@ import org.junit.Test;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.SerializationManager;
 
@@ -40,7 +39,7 @@ class ClientSendTest extends BaseTest {
 
     @Test
     public
-    void sendDataFromClientClass() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void sendDataFromClientClass() throws SecurityException, IOException {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;

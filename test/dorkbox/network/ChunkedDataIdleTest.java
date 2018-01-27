@@ -32,7 +32,6 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.SerializationManager;
 
@@ -46,7 +45,7 @@ public class ChunkedDataIdleTest extends BaseTest {
 
     // have to test sending objects
     @Test
-    public void ObjectSender() throws InitializationException, SecurityException, IOException, InterruptedException {
+    public void ObjectSender() throws SecurityException, IOException {
         final Data mainData = new Data();
         populateData(mainData);
 
@@ -75,7 +74,7 @@ public class ChunkedDataIdleTest extends BaseTest {
 
 
     private void sendObject(final Data mainData, Configuration configuration, final ConnectionType type)
-                    throws InitializationException, SecurityException, IOException, InterruptedException {
+                    throws SecurityException, IOException {
         Server server = new Server(configuration);
 
         addEndPoint(server);

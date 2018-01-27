@@ -31,13 +31,8 @@ import org.junit.Test;
 import dorkbox.network.PingPongTest.TYPE;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.connection.idle.IdleListener;
-import dorkbox.network.connection.idle.IdleListenerTCP;
-import dorkbox.network.connection.idle.IdleListenerUDP;
-import dorkbox.network.connection.idle.InputStreamSender;
+import dorkbox.network.connection.idle.*;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.SerializationManager;
 
@@ -54,7 +49,7 @@ class IdleTest extends BaseTest {
 
     @Test
     public
-    void InputStreamSender() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void InputStreamSender() throws SecurityException, IOException {
         final int largeDataSize = 12345;
 
         System.err.println("-- TCP");
@@ -81,7 +76,7 @@ class IdleTest extends BaseTest {
     // have to test sending objects
     @Test
     public
-    void ObjectSender() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void ObjectSender() throws SecurityException, IOException {
         final Data mainData = new Data();
         populateData(mainData);
 
@@ -111,7 +106,7 @@ class IdleTest extends BaseTest {
 
     private
     void sendObject(final Data mainData, Configuration configuration, final ConnectionType type)
-                    throws InitializationException, SecurityException, IOException, InterruptedException {
+                    throws SecurityException, IOException {
 
         Server server = new Server(configuration);
         addEndPoint(server);
@@ -166,7 +161,7 @@ class IdleTest extends BaseTest {
 
     private
     void streamSpecificType(final int largeDataSize, Configuration configuration, final ConnectionType type)
-                    throws InitializationException, SecurityException, IOException, InterruptedException {
+                    throws SecurityException, IOException {
         Server server = new Server(configuration);
         addEndPoint(server);
         server.setIdleTimeout(100);

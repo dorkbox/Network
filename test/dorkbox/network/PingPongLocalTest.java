@@ -31,7 +31,6 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.SerializationManager;
 
@@ -41,7 +40,7 @@ class PingPongLocalTest extends BaseTest {
     private volatile String fail;
 
     @Test
-    public void pingPongLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
+    public void pingPongLocal() throws SecurityException, IOException {
         this.fail = "Data not received.";
 
         final Data dataLOCAL = new Data();

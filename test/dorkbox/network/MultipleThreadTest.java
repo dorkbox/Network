@@ -34,7 +34,6 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
 public
@@ -57,7 +56,7 @@ class MultipleThreadTest extends BaseTest {
 
     @Test
     public
-    void multipleThreads() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void multipleThreads() throws SecurityException, IOException {
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;

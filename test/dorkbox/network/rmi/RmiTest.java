@@ -34,9 +34,7 @@
  */
 package dorkbox.network.rmi;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 import java.io.IOException;
 
@@ -51,7 +49,6 @@ import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
 public
@@ -178,7 +175,7 @@ class RmiTest extends BaseTest {
 
     @Test
     public
-    void rmiNetwork() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void rmiNetwork() throws SecurityException, IOException, InterruptedException {
         rmi(new Config() {
             @Override
             public
@@ -197,7 +194,7 @@ class RmiTest extends BaseTest {
 
     @Test
     public
-    void rmiLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void rmiLocal() throws SecurityException, IOException, InterruptedException {
         rmi(new Config() {
             @Override
             public
@@ -214,7 +211,7 @@ class RmiTest extends BaseTest {
 
 
     public
-    void rmi(final Config config) throws InitializationException, SecurityException, IOException, InterruptedException {
+    void rmi(final Config config) throws SecurityException, IOException {
         Configuration configuration = new Configuration();
         config.apply(configuration);
 

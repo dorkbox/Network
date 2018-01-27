@@ -29,7 +29,6 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.SerializationManager;
 
@@ -38,7 +37,7 @@ class ConnectionTest extends BaseTest {
 
     @Test
     public
-    void connectLocal() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void connectLocal() throws SecurityException, IOException {
         System.out.println("---- " + "Local");
 
         Configuration configuration = new Configuration();
@@ -54,7 +53,7 @@ class ConnectionTest extends BaseTest {
 
     @Test
     public
-    void connectTcp() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void connectTcp() throws SecurityException, IOException {
         System.out.println("---- " + "TCP");
 
         Configuration configuration = new Configuration();
@@ -72,7 +71,7 @@ class ConnectionTest extends BaseTest {
 
     @Test
     public
-    void connectTcpUdp() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void connectTcpUdp() throws SecurityException, IOException {
         System.out.println("---- " + "TCP UDP");
 
         Configuration configuration = new Configuration();
@@ -90,7 +89,7 @@ class ConnectionTest extends BaseTest {
     }
 
     private
-    Server startServer(Configuration configuration) throws InitializationException, SecurityException, IOException {
+    Server startServer(Configuration configuration) throws SecurityException {
         Server server = new Server(configuration);
 
         addEndPoint(server);
@@ -126,7 +125,7 @@ class ConnectionTest extends BaseTest {
     }
 
     private
-    Client startClient(Configuration configuration) throws InitializationException, SecurityException, IOException, InterruptedException {
+    Client startClient(Configuration configuration) throws SecurityException, IOException {
         Client client;
         if (configuration != null) {
             client = new Client(configuration);

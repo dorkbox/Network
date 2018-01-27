@@ -29,7 +29,6 @@ import org.junit.Test;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.Serialization;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
 public
@@ -38,7 +37,7 @@ class MultipleServerTest extends BaseTest {
 
     @Test
     public
-    void multipleServers() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void multipleServers() throws SecurityException, IOException {
         Configuration configuration1 = new Configuration();
         configuration1.tcpPort = tcpPort;
         configuration1.udpPort = udpPort;

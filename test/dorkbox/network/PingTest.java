@@ -24,7 +24,6 @@ import org.junit.Test;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Ping;
 import dorkbox.network.connection.PingListener;
-import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
 public
@@ -35,7 +34,7 @@ class PingTest extends BaseTest {
     // ping prefers the following order:  UDP, TCP
     @Test
     public
-    void pingTCP() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void pingTCP() throws SecurityException, IOException {
         this.response = -1;
 
         Configuration configuration = new Configuration();
@@ -69,7 +68,7 @@ class PingTest extends BaseTest {
 
     @Test
     public
-    void pingTCP_testListeners1() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void pingTCP_testListeners1() throws SecurityException, IOException {
         this.response = -1;
 
         Configuration configuration = new Configuration();
@@ -124,7 +123,7 @@ class PingTest extends BaseTest {
 
     @Test
     public
-    void pingTCP_testListeners2() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void pingTCP_testListeners2() throws SecurityException, IOException {
         this.response = -1;
 
         Configuration configuration = new Configuration();
@@ -170,7 +169,7 @@ class PingTest extends BaseTest {
     // ping prefers the following order:  UDP, TCP
     @Test
     public
-    void pingUDP() throws InitializationException, SecurityException, IOException, InterruptedException {
+    void pingUDP() throws SecurityException, IOException {
         this.response = -1;
 
         Configuration configuration = new Configuration();
