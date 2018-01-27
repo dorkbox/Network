@@ -47,11 +47,7 @@ import dorkbox.network.dns.Name;
 import dorkbox.network.dns.constants.DnsClass;
 import dorkbox.network.dns.constants.DnsRecordType;
 import dorkbox.network.dns.constants.DnsSection;
-import dorkbox.network.dns.exceptions.InvalidDClassException;
-import dorkbox.network.dns.exceptions.InvalidTTLException;
-import dorkbox.network.dns.exceptions.InvalidTypeException;
-import dorkbox.network.dns.exceptions.RelativeNameException;
-import dorkbox.network.dns.exceptions.TextParseException;
+import dorkbox.network.dns.exceptions.*;
 import dorkbox.network.dns.utils.Options;
 import dorkbox.network.dns.utils.Tokenizer;
 import junit.framework.TestCase;
@@ -534,7 +530,7 @@ class RecordTest extends TestCase {
 
     public
     void test_byteArrayFromString_invalid() {
-        StringBuffer b = new StringBuffer();
+        StringBuilder b = new StringBuilder();
         for (int i = 0; i < 257; ++i) {
             b.append('A');
         }
