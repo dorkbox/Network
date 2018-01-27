@@ -511,12 +511,12 @@ class EndPoint extends Shutdownable {
 
     /**
      * Creates a "global" RMI object for use by multiple connections.
+     *
      * @return the ID assigned to this RMI object
      */
     public
     <T> int createGlobalObject(final T globalObject) {
-        int globalObjectId = globalRmiBridge.nextObjectId();
-        globalRmiBridge.register(globalObjectId, globalObject);
+        int globalObjectId = globalRmiBridge.register(globalObject);
         return globalObjectId;
     }
 }
