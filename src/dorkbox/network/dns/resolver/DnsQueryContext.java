@@ -24,7 +24,6 @@ import dorkbox.network.dns.DnsQuestion;
 import dorkbox.network.dns.DnsResponse;
 import dorkbox.network.dns.constants.DnsSection;
 import dorkbox.network.dns.records.DnsRecord;
-import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -42,7 +41,7 @@ class DnsQueryContext {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(DnsQueryContext.class);
 
     private final DnsNameResolver parent;
-    private final Promise<AddressedEnvelope<DnsResponse, InetSocketAddress>> promise;
+    private final Promise<DnsResponse> promise;
     private final int id;
     private final DnsQuestion question;
 
@@ -53,7 +52,7 @@ class DnsQueryContext {
     DnsQueryContext(DnsNameResolver parent,
                     InetSocketAddress nameServerAddr,
                     DnsQuestion question,
-                    Promise<AddressedEnvelope<DnsResponse, InetSocketAddress>> promise) {
+                    Promise<DnsResponse> promise) {
 
         this.parent = checkNotNull(parent, "parent");
         this.nameServerAddr = checkNotNull(nameServerAddr, "nameServerAddr");
@@ -175,29 +174,28 @@ class DnsQueryContext {
         promise.tryFailure(e);
     }
 
-    void finish(AddressedEnvelope<DnsResponse, InetSocketAddress> envelope) {
-        final DnsResponse response = envelope.content();
+    void finish(DnsResponse response) {
 
         try {
             DnsRecord[] sectionArray = response.getSectionArray(DnsSection.QUESTION);
             if (sectionArray.length != 1) {
-                logger.warn("Received a DNS response with invalid number of questions: {}", envelope);
+                logger.warn("Received a DNS response with invalid number of questions: {}", response);
                 return;
             }
 
             DnsRecord[] questionArray = question.getSectionArray(DnsSection.QUESTION);
             if (questionArray.length != 1) {
-                logger.warn("Received a DNS response with invalid number of query questions: {}", envelope);
+                logger.warn("Received a DNS response with invalid number of query questions: {}", response);
                 return;
             }
 
 
             if (!questionArray[0].equals(sectionArray[0])) {
-                logger.warn("Received a mismatching DNS response: {}", envelope);
+                logger.warn("Received a mismatching DNS response: {}", response);
                 return;
             }
 
-            setSuccess(envelope);
+            setSuccess(response);
         } finally {
             if (question.isResolveQuestion()) {
                 // for resolve questions (always A/AAAA), we convert the answer into InetAddress, however with OTHER TYPES, we pass
@@ -208,7 +206,7 @@ class DnsQueryContext {
     }
 
     private
-    void setSuccess(AddressedEnvelope<DnsResponse, InetSocketAddress> envelope) {
+    void setSuccess(DnsResponse response) {
         parent.queryContextManager.remove(nameServerAddr(), id);
 
         // Cancel the timeout task.
@@ -217,17 +215,16 @@ class DnsQueryContext {
             timeoutFuture.cancel(false);
         }
 
-        Promise<AddressedEnvelope<DnsResponse, InetSocketAddress>> promise = this.promise;
+        Promise<DnsResponse> promise = this.promise;
         if (promise.setUncancellable()) {
-            @SuppressWarnings("unchecked")
-            AddressedEnvelope<DnsResponse, InetSocketAddress> castResponse = envelope.retain();
-            // envelope now has a refCnt = 2
-            if (!promise.trySuccess(castResponse)) { // question is used here!
+            response.retain();
+            // response now has a refCnt = 2
+            if (!promise.trySuccess(response)) { // question is used here!
                 // We failed to notify the promise as it was failed before, thus we need to release the envelope
-                envelope.release();
+                response.release();
             }
 
-            envelope.release();
+            response.release();
         }
     }
 }

@@ -22,32 +22,18 @@ import static java.util.Collections.unmodifiableList;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import dorkbox.network.dns.DnsQuestion;
 import dorkbox.network.dns.DnsResponse;
 import dorkbox.network.dns.constants.DnsRecordType;
 import dorkbox.network.dns.constants.DnsResponseCode;
 import dorkbox.network.dns.constants.DnsSection;
-import dorkbox.network.dns.records.AAAARecord;
-import dorkbox.network.dns.records.ARecord;
-import dorkbox.network.dns.records.CNAMERecord;
-import dorkbox.network.dns.records.DnsMessage;
-import dorkbox.network.dns.records.DnsRecord;
-import dorkbox.network.dns.records.NSRecord;
+import dorkbox.network.dns.records.*;
 import dorkbox.network.dns.resolver.addressProvider.DnsServerAddressStream;
 import dorkbox.network.dns.resolver.addressProvider.DnsServerAddresses;
 import dorkbox.network.dns.resolver.cache.DnsCache;
 import dorkbox.network.dns.resolver.cache.DnsCacheEntry;
-import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.socket.InternetProtocolFamily;
 import io.netty.util.concurrent.Future;
@@ -61,10 +47,10 @@ import io.netty.util.internal.ThrowableUtil;
 abstract
 class DnsNameResolverContext<T> {
 
-    private static final FutureListener<AddressedEnvelope<DnsResponse, InetSocketAddress>> RELEASE_RESPONSE = new FutureListener<AddressedEnvelope<DnsResponse, InetSocketAddress>>() {
+    private static final FutureListener<DnsResponse> RELEASE_RESPONSE = new FutureListener<DnsResponse>() {
         @Override
         public
-        void operationComplete(Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> future) {
+        void operationComplete(Future<DnsResponse> future) {
             if (future.isSuccess()) {
                 future.getNow()
                       .release();
@@ -104,7 +90,7 @@ class DnsNameResolverContext<T> {
     private final int maxAllowedQueries;
     private final InternetProtocolFamily[] resolvedInternetProtocolFamilies;
 
-    private final Set<Future<AddressedEnvelope<DnsResponse, InetSocketAddress>>> queriesInProgress = Collections.newSetFromMap(new IdentityHashMap<Future<AddressedEnvelope<DnsResponse, InetSocketAddress>>, Boolean>());
+    private final Set<Future<DnsResponse>> queriesInProgress = Collections.newSetFromMap(new IdentityHashMap<Future<DnsResponse>, Boolean>());
 
     private List<DnsCacheEntry> resolvedEntries;
     private int allowedQueries;
@@ -323,20 +309,20 @@ class DnsNameResolverContext<T> {
 
         final InetSocketAddress nameServerAddr = nameServerAddrStream.next();
         final ChannelPromise writePromise = parent.ch.newPromise();
-        final Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> f =
+        final Future<DnsResponse> f =
                 parent.query0(nameServerAddr,
                               question,
                               writePromise,
-                              parent.ch.eventLoop().<AddressedEnvelope<DnsResponse, InetSocketAddress>>newPromise());
+                              parent.ch.eventLoop().<DnsResponse>newPromise());
 
         queriesInProgress.add(f);
 
         queryLifecycleObserver.queryWritten(nameServerAddr, writePromise);
 
-        f.addListener(new FutureListener<AddressedEnvelope<DnsResponse, InetSocketAddress>>() {
+        f.addListener(new FutureListener<DnsResponse>() {
             @Override
             public
-            void operationComplete(Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> future) {
+            void operationComplete(Future<DnsResponse> future) {
                 // future.result() should have refCnt=2
                 // question should have refCnt=1
                 queriesInProgress.remove(future);
@@ -346,7 +332,7 @@ class DnsNameResolverContext<T> {
                     return;
                 }
 
-                AddressedEnvelope<DnsResponse, InetSocketAddress> envelope = future.getNow();
+                DnsResponse envelope = future.getNow();
                 try {
                     if (future.isSuccess()) {
                         onResponse(nameServerAddrStream,
@@ -378,17 +364,15 @@ class DnsNameResolverContext<T> {
 
     void onResponse(final DnsServerAddressStream nameServerAddrStream,
                     final int nameServerAddrStreamIndex,
-                    final DnsQuestion question,
-                    AddressedEnvelope<DnsResponse, InetSocketAddress> envelope,
+                    final DnsQuestion question, DnsResponse response,
                     final DnsQueryLifecycleObserver queryLifecycleObserver,
                     Promise<T> promise) {
 
-        final DnsResponse res = envelope.content();
-        final int code = res.getHeader()
-                            .getRcode();
+        final int code = response.getHeader()
+                                 .getRcode();
 
         if (code == DnsResponseCode.NOERROR) {
-            if (handleRedirect(question, envelope, queryLifecycleObserver, promise)) {
+            if (handleRedirect(question, response, queryLifecycleObserver, promise)) {
                 // Was a redirect so return here as everything else is handled in handleRedirect(...)
                 return;
             }
@@ -396,10 +380,10 @@ class DnsNameResolverContext<T> {
                                      .getType();
 
             if (type == DnsRecordType.A || type == DnsRecordType.AAAA) {
-                onResponseAorAAAA(type, question, envelope, queryLifecycleObserver, promise);
+                onResponseAorAAAA(type, question, response, queryLifecycleObserver, promise);
             }
             else if (type == DnsRecordType.CNAME) {
-                onResponseCNAME(question, envelope, queryLifecycleObserver, promise);
+                onResponseCNAME(question, response, queryLifecycleObserver, promise);
             }
             else {
                 queryLifecycleObserver.queryFailed(UNRECOGNIZED_TYPE_QUERY_FAILED_EXCEPTION);
@@ -424,23 +408,20 @@ class DnsNameResolverContext<T> {
      * Handles a redirect answer if needed and returns {@code true} if a redirect query has been made.
      */
     private
-    boolean handleRedirect(DnsQuestion question,
-                           AddressedEnvelope<DnsResponse, InetSocketAddress> envelope,
+    boolean handleRedirect(DnsQuestion question, DnsResponse response,
                            final DnsQueryLifecycleObserver queryLifecycleObserver,
                            Promise<T> promise) {
 
-        final DnsResponse res = envelope.content();
-
         // Check if we have answers, if not this may be an non authority NS and so redirects must be handled.
-        DnsRecord[] answerArray = res.getSectionArray(DnsSection.ANSWER);
+        DnsRecord[] answerArray = response.getSectionArray(DnsSection.ANSWER);
         if (answerArray.length == 0) {
             AuthoritativeNameServerList serverNames = extractAuthoritativeNameServers(question.getQuestion()
                                                                                               .getName()
-                                                                                              .toString(), res);
+                                                                                              .toString(), response);
 
             if (serverNames != null) {
                 List<InetSocketAddress> nameServers = new ArrayList<InetSocketAddress>(serverNames.size());
-                DnsRecord[] additionalArray = res.getSectionArray(DnsSection.ADDITIONAL);
+                DnsRecord[] additionalArray = response.getSectionArray(DnsSection.ADDITIONAL);
 
                 for (int i = 0; i < additionalArray.length; i++) {
                     final DnsRecord r = additionalArray[i];
@@ -505,13 +486,11 @@ class DnsNameResolverContext<T> {
 
     private
     void onResponseAorAAAA(int qType,
-                           DnsMessage question,
-                           AddressedEnvelope<DnsResponse, InetSocketAddress> envelope,
+                           DnsMessage question, DnsResponse response,
                            final DnsQueryLifecycleObserver queryLifecycleObserver,
                            Promise<T> promise) {
 
         // We often get a bunch of CNAMES as well when we asked for A/AAAA.
-        final DnsResponse response = envelope.content();
         final Map<String, String> cnames = buildAliasMap(response);
 
         DnsRecord[] answerArray = response.getSectionArray(DnsSection.ANSWER);
@@ -573,7 +552,7 @@ class DnsNameResolverContext<T> {
         }
         else {
             // We asked for A/AAAA but we got only CNAME.
-            onResponseCNAME(question, envelope, cnames, queryLifecycleObserver, promise);
+            onResponseCNAME(question, response, cnames, queryLifecycleObserver, promise);
         }
     }
 
@@ -595,16 +574,14 @@ class DnsNameResolverContext<T> {
     }
 
     private
-    void onResponseCNAME(DnsMessage question,
-                         AddressedEnvelope<DnsResponse, InetSocketAddress> envelope,
+    void onResponseCNAME(DnsMessage question, DnsResponse response,
                          final DnsQueryLifecycleObserver queryLifecycleObserver,
                          Promise<T> promise) {
-        onResponseCNAME(question, envelope, buildAliasMap(envelope.content()), queryLifecycleObserver, promise);
+        onResponseCNAME(question, response, buildAliasMap(response), queryLifecycleObserver, promise);
     }
 
     private
-    void onResponseCNAME(DnsMessage question,
-                         AddressedEnvelope<DnsResponse, InetSocketAddress> response,
+    void onResponseCNAME(DnsMessage question, DnsResponse response,
                          Map<String, String> cnames,
                          final DnsQueryLifecycleObserver queryLifecycleObserver,
                          Promise<T> promise) {
@@ -748,8 +725,8 @@ class DnsNameResolverContext<T> {
 
         if (!queriesInProgress.isEmpty()) {
             // If there are queries in progress, we should cancel it because we already finished the resolution.
-            for (Iterator<Future<AddressedEnvelope<DnsResponse, InetSocketAddress>>> i = queriesInProgress.iterator(); i.hasNext(); ) {
-                Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> f = i.next();
+            for (Iterator<Future<DnsResponse>> i = queriesInProgress.iterator(); i.hasNext(); ) {
+                Future<DnsResponse> f = i.next();
                 i.remove();
 
                 if (!f.cancel(false)) {

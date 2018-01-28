@@ -19,7 +19,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 
-import dorkbox.network.dns.records.DnsMessage;
 import io.netty.channel.AddressedEnvelope;
 import io.netty.util.internal.UnstableApi;
 
@@ -27,74 +26,40 @@ import io.netty.util.internal.UnstableApi;
  * A {@link DnsResponse} implementation for UDP/IP.
  */
 @UnstableApi
-public class DnsResponse extends DnsMessage implements AddressedEnvelope<DnsResponse, InetSocketAddress> {
-
-    private final InetSocketAddress sender;
-    private final InetSocketAddress recipient;
+public
+class DnsResponse extends DnsEnvelope {
 
     /**
      * Creates a new instance.
      *
-     * @param sender the address of the sender
-     * @param recipient the address of the recipient
+     * @param localAddress the address of the sender
+     * @param remoteAddress the address of the recipient
      */
     public
-    DnsResponse(InetSocketAddress sender, InetSocketAddress recipient, final DnsInput dnsInput) throws IOException {
-        super(dnsInput);
+    DnsResponse(final DnsInput dnsInput, InetSocketAddress localAddress, InetSocketAddress remoteAddress) throws IOException {
+        super(dnsInput, localAddress, remoteAddress);
 
-        if (recipient == null && sender == null) {
-            throw new NullPointerException("recipient and sender");
+        if (remoteAddress == null && localAddress == null) {
+            throw new NullPointerException("localAddress and remoteAddress");
         }
-
-        this.sender = sender;
-        this.recipient = recipient;
     }
 
     @Override
     public
-    DnsResponse content() {
-        return this;
-    }
-
-    @Override
-    public InetSocketAddress sender() {
-        return sender;
-    }
-
-    @Override
-    public InetSocketAddress recipient() {
-        return recipient;
-    }
-
-
-
-
-    @Override
-    public
-    DnsResponse touch() {
-        return (DnsResponse) super.touch();
+    int hashCode() {
+        int hashCode = super.hashCode();
+        if (sender() != null) {
+            hashCode = hashCode * 31 + sender().hashCode();
+        }
+        if (recipient() != null) {
+            hashCode = hashCode * 31 + recipient().hashCode();
+        }
+        return hashCode;
     }
 
     @Override
     public
-    DnsResponse touch(Object hint) {
-        return (DnsResponse) super.touch(hint);
-    }
-
-    @Override
-    public
-    DnsResponse retain() {
-        return (DnsResponse) super.retain();
-    }
-
-    @Override
-    public
-    DnsResponse retain(int increment) {
-        return (DnsResponse) super.retain(increment);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
+    boolean equals(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -113,7 +78,8 @@ public class DnsResponse extends DnsMessage implements AddressedEnvelope<DnsResp
             if (that.sender() != null) {
                 return false;
             }
-        } else if (!sender().equals(that.sender())) {
+        }
+        else if (!sender().equals(that.sender())) {
             return false;
         }
 
@@ -121,22 +87,11 @@ public class DnsResponse extends DnsMessage implements AddressedEnvelope<DnsResp
             if (that.recipient() != null) {
                 return false;
             }
-        } else if (!recipient().equals(that.recipient())) {
+        }
+        else if (!recipient().equals(that.recipient())) {
             return false;
         }
 
         return true;
-    }
-
-    @Override
-    public int hashCode() {
-        int hashCode = super.hashCode();
-        if (sender() != null) {
-            hashCode = hashCode * 31 + sender().hashCode();
-        }
-        if (recipient() != null) {
-            hashCode = hashCode * 31 + recipient().hashCode();
-        }
-        return hashCode;
     }
 }
