@@ -2,9 +2,9 @@
 
 package dorkbox.network.dns.utils;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.StringTokenizer;
+
+import com.esotericsoftware.kryo.util.ObjectMap;
 
 /**
  * Boolean options:<BR>
@@ -27,12 +27,12 @@ import java.util.StringTokenizer;
 public final
 class Options {
 
-    private static Map table;
+    private static ObjectMap<String, Object> table;
 
     static {
         try {
             refresh();
-        } catch (SecurityException e) {
+        } catch (SecurityException ignored) {
         }
     }
 
@@ -65,8 +65,9 @@ class Options {
     public static
     void set(String option) {
         if (table == null) {
-            table = new HashMap();
+            table = new ObjectMap<String, Object>();
         }
+
         table.put(option.toLowerCase(), "true");
     }
 
@@ -76,7 +77,7 @@ class Options {
     public static
     void set(String option, String value) {
         if (table == null) {
-            table = new HashMap();
+            table = new ObjectMap<String, Object>();
         }
         table.put(option.toLowerCase(), value.toLowerCase());
     }
@@ -108,6 +109,7 @@ class Options {
         if (table == null) {
             return false;
         }
+
         return (table.get(option.toLowerCase()) != null);
     }
 
@@ -123,10 +125,11 @@ class Options {
                 if (val > 0) {
                     return (val);
                 }
-            } catch (NumberFormatException e) {
+            } catch (NumberFormatException ignored) {
             }
         }
-        return (-1);
+
+        return -1;
     }
 
     /**
@@ -137,7 +140,7 @@ class Options {
         if (table == null) {
             return null;
         }
+
         return ((String) table.get(option.toLowerCase()));
     }
-
 }
