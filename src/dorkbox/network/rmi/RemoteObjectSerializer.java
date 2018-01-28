@@ -59,10 +59,6 @@ class RemoteObjectSerializer<T> extends Serializer<T> {
     void write(Kryo kryo, Output output, T object) {
         KryoExtra kryoExtra = (KryoExtra) kryo;
         int id = kryoExtra.connection.getRegisteredId(object);
-        if (id == RmiBridge.INVALID_RMI) {
-            throw new IllegalStateException("Object not found in RMI objectSpace: " + object);
-        }
-
         output.writeInt(id, true);
     }
 

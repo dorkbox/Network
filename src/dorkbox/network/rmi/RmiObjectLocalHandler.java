@@ -20,6 +20,8 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
+import org.slf4j.Logger;
+
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.util.IdentityMap;
@@ -39,13 +41,8 @@ import dorkbox.network.serialization.CryptoSerializationManager;
  */
 public
 class RmiObjectLocalHandler extends RmiObjectHandler {
-    private static final boolean ENABLE_PROXY_OBJECTS = ConnectionImpl.ENABLE_PROXY_OBJECTS;
+    private static final boolean ENABLE_PROXY_OBJECTS = RmiBridge.ENABLE_PROXY_OBJECTS;
     private static final Field[] NO_REMOTE_FIELDS = new Field[0];
-
-    // private static final AtomicReferenceFieldUpdater<RmiObjectLocalHandler, IdentityMap> rmiFieldsREF = AtomicReferenceFieldUpdater.newUpdater(
-    //         RmiObjectLocalHandler.class,
-    //         IdentityMap.class,
-    //         "fieldCache");
 
     private static final AtomicReferenceFieldUpdater<RmiObjectLocalHandler, IdentityMap> implToProxyREF = AtomicReferenceFieldUpdater.newUpdater(
             RmiObjectLocalHandler.class,
@@ -57,13 +54,14 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
             IdentityMap.class,
             "objectHasRemoteObjects");
 
-    // private volatile IdentityMap<Class<?>, Field[]> fieldCache = new IdentityMap<Class<?>, Field[]>();
     private volatile IdentityMap<Object, Object> implToProxy = new IdentityMap<Object, Object>();
     private volatile IdentityMap<Object, Field[]> objectHasRemoteObjects = new IdentityMap<Object, Field[]>();
+    private final Logger logger;
 
 
     public
-    RmiObjectLocalHandler() {
+    RmiObjectLocalHandler(final Logger logger) {
+        this.logger = logger;
     }
 
     @Override
@@ -176,17 +174,27 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
             // if we are the response, we want to create a proxy object instead of just passing the ACTUAL object.
             // On the "network" (RemoteObjectSerializer.java) stack, this process is automatic -- and here we have to mimic this behavior.
 
-            // has to be 'registration.remoteObject' because we use it later on
-            if (ENABLE_PROXY_OBJECTS && registration.remoteObject != null) {
-                // override the implementation object with the proxy. This is required because RMI must be the same between "network" and "local"
-                // connections -- even if this "slows down" the speed/performance of what "local" connections offer.
-                RemoteObject proxyObject = connection.getProxyObject(registration.rmiId, interfaceClass);
 
-                // have to save A and B so we can correctly switch as necessary
-                //noinspection SynchronizeOnNonFinalField
-                synchronized (implToProxy) {
-                    // i know what I'm doing. This must be synchronized.
-                    implToProxy.put(registration.remoteObject, proxyObject);
+            // if PROXY objects are enabled, we replace the IMPLEMENTATION with a proxy object, so that the network logic == local logic.
+            if (ENABLE_PROXY_OBJECTS) {
+                RemoteObject proxyObject = null;
+
+                if (registration.rmiId == RmiBridge.INVALID_RMI) {
+                    logger.error("RMI ID '{}' is invalid. Unable to create RMI object.", registration.rmiId);
+                }
+                else {
+                    // override the implementation object with the proxy. This is required because RMI must be the same between "network" and "local"
+                    // connections -- even if this "slows down" the speed/performance of what "local" connections offer.
+                    proxyObject = connection.getProxyObject(registration.rmiId, interfaceClass);
+
+                    if (proxyObject != null) {
+                        // have to save A and B so we can correctly switch as necessary
+                        //noinspection SynchronizeOnNonFinalField
+                        synchronized (implToProxy) {
+                            // i know what I'm doing. This must be synchronized.
+                            implToProxy.put(registration.remoteObject, proxyObject);
+                        }
+                    }
                 }
 
                 connection.runRmiCallback(interfaceClass, callbackId, proxyObject);
@@ -197,6 +205,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
         }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public
     Object normalMessages(final ConnectionImpl connection, final Object message) {
@@ -208,7 +217,6 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
 
         // maybe this object is supposed to switch to a proxy object?? (note: we cannot send proxy objects over local/network connections)
 
-        @SuppressWarnings("unchecked")
         IdentityMap<Object, Object> implToProxy = implToProxyREF.get(this);
         IdentityMap<Object, Field[]> objectHasRemoteObjects = remoteObjectREF.get(this);
 
@@ -324,78 +332,4 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
 
         return message;
     }
-
-
-    // private
-    // LocalRmiClassEncoder replaceFieldObjects(final ConnectionImpl connection, final Object object, final Class<?> implClass) {
-    //     Field[] rmiFields = fieldCache.get(implClass);
-    //     int length = rmiFields.length;
-    //
-    //     Object rmiObject = null;
-    //     int[] rmiFieldIds = new int[length];
-    //     for (int i = 0; i < length; i++) {
-    //         Field field = rmiFields[i];
-    //
-    //         // if it's an RMI object we want to write out a proxy object in the field instead of the actual object
-    //         try {
-    //             rmiObject = field.get(object);
-    //         } catch (IllegalAccessException e) {
-    //             e.printStackTrace();
-    //         }
-    //
-    //         if (rmiObject == null) {
-    //             rmiFieldIds[i] = 0; // 0 means it was null
-    //         }
-    //
-    //         final Map<Object, Integer> localWeakCache = objectThreadLocals.get();
-    //
-    //         Integer id = localWeakCache.get(rmiObject);
-    //         if (id == null) {
-    //             // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-    //             int registeredId = connection.getRegisteredId(rmiObject);
-    //             rmiFieldIds[i] = registeredId;
-    //             localWeakCache.put(rmiObject, registeredId);
-    //         }
-    //         else {
-    //             rmiFieldIds[i] = id;
-    //         }
-    //     }
-    //
-    //     LocalRmiClassEncoder localRmiClassEncoder = new LocalRmiClassEncoder();
-    //     localRmiClassEncoder.rmiObject = object;
-    //     localRmiClassEncoder.rmiFieldIds = rmiFieldIds;
-    //
-    //     return localRmiClassEncoder;
-    // }
-
-    // Field[] getFields(final Class<?> clazz) {
-    //     // duplicates are OK, because they will contain the same information, so we DO NOT care about single writers
-    //
-    //     //noinspection unchecked
-    //     final IdentityMap<Class<?>, Field[]> identityMap = rmiFieldsREF.get(this);
-    //
-    //
-    //     Field[] rmiFields = identityMap.get(clazz);
-    //     if (rmiFields != null) {
-    //         return rmiFields;
-    //     }
-    //
-    //     final ArrayList<Field> fields = new ArrayList<Field>();
-    //
-    //     for (Field field : clazz.getDeclaredFields()) {
-    //         if (field.getAnnotation(Rmi.class) != null) {
-    //             fields.add(field);
-    //         }
-    //     }
-    //
-    //
-    //     rmiFields = new Field[fields.size()];
-    //     fields.toArray(rmiFields);
-    //
-    //     // save in cache
-    //     fieldCache.put(clazz, rmiFields);
-    //     rmiFieldsREF.lazySet(this, fieldCache);
-    //
-    //     return rmiFields;
-    // }
 }

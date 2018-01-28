@@ -41,8 +41,8 @@ import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.rmi.*;
 import dorkbox.network.serialization.CryptoSerializationManager;
-import dorkbox.util.collections.IntMap;
 import dorkbox.util.collections.LockFreeHashMap;
+import dorkbox.util.collections.LockFreeIntMap;
 import dorkbox.util.generics.ClassHelper;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -66,9 +66,6 @@ import io.netty.util.concurrent.Promise;
 @Sharable
 public
 class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConnection, Connection, Listeners, ConnectionBridge {
-    // default false
-    public static boolean ENABLE_PROXY_OBJECTS = true;
-
     public static
     boolean isTcp(Class<? extends Channel> channelClass) {
         return channelClass == NioSocketChannel.class || channelClass == EpollSocketChannel.class;
@@ -128,8 +125,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     private final Map<Integer, RemoteObject> proxyIdCache;
     private final List<Listener.OnMessageReceived<Connection, InvokeMethodResult>> proxyListeners;
 
-    private final IntMap<RemoteObjectCallback> rmiRegistrationCallbacks;
-    private int rmiCallbackId = 0; // protected by synchronized (rmiRegistrationCallbacks)
+    private final LockFreeIntMap<RemoteObjectCallback> rmiRegistrationCallbacks;
+    private volatile int rmiCallbackId = 0;
 
     /**
      * All of the parameters can be null, when metaChannel wants to get the base class type
@@ -142,9 +139,11 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
         if (endPoint != null && endPoint.globalRmiBridge != null) {
             // rmi is enabled.
+            // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
+            // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
             proxyIdCache = new LockFreeHashMap<Integer, RemoteObject>();
             proxyListeners = new CopyOnWriteArrayList<Listener.OnMessageReceived<Connection, InvokeMethodResult>>();
-            rmiRegistrationCallbacks = new IntMap<RemoteObjectCallback>();
+            rmiRegistrationCallbacks = new LockFreeIntMap<RemoteObjectCallback>();
         } else {
             proxyIdCache = null;
             proxyListeners = null;
@@ -699,15 +698,11 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
             // proxy listeners are cleared in the removeAll() call
             if (proxyIdCache != null) {
-                synchronized (proxyIdCache) {
-                    proxyIdCache.clear();
-                }
+                proxyIdCache.clear();
             }
 
             if (rmiRegistrationCallbacks != null) {
-                synchronized (rmiRegistrationCallbacks) {
-                    rmiRegistrationCallbacks.clear();
-                }
+                rmiRegistrationCallbacks.clear();
             }
         }
     }
@@ -971,13 +966,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             throw new IllegalArgumentException("Cannot create a proxy for RMI access. It must be an interface.");
         }
 
-        RmiRegistration message;
-
-        synchronized (rmiRegistrationCallbacks) {
-            int nextRmiCallbackId = rmiCallbackId++;
-            rmiRegistrationCallbacks.put(nextRmiCallbackId, callback);
-            message = new RmiRegistration(interfaceClass, RmiBridge.INVALID_RMI, nextRmiCallbackId);
-        }
+        // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
+        // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
+        //noinspection NonAtomicOperationOnVolatileField
+        int nextRmiCallbackId = rmiCallbackId++;
+        rmiRegistrationCallbacks.put(nextRmiCallbackId, callback);
+        RmiRegistration message = new RmiRegistration(interfaceClass, RmiBridge.INVALID_RMI, nextRmiCallbackId);
 
         // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
@@ -989,15 +983,21 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) {
-        RmiRegistration message;
+        if (objectId < 0) {
+            throw new IllegalStateException("Object ID cannot be < 0");
+        }
+        if (objectId >= RmiBridge.INVALID_RMI) {
+            throw new IllegalStateException("Object ID cannot be >= " + RmiBridge.INVALID_RMI);
+        }
 
         Class<?> iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback.class, callback.getClass(), 0);
 
-        synchronized (rmiRegistrationCallbacks) {
-            int nextRmiCallbackId = rmiCallbackId++;
-            rmiRegistrationCallbacks.put(nextRmiCallbackId, callback);
-            message = new RmiRegistration(iFaceClass, objectId, nextRmiCallbackId);
-        }
+        // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
+        // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
+        //noinspection NonAtomicOperationOnVolatileField
+        int nextRmiCallbackId = rmiCallbackId++;
+        rmiRegistrationCallbacks.put(nextRmiCallbackId, callback);
+        RmiRegistration message = new RmiRegistration(iFaceClass, objectId, nextRmiCallbackId);
 
         // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
@@ -1072,55 +1072,61 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
             rmiId = rmiBridge.register(object);
 
+            if (rmiId == RmiBridge.INVALID_RMI) {
+                // this means that there are too many RMI ids (either global or connection specific!)
+                object = null;
+            }
+            else {
+                // if we are invalid, skip going over fields that might also be RMI objects, BECAUSE our object will be NULL!
+
+                // the @Rmi annotation allows an RMI object to have fields with objects that are ALSO RMI objects
+                LinkedList<Map.Entry<Class<?>, Object>> classesToCheck = new LinkedList<Map.Entry<Class<?>, Object>>();
+                classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(implementationClass, object));
 
 
-            // the @Rmi annotation allows an RMI object to have fields with objects that are ALSO RMI objects
-            LinkedList<Map.Entry<Class<?>, Object>> classesToCheck = new LinkedList<Map.Entry<Class<?>, Object>>();
-            classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(implementationClass, object));
+                Map.Entry<Class<?>, Object> remoteClassObject;
+                while (!classesToCheck.isEmpty()) {
+                    remoteClassObject = classesToCheck.removeFirst();
+
+                    // we have to check the IMPLEMENTATION for any additional fields that will have proxy information.
+                    // we use getDeclaredFields() + walking the object hierarchy, so we get ALL the fields possible (public + private).
+                    for (Field field : remoteClassObject.getKey()
+                                                        .getDeclaredFields()) {
+                        if (field.getAnnotation(Rmi.class) != null) {
+                            final Class<?> type = field.getType();
+
+                            if (!type.isInterface()) {
+                                // the type must be an interface, otherwise RMI cannot create a proxy object
+                                logger.error("Error checking RMI fields for: {}.{} -- It is not an interface!",
+                                             remoteClassObject.getKey(),
+                                             field.getName());
+                                continue;
+                            }
 
 
-            Map.Entry<Class<?>, Object> remoteClassObject;
-            while (!classesToCheck.isEmpty()) {
-                remoteClassObject = classesToCheck.removeFirst();
+                            boolean prev = field.isAccessible();
+                            field.setAccessible(true);
+                            final Object o;
+                            try {
+                                o = field.get(remoteClassObject.getValue());
 
-                // we have to check the IMPLEMENTATION for any additional fields that will have proxy information.
-                // we use getDeclaredFields() + walking the object hierarchy, so we get ALL the fields possible (public + private).
-                for (Field field : remoteClassObject.getKey()
-                                                    .getDeclaredFields()) {
-                    if (field.getAnnotation(Rmi.class) != null) {
-                        final Class<?> type = field.getType();
-
-                        if (!type.isInterface()) {
-                            // the type must be an interface, otherwise RMI cannot create a proxy object
-                            logger.error("Error checking RMI fields for: {}.{} -- It is not an interface!",
-                                         remoteClassObject.getKey(),
-                                         field.getName());
-                            continue;
-                        }
-
-
-                        boolean prev = field.isAccessible();
-                        field.setAccessible(true);
-                        final Object o;
-                        try {
-                            o = field.get(remoteClassObject.getValue());
-
-                            rmiBridge.register(o);
-                            classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(type, o));
-                        } catch (IllegalAccessException e) {
-                            logger.error("Error checking RMI fields for: {}.{}", remoteClassObject.getKey(), field.getName(), e);
-                        } finally {
-                            field.setAccessible(prev);
+                                rmiBridge.register(o);
+                                classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(type, o));
+                            } catch (IllegalAccessException e) {
+                                logger.error("Error checking RMI fields for: {}.{}", remoteClassObject.getKey(), field.getName(), e);
+                            } finally {
+                                field.setAccessible(prev);
+                            }
                         }
                     }
-                }
 
 
-                // have to check the object hierarchy as well
-                Class<?> superclass = remoteClassObject.getKey()
-                                                       .getSuperclass();
-                if (superclass != null && superclass != Object.class) {
-                    classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(superclass, remoteClassObject.getValue()));
+                    // have to check the object hierarchy as well
+                    Class<?> superclass = remoteClassObject.getKey()
+                                                           .getSuperclass();
+                    if (superclass != null && superclass != Object.class) {
+                        classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(superclass, remoteClassObject.getValue()));
+                    }
                 }
             }
         } catch (Exception e) {
@@ -1144,10 +1150,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
     public final
     void runRmiCallback(final Class<?> interfaceClass, final int callbackId, final Object remoteObject) {
-        RemoteObjectCallback callback;
-        synchronized (rmiRegistrationCallbacks) {
-            callback = rmiRegistrationCallbacks.remove(callbackId);
-        }
+        RemoteObjectCallback callback = rmiRegistrationCallbacks.remove(callbackId);
 
         try {
             //noinspection unchecked
@@ -1173,10 +1176,11 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         }
 
         int objectId = globalRmiBridge.getRegisteredId(object);
-        if (objectId == RmiBridge.INVALID_RMI) {
-            return rmiBridge.getRegisteredId(object);
-        } else {
+        if (objectId != RmiBridge.INVALID_RMI) {
             return objectId;
+        }
+        else {
+            return rmiBridge.getRegisteredId(object);
         }
     }
 
@@ -1212,30 +1216,29 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             throw new IllegalArgumentException("iface must be an interface.");
         }
 
-        synchronized (proxyIdCache) {
-            // we want to have a connection specific cache of IDs, using weak references.
-            // because this is PER CONNECTION, this is safe.
-            RemoteObject remoteObject = proxyIdCache.get(objectID);
+        // we want to have a connection specific cache of IDs
+        // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
+        // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
+        RemoteObject remoteObject = proxyIdCache.get(objectID);
 
-            if (remoteObject == null) {
-                // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-                // remoteObject = rmiBridge.createProxyObject(this, objectID, iFace);
+        if (remoteObject == null) {
+            // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
+            // remoteObject = rmiBridge.createProxyObject(this, objectID, iFace);
 
-                // the ACTUAL proxy is created in the connection impl.
-                RmiProxyHandler proxyObject = new RmiProxyHandler(this, objectID, iFace);
-                proxyListeners.add(proxyObject.getListener());
+            // the ACTUAL proxy is created in the connection impl.
+            RmiProxyHandler proxyObject = new RmiProxyHandler(this, objectID, iFace);
+            proxyListeners.add(proxyObject.getListener());
 
-                Class<?>[] temp = new Class<?>[2];
-                temp[0] = RemoteObject.class;
-                temp[1] = iFace;
+            Class<?>[] temp = new Class<?>[2];
+            temp[0] = RemoteObject.class;
+            temp[1] = iFace;
 
-                remoteObject = (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(), temp, proxyObject);
+            remoteObject = (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(), temp, proxyObject);
 
-                proxyIdCache.put(objectID, remoteObject);
-            }
-
-            return remoteObject;
+            proxyIdCache.put(objectID, remoteObject);
         }
+
+        return remoteObject;
     }
 
     /**
@@ -1247,9 +1250,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         if (RmiBridge.isGlobal(objectID)) {
             RmiBridge globalRmiBridge = endPoint.globalRmiBridge;
 
-            if (globalRmiBridge == null) {
-                throw new NullPointerException("Unable to call 'getRegisteredId' when the gloablRmiBridge is null!");
-            }
+            assert globalRmiBridge != null;
 
             return globalRmiBridge.getRegisteredObject(objectID);
         } else {

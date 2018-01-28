@@ -221,8 +221,8 @@ class EndPoint extends Shutdownable {
 
         if (rmiEnabled) {
             rmiHandler = null;
-            localRmiHandler = new RmiObjectLocalHandler();
-            networkRmiHandler = new RmiObjectNetworkHandler();
+            localRmiHandler = new RmiObjectLocalHandler(logger);
+            networkRmiHandler = new RmiObjectNetworkHandler(logger);
             globalRmiBridge = new RmiBridge(logger, config.rmiExecutor, true);
         }
         else {

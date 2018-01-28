@@ -21,7 +21,7 @@ package dorkbox.network.rmi;
 public
 interface RemoteObjectCallback<Iface> {
     /**
-     * @param remoteObject the remote object (as a proxy object) or null if there was an error
+     * @param remoteObject the remote object (as a proxy object) or null if there was an error creating the RMI object
      */
     void created(Iface remoteObject);
 }

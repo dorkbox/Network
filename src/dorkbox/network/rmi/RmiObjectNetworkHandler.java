@@ -15,14 +15,19 @@
  */
 package dorkbox.network.rmi;
 
+import org.slf4j.Logger;
+
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.Listener;
 
 public
 class RmiObjectNetworkHandler extends RmiObjectHandler {
 
+    private final Logger logger;
+
     public
-    RmiObjectNetworkHandler() {
+    RmiObjectNetworkHandler(final Logger logger) {
+        this.logger = logger;
     }
 
     @Override
@@ -66,6 +71,10 @@ class RmiObjectNetworkHandler extends RmiObjectHandler {
             }
         }
         else {
+            if (registration.rmiId == RmiBridge.INVALID_RMI) {
+                logger.error("RMI ID '{}' is invalid. Unable to create RMI object.", registration.rmiId);
+            }
+
             // this is the response.
             // THIS IS ON THE LOCAL CONNECTION SIDE, which is the side that called 'getRemoteObject()'   This can be Server or Client.
             connection.runRmiCallback(interfaceClass, callbackId, registration.remoteObject);

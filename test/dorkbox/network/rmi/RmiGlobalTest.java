@@ -361,7 +361,7 @@ class RmiGlobalTest extends BaseTest {
     class TestCowImpl extends ConnectionAware implements TestCow {
         public long value = System.currentTimeMillis();
         public int moos;
-        private final int id = 1;
+        private final int id = 0; // the RMI id should be == to this for each direction.
 
         public
         TestCowImpl() {
