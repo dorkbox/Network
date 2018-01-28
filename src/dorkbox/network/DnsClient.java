@@ -22,11 +22,7 @@ import static io.netty.util.internal.ObjectUtil.intValue;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -49,7 +45,6 @@ import dorkbox.network.dns.resolver.cache.DnsCache;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
-import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
@@ -722,15 +717,48 @@ class DnsClient extends Shutdownable {
         // we use our own resolvers
         DnsQuestion dnsMessage = DnsQuestion.newQuery(hostname, type, recursionDesired);
 
-        final Future<AddressedEnvelope<DnsResponse, InetSocketAddress>> query = resolver.query(dnsMessage);
+        return query(dnsMessage, queryTimeoutSeconds);
+    }
+
+
+    /**
+     * Resolves a specific DnsQuestion
+     * <p/>
+     * <p/>
+     * Note: PTR queries absolutely MUST end in '.in-addr.arpa' in order for the DNS server to understand it.
+     * -- because of this, we will automatically fix this in case that clients are unaware of this requirement
+     * <p/>
+     * <p/>
+     * Note: A/AAAA queries absolutely MUST end in a '.' -- because of this we will automatically fix this in case that clients are
+     * unaware of this requirement
+     *
+     * @param queryTimeoutSeconds the number of seconds to wait for host resolution
+     *
+     * @return the DnsRecords or throws an exception if the hostname cannot be resolved
+     *
+     * @throws @throws UnknownHostException if the hostname cannot be resolved
+     */
+    public
+    DnsRecord[] query(final DnsQuestion dnsMessage, final int queryTimeoutSeconds) throws UnknownHostException {
+        int questionCount = dnsMessage.getHeader()
+                                      .getCount(DnsSection.QUESTION);
+
+        if (questionCount > 1) {
+            throw new UnknownHostException("Cannot ask more than 1 question at a time! You tried to ask " + questionCount + " questions at once");
+        }
+
+        final int type = dnsMessage.getQuestion()
+                                   .getType();
+
+        final Future<DnsResponse> query = resolver.query(dnsMessage);
         boolean finished = query.awaitUninterruptibly(queryTimeoutSeconds, TimeUnit.SECONDS);
 
         // now return whatever value we had
         if (finished && query.isSuccess() && query.isDone()) {
-            AddressedEnvelope<DnsResponse, InetSocketAddress> envelope = query.getNow();
-            DnsResponse response = envelope.content();
+            DnsResponse response = query.getNow();
             try {
-                final int code = response.getHeader().getRcode();
+                final int code = response.getHeader()
+                                         .getRcode();
                 if (code == DnsResponseCode.NOERROR) {
                     return response.getSectionArray(DnsSection.ANSWER);
                 }
@@ -753,6 +781,7 @@ class DnsClient extends Shutdownable {
         }
 
         throw new UnknownHostException(msg);
+
     }
 }
 
