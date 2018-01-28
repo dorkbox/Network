@@ -15,15 +15,20 @@ import dorkbox.util.collections.ObjectIntMap;
 public
 class Mnemonic {
 
-    /* Strings are case-sensitive. */
+    /** Strings are case-sensitive. */
     public static final int CASE_SENSITIVE = 1;
-    /* Strings will be stored/searched for in uppercase. */
+
+    /** Strings will be stored/searched for in uppercase. */
     public static final int CASE_UPPER = 2;
-    /* Strings will be stored/searched for in lowercase. */
+
+    /** Strings will be stored/searched for in lowercase. */
     public static final int CASE_LOWER = 3;
+
     private static final int INVALID_VALUE = -1;
+
     private ObjectIntMap<String> strings;
     private IntMap<String> values;
+
     private String description;
     private int wordcase;
     private String prefix;
