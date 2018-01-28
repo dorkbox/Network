@@ -5,15 +5,13 @@ package dorkbox.network.dns.records;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
 
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+
+import com.esotericsoftware.kryo.util.ObjectMap;
 
 import dorkbox.network.dns.DnsOutput;
 import dorkbox.network.dns.Name;
@@ -32,6 +30,7 @@ import dorkbox.util.Base64Fast;
  * @see TSIGRecord
  */
 
+@SuppressWarnings("WeakerAccess")
 public
 class TSIG {
 
@@ -72,9 +71,10 @@ class TSIG {
      */
     public static final Name HMAC_SHA512 = Name.fromConstantString("hmac-sha512.");
 
-    private static Map algMap;
+    private static final ObjectMap<Name, String> algMap = new ObjectMap<Name, String>();
+
     /**
-     * The default fudge value for outgoing packets.  Can be overriden by the
+     * The default fudge value for outgoing packets.  Can be overridden by the
      * tsigfudge option.
      */
     public static final short FUDGE = 300;
@@ -82,14 +82,12 @@ class TSIG {
     private Mac hmac;
 
     static {
-        Map out = new HashMap();
-        out.put(HMAC_MD5, "HmacMD5");
-        out.put(HMAC_SHA1, "HmacSHA1");
-        out.put(HMAC_SHA224, "HmacSHA224");
-        out.put(HMAC_SHA256, "HmacSHA256");
-        out.put(HMAC_SHA384, "HmacSHA384");
-        out.put(HMAC_SHA512, "HmacSHA512");
-        algMap = Collections.unmodifiableMap(out);
+        algMap.put(HMAC_MD5, "HmacMD5");
+        algMap.put(HMAC_SHA1, "HmacSHA1");
+        algMap.put(HMAC_SHA224, "HmacSHA224");
+        algMap.put(HMAC_SHA256, "HmacSHA256");
+        algMap.put(HMAC_SHA384, "HmacSHA384");
+        algMap.put(HMAC_SHA512, "HmacSHA512");
     }
 
     /**
@@ -143,7 +141,7 @@ class TSIG {
 
     public static
     String nameToAlgorithm(Name name) {
-        String alg = (String) algMap.get(name);
+        String alg = algMap.get(name);
         if (alg != null) {
             return alg;
         }
@@ -177,14 +175,13 @@ class TSIG {
 
     public static
     Name algorithmToName(String alg) {
-        Iterator it = algMap.entrySet()
-                            .iterator();
-        while (it.hasNext()) {
-            Map.Entry entry = (Map.Entry) it.next();
-            if (alg.equalsIgnoreCase((String) entry.getValue())) {
-                return (Name) entry.getKey();
-            }
+
+        // false identity check because it's string comparisons.
+        Name foundKey = algMap.findKey(alg, false);
+        if (foundKey != null) {
+            return foundKey;
         }
+
         throw new IllegalArgumentException("Unknown algorithm");
     }
 

@@ -2,7 +2,9 @@
 
 package dorkbox.network.dns;
 
-import java.util.HashMap;
+import com.esotericsoftware.kryo.util.IntMap;
+
+import dorkbox.util.collections.ObjectIntMap;
 
 /**
  * A utility class for converting between numeric codes and mnemonics
@@ -13,28 +15,20 @@ import java.util.HashMap;
 public
 class Mnemonic {
 
-    private static Integer cachedInts[] = new Integer[64];
     /* Strings are case-sensitive. */
     public static final int CASE_SENSITIVE = 1;
     /* Strings will be stored/searched for in uppercase. */
     public static final int CASE_UPPER = 2;
     /* Strings will be stored/searched for in lowercase. */
     public static final int CASE_LOWER = 3;
-
-
-    private HashMap<String, Integer> strings;
-    private HashMap<Integer, String> values;
+    private static final int INVALID_VALUE = -1;
+    private ObjectIntMap<String> strings;
+    private IntMap<String> values;
     private String description;
     private int wordcase;
     private String prefix;
     private int max;
     private boolean numericok;
-
-    static {
-        for (int i = 0; i < cachedInts.length; i++) {
-            cachedInts[i] = new Integer(i);
-        }
-    }
 
     /**
      * Creates a new Mnemonic table.
@@ -48,8 +42,8 @@ class Mnemonic {
     Mnemonic(String description, int wordcase) {
         this.description = description;
         this.wordcase = wordcase;
-        strings = new HashMap();
-        values = new HashMap();
+        strings = new ObjectIntMap<String>();
+        values = new IntMap<String>();
         max = Integer.MAX_VALUE;
     }
 
@@ -93,27 +87,15 @@ class Mnemonic {
     /**
      * Defines the text representation of a numeric value.
      *
-     * @param val The numeric value
+     * @param value The numeric value
      * @param string The text string
      */
     public
-    void add(int val, String string) {
-        check(val);
-        Integer value = toInteger(val);
+    void add(int value, String string) {
+        check(value);
         string = sanitize(string);
         strings.put(string, value);
         values.put(value, string);
-    }
-
-    /**
-     * Converts an int into a possibly cached Integer.
-     */
-    public static
-    Integer toInteger(int val) {
-        if (val >= 0 && val < cachedInts.length) {
-            return (cachedInts[val]);
-        }
-        return new Integer(val);
     }
 
     /**
@@ -130,13 +112,12 @@ class Mnemonic {
      * Defines an additional text representation of a numeric value.  This will
      * be used by getValue(), but not getText().
      *
-     * @param val The numeric value
+     * @param value The numeric value
      * @param string The text string
      */
     public
-    void addAlias(int val, String string) {
-        check(val);
-        Integer value = toInteger(val);
+    void addAlias(int value, String string) {
+        check(value);
         string = sanitize(string);
         strings.put(string, value);
     }
@@ -154,6 +135,7 @@ class Mnemonic {
         if (wordcase != source.wordcase) {
             throw new IllegalArgumentException(source.description + ": wordcases do not match");
         }
+
         strings.putAll(source.strings);
         values.putAll(source.values);
     }
@@ -161,18 +143,19 @@ class Mnemonic {
     /**
      * Gets the text mnemonic corresponding to a numeric value.
      *
-     * @param val The numeric value
+     * @param value The numeric value
      *
      * @return The corresponding text mnemonic.
      */
     public
-    String getText(int val) {
-        check(val);
-        String str = (String) values.get(toInteger(val));
+    String getText(int value) {
+        check(value);
+        String str = values.get(value);
         if (str != null) {
             return str;
         }
-        str = Integer.toString(val);
+
+        str = Integer.toString(value);
         if (prefix != null) {
             return prefix + str;
         }
@@ -189,9 +172,10 @@ class Mnemonic {
     public
     int getValue(String str) {
         str = sanitize(str);
-        Integer value = (Integer) strings.get(str);
-        if (value != null) {
-            return value.intValue();
+        int value = strings.get(str, INVALID_VALUE);
+
+        if (value != INVALID_VALUE) {
+            return value;
         }
         if (prefix != null) {
             if (str.startsWith(prefix)) {
@@ -204,7 +188,8 @@ class Mnemonic {
         if (numericok) {
             return parseNumeric(str);
         }
-        return -1;
+
+        return INVALID_VALUE;
     }
 
     private
@@ -214,9 +199,9 @@ class Mnemonic {
             if (val >= 0 && val <= max) {
                 return val;
             }
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException ignored) {
         }
-        return -1;
-    }
 
+        return INVALID_VALUE;
+    }
 }

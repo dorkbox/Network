@@ -2,12 +2,11 @@
 
 package dorkbox.network.dns.constants;
 
-import java.util.HashMap;
-
 import dorkbox.network.dns.Mnemonic;
 import dorkbox.network.dns.exceptions.InvalidTypeException;
 import dorkbox.network.dns.records.DnsRecord;
 import dorkbox.network.dns.records.DnsTypeProtoAssignment;
+import dorkbox.util.collections.IntMap;
 import io.netty.util.internal.StringUtil;
 
 /**
@@ -449,25 +448,26 @@ class DnsRecordType {
 
     public static
     class TypeMnemonic extends Mnemonic {
-        private HashMap objects;
+        private IntMap<DnsRecord> objects;
 
         public
         TypeMnemonic() {
             super("DnsRecordType", CASE_UPPER);
             setPrefix("TYPE");
-            objects = new HashMap();
+            objects = new IntMap<DnsRecord>();
         }
 
         public
-        void add(int val, String str, DnsRecord proto) {
-            super.add(val, str);
-            objects.put(Mnemonic.toInteger(val), proto);
+        void add(int value, String str, DnsRecord proto) {
+            super.add(value, str);
+            objects.put(value, proto);
         }
 
+        @SuppressWarnings("unchecked")
         public
-        <T extends DnsRecord> T getProto(int val) {
-            check(val);
-            return (T) objects.get(toInteger(val));
+        <T extends DnsRecord> T getProto(int value) {
+            check(value);
+            return (T) objects.get(value);
         }
 
         @Override

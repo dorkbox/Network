@@ -55,38 +55,11 @@ class MnemonicTest extends TestCase {
     }
 
     public
-    void test_toInteger() {
-        Integer i = Mnemonic.toInteger(64);
-        assertEquals(new Integer(64), i);
-        Integer i2 = Mnemonic.toInteger(64);
-        assertEquals(i, i2);
-        assertNotSame(i, i2);
-
-        i = Mnemonic.toInteger(-1);
-        assertEquals(new Integer(-1), i);
-        i2 = Mnemonic.toInteger(-1);
-        assertEquals(i, i2);
-        assertNotSame(i, i2);
-
-        i = Mnemonic.toInteger(0);
-        assertEquals(new Integer(0), i);
-        i2 = Mnemonic.toInteger(0);
-        assertEquals(i, i2);
-        assertSame(i, i2);
-
-        i = Mnemonic.toInteger(63);
-        assertEquals(new Integer(63), i);
-        i2 = Mnemonic.toInteger(63);
-        assertEquals(i, i2);
-        assertSame(i, i2);
-    }
-
-    public
     void test_no_maximum() {
         try {
             m_mn.check(-1);
             fail("IllegalArgumentException not thrown");
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException ignored) {
         }
         try {
             m_mn.check(0);
@@ -117,7 +90,7 @@ class MnemonicTest extends TestCase {
         try {
             m_mn.check(-1);
             fail("IllegalArgumentException not thrown");
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException ignored) {
         }
         try {
             m_mn.check(0);
@@ -132,7 +105,7 @@ class MnemonicTest extends TestCase {
         try {
             m_mn.check(16);
             fail("IllegalArgumentException not thrown");
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException ignored) {
         }
 
         // need numericok to exercise the usage of max in parseNumeric
