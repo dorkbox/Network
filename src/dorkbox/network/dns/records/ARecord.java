@@ -102,5 +102,4 @@ class ARecord extends DnsRecord {
             return null;
         }
     }
-
 }
