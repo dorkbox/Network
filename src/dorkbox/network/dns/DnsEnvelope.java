@@ -36,6 +36,15 @@ class DnsEnvelope extends DnsMessage implements AddressedEnvelope<DnsEnvelope, I
         super();
     }
 
+
+    public
+    DnsEnvelope(final int id, final InetSocketAddress localAddress, final InetSocketAddress remoteAddress) {
+        super(id);
+
+        this.localAddress = localAddress;
+        this.remoteAddress = remoteAddress;
+    }
+
     public
     DnsEnvelope(final ByteBuf buffer, final InetSocketAddress localAddress, final InetSocketAddress remoteAddress) throws IOException {
         super(buffer);

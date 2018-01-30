@@ -1,17 +1,29 @@
 package dorkbox.network.dns.serverHandlers;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.io.IOException;
 
+import org.slf4j.Logger;
+
+import dorkbox.network.dns.DnsEnvelope;
+import dorkbox.network.dns.DnsOutput;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.socket.DatagramPacket;
+import io.netty.handler.codec.MessageToByteEncoder;
 
-public class ForwardingHandler extends ChannelOutboundHandlerAdapter {
+public class ForwardingHandler extends MessageToByteEncoder<DnsEnvelope> {
 
-	static final Logger LOG = LoggerFactory.getLogger(ForwardingHandler.class);
 
-	// protected ServerConfiguration config;
+    private final int maxPayloadSize = 512;
+    private final Logger logger;
+
+    public
+    ForwardingHandler(final Logger logger) {
+        this.logger = logger;
+    }
+
+    // protected ServerConfiguration config;
 	// protected ChannelFactory clientChannelFactory;
 
 	// public
@@ -21,18 +33,27 @@ public class ForwardingHandler extends ChannelOutboundHandlerAdapter {
 	// 	this.clientChannelFactory = clientChannelFactory;
 	// }
 
+
     @Override
-    public
-    void read(final ChannelHandlerContext ctx) throws Exception {
-        System.err.println("FORWARD HANDLER READ");
-        super.read(ctx);
+    protected
+    void encode(final ChannelHandlerContext context, final DnsEnvelope message, final ByteBuf out) throws Exception {
+        System.err.println("FORWARD HANDLER ENCODE");
+
+        try {
+            DnsOutput dnsOutput = new DnsOutput(out);
+            message.toWire(dnsOutput);
+
+            context.channel()
+                   .writeAndFlush(new DatagramPacket(out, message.recipient(), null));
+                   // .write(new DatagramPacket(out, message.recipient(), message.sender()));
+        } catch (Exception e) {
+            context.fireExceptionCaught(new IOException("Unable to write dns message: " + message, e));
+        }
     }
 
 
-
     // @Override
-	// public void messageReceived(ChannelHandlerContext ctx, final MessageEvent e)
-	// 		throws Exception {
+	// public void messageReceived(ChannelHandlerContext ctx, final MessageEvent e) throws Exception {
 	// 	final DNSMessage original = DNSMessage.class.cast(e.getMessage());
     //
 	// 	ClientBootstrap cb = new ClientBootstrap(this.clientChannelFactory);
@@ -40,13 +61,11 @@ public class ForwardingHandler extends ChannelOutboundHandlerAdapter {
 	// 	cb.setPipelineFactory(new ChannelPipelineFactory() {
 	// 		@Override
 	// 		public ChannelPipeline getPipeline() throws Exception {
-	// 			return Channels.pipeline(new ClientHanler(original, e
-	// 					.getChannel(), e.getRemoteAddress()));
+	// 			return Channels.pipeline(new ClientHandler(original, e.getChannel(), e.getRemoteAddress()));
 	// 		}
 	// 	});
     //
-	// 	List<SocketAddress> newlist = new ArrayList<SocketAddress>(
-	// 			this.config.getForwarders());
+	// 	List<SocketAddress> newlist = new ArrayList<SocketAddress>(this.config.getForwarders());
 	// 	sendRequest(e, original, cb, newlist);
 	// }
     //
@@ -73,10 +92,8 @@ public class ForwardingHandler extends ChannelOutboundHandlerAdapter {
     //
 	// 		c.write(newone, sa).addListener(new ChannelFutureListener() {
 	// 			@Override
-	// 			public void operationComplete(ChannelFuture future)
-	// 					throws Exception {
-	// 				LOG.debug("request complete isSuccess : {}",
-	// 						future.isSuccess());
+	// 			public void operationComplete(ChannelFuture future) throws Exception {
+	// 				LOG.debug("request complete isSuccess : {}", future.isSuccess());
 	// 				if (future.isSuccess() == false) {
 	// 					if (0 < forwarders.size()) {
 	// 						sendRequest(e, original, bootstrap, forwarders);
@@ -98,9 +115,9 @@ public class ForwardingHandler extends ChannelOutboundHandlerAdapter {
 
     @Override
     public
-    void exceptionCaught(final ChannelHandlerContext ctx, final Throwable cause) throws Exception {
-        LOG.error("ForwardingHandler#exceptionCaught");
-        LOG.error(cause.getMessage(), cause);
+    void exceptionCaught(final ChannelHandlerContext context, final Throwable cause) throws Exception {
+        logger.error("ForwardingHandler#exceptionCaught", cause);
+        super.exceptionCaught(context, cause);
     }
 
 
@@ -117,13 +134,6 @@ public class ForwardingHandler extends ChannelOutboundHandlerAdapter {
 	// 		this.originalChannel = c;
 	// 		this.originalAddress = sa;
 	// 	}
-    //
-
-
-
-
-
-
 	// 	@Override
 	// 	public void messageReceived(ChannelHandlerContext ctx, final MessageEvent e) throws Exception {
 	// 		LOG.debug("ClientHanler#messageReceived");
@@ -147,8 +157,8 @@ public class ForwardingHandler extends ChannelOutboundHandlerAdapter {
         @Override
         public
         void exceptionCaught(final ChannelHandlerContext ctx, final Throwable cause) throws Exception {
-            LOG.error("ClientHanler#exceptionCaught");
-            LOG.error(cause.getMessage(), cause);
+            logger.error("ClientHandler#exceptionCaught");
+            logger.error(cause.getMessage(), cause);
             // e.getFuture()
             //  .setFailure(t);
             ctx.channel().close();

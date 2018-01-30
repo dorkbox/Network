@@ -12,19 +12,11 @@ import dorkbox.network.dns.Compression;
 import dorkbox.network.dns.DnsInput;
 import dorkbox.network.dns.DnsOutput;
 import dorkbox.network.dns.Name;
-import dorkbox.network.dns.constants.DnsClass;
-import dorkbox.network.dns.constants.DnsOpCode;
-import dorkbox.network.dns.constants.DnsRecordType;
-import dorkbox.network.dns.constants.DnsSection;
-import dorkbox.network.dns.constants.Flags;
+import dorkbox.network.dns.constants.*;
 import dorkbox.network.dns.exceptions.WireParseException;
 import dorkbox.util.OS;
 import io.netty.buffer.ByteBuf;
-import io.netty.util.AbstractReferenceCounted;
-import io.netty.util.ReferenceCounted;
-import io.netty.util.ResourceLeakDetector;
-import io.netty.util.ResourceLeakDetectorFactory;
-import io.netty.util.ResourceLeakTracker;
+import io.netty.util.*;
 
 /**
  * A DNS DnsMessage.  A message is the basic unit of communication between
@@ -658,7 +650,7 @@ class DnsMessage extends AbstractReferenceCounted implements Cloneable, Referenc
         return out.toByteArray();
     }
 
-    /* Returns true if the message could be rendered. */
+    /** Returns true if the message could be rendered. */
     private
     boolean toWire(DnsOutput out, int maxLength) {
         if (maxLength < Header.LENGTH) {
@@ -749,7 +741,7 @@ class DnsMessage extends AbstractReferenceCounted implements Cloneable, Referenc
         return null;
     }
 
-    /* Returns the number of records not successfully rendered. */
+    /** Returns the number of records not successfully rendered. */
     private
     int sectionToWire(DnsOutput out, int section, Compression c, int maxLength) {
         final Object records = sectionAt(section);
@@ -839,7 +831,6 @@ class DnsMessage extends AbstractReferenceCounted implements Cloneable, Referenc
     Object clone() {
         DnsMessage m = new DnsMessage();
 
-
         for (int i = 0; i < DnsSection.TOTAL_SECTION_COUNT; i++) {
             final Object records = sectionAt(i);
             if (records == null) {
@@ -864,6 +855,7 @@ class DnsMessage extends AbstractReferenceCounted implements Cloneable, Referenc
     /**
      * Converts the DnsMessage to a String.
      */
+    @Override
     public
     String toString() {
         String NL = OS.LINE_SEPARATOR;
@@ -949,8 +941,7 @@ class DnsMessage extends AbstractReferenceCounted implements Cloneable, Referenc
     }
 
     /**
-     * Returns the size of the message.  Only valid if the message has been
-     * converted to or from wire format.
+     * Returns the size of the message.  Only valid if the message has been converted to or from wire format.
      */
     public
     int numBytes() {

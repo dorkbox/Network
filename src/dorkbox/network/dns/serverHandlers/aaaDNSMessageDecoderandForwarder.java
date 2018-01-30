@@ -7,14 +7,7 @@ import dorkbox.util.NamedThreadFactory;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.DatagramPacket;
@@ -24,7 +17,7 @@ import io.netty.util.internal.PlatformDependent;
 
 @ChannelHandler.Sharable
 public
-class DNSMessageDecoder extends ChannelInboundHandlerAdapter {
+class aaaDNSMessageDecoderandForwarder extends ChannelInboundHandlerAdapter {
 
     /**
      * This is what is called whenever a DNS packet is received. Currently only support UDP packets.

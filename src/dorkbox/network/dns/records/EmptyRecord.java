@@ -43,5 +43,4 @@ class EmptyRecord extends DnsRecord {
     @Override
     void rdataFromString(Tokenizer st, Name origin) throws IOException {
     }
-
 }

@@ -1,3 +1,18 @@
+/*
+ * Copyright 2018 dorkbox, llc.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
 package dorkbox.network;
 
 import org.slf4j.Logger;
@@ -19,12 +34,16 @@ import io.netty.channel.epoll.EpollChannelOption;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerSocketChannel;
+import io.netty.channel.kqueue.KQueueDatagramChannel;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
+import io.netty.channel.kqueue.KQueueServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
+import io.netty.channel.unix.UnixChannelOption;
 
 /**
  * from: https://blog.cloudflare.com/how-the-consumer-product-safety-commission-is-inadvertently-behind-the-internets-largest-ddos-attacks/
@@ -55,6 +74,25 @@ class DnsServer extends Shutdownable {
     private final int tcpPort;
     private final int udpPort;
     private final String hostName;
+
+    public static
+    void main(String[] args) {
+        DnsServer server = new DnsServer("localhost", 2053);
+        // server.bind(false);
+        server.bind();
+
+
+        // DnsClient client = new DnsClient("localhost", 2053);
+        // List<InetAddress> resolve = null;
+        // try {
+        //     resolve = client.resolve("google.com");
+        // } catch (UnknownHostException e) {
+        //     e.printStackTrace();
+        // }
+        // System.err.println("RESOLVED: " + resolve);
+        // client.stop();
+        // server.stop();
+    }
 
 
     public
@@ -87,6 +125,11 @@ class DnsServer extends Shutdownable {
             boss = new EpollEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
             worker = new EpollEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
+        else if (OS.isMacOsX()) {
+            // KQueue network stack is MUCH faster (but only on macosx)
+            boss = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+        }
         else {
             boss = new NioEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
             worker = new NioEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
@@ -101,63 +144,72 @@ class DnsServer extends Shutdownable {
         udpBootstrap = new Bootstrap();
 
 
-            if (OS.isAndroid()) {
-                // android ONLY supports OIO (not NIO)
-                tcpBootstrap.channel(OioServerSocketChannel.class);
-            }
-            else if (OS.isLinux()) {
-                // JNI network stack is MUCH faster (but only on linux)
-                tcpBootstrap.channel(EpollServerSocketChannel.class);
-            }
-            else {
-                tcpBootstrap.channel(NioServerSocketChannel.class);
-            }
+        if (OS.isAndroid()) {
+            // android ONLY supports OIO (not NIO)
+            tcpBootstrap.channel(OioServerSocketChannel.class);
+        }
+        else if (OS.isLinux()) {
+            // JNI network stack is MUCH faster (but only on linux)
+            tcpBootstrap.channel(EpollServerSocketChannel.class);
+        }
+        else if (OS.isMacOsX()) {
+            // KQueue network stack is MUCH faster (but only on macosx)
+            tcpBootstrap.channel(KQueueServerSocketChannel.class);
+        }
+        else {
+            tcpBootstrap.channel(NioServerSocketChannel.class);
+        }
 
-            // TODO: If we use netty for an HTTP server,
-            // Beside the usual ChannelOptions the Native Transport allows to enable TCP_CORK which may come in handy if you implement a HTTP Server.
+        // TODO: If we use netty for an HTTP server,
+        // Beside the usual ChannelOptions the Native Transport allows to enable TCP_CORK which may come in handy if you implement a HTTP Server.
 
-            tcpBootstrap.group(boss, worker)
-                        .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
-                        .option(ChannelOption.SO_REUSEADDR, true)
-                        .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                        .childOption(ChannelOption.SO_KEEPALIVE, true)
-                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
-                        .childHandler(new DnsServerHandler());
+        tcpBootstrap.group(boss, worker)
+                    .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
+                    .option(ChannelOption.SO_REUSEADDR, true)
+                    .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                    .childOption(ChannelOption.SO_KEEPALIVE, true)
+                    .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
+                    .childHandler(new DnsServerHandler(logger));
 
-            // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
-            if (hostName != null) {
-                tcpBootstrap.localAddress(hostName, tcpPort);
-            }
-            else {
-                tcpBootstrap.localAddress(tcpPort);
-            }
-
-
-            // android screws up on this!!
-            tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid())
-                        .childOption(ChannelOption.TCP_NODELAY, !OS.isAndroid());
+        // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
+        if (hostName != null) {
+            tcpBootstrap.localAddress(hostName, tcpPort);
+        }
+        else {
+            tcpBootstrap.localAddress(tcpPort);
+        }
 
 
-            if (OS.isAndroid()) {
-                // android ONLY supports OIO (not NIO)
-                udpBootstrap.channel(OioDatagramChannel.class);
-            }
-            else if (OS.isLinux()) {
-                // JNI network stack is MUCH faster (but only on linux)
-                udpBootstrap.channel(EpollDatagramChannel.class)
-                            .option(EpollChannelOption.SO_REUSEPORT, true);
-            }
-            else {
-                udpBootstrap.channel(NioDatagramChannel.class);
-            }
+        // android screws up on this!!
+        tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid())
+                    .childOption(ChannelOption.TCP_NODELAY, !OS.isAndroid());
 
-            udpBootstrap.group(worker)
-                        .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
 
-                        // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
-                        .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
-                        .handler(new DnsServerHandler());
+        if (OS.isAndroid()) {
+            // android ONLY supports OIO (not NIO)
+            udpBootstrap.channel(OioDatagramChannel.class);
+        }
+        else if (OS.isLinux()) {
+            // JNI network stack is MUCH faster (but only on linux)
+            udpBootstrap.channel(EpollDatagramChannel.class)
+                        .option(EpollChannelOption.SO_REUSEPORT, true);
+        }
+        else if (OS.isMacOsX()) {
+            // JNI network stack is MUCH faster (but only on macosx)
+            udpBootstrap.channel(KQueueDatagramChannel.class)
+                        .option(UnixChannelOption.SO_REUSEPORT, true);
+        }
+        else {
+            udpBootstrap.channel(NioDatagramChannel.class);
+        }
+
+        udpBootstrap.group(worker)
+                    .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                    .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
+
+                    // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
+                    .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
+                    .handler(new DnsServerHandler(logger));
     }
 
     /**

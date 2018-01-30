@@ -1,46 +1,58 @@
 package dorkbox.network.dns.serverHandlers;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 
-import dorkbox.network.dns.records.DnsMessage;
+import org.slf4j.Logger;
+
+import dorkbox.network.dns.DnsEnvelope;
+import dorkbox.network.dns.exceptions.WireParseException;
+import dorkbox.network.dns.records.Header;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageDecoder;
 
-
-public
 class DnsMessageDecoder extends MessageToMessageDecoder<DatagramPacket> {
+    private final Logger logger;
+
+    DnsMessageDecoder(final Logger logger) {
+        this.logger = logger;
+    }
+
     @Override
     public
-    void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
-        // Channel channel = context.channel();
-
-        System.err.println("POW! ");
-        cause.printStackTrace();
-        // this.logger.error("Unexpected exception while trying to send/receive data on Client remote (network) channel.  ({})" +
-        //                   System.getProperty("line.separator"), channel.remoteAddress(), cause);
-        // if (channel.isOpen()) {
-        //     channel.close();
-        // }
+    void exceptionCaught(final ChannelHandlerContext context, final Throwable cause) throws Exception {
+        logger.error("DnsMessageDecoder#exceptionCaught", cause);
+        super.exceptionCaught(context, cause);
     }
 
     @Override
     protected
-    void decode(ChannelHandlerContext ctx, DatagramPacket packet, List<Object> out) throws Exception {
-        System.err.println("READING MESSAGE");
+    void decode(ChannelHandlerContext context, DatagramPacket packet, List<Object> out) throws Exception {
         final ByteBuf buf = packet.content();
+
+        // Check that the response is long enough.
+        if (buf.readableBytes() < Header.LENGTH) {
+            throw new WireParseException("invalid DNS header - " + "too short");
+        }
 
         boolean success = false;
         try {
-            DnsMessage dnsMessage = new DnsMessage(buf);
-            dnsMessage.retain();
-            out.add(dnsMessage);
+            InetSocketAddress localAddress = packet.recipient();
+            InetSocketAddress remoteAddress = packet.sender();
+
+            DnsEnvelope dnsEnvelope = new DnsEnvelope(buf, localAddress, remoteAddress);
+            dnsEnvelope.retain();
+
+
+            // send down the pipeline
+            out.add(dnsEnvelope);
             success = true;
         } finally {
             if (!success) {
                 buf.release();
             }
         }
-     }
+    }
 }

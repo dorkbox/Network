@@ -30,7 +30,7 @@ class RRset implements Serializable {
      * rrs contains both normal and RRSIG records, with the RRSIG records
      * at the end.
      */
-    private List rrs;
+    private List resourceRecords;
     private short nsigs;
     private short position;
 
@@ -48,7 +48,7 @@ class RRset implements Serializable {
      */
     public
     RRset() {
-        rrs = new ArrayList(1);
+        resourceRecords = new ArrayList(1);
         nsigs = 0;
         position = 0;
     }
@@ -57,14 +57,14 @@ class RRset implements Serializable {
     void safeAddRR(DnsRecord r) {
         if (!(r instanceof RRSIGRecord)) {
             if (nsigs == 0) {
-                rrs.add(r);
+                resourceRecords.add(r);
             }
             else {
-                rrs.add(rrs.size() - nsigs, r);
+                resourceRecords.add(resourceRecords.size() - nsigs, r);
             }
         }
         else {
-            rrs.add(r);
+            resourceRecords.add(r);
             nsigs++;
         }
     }
@@ -75,7 +75,7 @@ class RRset implements Serializable {
     public
     RRset(RRset rrset) {
         synchronized (rrset) {
-            rrs = (List) ((ArrayList) rrset.rrs).clone();
+            resourceRecords = (List) ((ArrayList) rrset.resourceRecords).clone();
             nsigs = rrset.nsigs;
             position = rrset.position;
         }
@@ -86,7 +86,7 @@ class RRset implements Serializable {
      */
     public synchronized
     void addRR(DnsRecord r) {
-        if (rrs.size() == 0) {
+        if (resourceRecords.size() == 0) {
             safeAddRR(r);
             return;
         }
@@ -101,16 +101,16 @@ class RRset implements Serializable {
                 r.setTTL(first.getTTL());
             }
             else {
-                for (int i = 0; i < rrs.size(); i++) {
-                    DnsRecord tmp = (DnsRecord) rrs.get(i);
+                for (int i = 0; i < resourceRecords.size(); i++) {
+                    DnsRecord tmp = (DnsRecord) resourceRecords.get(i);
                     tmp = tmp.cloneRecord();
                     tmp.setTTL(r.getTTL());
-                    rrs.set(i, tmp);
+                    resourceRecords.set(i, tmp);
                 }
             }
         }
 
-        if (!rrs.contains(r)) {
+        if (!resourceRecords.contains(r)) {
             safeAddRR(r);
         }
     }
@@ -122,10 +122,10 @@ class RRset implements Serializable {
      */
     public synchronized
     DnsRecord first() {
-        if (rrs.size() == 0) {
+        if (resourceRecords.size() == 0) {
             throw new IllegalStateException("rrset is empty");
         }
-        return (DnsRecord) rrs.get(0);
+        return (DnsRecord) resourceRecords.get(0);
     }
 
     /**
@@ -133,7 +133,7 @@ class RRset implements Serializable {
      */
     public synchronized
     void deleteRR(DnsRecord r) {
-        if (rrs.remove(r) && (r instanceof RRSIGRecord)) {
+        if (resourceRecords.remove(r) && (r instanceof RRSIGRecord)) {
             nsigs--;
         }
     }
@@ -143,7 +143,7 @@ class RRset implements Serializable {
      */
     public synchronized
     void clear() {
-        rrs.clear();
+        resourceRecords.clear();
         position = 0;
         nsigs = 0;
     }
@@ -163,7 +163,7 @@ class RRset implements Serializable {
     Iterator iterator(boolean data, boolean cycle) {
         int size, start, total;
 
-        total = rrs.size();
+        total = resourceRecords.size();
 
         if (data) {
             size = total - nsigs;
@@ -192,13 +192,13 @@ class RRset implements Serializable {
 
         List list = new ArrayList(size);
         if (data) {
-            list.addAll(rrs.subList(start, size));
+            list.addAll(resourceRecords.subList(start, size));
             if (start != 0) {
-                list.addAll(rrs.subList(0, start));
+                list.addAll(resourceRecords.subList(0, start));
             }
         }
         else {
-            list.addAll(rrs.subList(start, total));
+            list.addAll(resourceRecords.subList(start, total));
         }
 
         return list.iterator();
@@ -226,15 +226,16 @@ class RRset implements Serializable {
      */
     public synchronized
     int size() {
-        return rrs.size() - nsigs;
+        return resourceRecords.size() - nsigs;
     }
 
     /**
      * Converts the RRset to a String
      */
+    @Override
     public
     String toString() {
-        if (rrs.size() == 0) {
+        if (resourceRecords.size() == 0) {
             return ("{empty}");
         }
         StringBuilder sb = new StringBuilder();

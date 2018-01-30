@@ -13,12 +13,13 @@ import io.netty.channel.ChannelPipeline;
  */
 public
 class DnsServerHandler extends ChannelInboundHandlerAdapter {
-    private static final Logger LOG = org.slf4j.LoggerFactory.getLogger(DnsServerHandler.class);
-
-    protected final DnsMessageDecoder decoder = new DnsMessageDecoder();
+    protected final DnsMessageDecoder decoder;
+    private final Logger logger;
 
     public
-    DnsServerHandler() {
+    DnsServerHandler(final Logger logger) {
+        this.logger = logger;
+        decoder = new DnsMessageDecoder(logger);
     }
 
     @Override
@@ -30,7 +31,7 @@ class DnsServerHandler extends ChannelInboundHandlerAdapter {
             context.fireChannelRegistered();
             success = true;
         } catch (Throwable t) {
-            LOG.error("Failed to initialize a channel. Closing: {}", context.channel(), t);
+            logger.error("Failed to initialize a channel. Closing: {}", context.channel(), t);
         } finally {
             if (!success) {
                 context.close();
@@ -52,7 +53,8 @@ class DnsServerHandler extends ChannelInboundHandlerAdapter {
 
         // ENCODE (or downstream)
         /////////////////////////
-        pipeline.addLast("fowarder", new ForwardingHandler());
+        pipeline.addLast("dnsDecision", new DnsDecisionHandler(logger));
+        pipeline.addLast("fowarder", new ForwardingHandler(logger));
         // pipeline.addLast("fowarder", new ForwardingHandler(this.config, this.clientChannelFactory));
     }
 }
