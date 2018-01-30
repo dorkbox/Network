@@ -29,7 +29,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.util.exceptions.SecurityException;
 
 public
-class ReconnectTest extends BaseTest {
+class DisconnectReconnectTest extends BaseTest {
 
     @Test
     public
