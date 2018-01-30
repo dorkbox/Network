@@ -32,7 +32,7 @@ import dorkbox.network.connection.Listeners;
 import dorkbox.util.exceptions.SecurityException;
 
 public
-class ReuseTest extends BaseTest {
+class ReconnectTest extends BaseTest {
     AtomicInteger serverCount;
     AtomicInteger clientCount;
 
@@ -64,7 +64,7 @@ class ReuseTest extends BaseTest {
             @Override
             public
             void received(Connection connection, String object) {
-                int incrementAndGet = ReuseTest.this.serverCount.incrementAndGet();
+                int incrementAndGet = ReconnectTest.this.serverCount.incrementAndGet();
                 System.err.println("<S " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
@@ -88,7 +88,7 @@ class ReuseTest extends BaseTest {
             @Override
             public
             void received(Connection connection, String object) {
-                int incrementAndGet = ReuseTest.this.clientCount.incrementAndGet();
+                int incrementAndGet = ReconnectTest.this.clientCount.incrementAndGet();
                 System.err.println("<C " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
@@ -138,7 +138,7 @@ class ReuseTest extends BaseTest {
                   @Override
                   public
                   void received(Connection connection, String object) {
-                      int incrementAndGet = ReuseTest.this.serverCount.incrementAndGet();
+                      int incrementAndGet = ReconnectTest.this.serverCount.incrementAndGet();
                       System.err.println("<S " + connection + "> " + incrementAndGet + " : " + object);
                   }
               });
@@ -162,7 +162,7 @@ class ReuseTest extends BaseTest {
                   @Override
                   public
                   void received(Connection connection, String object) {
-                      int incrementAndGet = ReuseTest.this.clientCount.incrementAndGet();
+                      int incrementAndGet = ReconnectTest.this.clientCount.incrementAndGet();
                       System.err.println("<C " + connection + "> " + incrementAndGet + " : " + object);
                   }
               });
