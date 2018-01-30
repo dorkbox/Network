@@ -554,7 +554,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     }
 
     public
-    void channelRead(Object object) throws Exception {
+    void channelRead(Object object) {
         // prevent close from occurring SMACK in the middle of a message in progress.
         // delay close until it's finished.
         this.messageInProgress.set(true);
