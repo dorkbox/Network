@@ -149,8 +149,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
                 Class<?> rmiImpl = serialization.getRmiImpl(registration.interfaceClass);
 
                 RmiRegistration registrationResult = connection.createNewRmiObject(interfaceClass, rmiImpl, callbackId);
-                connection.TCP(registrationResult)
-                          .flush();
+                connection.TCP(registrationResult);
             }
 
             // Check if we are getting an already existing REMOTE object. This check is always AFTER the check to create a new object
@@ -160,8 +159,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
                 // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
                 RmiRegistration registrationResult = connection.getExistingRmiObject(interfaceClass, registration.rmiId, callbackId);
 
-                connection.TCP(registrationResult)
-                          .flush();
+                connection.TCP(registrationResult);
             }
         }
         else {
