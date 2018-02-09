@@ -42,7 +42,7 @@ import dorkbox.util.generics.ClassHelper;
  */
 @SuppressWarnings("Duplicates")
 public final
-class OnMessageReceivedManager {
+class OnMessageReceivedManager<C extends Connection> {
     // Recommended for best performance while adhering to the "single writer principle". Must be static-final
     private static final AtomicReferenceFieldUpdater<OnMessageReceivedManager, IdentityMap> REF = AtomicReferenceFieldUpdater.newUpdater(
             OnMessageReceivedManager.class,
@@ -57,6 +57,10 @@ class OnMessageReceivedManager {
      */
     private static
     Class<?> identifyType(final OnMessageReceived listener) {
+        if (listener instanceof SelfDefinedType) {
+            return ((SelfDefinedType) listener).getType();
+        }
+
         final Class<?> clazz = listener.getClass();
         Class<?> objectType = ClassHelper.getGenericParameterAsClassForSuperClass(Listener.OnMessageReceived.class, clazz, 1);
 
@@ -87,6 +91,7 @@ class OnMessageReceivedManager {
     // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
     // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
     // use-case 99% of the time)
+
     public
     OnMessageReceivedManager(final Logger logger) {
         this.logger = logger;
@@ -94,13 +99,7 @@ class OnMessageReceivedManager {
 
     public
     void add(final OnMessageReceived listener) {
-        final Class<?> type;
-        if (listener instanceof SelfDefinedType) {
-            type = ((SelfDefinedType) listener).getType();
-        }
-        else {
-            type = identifyType(listener);
-        }
+        final Class<?> type = identifyType(listener);
 
         synchronized (this) {
             // access a snapshot of the listeners (single-writer-principle)
@@ -120,41 +119,40 @@ class OnMessageReceivedManager {
     }
 
     /**
-     * @return true if the listener was removed, false otherwise
+     * The returned value indicates how many listeners are left in this manager
+     *
+     * @return >= 0 if the listener was removed, -1 otherwise
      */
     public
-    boolean remove(final OnMessageReceived listener) {
-        final Class<?> type;
-        if (listener instanceof SelfDefinedType) {
-            type = ((SelfDefinedType) listener).getType();
-        }
-        else {
-            type = identifyType(listener);
-        }
+    int removeWithSize(final OnMessageReceived listener) {
+        final Class<?> type = identifyType(listener);
 
-        boolean found = false;
+        int size = -1; // default is "not found"
         synchronized (this) {
             // access a snapshot of the listeners (single-writer-principle)
             final IdentityMap<Type, ConcurrentIterator> listeners = REF.get(this);
 
             final ConcurrentIterator concurrentIterator = listeners.get(type);
             if (concurrentIterator != null) {
-                concurrentIterator.remove(listener);
-                found = true;
+                boolean removed = concurrentIterator.remove(listener);
+                if (removed) {
+                    size = concurrentIterator.size();
+                }
             }
 
             // save this snapshot back to the original (single writer principle)
             REF.lazySet(this, listeners);
         }
 
-        return found;
+        return size;
     }
 
     /**
      * @return true if a listener was found, false otherwise
      */
+    @SuppressWarnings("unchecked")
     public
-    <C extends Connection> boolean notifyReceived(final C connection, final Object message, final AtomicBoolean shutdown) {
+    boolean notifyReceived(final C connection, final Object message, final AtomicBoolean shutdown) {
         boolean found = false;
         Class<?> objectType = message.getClass();
 

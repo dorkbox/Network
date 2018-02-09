@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 
 import com.esotericsoftware.kryo.util.IdentityMap;
 
+import dorkbox.network.connection.Listener.OnConnected;
 import dorkbox.network.connection.bridge.ConnectionBridgeServer;
 import dorkbox.network.connection.bridge.ConnectionExceptSpecifiedBridgeServer;
 import dorkbox.network.connection.listenerManagement.OnConnectedManager;
@@ -33,6 +34,8 @@ import dorkbox.util.Property;
 import dorkbox.util.collections.ConcurrentEntry;
 import dorkbox.util.generics.ClassHelper;
 import dorkbox.util.generics.TypeResolver;
+import io.netty.util.concurrent.ImmediateEventExecutor;
+import io.netty.util.concurrent.Promise;
 
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
 @SuppressWarnings("unchecked")
@@ -62,10 +65,10 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
     private final String loggerName;
 
-    private final OnConnectedManager onConnectedManager;
-    private final OnDisconnectedManager onDisconnectedManager;
-    private final OnIdleManager onIdleManager;
-    private final OnMessageReceivedManager onMessageReceivedManager;
+    private final OnConnectedManager<C> onConnectedManager;
+    private final OnDisconnectedManager<C> onDisconnectedManager;
+    private final OnIdleManager<C> onIdleManager;
+    private final OnMessageReceivedManager<C> onMessageReceivedManager;
 
     @SuppressWarnings({"FieldCanBeLocal", "unused"})
     private volatile ConcurrentEntry<Connection> connectionsHead = null; // reference to the first element
@@ -90,7 +93,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     private final Class<?> baseClass;
     protected final org.slf4j.Logger logger;
-    private final AtomicBoolean hasAddedAtLeastOnce = new AtomicBoolean(false);
+    private final AtomicBoolean hasAtLeastOneListener = new AtomicBoolean(false);
     final AtomicBoolean shutdown = new AtomicBoolean(false);
 
 
@@ -99,10 +102,10 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         this.logger = org.slf4j.LoggerFactory.getLogger(loggerName);
         this.baseClass = baseClass;
 
-        onConnectedManager = new OnConnectedManager(logger);
-        onDisconnectedManager = new OnDisconnectedManager(logger);
-        onIdleManager = new OnIdleManager(logger);
-        onMessageReceivedManager = new OnMessageReceivedManager(logger);
+        onConnectedManager = new OnConnectedManager<C>(logger);
+        onDisconnectedManager = new OnDisconnectedManager<C>(logger);
+        onIdleManager = new OnIdleManager<C>(logger);
+        onMessageReceivedManager = new OnMessageReceivedManager<C>(logger);
     }
 
     /**
@@ -166,19 +169,19 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             found = true;
         }
 
-        final Logger logger2 = this.logger;
-        if (!found) {
-            logger2.error("No matching listener types. Unable to add listener: {}",
-                          listener.getClass()
-                                  .getName());
+        if (found) {
+            hasAtLeastOneListener.set(true);
+
+            if (logger.isTraceEnabled()) {
+                logger.trace("listener added: {}",
+                             listener.getClass()
+                                     .getName());
+            }
         }
         else {
-            hasAddedAtLeastOnce.set(true);
-            if (logger2.isTraceEnabled()) {
-                logger2.trace("listener added: {}",
-                              listener.getClass()
-                                      .getName());
-            }
+            logger.error("No matching listener types. Unable to add listener: {}",
+                         listener.getClass()
+                                 .getName());
         }
     }
 
@@ -199,30 +202,53 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         }
 
         boolean found = false;
+        int remainingListeners = 0;
+
         if (listener instanceof Listener.OnConnected) {
-            found = onConnectedManager.remove((Listener.OnConnected) listener);
+            int size = onConnectedManager.removeWithSize((OnConnected) listener);
+            if (size >= 0) {
+                remainingListeners += size;
+                found = true;
+            }
         }
         if (listener instanceof Listener.OnDisconnected) {
-            found |= onDisconnectedManager.remove((Listener.OnDisconnected) listener);
+            int size = onDisconnectedManager.removeWithSize((Listener.OnDisconnected) listener);
+            if (size >= 0) {
+                remainingListeners += size;
+                found |= true;
+            }
         }
         if (listener instanceof Listener.OnIdle) {
-            found |= onIdleManager.remove((Listener.OnIdle) listener);
+            int size = onIdleManager.removeWithSize((Listener.OnIdle) listener);
+            if (size >= 0) {
+                remainingListeners += size;
+                found |= true;
+            }
         }
         if (listener instanceof Listener.OnMessageReceived) {
-            found |= onMessageReceivedManager.remove((Listener.OnMessageReceived) listener);
+            int size =  onMessageReceivedManager.removeWithSize((Listener.OnMessageReceived) listener);
+            if (size >= 0) {
+                remainingListeners += size;
+                found |= true;
+            }
         }
 
-        final Logger logger2 = this.logger;
-        if (!found) {
-            logger2.error("No matching listener types. Unable to remove listener: {}",
-                          listener.getClass()
-                                  .getName());
+        if (found) {
+            if (remainingListeners == 0) {
+                hasAtLeastOneListener.set(false);
+            }
 
+            if (logger.isTraceEnabled()) {
+                logger.trace("listener removed: {}",
+                             listener.getClass()
+                                     .getName());
+            }
         }
-        else if (logger2.isTraceEnabled()) {
-            logger2.trace("listener removed: {}",
-                          listener.getClass()
-                                  .getName());
+        else {
+            logger.error("No matching listener types. Unable to remove listener: {}",
+                         listener.getClass()
+                                 .getName());
+
         }
 
         return this;
@@ -300,7 +326,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         message = connection.fixupRmi(message);
 
 
-        foundListener |= onMessageReceivedManager.notifyReceived(connection, message, shutdown);
+        foundListener |= onMessageReceivedManager.notifyReceived((C) connection, message, shutdown);
 
         // now have to account for additional connection listener managers (non-global).
         // access a snapshot of the managers (single-writer-principle)
@@ -315,8 +341,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
         // only run a flush once
         if (foundListener) {
-            connection.send()
-                      .flush();
+            connection.flush();
         }
         else {
             this.logger.warn("----------- LISTENER NOT REGISTERED FOR TYPE: {}",
@@ -331,12 +356,11 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public final
-    void onIdle(final Connection connection) {
-        boolean foundListener = onIdleManager.notifyIdle(connection, shutdown);
+    void onIdle(final ConnectionImpl connection) {
+        boolean foundListener = onIdleManager.notifyIdle((C) connection, shutdown);
 
         if (foundListener) {
-            connection.send()
-                      .flush();
+            connection.flush();
         }
 
         // now have to account for additional (local) listener managers.
@@ -353,14 +377,13 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public
-    void onConnected(final Connection connection) {
+    void onConnected(final ConnectionImpl connection) {
         addConnection(connection);
 
-        boolean foundListener = onConnectedManager.notifyConnected(connection, shutdown);
+        boolean foundListener = onConnectedManager.notifyConnected((C) connection, shutdown);
 
         if (foundListener) {
-            connection.send()
-                      .flush();
+            connection.flush();
         }
 
         // now have to account for additional (local) listener managers.
@@ -377,12 +400,11 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public
-    void onDisconnected(final Connection connection) {
-        boolean foundListener = onDisconnectedManager.notifyDisconnected(connection, shutdown);
+    void onDisconnected(final ConnectionImpl connection) {
+        boolean foundListener = onDisconnectedManager.notifyDisconnected((C) connection, shutdown);
 
         if (foundListener) {
-            connection.send()
-                      .flush();
+            connection.flush();
         }
 
         // now have to account for additional (local) listener managers.
@@ -550,7 +572,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     final
     boolean hasListeners() {
-        return hasAddedAtLeastOnce.get();
+        return hasAtLeastOneListener.get();
     }
 
     /**
@@ -613,6 +635,12 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         throw new UnsupportedOperationException("Method not implemented");
     }
 
+    @Override
+    public
+    void write(final Object object) {
+        throw new UnsupportedOperationException("Method not implemented");
+    }
+
     /**
      * Exposes methods to send the object to all server connections (except the specified one) over the network. (or via LOCAL when it's a
      * local channel).
@@ -623,25 +651,10 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         return this;
     }
 
-    /**
-     * This will flush the data from EVERY connection on this server.
-     * <p/>
-     * THIS WILL BE SLOW!
-     *
-     * @see dorkbox.network.connection.ConnectionPoint#flush()
-     */
     @Override
     public
-    void flush() {
-        ConcurrentEntry<Connection> current = connectionsREF.get(this);
-        Connection c;
-        while (current != null) {
-            c = current.getValue();
-            current = current.next();
-
-            c.send()
-             .flush();
-        }
+    <V> Promise<V> newPromise() {
+        return ImmediateEventExecutor.INSTANCE.newPromise();
     }
 
     /**
