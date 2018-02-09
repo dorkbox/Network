@@ -50,6 +50,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.kqueue.KQueueDatagramChannel;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
@@ -59,7 +61,6 @@ import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.resolver.HostsFileEntriesResolver;
 import io.netty.resolver.ResolvedAddressTypes;
 import io.netty.util.concurrent.Future;
-import io.netty.util.internal.PlatformDependent;
 
 /**
  * A DnsClient for resolving DNS name, with reasonably good defaults.
@@ -232,15 +233,20 @@ class DnsClient extends Shutdownable {
     DnsClient(Collection<InetSocketAddress> nameServerAddresses) {
         super(DnsClient.class);
 
-        if (PlatformDependent.isAndroid()) {
+        if (OS.isAndroid()) {
             // android ONLY supports OIO (not NIO)
             eventLoopGroup = new OioEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-DNS", threadGroup));
             channelType = OioDatagramChannel.class;
         }
-        else if (OS.isLinux()) {
+        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
             // JNI network stack is MUCH faster (but only on linux)
             eventLoopGroup = new EpollEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-DNS", threadGroup));
             channelType = EpollDatagramChannel.class;
+        }
+        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
+            // KQueue network stack is MUCH faster (but only on macosx)
+            eventLoopGroup = new KQueueEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-DNS", threadGroup));
+            channelType = KQueueDatagramChannel.class;
         }
         else {
             eventLoopGroup = new NioEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-DNS", threadGroup));

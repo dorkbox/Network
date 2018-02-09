@@ -30,7 +30,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.WriteBufferWaterMark;
-import io.netty.channel.epoll.EpollChannelOption;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerSocketChannel;
@@ -43,7 +42,6 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
-import io.netty.channel.unix.UnixChannelOption;
 
 /**
  * from: https://blog.cloudflare.com/how-the-consumer-product-safety-commission-is-inadvertently-behind-the-internets-largest-ddos-attacks/
@@ -117,20 +115,21 @@ class DnsServer extends Shutdownable {
 
         if (OS.isAndroid()) {
             // android ONLY supports OIO (not NIO)
-            boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName, threadGroup));
+            boss = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
-        else if (OS.isLinux()) {
+        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
             // JNI network stack is MUCH faster (but only on linux)
             boss = new EpollEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
             worker = new EpollEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
-        else if (OS.isMacOsX()) {
+        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
             // KQueue network stack is MUCH faster (but only on macosx)
             boss = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
             worker = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else {
+            // sometimes the native libraries cannot be loaded, so fall back to NIO
             boss = new NioEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
             worker = new NioEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
@@ -148,11 +147,11 @@ class DnsServer extends Shutdownable {
             // android ONLY supports OIO (not NIO)
             tcpBootstrap.channel(OioServerSocketChannel.class);
         }
-        else if (OS.isLinux()) {
+        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
             // JNI network stack is MUCH faster (but only on linux)
             tcpBootstrap.channel(EpollServerSocketChannel.class);
         }
-        else if (OS.isMacOsX()) {
+        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
             // KQueue network stack is MUCH faster (but only on macosx)
             tcpBootstrap.channel(KQueueServerSocketChannel.class);
         }
@@ -165,7 +164,6 @@ class DnsServer extends Shutdownable {
 
         tcpBootstrap.group(boss, worker)
                     .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
-                    .option(ChannelOption.SO_REUSEADDR, true)
                     .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
@@ -191,13 +189,11 @@ class DnsServer extends Shutdownable {
         }
         else if (OS.isLinux()) {
             // JNI network stack is MUCH faster (but only on linux)
-            udpBootstrap.channel(EpollDatagramChannel.class)
-                        .option(EpollChannelOption.SO_REUSEPORT, true);
+            udpBootstrap.channel(EpollDatagramChannel.class);
         }
         else if (OS.isMacOsX()) {
             // JNI network stack is MUCH faster (but only on macosx)
-            udpBootstrap.channel(KQueueDatagramChannel.class)
-                        .option(UnixChannelOption.SO_REUSEPORT, true);
+            udpBootstrap.channel(KQueueDatagramChannel.class);
         }
         else {
             udpBootstrap.channel(NioDatagramChannel.class);

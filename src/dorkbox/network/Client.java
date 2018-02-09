@@ -53,7 +53,6 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioSocketChannel;
-import io.netty.util.internal.PlatformDependent;
 
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
@@ -113,22 +112,19 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
         localChannelName = config.localChannelName;
         hostName = config.host;
 
-        boolean isAndroid = PlatformDependent.isAndroid();
-
-
         final EventLoopGroup boss;
 
-        if (isAndroid) {
+        if (OS.isAndroid()) {
             // android ONLY supports OIO (not NIO)
-            boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName, threadGroup));
+            boss = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
-        else if (OS.isLinux()) {
+        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
             // JNI network stack is MUCH faster (but only on linux)
             boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
-        else if (OS.isMacOsX()) {
+        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
             // KQueue network stack is MUCH faster (but only on macosx)
-            boss = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            boss = new KQueueEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else {
             boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
@@ -164,16 +160,16 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                 Bootstrap tcpBootstrap = new Bootstrap();
                 bootstraps.add(new BootstrapWrapper("TCP", config.host, config.tcpPort, tcpBootstrap));
 
-                if (isAndroid) {
+                if (OS.isAndroid()) {
                     // android ONLY supports OIO (not NIO)
                     tcpBootstrap.channel(OioSocketChannel.class);
                 }
-                else if (OS.isLinux()) {
+                else if (OS.isLinux() && NativeLibrary.isAvailable()) {
                     // JNI network stack is MUCH faster (but only on linux)
                     tcpBootstrap.channel(EpollSocketChannel.class);
                 }
-                else if (OS.isMacOsX()) {
-                    // JNI network stack is MUCH faster (but only on macosx)
+                else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
+                    // KQueue network stack is MUCH faster (but only on macosx)
                     tcpBootstrap.channel(KQueueSocketChannel.class);
                 }
                 else {
@@ -189,7 +185,7 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                                                                             serializationManager));
 
                 // android screws up on this!!
-                tcpBootstrap.option(ChannelOption.TCP_NODELAY, !isAndroid)
+                tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid())
                             .option(ChannelOption.SO_KEEPALIVE, true);
             }
 
@@ -198,20 +194,19 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                 Bootstrap udpBootstrap = new Bootstrap();
                 bootstraps.add(new BootstrapWrapper("UDP", config.host, config.udpPort, udpBootstrap));
 
-                if (isAndroid) {
+                if (OS.isAndroid()) {
                     // android ONLY supports OIO (not NIO)
                     udpBootstrap.channel(OioDatagramChannel.class);
                 }
-                else if (OS.isLinux()) {
+                else if (OS.isLinux() && NativeLibrary.isAvailable()) {
                     // JNI network stack is MUCH faster (but only on linux)
                     udpBootstrap.channel(EpollDatagramChannel.class);
                 }
-                else if (OS.isMacOsX()) {
-                    // JNI network stack is MUCH faster (but only on macosx)
+                else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
+                    // KQueue network stack is MUCH faster (but only on macosx)
                     udpBootstrap.channel(KQueueDatagramChannel.class);
                 }
                 else {
-                    // windows
                     udpBootstrap.channel(NioDatagramChannel.class);
                 }
 

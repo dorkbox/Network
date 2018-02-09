@@ -15,12 +15,7 @@
  */
 package dorkbox.network;
 
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.InterfaceAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
+import java.net.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -31,15 +26,19 @@ import org.slf4j.Logger;
 
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostHandler;
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostInitializer;
+import dorkbox.util.OS;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.channel.socket.oio.OioDatagramChannel;
 
 @SuppressWarnings({"unused", "AutoBoxing"})
 public final
@@ -154,9 +153,21 @@ class Broadcast {
                         logger2.info("Searching for host on {} : {}", address, udpPort);
                     }
 
-                    NioEventLoopGroup group = new NioEventLoopGroup();
+                    EventLoopGroup group;
+                    Class<? extends Channel> channelClass;
+
+                    if (OS.isAndroid()) {
+                        // android ONLY supports OIO (not NIO)
+                        group = new OioEventLoopGroup(1);
+                        channelClass = OioDatagramChannel.class;
+                    } else {
+                        group = new NioEventLoopGroup(1);
+                        channelClass = NioDatagramChannel.class;
+                    }
+
+
                     Bootstrap udpBootstrap = new Bootstrap().group(group)
-                                                            .channel(NioDatagramChannel.class)
+                                                            .channel(channelClass)
                                                             .option(ChannelOption.SO_BROADCAST, true)
                                                             .handler(new ClientDiscoverHostInitializer())
                                                             .localAddress(new InetSocketAddress(address,

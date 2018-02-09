@@ -46,7 +46,6 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
-import io.netty.channel.unix.UnixChannelOption;
 
 /**
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
@@ -151,15 +150,15 @@ class Server<C extends Connection> extends EndPointServer {
 
         if (OS.isAndroid()) {
             // android ONLY supports OIO (not NIO)
-            boss = new OioEventLoopGroup(0, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new OioEventLoopGroup(0, new NamedThreadFactory(threadName, threadGroup));
+            boss = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
-        else if (OS.isLinux()) {
+        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
             // JNI network stack is MUCH faster (but only on linux)
             boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
             worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
-        else if (OS.isMacOsX()) {
+        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
             // KQueue network stack is MUCH faster (but only on macosx)
             boss = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
             worker = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
@@ -200,12 +199,12 @@ class Server<C extends Connection> extends EndPointServer {
                 // android ONLY supports OIO (not NIO)
                 tcpBootstrap.channel(OioServerSocketChannel.class);
             }
-            else if (OS.isLinux()) {
+            else if (OS.isLinux() && NativeLibrary.isAvailable()) {
                 // JNI network stack is MUCH faster (but only on linux)
                 tcpBootstrap.channel(EpollServerSocketChannel.class);
             }
-            else if (OS.isMacOsX()) {
-                // JNI network stack is MUCH faster (but only on macosx)
+            else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
+                // KQueue network stack is MUCH faster (but only on macosx)
                 tcpBootstrap.channel(KQueueServerSocketChannel.class);
             }
             else {
@@ -243,18 +242,15 @@ class Server<C extends Connection> extends EndPointServer {
         if (udpBootstrap != null) {
             if (OS.isAndroid()) {
                 // android ONLY supports OIO (not NIO)
-                udpBootstrap.channel(OioDatagramChannel.class)
-                            .option(UnixChannelOption.SO_REUSEPORT, true);
+                udpBootstrap.channel(OioDatagramChannel.class);
             }
-            else if (OS.isLinux()) {
+            else if (OS.isLinux() && NativeLibrary.isAvailable()) {
                 // JNI network stack is MUCH faster (but only on linux)
-                udpBootstrap.channel(EpollDatagramChannel.class)
-                            .option(UnixChannelOption.SO_REUSEPORT, true);
+                udpBootstrap.channel(EpollDatagramChannel.class);
             }
-            else if (OS.isMacOsX()) {
-                // JNI network stack is MUCH faster (but only on macosx)
-                udpBootstrap.channel(KQueueDatagramChannel.class)
-                            .option(UnixChannelOption.SO_REUSEPORT, true);
+            else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
+                // KQueue network stack is MUCH faster (but only on macosx)
+                udpBootstrap.channel(KQueueDatagramChannel.class);
             }
             else {
                 // windows
