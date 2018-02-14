@@ -148,7 +148,7 @@ class Shutdownable {
     // server only does this on stop. Client does this on closeConnections
     void shutdownChannels() {
         synchronized (shutdownChannelList) {
-            // now we stop all of our channels
+            // now we stop all of our channels. For the server, this will close the server manager for UDP sessions
             for (ChannelFuture f : shutdownChannelList) {
                 Channel channel = f.channel();
                 if (channel.isOpen()) {
@@ -275,6 +275,9 @@ class Shutdownable {
         // make sure we are not trying to stop during a startup procedure.
         // This will wait until we have finished starting up/shutting down.
         synchronized (shutdownInProgress) {
+            shutdownChannelsPre();
+            shutdownChannels();
+
             // we want to WAIT until after the event executors have completed shutting down.
             List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
 
@@ -298,9 +301,7 @@ class Shutdownable {
                 Thread.yield();
             }
 
-            shutdownChannelsPre();
 
-            shutdownChannels();
 
             logger.info("Stopping endpoint.");
 
