@@ -24,15 +24,12 @@ import org.slf4j.LoggerFactory;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.serialization.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageEncoder;
 
 @Sharable
-// UDP uses messages --- NOT bytebuf!
-// ONLY USED BY THE CLIENT (the server has it's own handler!)
 public
 class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
 
@@ -46,42 +43,45 @@ class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
         this.serializationManager = serializationManager;
     }
 
-    // the crypto writer will override this
-    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, Object msg, ByteBuf buffer)
-                    throws IOException {
-        // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-        serializationManager.write(buffer, msg);
-    }
-
     @Override
     protected
-    void encode(ChannelHandlerContext ctx, Object msg, List<Object> out) throws Exception {
-        if (msg != null) {
+    void encode(ChannelHandlerContext context, Object message, List<Object> out) throws Exception {
+        if (message != null) {
             try {
-                ByteBuf outBuffer = Unpooled.buffer(maxSize);
+                ByteBuf outBuffer = context.alloc()
+                                           .buffer(maxSize);
 
                 // no size info, since this is UDP, it is not segmented
-                writeObject(this.serializationManager, ctx, msg, outBuffer);
+                writeObject(this.serializationManager, context, message, outBuffer);
 
                 // have to check to see if we are too big for UDP!
                 if (outBuffer.readableBytes() > maxSize) {
-
-                    String message = "Object is TOO BIG FOR UDP! " + msg.toString() + " (Max " + maxSize + ", was " +
-                                     outBuffer.readableBytes() + ")";
-                    LoggerFactory.getLogger(this.getClass()).error(message);
-                    throw new IOException(message);
+                    String msg =
+                            "Object is TOO BIG FOR UDP! " + message.toString() + " (Max " + maxSize + ", was " + outBuffer.readableBytes() +
+                            ")";
+                    LoggerFactory.getLogger(this.getClass())
+                                 .error(msg);
+                    throw new IOException(msg);
                 }
 
                 DatagramPacket packet = new DatagramPacket(outBuffer,
-                                                           (InetSocketAddress) ctx.channel()
-                                                                                  .remoteAddress());
+                                                           (InetSocketAddress) context.channel()
+                                                                                      .remoteAddress());
                 out.add(packet);
             } catch (Exception e) {
-                String message = "Unable to serialize object of type: " + msg.getClass()
+                String msg = "Unable to serialize object of type: " + message.getClass()
                                                                              .getName();
-                LoggerFactory.getLogger(this.getClass()).error(message, e);
-                throw new IOException(message, e);
+                LoggerFactory.getLogger(this.getClass())
+                             .error(msg, e);
+                throw new IOException(msg, e);
             }
         }
+    }
+
+    // the crypto writer will override this
+    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, Object msg, ByteBuf buffer)
+            throws IOException {
+        // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
+        serializationManager.write(buffer, msg);
     }
 }

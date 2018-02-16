@@ -171,8 +171,7 @@ class RmiGlobalTest extends BaseTest {
         m.text = "sometext";
 
         connection.send()
-                  .TCP(m)
-                  .flush();
+                  .TCP(m);
     }
 
 

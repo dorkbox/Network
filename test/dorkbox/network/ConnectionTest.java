@@ -20,9 +20,9 @@
 package dorkbox.network;
 
 import java.io.IOException;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.Assert;
 import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
@@ -34,11 +34,13 @@ import dorkbox.util.serialization.SerializationManager;
 
 public
 class ConnectionTest extends BaseTest {
+    private AtomicInteger succesCount;
 
     @Test
     public
     void connectLocal() throws SecurityException, IOException {
         System.out.println("---- " + "Local");
+        succesCount = new AtomicInteger(0);
 
         Configuration configuration = new Configuration();
         configuration.localChannelName = EndPoint.LOCAL_CHANNEL;
@@ -49,12 +51,14 @@ class ConnectionTest extends BaseTest {
         startClient(configuration);
 
         waitForThreads(10);
+        Assert.assertEquals(3, succesCount.get());
     }
 
     @Test
     public
     void connectTcp() throws SecurityException, IOException {
         System.out.println("---- " + "TCP");
+        succesCount = new AtomicInteger(0);
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
@@ -67,12 +71,34 @@ class ConnectionTest extends BaseTest {
         startClient(configuration);
 
         waitForThreads(10);
+        Assert.assertEquals(3, succesCount.get());
+    }
+
+    @Test
+    public
+    void connectUdp() throws SecurityException, IOException {
+        System.out.println("---- " + "UDP");
+        succesCount = new AtomicInteger(0);
+
+        Configuration configuration = new Configuration();
+        configuration.udpPort = udpPort;
+        configuration.serialization = Serialization.DEFAULT();
+        register(configuration.serialization);
+
+        startServer(configuration);
+
+        configuration.host = host;
+        startClient(configuration);
+
+        waitForThreads(10);
+        Assert.assertEquals(3, succesCount.get());
     }
 
     @Test
     public
     void connectTcpUdp() throws SecurityException, IOException {
         System.out.println("---- " + "TCP UDP");
+        succesCount = new AtomicInteger(0);
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
@@ -86,6 +112,7 @@ class ConnectionTest extends BaseTest {
         startClient(configuration);
 
         waitForThreads(10);
+        Assert.assertEquals(3, succesCount.get());
     }
 
     private
@@ -97,19 +124,10 @@ class ConnectionTest extends BaseTest {
         server.bind(false);
         server.listeners()
               .add(new Listener.OnConnected<Connection>() {
-                  Timer timer = new Timer();
-
                   @Override
                   public
                   void connected(final Connection connection) {
-                      this.timer.schedule(new TimerTask() {
-                          @Override
-                          public
-                          void run() {
-                              System.out.println("Disconnecting after 1 second.");
-                              connection.close();
-                          }
-                      }, 1000);
+                      succesCount.getAndIncrement();
                   }
               });
 
@@ -118,6 +136,11 @@ class ConnectionTest extends BaseTest {
                   @Override
                   public void received(Connection connection, Object message) {
                       System.err.println("Received message from client: " + message.getClass().getSimpleName());
+
+                      succesCount.getAndIncrement();
+                      connection.send()
+                                .UDP(message);
+                      connection.close();
                   }
               });
 
@@ -140,15 +163,28 @@ class ConnectionTest extends BaseTest {
                   @Override
                   public
                   void disconnected(Connection connection) {
+                      succesCount.getAndIncrement();
                       stopEndPoints();
+                  }
+              })
+              .add(new Listener.OnMessageReceived<Connection, Object>() {
+                  @Override
+                  public
+                  void received(Connection connection, Object message) {
+                      System.err.println("Received message from server: " + message.getClass()
+                                                                                   .getSimpleName());
+                      System.out.println("Now disconnecting!");
+                      succesCount.getAndIncrement();
+                      connection.close();
                   }
               });
         client.connect(5000);
-
         client.send()
-              .TCP(new BMessage())
-              .flush();
+              .UDP(new BMessage());
 
+        if (true) {
+            throw new RuntimeException("wreha?");
+        }
         return client;
     }
 

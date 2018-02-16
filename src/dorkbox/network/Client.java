@@ -35,10 +35,7 @@ import dorkbox.util.OS;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.DefaultEventLoopGroup;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.WriteBufferWaterMark;
+import io.netty.channel.*;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
@@ -181,8 +178,7 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .remoteAddress(config.host, config.tcpPort)
                             .handler(new RegistrationRemoteHandlerClientTCP(threadName,
-                                                                            registrationWrapper,
-                                                                            serializationManager));
+                                                                            registrationWrapper));
 
                 // android screws up on this!!
                 tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid())
@@ -210,14 +206,16 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                     udpBootstrap.channel(NioDatagramChannel.class);
                 }
 
+
                 udpBootstrap.group(boss)
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                            // Netty4 has a default of 2048 bytes as upper limit for datagram packets.
+                            .option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(EndPoint.udpMaxSize))
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .localAddress(new InetSocketAddress(0))  // bind to wildcard
                             .remoteAddress(new InetSocketAddress(config.host, config.udpPort))
                             .handler(new RegistrationRemoteHandlerClientUDP(threadName,
-                                                                            registrationWrapper,
-                                                                            serializationManager));
+                                                                            registrationWrapper));
 
                 // Enable to READ and WRITE MULTICAST data (ie, 192.168.1.0)
                 // in order to WRITE: write as normal, just make sure it ends in .255

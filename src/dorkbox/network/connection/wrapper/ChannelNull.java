@@ -16,10 +16,11 @@
 package dorkbox.network.connection.wrapper;
 
 import dorkbox.network.connection.ConnectionPoint;
-import dorkbox.network.connection.ConnectionPointWriter;
+import io.netty.util.concurrent.ImmediateEventExecutor;
+import io.netty.util.concurrent.Promise;
 
 public
-class ChannelNull implements ConnectionPointWriter {
+class ChannelNull implements ConnectionPoint {
 
     private static final ConnectionPoint INSTANCE = new ChannelNull();
 
@@ -51,6 +52,7 @@ class ChannelNull implements ConnectionPointWriter {
 
     @Override
     public
-    void flush() {
+    <V> Promise<V> newPromise() {
+        return ImmediateEventExecutor.INSTANCE.newPromise();
     }
 }

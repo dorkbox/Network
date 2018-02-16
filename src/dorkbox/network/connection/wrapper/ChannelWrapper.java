@@ -18,16 +18,15 @@ package dorkbox.network.connection.wrapper;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.ConnectionPointWriter;
+import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.rmi.RmiObjectHandler;
-import io.netty.channel.EventLoop;
 
 public
 interface ChannelWrapper {
 
-    ConnectionPointWriter tcp();
-    ConnectionPointWriter udp();
+    ConnectionPoint tcp();
+    ConnectionPoint udp();
 
     /**
      * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
@@ -38,8 +37,6 @@ interface ChannelWrapper {
      * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
      */
     void flush();
-
-    EventLoop getEventLoop();
 
     /**
      * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal

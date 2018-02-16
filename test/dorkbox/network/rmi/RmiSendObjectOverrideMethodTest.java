@@ -165,8 +165,7 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
                                       // that is where that object acutally exists.
                                       // we have to manually flush, since we are in a separate thread that does not auto-flush.
                                       connection.send()
-                                                .TCP(otherObject)
-                                                .flush();
+                                                .TCP(otherObject);
                                   }
                               }.start();
                           }

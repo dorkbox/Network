@@ -20,17 +20,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.ConnectionPointWriter;
+import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.rmi.RmiObjectHandler;
 import io.netty.channel.Channel;
-import io.netty.channel.EventLoop;
 import io.netty.channel.local.LocalAddress;
+import io.netty.util.concurrent.Promise;
 
 public
-class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
+class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
 
     private final Channel channel;
     private final RmiObjectHandler rmiObjectHandler;
@@ -66,13 +66,13 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
 
     @Override
     public
-    ConnectionPointWriter tcp() {
+    ConnectionPoint tcp() {
         return this;
     }
 
     @Override
     public
-    ConnectionPointWriter udp() {
+    ConnectionPoint udp() {
         return this;
     }
 
@@ -96,10 +96,12 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPointWriter {
         }
     }
 
+
     @Override
     public
-    EventLoop getEventLoop() {
-        return this.channel.eventLoop();
+    <V> Promise<V> newPromise() {
+        return channel.eventLoop()
+                      .newPromise();
     }
 
     @Override

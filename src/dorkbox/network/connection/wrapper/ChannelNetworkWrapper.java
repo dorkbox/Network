@@ -21,19 +21,18 @@ import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.ConnectionPointWriter;
+import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
-import dorkbox.network.connection.UdpServer;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.rmi.RmiObjectHandler;
 import dorkbox.util.FastThreadLocal;
-import io.netty.channel.Channel;
-import io.netty.channel.EventLoop;
 import io.netty.util.NetUtil;
 
 public
 class ChannelNetworkWrapper implements ChannelWrapper {
+
+    private final int sessionId;
 
     private final ChannelNetwork tcp;
     private final ChannelNetwork udp;
@@ -43,7 +42,6 @@ class ChannelNetworkWrapper implements ChannelWrapper {
 
     private final String remoteAddress;
     private final boolean isLoopback;
-    private final EventLoop eventLoop;
 
     // GCM IV. hacky way to prevent tons of GC and to not clobber the original parameters
     private final byte[] aesKey; // AES-256 requires 32 bytes
@@ -53,36 +51,30 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     private final RmiObjectHandler rmiObjectHandler;
 
     /**
-     * @param udpServer is null when created by the client, non-null when created by the server
      * @param rmiObjectHandler is a no-op handler if RMI is disabled, otherwise handles RMI object registration
      */
     public
-    ChannelNetworkWrapper(MetaChannel metaChannel, UdpServer udpServer, final RmiObjectHandler rmiObjectHandler) {
+    ChannelNetworkWrapper(final MetaChannel metaChannel, final InetSocketAddress remoteAddress, final RmiObjectHandler rmiObjectHandler) {
 
+        this.sessionId = metaChannel.sessionId;
         this.rmiObjectHandler = rmiObjectHandler;
+        this.isLoopback = remoteAddress.getAddress().equals(NetUtil.LOCALHOST);
 
-        Channel tcpChannel = metaChannel.tcpChannel;
-        this.eventLoop = tcpChannel.eventLoop();
-
-        isLoopback = ((InetSocketAddress)tcpChannel.remoteAddress()).getAddress().equals(NetUtil.LOCALHOST);
-
-        this.tcp = new ChannelNetwork(tcpChannel);
+        if (metaChannel.tcpChannel != null) {
+            this.tcp = new ChannelNetwork(metaChannel.tcpChannel);
+        } else {
+            this.tcp = null;
+        }
 
         if (metaChannel.udpChannel != null) {
-            if (metaChannel.udpRemoteAddress != null) {
-                this.udp = new ChannelNetworkUdp(metaChannel.udpChannel, metaChannel.udpRemoteAddress, udpServer);
-            }
-            else {
-                this.udp = new ChannelNetwork(metaChannel.udpChannel);
-            }
+            this.udp = new ChannelNetwork(metaChannel.udpChannel);
         }
         else {
             this.udp = null;
         }
 
 
-        this.remoteAddress = ((InetSocketAddress) tcpChannel.remoteAddress()).getAddress()
-                                                                             .getHostAddress();
+        this.remoteAddress = remoteAddress.getAddress().getHostAddress();
         this.remotePublicKeyChanged = metaChannel.changedRemoteKey;
 
         // AES key & IV (only for networked connections)
@@ -105,13 +97,13 @@ class ChannelNetworkWrapper implements ChannelWrapper {
 
     @Override
     public
-    ConnectionPointWriter tcp() {
+    ConnectionPoint tcp() {
         return this.tcp;
     }
 
     @Override
     public
-    ConnectionPointWriter udp() {
+    ConnectionPoint udp() {
         return this.udp;
     }
 
@@ -130,17 +122,13 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     @Override
     public
     void flush() {
-        this.tcp.flush();
+        if (this.tcp != null) {
+            this.tcp.flush();
+        }
 
         if (this.udp != null) {
             this.udp.flush();
         }
-    }
-
-    @Override
-    public
-    EventLoop getEventLoop() {
-        return this.eventLoop;
     }
 
     /**
@@ -177,7 +165,9 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     void close(final ConnectionImpl connection, final ISessionManager sessionManager) {
         long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
-        this.tcp.close(maxShutdownWaitTimeInMilliSeconds);
+        if (this.tcp != null) {
+            this.tcp.close(maxShutdownWaitTimeInMilliSeconds);
+        }
 
         if (this.udp != null) {
             this.udp.close(maxShutdownWaitTimeInMilliSeconds);
@@ -190,13 +180,14 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     @Override
     public
     int id() {
-        return this.tcp.id();
+        return this.sessionId;
     }
 
     @Override
     public
     int hashCode() {
-        return this.remoteAddress.hashCode();
+        // a unique ID for every connection. However, these ID's can also be reused
+        return this.sessionId;
     }
 
     @Override

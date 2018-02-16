@@ -35,6 +35,7 @@ import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.SerializationManager;
 
+@SuppressWarnings("Duplicates")
 public class ChunkedDataIdleTest extends BaseTest {
     private volatile boolean success = false;
 
@@ -45,7 +46,7 @@ public class ChunkedDataIdleTest extends BaseTest {
 
     // have to test sending objects
     @Test
-    public void ObjectSender() throws SecurityException, IOException {
+    public void SendTcp() throws SecurityException, IOException {
         final Data mainData = new Data();
         populateData(mainData);
 
@@ -58,10 +59,36 @@ public class ChunkedDataIdleTest extends BaseTest {
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
+    }
+
+    // have to test sending objects
+    @Test
+    public void SendUdp() throws SecurityException, IOException {
+        final Data mainData = new Data();
+        populateData(mainData);
 
 
         System.err.println("-- UDP");
-        configuration = new Configuration();
+        Configuration configuration = new Configuration();
+        configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
+        configuration.serialization = Serialization.DEFAULT();
+        register(configuration.serialization);
+
+        sendObject(mainData, configuration, ConnectionType.UDP);
+    }
+
+    // have to test sending objects
+    @Test
+    public void SendTcpAndUdp() throws SecurityException, IOException {
+        final Data mainData = new Data();
+        populateData(mainData);
+
+
+
+        System.err.println("-- TCP/UDP");
+        Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
@@ -75,8 +102,9 @@ public class ChunkedDataIdleTest extends BaseTest {
 
     private void sendObject(final Data mainData, Configuration configuration, final ConnectionType type)
                     throws SecurityException, IOException {
-        Server server = new Server(configuration);
+        success = false;
 
+        Server server = new Server(configuration);
         addEndPoint(server);
         server.setIdleTimeout(10);
         server.bind(false);
@@ -135,7 +163,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         data.floats = new float[] {0, -0, 1, -1, 123456, -123456, 0.1f, 0.2f, -0.3f, (float)Math.PI, Float.MAX_VALUE, Float.MIN_VALUE};
 
         data.doubles = new double[] {0, -0, 1, -1, 123456, -123456, 0.1d, 0.2d, -0.3d, Math.PI, Double.MAX_VALUE, Double.MIN_VALUE};
-        data.longs = new long[] {0, -0, 1, -1, 123456, -123456, 99999999999l, -99999999999l, Long.MAX_VALUE, Long.MIN_VALUE};
+        data.longs = new long[] {0, -0, 1, -1, 123456, -123456, 99999999999L, -99999999999L, Long.MAX_VALUE, Long.MIN_VALUE};
         data.bytes = new byte[] {-123, 123, -1, 0, 1, Byte.MAX_VALUE, Byte.MIN_VALUE};
         data.chars = new char[] {32345, 12345, 0, 1, 63, Character.MAX_VALUE, Character.MIN_VALUE};
 
@@ -144,7 +172,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         data.Shorts = new Short[] {-12345, 12345, -1, 0, 1, Short.MAX_VALUE, Short.MIN_VALUE};
         data.Floats = new Float[] {0f, -0f, 1f, -1f, 123456f, -123456f, 0.1f, 0.2f, -0.3f, (float)Math.PI, Float.MAX_VALUE, Float.MIN_VALUE};
         data.Doubles = new Double[] {0d, -0d, 1d, -1d, 123456d, -123456d, 0.1d, 0.2d, -0.3d, Math.PI, Double.MAX_VALUE, Double.MIN_VALUE};
-        data.Longs = new Long[] {0l, -0l, 1l, -1l, 123456l, -123456l, 99999999999l, -99999999999l, Long.MAX_VALUE, Long.MIN_VALUE};
+        data.Longs = new Long[] {0L, -0L, 1L, -1L, 123456L, -123456L, 99999999999L, -99999999999L, Long.MAX_VALUE, Long.MIN_VALUE};
         data.Bytes = new Byte[] {-123, 123, -1, 0, 1, Byte.MAX_VALUE, Byte.MIN_VALUE};
         data.Chars = new Character[] {32345, 12345, 0, 1, 63, Character.MAX_VALUE, Character.MIN_VALUE};
         data.Booleans = new Boolean[] {true, false};
@@ -172,6 +200,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         manager.register(TYPE.class);
     }
 
+    @SuppressWarnings("WeakerAccess")
     static public class Data {
         public String string;
         public String[] strings;

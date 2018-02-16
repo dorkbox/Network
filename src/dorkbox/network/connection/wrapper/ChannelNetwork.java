@@ -15,23 +15,24 @@
  */
 package dorkbox.network.connection.wrapper;
 
-import dorkbox.network.connection.ConnectionPointWriter;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelPromise;
-
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public
-class ChannelNetwork implements ConnectionPointWriter {
+import dorkbox.network.connection.ConnectionPoint;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelPromise;
+import io.netty.util.concurrent.Promise;
 
-    private final Channel channel;
-    private final AtomicBoolean shouldFlush = new AtomicBoolean(false);
+public
+class ChannelNetwork implements ConnectionPoint {
+
+    final Channel channel;
+    final AtomicBoolean shouldFlush = new AtomicBoolean(false);
     private final ChannelPromise voidPromise;
 
     public
     ChannelNetwork(Channel channel) {
         this.channel = channel;
-        voidPromise = channel.voidPromise();
+        this.voidPromise = channel.voidPromise();
     }
 
     /**
@@ -39,7 +40,7 @@ class ChannelNetwork implements ConnectionPointWriter {
      */
     @Override
     public
-    void write(Object object) {
+    void write(Object object) throws Exception {
         // we don't care, or want to save the future. This is so GC is less.
         channel.write(object, voidPromise);
         shouldFlush.set(true);
@@ -54,7 +55,6 @@ class ChannelNetwork implements ConnectionPointWriter {
         return channel.isWritable();
     }
 
-    @Override
     public
     void flush() {
         if (shouldFlush.compareAndSet(true, false)) {
@@ -62,15 +62,16 @@ class ChannelNetwork implements ConnectionPointWriter {
         }
     }
 
+    @Override
+    public
+    <V> Promise<V> newPromise() {
+        return channel.eventLoop().newPromise();
+    }
+
     public
     void close(long maxShutdownWaitTimeInMilliSeconds) {
         shouldFlush.set(false);
         channel.close()
                .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
-    }
-
-    public
-    int id() {
-        return channel.hashCode();
     }
 }

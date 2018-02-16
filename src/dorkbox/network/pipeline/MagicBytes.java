@@ -31,6 +31,9 @@ class MagicBytes {
 
     /**
      * Determines if this buffer is encrypted or not.
+     *
+     * REGISTRATION is the ONLY thing NOT encrypted
+     * encrypted Y/N is always written by the serialization writer, so it is ALWAYS safe to check it here.
      */
     public static
     boolean isEncrypted(final ByteBuf buffer) {

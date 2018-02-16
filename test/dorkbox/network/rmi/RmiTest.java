@@ -160,8 +160,7 @@ class RmiTest extends BaseTest {
         m.number = 678;
         m.text = "sometext";
         connection.send()
-                  .TCP(m)
-                  .flush();
+                  .TCP(m);
 
         System.out.println("Finished tests");
     }

@@ -15,6 +15,8 @@
  */
 package dorkbox.network.connection;
 
+import io.netty.util.concurrent.Promise;
+
 public
 interface ConnectionPoint {
 
@@ -24,7 +26,12 @@ interface ConnectionPoint {
     boolean isWritable();
 
     /**
-     * Flushes the contents of the TCP/UDP/etc pipes to the wire.
+     * Writes data to the pipe. <b>DOES NOT FLUSH</b> the pipe to the wire!
      */
-    void flush();
+    void write(Object object) throws Exception;
+
+    /**
+     * Creates a new promise associated with this connection type
+     */
+    <V> Promise<V> newPromise();
 }

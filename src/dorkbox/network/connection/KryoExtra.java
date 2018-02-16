@@ -25,6 +25,7 @@ import com.esotericsoftware.kryo.Kryo;
 
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
+import dorkbox.network.pipeline.MagicBytes;
 import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.bytes.BigEndian;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
@@ -40,23 +41,6 @@ import net.jpountz.lz4.LZ4FastDecompressor;
  */
 public
 class KryoExtra<C extends ICryptoConnection> extends Kryo {
-    /**
-     * bit masks
-     */
-    static final byte crypto = (byte) (1 << 1);
-
-    /**
-     * Determines if this buffer is encrypted or not.
-     */
-    public static
-    boolean isEncrypted(final ByteBuf buffer) {
-        // read off the magic byte
-        byte magicByte = buffer.getByte(buffer.readerIndex());
-        return (magicByte & crypto) == crypto;
-    }
-
-
-
     // snappycomp   :       7.534 micros/op;  518.5 MB/s (output: 55.1%)
     // snappyuncomp :       1.391 micros/op; 2808.1 MB/s
     // lz4comp      :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
@@ -111,7 +95,6 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
         this.connection = null;
 
         // during INIT and handshake, we don't use connection encryption/compression
-        // magic byte
         buffer.writeByte(0);
 
         // write the object to the NORMAL output buffer!
@@ -124,7 +107,6 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
     Object read(final ByteBuf buffer) throws IOException {
         // connection will always be NULL during connection initialization
         this.connection = null;
-
 
         ////////////////
         // Note: we CANNOT write BACK to the buffer as "temp" storage, since there could be additional data on it!
@@ -224,11 +206,11 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
         inputOffset = maxLengthLengthOffset - lengthLength;
 
 
-        // now write the ORIGINAL (uncompressed) length to the front of the byte array. This is so we can use the FAST decompress version
+        // now write the ORIGINAL (uncompressed) length to the front of the byte array (this is NOT THE BUFFER!). This is so we can use the FAST decompress version
         OptimizeUtilsByteArray.writeInt(inputArray, length, true, inputOffset);
 
         // write out the "magic" byte.
-        buffer.writeByte(crypto);
+        buffer.writeByte(MagicBytes.crypto);
 
         // have to copy over the orig data, because we used the temp buffer. Also have to account for the length of the uncompressed size
         buffer.writeBytes(inputArray, inputOffset, compressedLength + lengthLength);
@@ -451,7 +433,7 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
         }
 
         // write out the "magic" byte.
-        buffer.writeByte(crypto);
+        buffer.writeByte(MagicBytes.crypto);
 
         // write out our GCM counter
         OptimizeUtilsByteBuf.writeLong(buffer, nextGcmSequence, true);

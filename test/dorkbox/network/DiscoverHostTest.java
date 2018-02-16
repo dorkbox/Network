@@ -38,7 +38,7 @@ class DiscoverHostTest extends BaseTest {
     void broadcast() throws SecurityException, IOException {
 
         Configuration configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
+        // configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
 
@@ -49,6 +49,15 @@ class DiscoverHostTest extends BaseTest {
         // ----
 
         String host = Broadcast.discoverHost(udpPort, 2000);
+        if (host == null) {
+            stopEndPoints();
+            fail("No servers found. Maybe you are behind a VPN service or your network is mis-configured?");
+            return;
+        }
+
+        // run it twice...
+
+        host = Broadcast.discoverHost(udpPort, 2000);
         if (host == null) {
             stopEndPoints();
             fail("No servers found. Maybe you are behind a VPN service or your network is mis-configured?");

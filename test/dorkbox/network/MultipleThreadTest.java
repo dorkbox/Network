@@ -94,8 +94,7 @@ class MultipleThreadTest extends BaseTest {
                                 //System.err.println(dataClass.data);
                                 MultipleThreadTest.this.sentStringsToClientDebug.put(incrementAndGet, dataClass);
                                 connection.send()
-                                          .TCP(dataClass)
-                                          .flush();
+                                          .TCP(dataClass);
                             }
                         }
                     }.start();

@@ -15,16 +15,16 @@
  */
 package dorkbox.network.connection.registration.local;
 
-import static dorkbox.network.connection.EndPoint.maxShutdownWaitTimeInMilliSeconds;
-
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.util.AttributeKey;
 
 public abstract
 class RegistrationLocalHandler extends RegistrationHandler {
+    public static final AttributeKey<MetaChannel> META_CHANNEL = AttributeKey.valueOf(RegistrationLocalHandler.class, "MetaChannel.local");
 
     RegistrationLocalHandler(String name, RegistrationWrapper registrationWrapper) {
         super(name, registrationWrapper);
@@ -36,14 +36,15 @@ class RegistrationLocalHandler extends RegistrationHandler {
     @Override
     protected
     void initChannel(Channel channel) {
-        MetaChannel metaChannel = new MetaChannel();
+        MetaChannel metaChannel = registrationWrapper.createSessionServer();
         metaChannel.localChannel = channel;
 
-        registrationWrapper.addChannel(channel.hashCode(), metaChannel);
+        channel.attr(META_CHANNEL)
+               .set(metaChannel);
 
         logger.trace("New LOCAL connection.");
 
-        registrationWrapper.connection0(metaChannel);
+        registrationWrapper.connection0(metaChannel, null);
     }
 
     @Override
@@ -73,9 +74,6 @@ class RegistrationLocalHandler extends RegistrationHandler {
         Channel channel = context.channel();
 
         logger.info("Closed LOCAL connection: {}", channel.remoteAddress());
-
-        // also, once we notify, we unregister this.
-        registrationWrapper.closeChannel(channel, maxShutdownWaitTimeInMilliSeconds);
 
         super.channelInactive(context);
     }

@@ -77,12 +77,6 @@ class EndPointClient extends EndPoint {
         }
     }
 
-    // protected by bootstrapLock
-    private
-    boolean isRegistrationComplete() {
-        return !bootstrapIterator.hasNext();
-    }
-
     // this is called by 2 threads. The startup thread, and the registration-in-progress thread
     private void doRegistration() {
         synchronized (bootstrapLock) {
@@ -116,12 +110,12 @@ class EndPointClient extends EndPoint {
 
             if (!future.isSuccess()) {
                 Throwable cause = future.cause();
+                        // extra space here is so it aligns with "Connecting to server:"
                 String errorMessage = "Connection refused  :" + bootstrapWrapper.address + " at " + bootstrapWrapper.type + " port: " + bootstrapWrapper.port;
 
                 if (cause instanceof java.net.ConnectException) {
                     if (cause.getMessage()
                              .contains("refused")) {
-                        // extra space here is so it aligns with "Connecting to server:"
                         logger.error(errorMessage);
                     }
 
@@ -147,21 +141,27 @@ class EndPointClient extends EndPoint {
      */
     @Override
     protected
-    boolean registerNextProtocol0() {
-        boolean registrationComplete;
+    void startNextProtocolRegistration() {
+        logger.trace("Registered protocol from server.");
 
         synchronized (bootstrapLock) {
-            registrationComplete = isRegistrationComplete();
-            if (!registrationComplete) {
+            if (hasMoreRegistrations()) {
                 doRegistration();
             }
         }
+    }
 
-        logger.trace("Registered protocol from server.");
-
-        // only let us continue with connections (this starts up the client/server implementations) once ALL of the
-        // bootstraps have connected
-        return registrationComplete;
+    /**
+     * Internal call by the pipeline to check if the client has more protocol registrations to complete.
+     *
+     * @return true if there are more registrations to process, false if we are 100% done with all types to register (TCP/UDP/etc)
+     */
+    @Override
+    protected
+    boolean hasMoreRegistrations() {
+        synchronized (bootstrapLock) {
+            return !(bootstrapIterator == null || !bootstrapIterator.hasNext());
+        }
     }
 
     /**
@@ -182,16 +182,25 @@ class EndPointClient extends EndPoint {
             @Override
             public
             ConnectionPoint TCP(Object message) {
-                ConnectionPoint tcp = connection.TCP_backpressure(message);
-                tcp.flush();
+                ConnectionPoint tcp = connection.TCP(message);
+                flush();
+
+                // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
+                // INSIDE the event loop
+                connection.controlBackPressure(tcp);
+
                 return tcp;
             }
 
             @Override
             public
             ConnectionPoint UDP(Object message) {
-                ConnectionPoint udp = connection.UDP_backpressure(message);
-                udp.flush();
+                ConnectionPoint udp = connection.UDP(message);
+                flush();
+
+                // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
+                // INSIDE the event loop
+                connection.controlBackPressure(udp);
                 return udp;
             }
 
@@ -215,6 +224,9 @@ class EndPointClient extends EndPoint {
 
         synchronized (bootstrapLock) {
             // we're done with registration, so no need to keep this around
+            if (bootstrapIterator.hasNext()) {
+                System.err.println("WHAT");
+            }
             bootstrapIterator = null;
             registration.countDown();
         }
@@ -224,8 +236,9 @@ class EndPointClient extends EndPoint {
         super.connectionConnected0(connection);
     }
 
+
     private
-    void registrationCompleted() {
+    void stopRegistration() {
         // make sure we're not waiting on registration
         synchronized (bootstrapLock) {
             // we're done with registration, so no need to keep this around
@@ -256,14 +269,13 @@ class EndPointClient extends EndPoint {
         // Only keep the listeners for connections IF we are the client. If we remove listeners as a client,
         // ALL of the client logic will be lost. The server is reactive, so listeners are added to connections as needed (instead of before startup)
         closeConnections(true);
-
-        // make sure we're not waiting on registration
-        registrationCompleted();
-
         // for the CLIENT only, we clear these connections! (the server only clears them on shutdown)
         shutdownChannels();
 
         connection = null;
+
+        // make sure we're not waiting on registration
+        stopRegistration();
     }
 
     /**
@@ -271,6 +283,6 @@ class EndPointClient extends EndPoint {
      */
     void abortRegistration() {
         // make sure we're not waiting on registration
-        registrationCompleted();
+        stopRegistration();
     }
 }

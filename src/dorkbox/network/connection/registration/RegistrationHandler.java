@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection.registration;
 
-import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -30,7 +29,6 @@ class RegistrationHandler extends ChannelInboundHandlerAdapter {
     protected final RegistrationWrapper registrationWrapper;
     protected final org.slf4j.Logger logger;
     protected final String name;
-
 
     public
     RegistrationHandler(final String name, RegistrationWrapper registrationWrapper) {
@@ -83,23 +81,20 @@ class RegistrationHandler extends ChannelInboundHandlerAdapter {
     public abstract
     void exceptionCaught(final ChannelHandlerContext context, final Throwable cause) throws Exception;
 
-    public
-    MetaChannel shutdown(final RegistrationWrapper registrationWrapper, final Channel channel) {
-        // shutdown. Something messed up or was incorrect
+    /**
+     * shutdown. Something messed up or was incorrect
+     */
+    protected final
+    void shutdown(final Channel channel, final int sessionId) {
         // properly shutdown the TCP/UDP channels.
-        if (channel.isOpen()) {
+        if (sessionId == 0 && channel.isOpen()) {
             channel.close();
         }
 
         // also, once we notify, we unregister this.
         if (registrationWrapper != null) {
-            MetaChannel metaChannel = registrationWrapper.closeChannel(channel, EndPoint.maxShutdownWaitTimeInMilliSeconds);
-            registrationWrapper.abortRegistrationIfClient();
-
-            return metaChannel;
+            registrationWrapper.closeSession(sessionId);
         }
-
-        return null;
     }
 }
 

@@ -20,24 +20,32 @@ import java.util.Collection;
 public
 interface ISessionManager {
     /**
-     * Called when a message is received
+     * Called when a message is received.
+     * <p>
+     * Will auto-flush the connection queue if necessary.
      */
     void onMessage(ConnectionImpl connection, Object message);
 
     /**
-     * Called when the connection has been idle (read & write) for 2 seconds
+     * Called when the connection has been idle (read & write) for 2 seconds.
+     * <p>
+     * Will auto-flush the connection queue if necessary.
      */
-    void onIdle(Connection connection);
+    void onIdle(ConnectionImpl connection);
 
     /**
      * Invoked when a Channel is open, bound to a local address, and connected to a remote address.
+     * <p>
+     * Will auto-flush the connection queue if necessary.
      */
-    void onConnected(Connection connection);
+    void onConnected(ConnectionImpl connection);
 
     /**
      * Invoked when a Channel was disconnected from its remote peer.
+     * <p>
+     * Will auto-flush the connection queue if necessary.
      */
-    void onDisconnected(Connection connection);
+    void onDisconnected(ConnectionImpl connection);
 
     /**
      * Returns a non-modifiable list of active connections. This is extremely slow, and not recommended!

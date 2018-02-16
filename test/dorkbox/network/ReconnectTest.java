@@ -43,7 +43,7 @@ class ReconnectTest extends BaseTest {
         this.clientCount = new AtomicInteger(0);
 
         Configuration configuration = new Configuration();
-        configuration.tcpPort = tcpPort;
+        // configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
 
@@ -54,8 +54,8 @@ class ReconnectTest extends BaseTest {
             @Override
             public
             void connected(Connection connection) {
-                connection.send()
-                          .TCP("-- TCP from server");
+                // connection.send()
+                //           .TCP("-- TCP from server");
                 connection.send()
                           .UDP("-- UDP from server");
             }
@@ -65,7 +65,7 @@ class ReconnectTest extends BaseTest {
             public
             void received(Connection connection, String object) {
                 int incrementAndGet = ReconnectTest.this.serverCount.incrementAndGet();
-                System.err.println("<S " + connection + "> " + incrementAndGet + " : " + object);
+                System.out.println("----- <S " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
 
@@ -78,8 +78,8 @@ class ReconnectTest extends BaseTest {
             @Override
             public
             void connected(Connection connection) {
-                connection.send()
-                          .TCP("-- TCP from client");
+                // connection.send()
+                //           .TCP("-- TCP from client");
                 connection.send()
                           .UDP("-- UDP from client");
             }
@@ -89,18 +89,23 @@ class ReconnectTest extends BaseTest {
             public
             void received(Connection connection, String object) {
                 int incrementAndGet = ReconnectTest.this.clientCount.incrementAndGet();
-                System.err.println("<C " + connection + "> " + incrementAndGet + " : " + object);
+                System.out.println("----- <C " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
 
         server.bind(false);
-        int count = 10;
+
+        int count = 100;
         for (int i = 1; i < count + 1; i++) {
             client.connect(5000);
 
-            int target = i * 2;
+            int waitingRetryCount = 10;
+            // int target = i * 2;
+            int target = i;
             while (this.serverCount.get() != target || this.clientCount.get() != target) {
-                System.err.println("Waiting...");
+                if (waitingRetryCount-- < 0) {
+                    throw new IOException("Unable to reconnect in 5000 ms");
+                }
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException ignored) {
@@ -139,7 +144,7 @@ class ReconnectTest extends BaseTest {
                   public
                   void received(Connection connection, String object) {
                       int incrementAndGet = ReconnectTest.this.serverCount.incrementAndGet();
-                      System.err.println("<S " + connection + "> " + incrementAndGet + " : " + object);
+                      System.out.println("----- <S " + connection + "> " + incrementAndGet + " : " + object);
                   }
               });
 
@@ -163,7 +168,7 @@ class ReconnectTest extends BaseTest {
                   public
                   void received(Connection connection, String object) {
                       int incrementAndGet = ReconnectTest.this.clientCount.incrementAndGet();
-                      System.err.println("<C " + connection + "> " + incrementAndGet + " : " + object);
+                      System.out.println("----- <C " + connection + "> " + incrementAndGet + " : " + object);
                   }
               });
 
@@ -174,7 +179,7 @@ class ReconnectTest extends BaseTest {
 
             int target = i;
             while (this.serverCount.get() != target || this.clientCount.get() != target) {
-                System.err.println("Waiting...");
+                System.out.println("----- Waiting...");
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException ex) {

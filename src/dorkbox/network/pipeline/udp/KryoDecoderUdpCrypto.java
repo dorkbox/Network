@@ -42,9 +42,9 @@ class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
 
     @Override
     public
-    void decode(ChannelHandlerContext ctx, DatagramPacket in, List<Object> out) throws Exception {
-        ChannelHandler last = ctx.pipeline()
-                                 .last();
+    void decode(ChannelHandlerContext context, DatagramPacket in, List<Object> out) throws Exception {
+        ChannelHandler last = context.pipeline()
+                                     .last();
 
         try {
             ByteBuf data = in.content();
@@ -52,7 +52,8 @@ class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
             out.add(object);
         } catch (IOException e) {
             String message = "Unable to deserialize object";
-            LoggerFactory.getLogger(this.getClass()).error(message, e);
+            LoggerFactory.getLogger(this.getClass())
+                         .error(message, e);
             throw new IOException(message, e);
         }
     }

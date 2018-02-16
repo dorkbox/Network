@@ -19,10 +19,7 @@
  */
 package dorkbox.network;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -31,11 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.slf4j.Logger;
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.Listener;
-import dorkbox.network.connection.Listeners;
+import dorkbox.network.connection.*;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
@@ -228,8 +221,7 @@ class ListenerTest extends BaseTest {
                 void received(TestConnectionB connection, String string) {
                     connection.check();
                     System.err.println(string);
-                    connection.send()
-                              .TCP(string);
+                    connection.TCP(string);
                 }
             });
             fail("Should not be able to ADD listeners that are NOT the basetype or the interface");

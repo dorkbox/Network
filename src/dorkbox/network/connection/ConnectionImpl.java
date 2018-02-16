@@ -51,6 +51,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.local.LocalChannel;
+import io.netty.channel.socket.nio.DatagramSessionChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.timeout.IdleState;
@@ -73,7 +74,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
     public static
     boolean isUdp(Class<? extends Channel> channelClass) {
-        return channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class;
+        return channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class || channelClass == DatagramSessionChannel.class;
     }
 
     public static
@@ -261,7 +262,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public
     String idAsHex() {
-        return Integer.toHexString(this.channelWrapper.id());
+        return Integer.toHexString(id());
     }
 
     /**
@@ -287,8 +288,16 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             pingFuture2.cancel();
         }
 
-        Promise<PingTuple<? extends Connection>> newPromise = this.channelWrapper.getEventLoop()
-                                                                                 .newPromise();
+        Promise<PingTuple<? extends Connection>> newPromise;
+        if (this.channelWrapper.udp() != null) {
+            newPromise = this.channelWrapper.udp()
+                                            .newPromise();
+        }
+        else {
+            newPromise = this.channelWrapper.tcp()
+                                            .newPromise();
+        }
+
         this.pingFuture = new PingFuture(newPromise);
 
         PingMessage ping = new PingMessage();
@@ -305,11 +314,15 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     public final
     void ping0(PingMessage ping) {
         if (this.channelWrapper.udp() != null) {
-            UDP(ping).flush();
+            UDP(ping);
+        }
+        else if (this.channelWrapper.tcp() != null) {
+            TCP(ping);
         }
         else {
-            TCP(ping).flush();
+            self(ping);
         }
+        flush();
     }
 
     /**
@@ -337,8 +350,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
     @Override
     public
-    void channelWritabilityChanged(final ChannelHandlerContext ctx) throws Exception {
-        super.channelWritabilityChanged(ctx);
+    void channelWritabilityChanged(final ChannelHandlerContext context) throws Exception {
+        super.channelWritabilityChanged(context);
 
         // needed to place back-pressure when writing too much data to the connection
         if (writeSignalNeeded.getAndSet(false)) {
@@ -354,7 +367,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      *
      * This blocks until we are writable again
      */
-    private
+    final
     void controlBackPressure(ConnectionPoint c) {
         while (!closeInProgress.get() && !c.isWritable()) {
             needsLock.set(true);
@@ -389,38 +402,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     void self(Object message) {
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("Sending LOCAL {}", message);
-        }
+        logger.trace("Sending LOCAL {}", message);
         this.sessionManager.onMessage(this, message);
-    }
-
-    /**
-     * Sends the object over the network using TCP. (LOCAL channels do not care if its TCP or UDP)
-     */
-    final
-    ConnectionPoint TCP_backpressure(Object message) {
-        Logger logger2 = this.logger;
-        if (!this.closeInProgress.get()) {
-            if (logger2.isTraceEnabled()) {
-                logger2.trace("Sending TCP {}", message);
-            }
-            ConnectionPointWriter tcp = this.channelWrapper.tcp();
-            // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
-            // INSIDE the event loop
-            controlBackPressure(tcp);
-
-            tcp.write(message);
-            return tcp;
-        }
-        else {
-            if (logger2.isDebugEnabled()) {
-                logger2.debug("writing TCP while closed: {}", message);
-            }
-            // we have to return something, otherwise dependent code will throw a null pointer exception
-            return ChannelNull.get();
-        }
     }
 
     /**
@@ -429,46 +412,20 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public final
     ConnectionPoint TCP(Object message) {
-        Logger logger2 = this.logger;
-        if (!this.closeInProgress.get()) {
-            if (logger2.isTraceEnabled()) {
-                logger2.trace("Sending TCP {}", message);
+        if (!closeInProgress.get()) {
+            logger.trace("Sending TCP {}", message);
+
+            ConnectionPoint tcp = this.channelWrapper.tcp();
+            try {
+                tcp.write(message);
+            } catch (Exception e) {
+                logger.error("Unable to write TCP object {}", message.getClass());
             }
-            ConnectionPointWriter tcp = this.channelWrapper.tcp();
-            tcp.write(message);
             return tcp;
         }
         else {
-            if (logger2.isDebugEnabled()) {
-                logger2.debug("writing TCP while closed: {}", message);
-            }
-            // we have to return something, otherwise dependent code will throw a null pointer exception
-            return ChannelNull.get();
-        }
-    }
+            logger.debug("writing TCP while closed: {}", message);
 
-    /**
-     * Sends the object over the network using UDP (LOCAL channels do not care if its TCP or UDP)
-     */
-    final
-    ConnectionPoint UDP_backpressure(Object message) {
-        Logger logger2 = this.logger;
-        if (!this.closeInProgress.get()) {
-            if (logger2.isTraceEnabled()) {
-                logger2.trace("Sending UDP {}", message);
-            }
-            ConnectionPointWriter udp = this.channelWrapper.udp();
-            // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
-            // INSIDE the event loop
-            controlBackPressure(udp);
-
-            udp.write(message);
-            return udp;
-        }
-        else {
-            if (logger2.isDebugEnabled()) {
-                logger2.debug("writing UDP while closed: {}", message);
-            }
             // we have to return something, otherwise dependent code will throw a null pointer exception
             return ChannelNull.get();
         }
@@ -480,19 +437,19 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public
     ConnectionPoint UDP(Object message) {
-        Logger logger2 = this.logger;
-        if (!this.closeInProgress.get()) {
-            if (logger2.isTraceEnabled()) {
-                logger2.trace("Sending UDP {}", message);
+        if (!closeInProgress.get()) {
+            logger.trace("Sending UDP {}", message);
+
+            ConnectionPoint udp = this.channelWrapper.udp();
+            try {
+                udp.write(message);
+            } catch (Exception e) {
+                logger.error("Unable to write TCP object {}", message.getClass());
             }
-            ConnectionPointWriter udp = this.channelWrapper.udp();
-            udp.write(message);
             return udp;
         }
         else {
-            if (logger2.isDebugEnabled()) {
-                logger2.debug("writing UDP while closed: {}", message);
-            }
+            logger.debug("writing UDP while closed: {}", message);
             // we have to return something, otherwise dependent code will throw a null pointer exception
             return ChannelNull.get();
         }
@@ -539,6 +496,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         //  } else
         if (event instanceof IdleStateEvent) {
             if (((IdleStateEvent) event).state() == IdleState.ALL_IDLE) {
+                // will auto-flush if necessary
                 this.sessionManager.onIdle(this);
             }
         }
@@ -559,6 +517,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         // delay close until it's finished.
         this.messageInProgress.set(true);
 
+        // will auto-flush if necessary
         this.sessionManager.onMessage(this, object);
 
         this.messageInProgress.set(false);
@@ -626,6 +585,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         if (isTCP || isLocal) {
             // this is because channelInactive can ONLY happen when netty shuts down the channel.
             //   and connection.close() can be called by the user.
+            // will auto-flush if necessary
             this.sessionManager.onDisconnected(this);
 
             // close TCP/UDP together!
@@ -977,7 +937,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
 
         // this means we are creating a NEW object on the server, bound access to only this connection
-        TCP(message).flush();
+        TCP(message);
+        flush();
     }
 
     @Override
@@ -1003,7 +964,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
 
         // this means we are creating a NEW object on the server, bound access to only this connection
-        TCP(message).flush();
+        TCP(message);
+        flush();
     }
 
 
@@ -1048,10 +1010,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     public
     void removeRmiListeners(final int objectID, final Listener listener) {
-
     }
-
-
 
     /**
      * For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.

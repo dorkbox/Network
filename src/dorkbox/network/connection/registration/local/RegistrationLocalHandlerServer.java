@@ -70,17 +70,17 @@ class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
         ReferenceCountUtil.release(message);
         logger.trace("Sent registration");
 
-        ConnectionImpl connection = null;
-        MetaChannel metaChannel = registrationWrapper.removeChannel(channel.hashCode());
+        MetaChannel metaChannel = channel.attr(META_CHANNEL)
+                                         .getAndSet(null);
         if (metaChannel != null) {
-            connection = metaChannel.connection;
-        }
+            ConnectionImpl connection = metaChannel.connection;
 
-        if (connection != null) {
-            // have to setup connection handler
-            pipeline.addLast(CONNECTION_HANDLER, connection);
+            if (connection != null) {
+                // have to setup connection handler
+                pipeline.addLast(CONNECTION_HANDLER, connection);
 
-            registrationWrapper.connectionConnected0(connection);
+                registrationWrapper.connectionConnected0(connection);
+            }
         }
     }
 }

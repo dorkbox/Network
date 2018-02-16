@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection;
 
+import java.net.InetSocketAddress;
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -32,8 +33,6 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
-import dorkbox.network.pipeline.KryoEncoder;
-import dorkbox.network.pipeline.KryoEncoderCrypto;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.rmi.RmiObjectHandler;
 import dorkbox.network.rmi.RmiObjectLocalHandler;
@@ -151,9 +150,7 @@ class EndPoint extends Shutdownable {
         // to expose to external code. "this" escaping can be ignored, because it is benign.
         //noinspection ThisEscapedInObjectConstruction
         registrationWrapper = new RegistrationWrapper(this,
-                                                      logger,
-                                                      new KryoEncoder(serializationManager),
-                                                      new KryoEncoderCrypto(serializationManager));
+                                                      logger);
 
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
@@ -214,7 +211,7 @@ class EndPoint extends Shutdownable {
 
         // we don't care about un-instantiated/constructed members, since the class type is the only interest.
         //noinspection unchecked
-        connectionManager = new ConnectionManager(type.getSimpleName(), connection0(null).getClass());
+        connectionManager = new ConnectionManager(type.getSimpleName(), connection0(null, null).getClass());
 
         // add the ping listener (internal use only!)
         connectionManager.add(new PingSystemListener());
@@ -260,12 +257,21 @@ class EndPoint extends Shutdownable {
     }
 
     /**
+     * Internal call by the pipeline to check if the client has more protocol registrations to complete.
+     *
+     * @return true if there are more registrations to process, false if we are 100% done with all types to register (TCP/UDP/etc)
+     */
+    protected
+    boolean hasMoreRegistrations() {
+        return false;
+    }
+
+    /**
      * Internal call by the pipeline to notify the client to continue registering the different session protocols.
      * The server does not use this.
      */
     protected
-    boolean registerNextProtocol0() {
-        return true;
+    void startNextProtocolRegistration() {
     }
 
     /**
@@ -326,9 +332,10 @@ class EndPoint extends Shutdownable {
      * - when determining the baseClass for listeners
      *
      * @param metaChannel can be NULL (when getting the baseClass)
+     * @param remoteAddress be NULL (when getting the baseClass or when creating a local channel)
      */
     protected final
-    Connection connection0(MetaChannel metaChannel) {
+    Connection connection0(final MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
         ConnectionImpl connection;
 
         RmiBridge rmiBridge = null;
@@ -354,16 +361,11 @@ class EndPoint extends Shutdownable {
                 }
             }
             else {
-                RmiObjectHandler rmiObjectHandler = rmiHandler;
                 if (rmiEnabled) {
-                    rmiObjectHandler = networkRmiHandler;
-                }
-
-                if (this instanceof EndPointServer) {
-                    wrapper = new ChannelNetworkWrapper(metaChannel, registrationWrapper, rmiObjectHandler);
+                    wrapper = new ChannelNetworkWrapper(metaChannel, remoteAddress, networkRmiHandler);
                 }
                 else {
-                    wrapper = new ChannelNetworkWrapper(metaChannel, null, rmiObjectHandler);
+                    wrapper = new ChannelNetworkWrapper(metaChannel, remoteAddress, rmiHandler);
                 }
             }
 
@@ -433,7 +435,7 @@ class EndPoint extends Shutdownable {
         connectionManager.closeConnections(shouldKeepListeners);
 
         // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
-        registrationWrapper.closeChannels(maxShutdownWaitTimeInMilliSeconds);
+        registrationWrapper.clearSessions();
 
         isConnected.set(false);
     }
@@ -516,7 +518,19 @@ class EndPoint extends Shutdownable {
      */
     public
     <T> int createGlobalObject(final T globalObject) {
-        int globalObjectId = globalRmiBridge.register(globalObject);
-        return globalObjectId;
+        return globalRmiBridge.register(globalObject);
+    }
+
+    /**
+     * Gets a previously created "global" RMI object
+     *
+     * @param objectRmiId the ID of the RMI object to get
+     *
+     * @return null if the object doesn't exist or the ID is invalid.
+     */
+    @SuppressWarnings("unchecked")
+    public
+    <T> T getGlobalObject(final int objectRmiId) {
+        return (T) globalRmiBridge.getRegisteredObject(objectRmiId);
     }
 }

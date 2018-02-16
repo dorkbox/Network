@@ -55,7 +55,7 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
                     channel.remoteAddress());
 
         // client starts the registration process
-        channel.writeAndFlush(new Registration());
+        channel.writeAndFlush(new Registration(0));
     }
 
     @Override
@@ -64,8 +64,8 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
         ReferenceCountUtil.release(message);
 
         Channel channel = context.channel();
-
-        MetaChannel metaChannel = this.registrationWrapper.removeChannel(channel.hashCode());
+        MetaChannel metaChannel = channel.attr(META_CHANNEL)
+                                         .getAndSet(null);
 
         // have to setup new listeners
         if (metaChannel != null) {
@@ -73,7 +73,7 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
             pipeline.remove(this);
 
             // Event though a local channel is XOR with everything else, we still have to make the client clean up it's state.
-            registrationWrapper.registerNextProtocol0();
+            registrationWrapper.startNextProtocolRegistration();
 
             ConnectionImpl connection = metaChannel.connection;
 
@@ -85,7 +85,7 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
         else {
             // this should NEVER happen!
             logger.error("Error registering LOCAL channel! MetaChannel is null!");
-            shutdown(registrationWrapper, channel);
+            shutdown(channel, 0);
         }
     }
 }

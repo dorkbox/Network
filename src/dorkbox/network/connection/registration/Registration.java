@@ -23,10 +23,25 @@ import org.bouncycastle.crypto.params.IESParameters;
  */
 public
 class Registration {
+    // used to keep track and associate TCP/UDP/etc sessions. This is always defined by the server
+    // a sessionId if '0', means we are still figuring it out.
+    public int sessionID;
+
     public ECPublicKeyParameters publicKey;
     public IESParameters eccParameters;
-    public byte[] aesKey;
-    public byte[] aesIV;
 
     public byte[] payload;
+
+    // true if we have more registrations to process, false if we are done
+    public boolean hasMore;
+
+    private
+    Registration() {
+        // for serialization
+    }
+
+    public
+    Registration(final int sessionID) {
+        this.sessionID = sessionID;
+    }
 }

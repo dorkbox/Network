@@ -20,17 +20,19 @@ import java.util.List;
 
 import org.slf4j.LoggerFactory;
 
-import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.serialization.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.AddressedEnvelope;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToMessageDecoder;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 
 @Sharable
 public
-class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
+class KryoDecoderUdp extends MessageToMessageDecoder<Object> {
 
     private final CryptoSerializationManager serializationManager;
 
@@ -40,30 +42,58 @@ class KryoDecoderUdp extends MessageToMessageDecoder<DatagramPacket> {
     }
 
     @Override
+    public
+    boolean acceptInboundMessage(final Object msg) throws Exception {
+        return msg instanceof ByteBuf || msg instanceof AddressedEnvelope;
+    }
+
+    /**
+     * Invoked when a {@link Channel} has been idle for a while.
+     */
+    @Override
+    public
+    void userEventTriggered(ChannelHandlerContext context, Object event) throws Exception {
+        //      if (e.getState() == IdleState.READER_IDLE) {
+        //      e.getChannel().close();
+        //  } else if (e.getState() == IdleState.WRITER_IDLE) {
+        //      e.getChannel().write(new Object());
+        //  } else
+        if (event instanceof IdleStateEvent) {
+            if (((IdleStateEvent) event).state() == IdleState.ALL_IDLE) {
+                // will auto-flush if necessary
+                // TODO: if we have been idle TOO LONG, then we close this channel!
+                // if we are idle for a much smaller amount of time, then we pass the idle message up to the connection
+
+                // this.sessionManager.onIdle(this);
+            }
+        }
+
+        super.userEventTriggered(context, event);
+    }
+
+    @Override
     protected
-    void decode(ChannelHandlerContext ctx, DatagramPacket msg, List<Object> out) throws Exception {
-        if (msg != null) {
-            ByteBuf data = msg.content();
+    void decode(ChannelHandlerContext context, Object message, List<Object> out) throws Exception {
+        ByteBuf data;
+        if (message instanceof AddressedEnvelope) {
+            // this is on the client
+            data = (ByteBuf) ((AddressedEnvelope) message).content();
+        } else {
+            // this is on the server
+            data = (ByteBuf) message;
+        }
 
-            if (data != null) {
-                // there is a REMOTE possibility that UDP traffic BEAT the TCP registration traffic, which means that THIS packet
-                // COULD be encrypted!
 
-                if (KryoExtra.isEncrypted(data)) {
-                    String message = "Encrypted UDP packet received before registration complete.";
-                    LoggerFactory.getLogger(this.getClass()).error(message);
-                    throw new IOException(message);
-                } else {
-                    try {
-                        // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-                        Object read = serializationManager.read(data, data.writerIndex());
-                        out.add(read);
-                    } catch (IOException e) {
-                        String message = "Unable to deserialize object";
-                        LoggerFactory.getLogger(this.getClass()).error(message, e);
-                        throw new IOException(message, e);
-                    }
-                }
+        if (data != null) {
+            try {
+                // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
+                Object read = serializationManager.read(data, data.writerIndex());
+                out.add(read);
+            } catch (IOException e) {
+                String msg = "Unable to deserialize object";
+                LoggerFactory.getLogger(this.getClass())
+                             .error(msg, e);
+                throw new IOException(msg, e);
             }
         }
     }
