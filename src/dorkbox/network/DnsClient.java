@@ -22,7 +22,11 @@ import static io.netty.util.internal.ObjectUtil.intValue;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -85,6 +89,8 @@ class DnsClient extends Shutdownable {
  * an UnknownHostException. Thus, a non existent hosts file is handled as if the file is empty.
  *
  * UP UNTIL java 1.8, one can use org/xbill/DNS/spi, ie: sun.net.dns.ResolverConfiguration
+ *
+ *  TODO: add this functionality? https://en.wikipedia.org/wiki/Link-Local_Multicast_Name_Resolution
  */
 
 
