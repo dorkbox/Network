@@ -44,7 +44,7 @@ class KryoDecoderUdp extends MessageToMessageDecoder<Object> {
     @Override
     public
     boolean acceptInboundMessage(final Object msg) throws Exception {
-        return msg instanceof ByteBuf || msg instanceof AddressedEnvelope;
+        return msg instanceof AddressedEnvelope;
     }
 
     /**
@@ -74,15 +74,7 @@ class KryoDecoderUdp extends MessageToMessageDecoder<Object> {
     @Override
     protected
     void decode(ChannelHandlerContext context, Object message, List<Object> out) throws Exception {
-        ByteBuf data;
-        if (message instanceof AddressedEnvelope) {
-            // this is on the client
-            data = (ByteBuf) ((AddressedEnvelope) message).content();
-        } else {
-            // this is on the server
-            data = (ByteBuf) message;
-        }
-
+        ByteBuf data = (ByteBuf) ((AddressedEnvelope) message).content();
 
         if (data != null) {
             try {

@@ -29,13 +29,28 @@ import dorkbox.util.OS;
 import dorkbox.util.Property;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.bootstrap.SessionBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.*;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.FixedRecvByteBufAllocator;
+import io.netty.channel.WriteBufferWaterMark;
+import io.netty.channel.epoll.EpollDatagramChannel;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
+import io.netty.channel.kqueue.KQueueDatagramChannel;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
+import io.netty.channel.kqueue.KQueueServerSocketChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioServerDatagramChannel;
+import io.netty.channel.oio.OioEventLoopGroup;
+import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.oio.OioDatagramChannel;
+import io.netty.channel.socket.oio.OioServerSocketChannel;
 
 /**
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
@@ -64,7 +79,7 @@ class Server<C extends Connection> extends EndPointServer {
 
     private final ServerBootstrap localBootstrap;
     private final ServerBootstrap tcpBootstrap;
-    private final ServerBootstrap udpBootstrap;
+    private final SessionBootstrap udpBootstrap;
 
     private final int tcpPort;
     private final int udpPort;
@@ -125,7 +140,7 @@ class Server<C extends Connection> extends EndPointServer {
         }
 
         if (udpPort > 0) {
-            udpBootstrap = new ServerBootstrap();
+            udpBootstrap = new SessionBootstrap();
         }
         else {
             udpBootstrap = null;
@@ -138,25 +153,25 @@ class Server<C extends Connection> extends EndPointServer {
         final EventLoopGroup boss;
         final EventLoopGroup worker;
 
-        // if (OS.isAndroid()) {
-        //     // android ONLY supports OIO (not NIO)
-        //     boss = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-        //     worker = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        // }
-        // else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-        //     // JNI network stack is MUCH faster (but only on linux)
-        //     boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-        //     worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        // }
-        // else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
-        //     // KQueue network stack is MUCH faster (but only on macosx)
-        //     boss = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-        //     worker = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        // }
-        // else {
+        if (OS.isAndroid()) {
+            // android ONLY supports OIO (not NIO)
+            boss = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+        }
+        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
+            // JNI network stack is MUCH faster (but only on linux)
+            boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+        }
+        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
+            // KQueue network stack is MUCH faster (but only on macosx)
+            boss = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            worker = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+        }
+        else {
             boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
             worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        // }
+        }
 
         manageForShutdown(boss);
         manageForShutdown(worker);
@@ -185,21 +200,21 @@ class Server<C extends Connection> extends EndPointServer {
         }
 
         if (tcpBootstrap != null) {
-            // if (OS.isAndroid()) {
-            //     // android ONLY supports OIO (not NIO)
-            //     tcpBootstrap.channel(OioServerSocketChannel.class);
-            // }
-            // else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-            //     // JNI network stack is MUCH faster (but only on linux)
-            //     tcpBootstrap.channel(EpollServerSocketChannel.class);
-            // }
-            // else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
-            //     // KQueue network stack is MUCH faster (but only on macosx)
-            //     tcpBootstrap.channel(KQueueServerSocketChannel.class);
-            // }
-            // else {
+            if (OS.isAndroid()) {
+                // android ONLY supports OIO (not NIO)
+                tcpBootstrap.channel(OioServerSocketChannel.class);
+            }
+            else if (OS.isLinux() && NativeLibrary.isAvailable()) {
+                // JNI network stack is MUCH faster (but only on linux)
+                tcpBootstrap.channel(EpollServerSocketChannel.class);
+            }
+            else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
+                // KQueue network stack is MUCH faster (but only on macosx)
+                tcpBootstrap.channel(KQueueServerSocketChannel.class);
+            }
+            else {
                 tcpBootstrap.channel(NioServerSocketChannel.class);
-            // }
+            }
 
             // TODO: If we use netty for an HTTP server,
             // Beside the usual ChannelOptions the Native Transport allows to enable TCP_CORK which may come in handy if you implement a HTTP Server.
@@ -230,23 +245,22 @@ class Server<C extends Connection> extends EndPointServer {
 
 
         if (udpBootstrap != null) {
-            // if (OS.isAndroid()) {
-            //     // android ONLY supports OIO (not NIO)
-            //     udpBootstrap.channel(OioDatagramChannel.class);
-            // }
-            // else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-            //     // JNI network stack is MUCH faster (but only on linux)
-            //     udpBootstrap.channel(EpollDatagramChannel.class);
-            // }
-            // else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
-            //     // KQueue network stack is MUCH faster (but only on macosx)
-            //     udpBootstrap.channel(KQueueDatagramChannel.class);
-            // }
-            // else {
+            if (OS.isAndroid()) {
+                // android ONLY supports OIO (not NIO)
+                udpBootstrap.channel(OioDatagramChannel.class);
+            }
+            else if (OS.isLinux() && NativeLibrary.isAvailable()) {
+                // JNI network stack is MUCH faster (but only on linux)
+                udpBootstrap.channel(EpollDatagramChannel.class);
+            }
+            else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
+                // KQueue network stack is MUCH faster (but only on macosx)
+                udpBootstrap.channel(KQueueDatagramChannel.class);
+            }
+            else {
                 // windows and linux/mac that are incompatible with the native implementations
-                // udpBootstrap.channel(NioDatagramChannel.class);
-            // }
-            udpBootstrap.channel(NioServerDatagramChannel.class);
+                udpBootstrap.channel(NioDatagramChannel.class);
+            }
 
 
             // Netty4 has a default of 2048 bytes as upper limit for datagram packets, we want this to be whatever we specify
@@ -260,11 +274,7 @@ class Server<C extends Connection> extends EndPointServer {
                         // TODO: move broadcast to it's own handler, and have UDP server be able to be bound to a specific IP
                         // OF NOTE: At the end in my case I decided to bind to .255 broadcast address on Linux systems. (to receive broadcast packets)
                         .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets! see: http://developerweb.net/viewtopic.php?id=5722
-
-                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName,
-                                                                        registrationWrapper));
-
-
+                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, registrationWrapper));
 
             // // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
             // if (hostName.equals("0.0.0.0")) {

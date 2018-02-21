@@ -13,13 +13,19 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
-package io.netty.channel.socket.nio;
+package io.netty.bootstrap;
 
 import java.util.Map;
 
 import dorkbox.network.connection.EndPoint;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelConfig;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.DefaultMessageSizeEstimator;
+import io.netty.channel.MessageSizeEstimator;
+import io.netty.channel.RecvByteBufAllocator;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.socket.DatagramChannelConfig;
 
 /**
@@ -31,14 +37,14 @@ public class DatagramSessionChannelConfig implements ChannelConfig {
 
     private volatile MessageSizeEstimator msgSizeEstimator = DEFAULT_MSG_SIZE_ESTIMATOR;
 
-    private final NioServerDatagramChannel serverDatagramSessionChannel;
+    private final Channel channel;
 
     /**
      * Creates a new instance.
      */
     public
-    DatagramSessionChannelConfig(DatagramSessionChannel channel, final NioServerDatagramChannel serverDatagramSessionChannel) {
-        this.serverDatagramSessionChannel = serverDatagramSessionChannel;
+    DatagramSessionChannelConfig(Channel channel) {
+        this.channel = channel;
     }
 
     @Override
@@ -56,7 +62,7 @@ public class DatagramSessionChannelConfig implements ChannelConfig {
     @Override
     public
     <T> T getOption(final ChannelOption<T> option) {
-        return serverDatagramSessionChannel.config().getOption(option);
+        return channel.config().getOption(option);
     }
 
     @Override
@@ -104,8 +110,7 @@ public class DatagramSessionChannelConfig implements ChannelConfig {
     @Override
     public
     ByteBufAllocator getAllocator() {
-        return serverDatagramSessionChannel.config()
-                                           .getAllocator();
+        return channel.config().getAllocator();
     }
 
     @Override
@@ -117,8 +122,7 @@ public class DatagramSessionChannelConfig implements ChannelConfig {
     @Override
     public
     <T extends RecvByteBufAllocator> T getRecvByteBufAllocator() {
-        return serverDatagramSessionChannel.config()
-                                           .getRecvByteBufAllocator();
+        return channel.config().getRecvByteBufAllocator();
     }
 
     @Override

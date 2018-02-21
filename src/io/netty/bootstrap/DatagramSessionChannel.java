@@ -13,15 +13,18 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
-package io.netty.channel.socket.nio;
+package io.netty.bootstrap;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.*;
-import io.netty.channel.nio.AbstractNioChannel.NioUnsafe;
-import io.netty.channel.nio.NioEventLoop;
+import io.netty.channel.AbstractChannel;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelConfig;
+import io.netty.channel.ChannelMetadata;
+import io.netty.channel.ChannelOutboundBuffer;
+import io.netty.channel.ChannelPromise;
+import io.netty.channel.EventLoop;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.internal.RecyclableArrayList;
@@ -41,22 +44,27 @@ class DatagramSessionChannel extends AbstractChannel implements Channel {
 
 
     private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
-    protected final DatagramSessionChannelConfig config;
+    private final DatagramSessionChannelConfig config;
 
 
-    protected final NioServerDatagramChannel serverChannel;
-    protected final InetSocketAddress remote;
+    private SessionManager sessionManager;
+    private InetSocketAddress localAddress;
+    private InetSocketAddress remoteAddress;
 
     private volatile boolean isOpen = true;
-    private ByteBuf buffer;
 
-    protected
-    DatagramSessionChannel(NioServerDatagramChannel serverChannel, InetSocketAddress remote) {
-        super(serverChannel);
-        this.serverChannel = serverChannel;
-        this.remote = remote;
+    DatagramSessionChannel(final Channel parentChannel,
+                           final SessionManager sessionManager,
+                           final DatagramSessionChannelConfig sessionConfig,
+                           final InetSocketAddress localAddress,
+                           final InetSocketAddress remoteAddress) {
+        super(parentChannel);
 
-        config = new DatagramSessionChannelConfig(this, serverChannel);
+        this.sessionManager = sessionManager;
+        this.config = sessionConfig;
+
+        this.localAddress = localAddress;
+        this.remoteAddress = remoteAddress;
     }
 
     @Override
@@ -68,12 +76,6 @@ class DatagramSessionChannel extends AbstractChannel implements Channel {
     @Override
     protected
     void doBeginRead() throws Exception {
-        // a single packet is 100% of our data, so we cannot have multiple reads (there is no "session" for UDP)
-        ChannelPipeline pipeline = pipeline();
-
-        pipeline.fireChannelRead(buffer);
-        pipeline.fireChannelReadComplete();
-        buffer = null;
     }
 
     @Override
@@ -86,7 +88,7 @@ class DatagramSessionChannel extends AbstractChannel implements Channel {
     protected
     void doClose() throws Exception {
         isOpen = false;
-        serverChannel.doCloseChannel(this);
+        sessionManager.doCloseChannel(this);
     }
 
     @Override
@@ -119,7 +121,7 @@ class DatagramSessionChannel extends AbstractChannel implements Channel {
         }
 
         //schedule a task that will write those entries
-        NioEventLoop eventLoop = serverChannel.eventLoop();
+        EventLoop eventLoop = parent().eventLoop();
         if (eventLoop.inEventLoop()) {
             write0(list);
         }
@@ -143,7 +145,8 @@ class DatagramSessionChannel extends AbstractChannel implements Channel {
     @Override
     protected
     boolean isCompatible(EventLoop eventloop) {
-        return eventloop instanceof NioEventLoop;
+        // compatible with all Datagram event loops where we are explicitly used
+        return true;
     }
 
     @Override
@@ -161,7 +164,7 @@ class DatagramSessionChannel extends AbstractChannel implements Channel {
     @Override
     protected
     SocketAddress localAddress0() {
-        return serverChannel.localAddress0();
+        return localAddress;
     }
 
     @Override
@@ -180,24 +183,19 @@ class DatagramSessionChannel extends AbstractChannel implements Channel {
     @Override
     public
     InetSocketAddress remoteAddress() {
-        return remote;
+        return remoteAddress;
     }
 
     @Override
     protected
     InetSocketAddress remoteAddress0() {
-        return remote;
-    }
-
-    public
-    void setBuffer(final ByteBuf buffer) {
-        this.buffer = buffer;
+        return remoteAddress;
     }
 
     private
     void write0(final RecyclableArrayList list) {
         try {
-            NioUnsafe unsafe = serverChannel.unsafe();
+            Unsafe unsafe = super.parent().unsafe();
 
             for (Object buf : list) {
                 unsafe.write(buf, voidPromise());
