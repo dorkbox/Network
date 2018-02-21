@@ -19,36 +19,42 @@ import java.net.InetSocketAddress;
 
 import dorkbox.network.Broadcast;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.socket.DatagramPacket;
 
 /**
- *
+ * Manages the response to broadcast events
  */
 public
 class BroadcastServer {
-    private final org.slf4j.Logger logger;
-    private final ByteBuf discoverResponseBuffer;
+    private final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(BroadcastServer.class.getSimpleName());
 
     public
     BroadcastServer() {
-        this.logger = org.slf4j.LoggerFactory.getLogger(BroadcastServer.class.getSimpleName());
-
-        // absolutely MUST send packet > 0 across, otherwise netty will think it failed to write to the socket, and keep trying.
-        // (this bug was fixed by netty, however we are keeping this code)
-        this.discoverResponseBuffer = Unpooled.buffer(1);
-        this.discoverResponseBuffer.writeByte(Broadcast.broadcastResponseID);
     }
 
-    public ByteBuf getBroadcastResponse(ByteBuf byteBuf, InetSocketAddress remoteAddress) {
+    /**
+     * @return true if the broadcast was responded to, false if it was not a broadcast (and there was no response)
+     */
+    public boolean isBroadcast(final Channel channel, ByteBuf byteBuf, final InetSocketAddress localAddress, InetSocketAddress remoteAddress) {
         if (byteBuf.readableBytes() == 1) {
             // this is a BROADCAST discovery event. Don't read the byte unless it is...
             if (byteBuf.getByte(0) == Broadcast.broadcastID) {
                 byteBuf.readByte(); // read the byte to consume it (now that we verified it is a broadcast byte)
+
+                // absolutely MUST send packet > 0 across, otherwise netty will think it failed to write to the socket, and keep trying.
+                // (this bug was fixed by netty, however we are keeping this code)
+                ByteBuf directBuffer = channel.alloc()
+                                              .directBuffer(1);
+                directBuffer.writeByte(Broadcast.broadcastResponseID);
+
+                channel.writeAndFlush(new DatagramPacket(directBuffer, remoteAddress, localAddress));
+
                 logger.info("Responded to host discovery from: {}", remoteAddress);
-                return discoverResponseBuffer;
+                return true;
             }
         }
 
-        return null;
+        return false;
     }
 }
