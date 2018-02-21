@@ -39,21 +39,35 @@ import dorkbox.network.connection.ping.PingTuple;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
-import dorkbox.network.rmi.*;
+import dorkbox.network.rmi.InvokeMethod;
+import dorkbox.network.rmi.InvokeMethodResult;
+import dorkbox.network.rmi.RemoteObject;
+import dorkbox.network.rmi.RemoteObjectCallback;
+import dorkbox.network.rmi.Rmi;
+import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.rmi.RmiMessage;
+import dorkbox.network.rmi.RmiObjectHandler;
+import dorkbox.network.rmi.RmiProxyHandler;
+import dorkbox.network.rmi.RmiRegistration;
+import dorkbox.network.rmi.TimeoutException;
 import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.collections.LockFreeHashMap;
 import dorkbox.util.collections.LockFreeIntMap;
 import dorkbox.util.generics.ClassHelper;
+import io.netty.bootstrap.DatagramSessionChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollSocketChannel;
+import io.netty.channel.kqueue.KQueueDatagramChannel;
+import io.netty.channel.kqueue.KQueueSocketChannel;
 import io.netty.channel.local.LocalChannel;
-import io.netty.channel.socket.nio.DatagramSessionChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.channel.socket.oio.OioDatagramChannel;
+import io.netty.channel.socket.oio.OioSocketChannel;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
@@ -69,12 +83,19 @@ public
 class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConnection, Connection, Listeners, ConnectionBridge {
     public static
     boolean isTcp(Class<? extends Channel> channelClass) {
-        return channelClass == NioSocketChannel.class || channelClass == EpollSocketChannel.class;
+        return channelClass == OioSocketChannel.class ||
+               channelClass == NioSocketChannel.class ||
+               channelClass == KQueueSocketChannel.class ||
+               channelClass == EpollSocketChannel.class;
     }
 
     public static
     boolean isUdp(Class<? extends Channel> channelClass) {
-        return channelClass == NioDatagramChannel.class || channelClass == EpollDatagramChannel.class || channelClass == DatagramSessionChannel.class;
+        return channelClass == OioDatagramChannel.class ||
+               channelClass == NioDatagramChannel.class ||
+               channelClass == KQueueDatagramChannel.class ||
+               channelClass == EpollDatagramChannel.class ||
+               channelClass == DatagramSessionChannel.class;
     }
 
     public static
