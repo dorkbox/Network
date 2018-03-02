@@ -170,11 +170,11 @@ class DnsServer extends Shutdownable {
                     .childHandler(new DnsServerHandler(logger));
 
         // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
-        if (hostName != null) {
-            tcpBootstrap.localAddress(hostName, tcpPort);
+        if (hostName.equals("0.0.0.0")) {
+            tcpBootstrap.localAddress(tcpPort);
         }
         else {
-            tcpBootstrap.localAddress(tcpPort);
+            tcpBootstrap.localAddress(hostName, tcpPort);
         }
 
 
@@ -187,11 +187,11 @@ class DnsServer extends Shutdownable {
             // android ONLY supports OIO (not NIO)
             udpBootstrap.channel(OioDatagramChannel.class);
         }
-        else if (OS.isLinux()) {
+        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
             // JNI network stack is MUCH faster (but only on linux)
             udpBootstrap.channel(EpollDatagramChannel.class);
         }
-        else if (OS.isMacOsX()) {
+        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
             // JNI network stack is MUCH faster (but only on macosx)
             udpBootstrap.channel(KQueueDatagramChannel.class);
         }
