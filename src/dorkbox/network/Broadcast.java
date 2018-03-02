@@ -15,7 +15,12 @@
  */
 package dorkbox.network;
 
-import java.net.*;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -46,7 +51,7 @@ class Broadcast {
     public static final byte broadcastID = (byte) 42;
     public static final byte broadcastResponseID = (byte) 57;
 
-    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger("Broadcast Host Discovery");
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(Client.class.getSimpleName());
 
     /**
      * Gets the version number.
@@ -150,7 +155,7 @@ class Broadcast {
 
                 try {
                     if (logger2.isInfoEnabled()) {
-                        logger2.info("Searching for host on {} : {}", address, udpPort);
+                        logger2.info("Searching for host on {}:{}", address, udpPort);
                     }
 
                     EventLoopGroup group;

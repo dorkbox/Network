@@ -18,6 +18,7 @@ package dorkbox.network.pipeline.discovery;
 import java.net.InetSocketAddress;
 
 import dorkbox.network.Broadcast;
+import dorkbox.network.Server;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.DatagramPacket;
@@ -27,7 +28,7 @@ import io.netty.channel.socket.DatagramPacket;
  */
 public
 class BroadcastServer {
-    private final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(BroadcastServer.class.getSimpleName());
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(Server.class.getSimpleName());
 
     public
     BroadcastServer() {
