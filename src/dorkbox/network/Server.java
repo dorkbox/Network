@@ -363,7 +363,7 @@ class Server<C extends Connection> extends EndPointServer {
                 throw new IllegalArgumentException("Could not bind to address " + hostName + " TCP port " + tcpPort + " on the server.", future.cause());
             }
 
-            logger.info("Listening on address {} at TCP port: {}", hostName, tcpPort);
+            logger.info("Listening on TCP at {}:{}", hostName, tcpPort);
             manageForShutdown(future);
         }
 
@@ -382,7 +382,7 @@ class Server<C extends Connection> extends EndPointServer {
                                                    future.cause());
             }
 
-            logger.info("Listening on address {} at UDP port: {}", hostName, udpPort);
+            logger.info("Listening on UDP at {}:{}", hostName, udpPort);
             manageForShutdown(future);
         }
 
