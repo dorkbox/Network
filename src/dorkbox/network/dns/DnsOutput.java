@@ -147,6 +147,7 @@ class DnsOutput {
         byteBuf.ensureWritable(2);
         byteBuf.writeShort(val);
 
+        // put the read/write back to where it was (since this was an operation to write a value at a specific position)
         byteBuf.writerIndex(saved);
         byteBuf.readerIndex(readSaved);
     }
