@@ -3,6 +3,8 @@ package dorkbox.network.dns.serverHandlers;
 
 import org.slf4j.Logger;
 
+import dorkbox.network.dns.Name;
+import dorkbox.network.dns.records.ARecord;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -25,6 +27,17 @@ class DnsServerHandler extends ChannelInboundHandlerAdapter {
         decoder = new DnsMessageDecoder(logger);
         decisionHandler = new DnsDecisionHandler(logger);
         encoder = new DnsMessageEncoder(logger);
+    }
+
+    /**
+     * Adds a domain name query result, so clients that request the domain name will get the ipAddress
+     *
+     * @param domainName the domain name to have results for
+     * @param @param aRecords the A records (can be multiple) to return for the requested domain name
+     */
+    public
+    void addARecord(final Name domainName, final ARecord[] aRecords) {
+        decisionHandler.addARecord(domainName, aRecords);
     }
 
     @Override

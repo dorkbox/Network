@@ -6,7 +6,11 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Locale;
 
-import dorkbox.network.dns.constants.*;
+import dorkbox.network.dns.constants.DnsClass;
+import dorkbox.network.dns.constants.DnsOpCode;
+import dorkbox.network.dns.constants.DnsRecordType;
+import dorkbox.network.dns.constants.DnsSection;
+import dorkbox.network.dns.constants.Flags;
 import dorkbox.network.dns.records.DnsRecord;
 import io.netty.channel.AddressedEnvelope;
 import io.netty.util.internal.StringUtil;
@@ -26,14 +30,13 @@ class DnsQuestion extends DnsEnvelope {
         return newQuestion(inetHost, type, isRecursionDesired, false);
     }
 
-    private static
-    DnsQuestion newQuestion(final String inetHost, final int type, final boolean isRecursionDesired, boolean isResolveQuestion) {
-
+    public static
+    Name createName(String hostName, final int type) {
         // Convert to ASCII which will also check that the length is not too big. Throws null pointer if null.
         // See:
         //   - https://github.com/netty/netty/issues/4937
         //   - https://github.com/netty/netty/issues/4935
-        String hostName = hostNameAsciiFix(checkNotNull(inetHost, "hostname"));
+        hostName = hostNameAsciiFix(checkNotNull(hostName, "hostname"));
 
         if (hostName == null) {
             // hostNameAsciiFix can throw a TextParseException if it fails to parse
@@ -46,13 +49,19 @@ class DnsQuestion extends DnsEnvelope {
         // NOTE: have to make sure that the hostname is a FQDN name
         hostName = DnsRecordType.ensureFQDN(type, hostName);
 
-        Name name;
         try {
-            name = Name.fromString(hostName);
+            return Name.fromString(hostName);
         } catch (Exception e) {
             // Name.fromString may throw a TextParseException if it fails to parse
             return null;
         }
+    }
+
+
+    private static
+    DnsQuestion newQuestion(final String inetHost, final int type, final boolean isRecursionDesired, boolean isResolveQuestion) {
+
+        Name name = createName(inetHost, type);
 
         try {
             DnsRecord questionRecord = DnsRecord.newRecord(name, type, DnsClass.IN);

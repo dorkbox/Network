@@ -46,7 +46,7 @@ class BroadcastServer {
                 // absolutely MUST send packet > 0 across, otherwise netty will think it failed to write to the socket, and keep trying.
                 // (this bug was fixed by netty, however we are keeping this code)
                 ByteBuf directBuffer = channel.alloc()
-                                              .directBuffer(1);
+                                              .ioBuffer(1);
                 directBuffer.writeByte(Broadcast.broadcastResponseID);
 
                 channel.writeAndFlush(new DatagramPacket(directBuffer, remoteAddress, localAddress));

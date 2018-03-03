@@ -49,7 +49,7 @@ class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
         if (message != null) {
             try {
                 ByteBuf outBuffer = context.alloc()
-                                           .buffer(maxSize);
+                                           .ioBuffer(maxSize);
 
                 // no size info, since this is UDP, it is not segmented
                 writeObject(this.serializationManager, context, message, outBuffer);

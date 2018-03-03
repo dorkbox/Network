@@ -15,9 +15,7 @@
  */
 package dorkbox.network.dns.serverHandlers;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
 
 import org.slf4j.Logger;
 
@@ -34,32 +32,37 @@ import dorkbox.network.dns.records.DnsRecord;
 import dorkbox.network.dns.records.Header;
 import dorkbox.network.dns.records.Update;
 import dorkbox.util.collections.IntMap;
+import dorkbox.util.collections.LockFreeHashMap;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 
 public class DnsDecisionHandler extends ChannelInboundHandlerAdapter {
 
-
     private final Logger logger;
+    private final LockFreeHashMap<Name, ARecord[]> aRecordMap;
+
+
+
     private IntMap responses = new IntMap();
     // private final DnsClient dnsClient;
-    private final InetAddress localHost;
 
     public
     DnsDecisionHandler(final Logger logger) {
         this.logger = logger;
 
         // dnsClient = new DnsClient();
+        aRecordMap = new LockFreeHashMap<Name, ARecord[]>();
+    }
 
-        InetAddress local;
-        try {
-            local = InetAddress.getLocalHost();
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-            local = null;
-        }
-
-        localHost = local;
+    /**
+     * Adds a domain name query result, so clients that request the domain name will get the ipAddress
+     *
+     * @param domainName the domain name to have results for
+     * @param aRecords the A records (can be multiple) to return for the requested domain name
+     */
+    public
+    void addARecord(final Name domainName, final ARecord[] aRecords) {
+        aRecordMap.put(domainName, aRecords);
     }
 
     @Override
@@ -120,19 +123,35 @@ public class DnsDecisionHandler extends ChannelInboundHandlerAdapter {
             long ttl = dnsRecord.getTTL();
             int type = dnsRecord.getType();
 
-            // // what type of record? A, AAAA, MX, PTR, etc?
+
+            // what type of record? A, AAAA, MX, PTR, etc?
             if (DnsRecordType.A == type) {
-                ARecord answerRecord = new ARecord(name, dnsRecord.getDClass(), 10, localHost);
-                dnsResponse.addRecord(dnsRecord, DnsSection.QUESTION);
-                dnsResponse.addRecord(answerRecord, DnsSection.ANSWER);
+                ARecord[] records = aRecordMap.get(name);
 
-                dnsResponse.getHeader().setRcode(DnsResponseCode.NOERROR);
+                if (records != null) {
+                    dnsResponse.addRecord(dnsRecord, DnsSection.QUESTION);
+                    dnsResponse.getHeader()
+                               .setRcode(DnsResponseCode.NOERROR);
 
-                logger.debug("Writing A record response: {}", answerRecord.getAddress());
+
+                    for (int i = 0; i < records.length; i++) {
+                        ARecord record = records[i];
+
+                        dnsResponse.addRecord(record, DnsSection.ANSWER);
+                        logger.debug("Writing A record response: {}", record.getAddress());
+                    }
+
+                    context.channel()
+                           .write(dnsResponse);
+
+                    return;
+                } else {
+                    logger.debug("Sending DNS query to the forwarder...");
+                    // have to send this on to the forwarder
+                }
             }
 
-            context.channel()
-                   .write(dnsResponse);
+
 
 
 // 		ChannelBuffer buffer = (ChannelBuffer) e.getMessage();

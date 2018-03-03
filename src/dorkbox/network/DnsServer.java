@@ -19,6 +19,11 @@ import org.slf4j.Logger;
 
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Shutdownable;
+import dorkbox.network.dns.DnsQuestion;
+import dorkbox.network.dns.Name;
+import dorkbox.network.dns.constants.DnsClass;
+import dorkbox.network.dns.constants.DnsRecordType;
+import dorkbox.network.dns.records.ARecord;
 import dorkbox.network.dns.serverHandlers.DnsServerHandler;
 import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
@@ -42,6 +47,7 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
+import io.netty.util.NetUtil;
 
 /**
  * from: https://blog.cloudflare.com/how-the-consumer-product-safety-commission-is-inadvertently-behind-the-internets-largest-ddos-attacks/
@@ -76,6 +82,9 @@ class DnsServer extends Shutdownable {
     public static
     void main(String[] args) {
         DnsServer server = new DnsServer("localhost", 2053);
+
+        server.aRecord("google.com", DnsClass.IN, 10, "127.0.0.1");
+
         // server.bind(false);
         server.bind();
 
@@ -92,6 +101,7 @@ class DnsServer extends Shutdownable {
         // server.stop();
     }
 
+    private final DnsServerHandler dnsServerHandler;
 
     public
     DnsServer(String host, int port) {
@@ -107,6 +117,7 @@ class DnsServer extends Shutdownable {
             hostName = host;
         }
 
+        dnsServerHandler = new DnsServerHandler(logger);
         String threadName = DnsServer.class.getSimpleName();
 
 
@@ -167,7 +178,7 @@ class DnsServer extends Shutdownable {
                     .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
-                    .childHandler(new DnsServerHandler(logger));
+                    .childHandler(dnsServerHandler);
 
         // have to check options.host for "0.0.0.0". we don't bind to "0.0.0.0", we bind to "null" to get the "any" address!
         if (hostName.equals("0.0.0.0")) {
@@ -205,7 +216,7 @@ class DnsServer extends Shutdownable {
 
                     // not binding to specific address, since it's driven by TCP, and that can be bound to a specific address
                     .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets!
-                    .handler(new DnsServerHandler(logger));
+                    .handler(dnsServerHandler);
     }
 
     /**
@@ -299,5 +310,28 @@ class DnsServer extends Shutdownable {
         if (blockUntilTerminate) {
             waitForShutdown();
         }
+    }
+
+
+    /**
+     * Adds a domain name query result, so clients that request the domain name will get the ipAddress
+     *
+     * @param domainName the domain name to have results for
+     * @param ipAddresses the ip addresses (can be multiple) to return for the requested domain name
+     */
+    public
+    void aRecord(final String domainName, final int dClass, final int ttl, final String... ipAddresses) {
+        Name name = DnsQuestion.createName(domainName, DnsRecordType.A);
+
+        int length = ipAddresses.length;
+        ARecord[] records = new ARecord[length];
+
+        for (int i = 0; i < length; i++) {
+            byte[] address = NetUtil.createByteArrayFromIpAddressString(ipAddresses[i]);
+
+            records[i] = new ARecord(name, dClass, ttl, address);
+        }
+
+        dnsServerHandler.addARecord(name, records);
     }
 }

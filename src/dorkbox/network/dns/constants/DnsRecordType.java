@@ -565,6 +565,15 @@ class DnsRecordType {
     }
 
     private static final String ptrSuffix = ".in-addr.arpa";
+
+    /**
+     * Guarantees that the specified host name is a FQND. This depends on it's type, which must also be specified.
+     *
+     * @param type the resource record type
+     * @param hostName the hostname
+     *
+     * @return the Fully Qualified Domain Name for this hostname, depending on it's type
+     */
     public static
     String ensureFQDN(int type, String hostName) {
         // list of RecordTypes from: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/ResourceRecordTypes.html
