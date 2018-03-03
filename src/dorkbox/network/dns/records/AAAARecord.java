@@ -78,7 +78,7 @@ class AAAARecord extends DnsRecord {
     /**
      * Creates an AAAA Record from the given data
      *
-     * @param address The address suffix
+     * @param address The address that the name refers
      */
     public
     AAAARecord(Name name, int dclass, long ttl, InetAddress address) {
@@ -87,6 +87,20 @@ class AAAARecord extends DnsRecord {
             throw new IllegalArgumentException("invalid IPv6 address");
         }
         this.address = address.getAddress();
+    }
+
+    /**
+     * Creates an AAAA Record from the given data
+     *
+     * @param address The address that the name refers to as a byte array. This value is NOT COPIED.
+     */
+    public
+    AAAARecord(Name name, int dclass, long ttl, byte[] address) {
+        super(name, DnsRecordType.AAAA, dclass, ttl);
+        if (address.length != Address.addressLength(Address.IPv6)) {
+            throw new IllegalArgumentException("invalid IPv6 address");
+        }
+        this.address = address;
     }
 
     /**

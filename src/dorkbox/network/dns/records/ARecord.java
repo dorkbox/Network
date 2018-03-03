@@ -87,6 +87,20 @@ class ARecord extends DnsRecord {
     }
 
     /**
+     * Creates an A Record from the given data
+     *
+     * @param address The address that the name refers to as a byte array. This value is NOT COPIED.
+     */
+    public
+    ARecord(Name name, int dclass, long ttl, byte[] address) {
+        super(name, DnsRecordType.A, dclass, ttl);
+        if (address.length != Address.addressLength(Address.IPv4)) {
+            throw new IllegalArgumentException("invalid IPv4 address");
+        }
+        addr = fromArray(address);
+    }
+
+    /**
      * Returns the Internet address
      */
     public
