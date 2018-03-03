@@ -33,11 +33,23 @@ import dorkbox.network.dns.DnsResponse;
 import dorkbox.network.dns.clientHandlers.DatagramDnsQueryEncoder;
 import dorkbox.network.dns.clientHandlers.DatagramDnsResponseDecoder;
 import dorkbox.network.dns.constants.DnsRecordType;
-import dorkbox.network.dns.resolver.addressProvider.*;
+import dorkbox.network.dns.resolver.addressProvider.DefaultDnsServerAddressStreamProvider;
+import dorkbox.network.dns.resolver.addressProvider.DnsServerAddressStream;
+import dorkbox.network.dns.resolver.addressProvider.DnsServerAddressStreamProvider;
+import dorkbox.network.dns.resolver.addressProvider.DnsServerAddresses;
+import dorkbox.network.dns.resolver.addressProvider.UnixResolverDnsServerAddressStreamProvider;
 import dorkbox.network.dns.resolver.cache.DnsCache;
 import dorkbox.network.dns.resolver.cache.DnsCacheEntry;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFactory;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPromise;
+import io.netty.channel.EventLoop;
+import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.InternetProtocolFamily;
 import io.netty.resolver.HostsFileEntriesResolver;
@@ -468,7 +480,7 @@ class DnsNameResolver extends InetNameResolver {
         }
     }
 
-    private
+    public
     InetAddress resolveHostsFileEntry(String hostname) {
         if (hostsFileEntriesResolver == null) {
             return null;

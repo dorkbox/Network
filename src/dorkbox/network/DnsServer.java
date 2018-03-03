@@ -15,13 +15,14 @@
  */
 package dorkbox.network;
 
+import java.util.ArrayList;
+
 import org.slf4j.Logger;
 
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Shutdownable;
 import dorkbox.network.dns.DnsQuestion;
 import dorkbox.network.dns.Name;
-import dorkbox.network.dns.constants.DnsClass;
 import dorkbox.network.dns.constants.DnsRecordType;
 import dorkbox.network.dns.records.ARecord;
 import dorkbox.network.dns.serverHandlers.DnsServerHandler;
@@ -83,7 +84,7 @@ class DnsServer extends Shutdownable {
     void main(String[] args) {
         DnsServer server = new DnsServer("localhost", 2053);
 
-        server.aRecord("google.com", DnsClass.IN, 10, "127.0.0.1");
+        // server.aRecord("google.com", DnsClass.IN, 10, "127.0.0.1");
 
         // server.bind(false);
         server.bind();
@@ -219,6 +220,12 @@ class DnsServer extends Shutdownable {
                     .handler(dnsServerHandler);
     }
 
+    @Override
+    protected
+    void stopExtraActions() {
+        dnsServerHandler.stop();
+    }
+
     /**
      * Binds the server to the configured, underlying protocols.
      * <p/>
@@ -324,12 +331,11 @@ class DnsServer extends Shutdownable {
         Name name = DnsQuestion.createName(domainName, DnsRecordType.A);
 
         int length = ipAddresses.length;
-        ARecord[] records = new ARecord[length];
+        ArrayList<ARecord> records = new ArrayList<ARecord>(length);
 
         for (int i = 0; i < length; i++) {
             byte[] address = NetUtil.createByteArrayFromIpAddressString(ipAddresses[i]);
-
-            records[i] = new ARecord(name, dClass, ttl, address);
+            records.add(new ARecord(name, dClass, ttl, address));
         }
 
         dnsServerHandler.addARecord(name, records);

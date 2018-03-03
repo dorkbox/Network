@@ -1,6 +1,8 @@
 package dorkbox.network.dns.serverHandlers;
 
 
+import java.util.ArrayList;
+
 import org.slf4j.Logger;
 
 import dorkbox.network.dns.Name;
@@ -29,6 +31,13 @@ class DnsServerHandler extends ChannelInboundHandlerAdapter {
         encoder = new DnsMessageEncoder(logger);
     }
 
+
+    public
+    void stop() {
+        decisionHandler.stop();
+    }
+
+
     /**
      * Adds a domain name query result, so clients that request the domain name will get the ipAddress
      *
@@ -36,7 +45,7 @@ class DnsServerHandler extends ChannelInboundHandlerAdapter {
      * @param @param aRecords the A records (can be multiple) to return for the requested domain name
      */
     public
-    void addARecord(final Name domainName, final ARecord[] aRecords) {
+    void addARecord(final Name domainName, final ArrayList<ARecord> aRecords) {
         decisionHandler.addARecord(domainName, aRecords);
     }
 

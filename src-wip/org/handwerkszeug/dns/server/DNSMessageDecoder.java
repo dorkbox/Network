@@ -1,19 +1,4 @@
-/*
- * Copyright 2018 dorkbox, llc.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- */
-package dorkbox.network.dns.serverHandlers.wip;
+package org.handwerkszeug.dns.server;
 
 import java.net.InetSocketAddress;
 
@@ -22,14 +7,7 @@ import dorkbox.util.NamedThreadFactory;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.DatagramPacket;
@@ -39,11 +17,11 @@ import io.netty.util.internal.PlatformDependent;
 
 @ChannelHandler.Sharable
 public
-class aaaDNSMessageDecoderandForwarder extends ChannelInboundHandlerAdapter {
+class DNSMessageDecoder extends ChannelInboundHandlerAdapter {
 
     /**
      * This is what is called whenever a DNS packet is received. Currently only support UDP packets.
-     *
+     * <p>
      * Calls {@link ChannelHandlerContext#fireChannelRead(Object)} to forward
      * to the next {@link ChannelInboundHandler} in the {@link ChannelPipeline}.
      * <p>
@@ -52,7 +30,7 @@ class aaaDNSMessageDecoderandForwarder extends ChannelInboundHandlerAdapter {
     @Override
     public
     void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if (msg instanceof DatagramPacket) {
+        if (msg instanceof io.netty.channel.socket.DatagramPacket) {
             ByteBuf content = ((DatagramPacket) msg).content();
 
             if (content.readableBytes() == 0) {
@@ -70,8 +48,10 @@ class aaaDNSMessageDecoderandForwarder extends ChannelInboundHandlerAdapter {
 
             // setup the thread group to easily ID what the following threads belong to (and their spawned threads...)
             SecurityManager s = System.getSecurityManager();
-            ThreadGroup nettyGroup = new ThreadGroup(s != null ? s.getThreadGroup() : Thread.currentThread().getThreadGroup(),
-                                                     "DnsClient (Netty)");
+            ThreadGroup nettyGroup = new ThreadGroup(s != null
+                                                     ? s.getThreadGroup()
+                                                     : Thread.currentThread()
+                                                             .getThreadGroup(), "DnsClient (Netty)");
 
             EventLoopGroup group;
             if (PlatformDependent.isAndroid()) {
@@ -121,10 +101,6 @@ class aaaDNSMessageDecoderandForwarder extends ChannelInboundHandlerAdapter {
                 //     logger2.error("Could not connect to the DNS server on port {}.", dnsServer.getPort());
                 // }
             }
-
-
-
-
 
 
 

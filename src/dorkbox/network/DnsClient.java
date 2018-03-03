@@ -673,6 +673,14 @@ class DnsClient extends Shutdownable {
     }
 
     /**
+     * @return the DNS resolver used by the client. This is for more advanced functionality
+     */
+    public
+    DnsNameResolver getResolver() {
+        return resolver;
+    }
+
+    /**
      * Resolves a specific hostname record, of the specified type (PTR, MX, TXT, etc) with the default timeout of 5 seconds
      * <p/>
      * <p/>
