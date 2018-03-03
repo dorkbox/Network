@@ -240,13 +240,14 @@ class Header implements Cloneable {
     /**
      * Converts the header into a String
      */
+    @Override
     public
     String toString() {
         return toStringWithRcode(getRcode());
     }
 
     /**
-     * Retrieves the mesasge's rcode
+     * Retrieves the message's rcode
      *
      * @see DnsResponseCode
      */
@@ -339,5 +340,4 @@ class Header implements Cloneable {
         }
         return sb.toString();
     }
-
 }
