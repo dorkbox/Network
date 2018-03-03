@@ -1,25 +1,29 @@
 package dorkbox.network.dns.serverHandlers;
 
+import java.io.IOException;
+
+import org.slf4j.Logger;
+
 import dorkbox.network.dns.DnsOutput;
-import dorkbox.network.dns.records.DnsMessage;
+import dorkbox.network.dns.DnsServerResponse;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.MessageToByteEncoder;
 
 /**
- * An encoder which serializes a Java object into a {@link ByteBuf}.
- * <p>
- * Please note that the serialized form this encoder produces is not
- * compatible with the standard {@link ObjectInputStream}.  Please use
- * {@link ObjectDecoder} or {@link ObjectDecoderInputStream} to ensure the
- * interoperability with this encoder.
+ *
  */
-
-
 @ChannelHandler.Sharable
 public
-class DnsMessageEncoder extends MessageToByteEncoder<DnsMessage> {
+class DnsMessageEncoder extends MessageToByteEncoder<DnsServerResponse> {
+    private final Logger logger;
+
+    public
+    DnsMessageEncoder(final Logger logger) {
+        this.logger = logger;
+    }
 
 
     // public
@@ -54,23 +58,24 @@ class DnsMessageEncoder extends MessageToByteEncoder<DnsMessage> {
 
     @Override
     protected
-    void encode(final ChannelHandlerContext ctx, final DnsMessage msg, final ByteBuf out) throws Exception {
-        System.err.println("WRITING MESSAGE");
-        final DnsOutput outd = new DnsOutput(out);
-        msg.toWire(outd);
+    void encode(final ChannelHandlerContext context, final DnsServerResponse message, final ByteBuf out) throws Exception {
+        try {
+            DnsOutput dnsOutput = new DnsOutput(out);
+            out.retain();
+            message.toWire(dnsOutput);
+
+            DatagramPacket packet = new DatagramPacket(out, message.recipient(), message.sender());
+            context.channel()
+                   .writeAndFlush(packet);
+        } catch (Exception e) {
+            context.fireExceptionCaught(new IOException("Unable to write dns message: " + message, e));
+        }
     }
 
     @Override
     public
-    void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
-        // Channel channel = context.channel();
-
-        System.err.println("POW! ");
-        cause.printStackTrace();
-        // this.logger.error("Unexpected exception while trying to send/receive data on Client remote (network) channel.  ({})" +
-        //                   System.getProperty("line.separator"), channel.remoteAddress(), cause);
-        // if (channel.isOpen()) {
-        //     channel.close();
-        // }
+    void exceptionCaught(final ChannelHandlerContext context, final Throwable cause) throws Exception {
+        logger.error("DnsMessageEncoder#exceptionCaught", cause);
+        super.exceptionCaught(context, cause);
     }
 }

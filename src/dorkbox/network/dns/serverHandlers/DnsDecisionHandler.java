@@ -22,16 +22,20 @@ import java.net.UnknownHostException;
 import org.slf4j.Logger;
 
 import dorkbox.network.dns.DnsEnvelope;
+import dorkbox.network.dns.DnsServerResponse;
 import dorkbox.network.dns.Name;
 import dorkbox.network.dns.constants.DnsOpCode;
 import dorkbox.network.dns.constants.DnsRecordType;
 import dorkbox.network.dns.constants.DnsResponseCode;
 import dorkbox.network.dns.constants.DnsSection;
-import dorkbox.network.dns.records.*;
+import dorkbox.network.dns.records.ARecord;
+import dorkbox.network.dns.records.DnsMessage;
+import dorkbox.network.dns.records.DnsRecord;
+import dorkbox.network.dns.records.Header;
+import dorkbox.network.dns.records.Update;
 import dorkbox.util.collections.IntMap;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.util.ReferenceCountUtil;
 
 public class DnsDecisionHandler extends ChannelInboundHandlerAdapter {
 
@@ -62,10 +66,9 @@ public class DnsDecisionHandler extends ChannelInboundHandlerAdapter {
     public
     void channelRead(ChannelHandlerContext context, Object message) throws Exception {
         onChannelRead(context, (DnsEnvelope) message);
-        ReferenceCountUtil.release(message);
     }
 
-    public
+    private
     void onChannelRead(final ChannelHandlerContext context, final DnsEnvelope dnsMessage) {
         int opcode = dnsMessage.getHeader()
                                .getOpcode();
@@ -73,32 +76,26 @@ public class DnsDecisionHandler extends ChannelInboundHandlerAdapter {
         switch (opcode) {
             case DnsOpCode.QUERY:
                 onQuery(context, dnsMessage, dnsMessage.recipient());
-                dnsMessage.release();
                 return;
 
             case DnsOpCode.IQUERY:
                 onIQuery(context, dnsMessage, dnsMessage.recipient());
-                dnsMessage.release();
                 return;
 
             case DnsOpCode.NOTIFY:
                 onNotify(context, dnsMessage, dnsMessage.recipient());
-                dnsMessage.release();
                 return;
 
             case DnsOpCode.STATUS:
                 onStatus(context, dnsMessage, dnsMessage.recipient());
-                dnsMessage.release();
                 return;
 
             case DnsOpCode.UPDATE:
                 onUpdate(context, (Update) (DnsMessage) dnsMessage, dnsMessage.recipient());
-                dnsMessage.release();
                 return;
 
             default:
                 logger.error("Unknown DNS opcode {} from {}", opcode, context.channel().remoteAddress());
-                dnsMessage.release();
         }
     }
 
@@ -111,12 +108,11 @@ public class DnsDecisionHandler extends ChannelInboundHandlerAdapter {
 
         // we don't support more than 1 question at a time.
         if (count == 1) {
-                DnsEnvelope dnsEnvelope = new DnsEnvelope(dnsQuestion.getHeader()
-                                                                  .getID(),
-                                                          (InetSocketAddress) context.channel().localAddress(),
-                                                          recipient);
+            DnsServerResponse dnsResponse = new DnsServerResponse(dnsQuestion,
+                                                                (InetSocketAddress) context.channel().localAddress(),
+                                                                recipient);
 
-                // dnsEnvelope.getHeader().setRcode(DnsResponseCode.NXDOMAIN);
+                // dnsResponse.getHeader().setRcode(DnsResponseCode.NXDOMAIN);
 
             DnsRecord[] sectionArray = dnsQuestion.getSectionArray(DnsSection.QUESTION);
             DnsRecord dnsRecord = sectionArray[0];
@@ -127,22 +123,16 @@ public class DnsDecisionHandler extends ChannelInboundHandlerAdapter {
             // // what type of record? A, AAAA, MX, PTR, etc?
             if (DnsRecordType.A == type) {
                 ARecord answerRecord = new ARecord(name, dnsRecord.getDClass(), 10, localHost);
-                dnsEnvelope.addRecord(dnsRecord, DnsSection.QUESTION);
-                dnsEnvelope.addRecord(answerRecord, DnsSection.ANSWER);
+                dnsResponse.addRecord(dnsRecord, DnsSection.QUESTION);
+                dnsResponse.addRecord(answerRecord, DnsSection.ANSWER);
 
-                dnsEnvelope.getHeader().setRcode(DnsResponseCode.NOERROR);
+                dnsResponse.getHeader().setRcode(DnsResponseCode.NOERROR);
 
-                System.err.println("write");
+                logger.debug("Writing A record response: {}", answerRecord.getAddress());
             }
 
-            // dnsEnvelope.retain();
-            // NOTE: I suspect this must be a "client" that writes back. there are errors if not.
             context.channel()
-                   .writeAndFlush(dnsEnvelope);
-
-
-            // out.add(new DatagramPacket(buf, recipient, null));
-
+                   .write(dnsResponse);
 
 
 // 		ChannelBuffer buffer = (ChannelBuffer) e.getMessage();
@@ -292,7 +282,7 @@ public class DnsDecisionHandler extends ChannelInboundHandlerAdapter {
     @Override
     public
     void exceptionCaught(final ChannelHandlerContext context, final Throwable cause) throws Exception {
-        logger.error("ForwardingHandler#exceptionCaught", cause);
+        logger.error("DecisionHandler#exceptionCaught", cause);
         super.exceptionCaught(context, cause);
     }
 

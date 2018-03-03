@@ -15,11 +15,16 @@ public
 class DnsServerHandler extends ChannelInboundHandlerAdapter {
     protected final DnsMessageDecoder decoder;
     private final Logger logger;
+    private DnsDecisionHandler decisionHandler;
+    private DnsMessageEncoder encoder;
 
     public
     DnsServerHandler(final Logger logger) {
         this.logger = logger;
+
         decoder = new DnsMessageDecoder(logger);
+        decisionHandler = new DnsDecisionHandler(logger);
+        encoder = new DnsMessageEncoder(logger);
     }
 
     @Override
@@ -49,12 +54,13 @@ class DnsServerHandler extends ChannelInboundHandlerAdapter {
         ///////////////////////
         // DECODE (or upstream)
         ///////////////////////
-        pipeline.addLast("decoder", this.decoder);
+        pipeline.addLast("decoder", decoder);
+        pipeline.addLast("dnsDecision", decisionHandler);
 
         // ENCODE (or downstream)
         /////////////////////////
-        pipeline.addLast("dnsDecision", new DnsDecisionHandler(logger));
-        pipeline.addLast("fowarder", new ForwardingHandler(logger));
+        pipeline.addLast("encoder", encoder);
+        // pipeline.addLast("fowarder", new ForwardingHandler(logger));
         // pipeline.addLast("fowarder", new ForwardingHandler(this.config, this.clientChannelFactory));
     }
 }

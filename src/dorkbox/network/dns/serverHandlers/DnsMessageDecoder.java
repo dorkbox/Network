@@ -43,10 +43,6 @@ class DnsMessageDecoder extends MessageToMessageDecoder<DatagramPacket> {
             InetSocketAddress remoteAddress = packet.sender();
 
             DnsEnvelope dnsEnvelope = new DnsEnvelope(buf, localAddress, remoteAddress);
-            dnsEnvelope.retain();
-
-
-            // send down the pipeline
             out.add(dnsEnvelope);
             success = true;
         } finally {
