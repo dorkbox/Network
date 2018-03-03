@@ -169,7 +169,7 @@ class DnsServer extends Shutdownable {
                     .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
                     .childHandler(new DnsServerHandler(logger));
 
-        // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
+        // have to check options.host for "0.0.0.0". we don't bind to "0.0.0.0", we bind to "null" to get the "any" address!
         if (hostName.equals("0.0.0.0")) {
             tcpBootstrap.localAddress(tcpPort);
         }
