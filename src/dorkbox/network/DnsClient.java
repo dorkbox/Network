@@ -33,7 +33,7 @@ import org.slf4j.Logger;
 
 import dorkbox.network.connection.Shutdownable;
 import dorkbox.network.dns.DnsQuestion;
-import dorkbox.network.dns.DnsResponse;
+import dorkbox.network.dns.clientHandlers.DnsResponse;
 import dorkbox.network.dns.constants.DnsRecordType;
 import dorkbox.network.dns.constants.DnsResponseCode;
 import dorkbox.network.dns.constants.DnsSection;

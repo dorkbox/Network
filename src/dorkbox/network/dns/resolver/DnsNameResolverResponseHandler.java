@@ -15,7 +15,7 @@
  */
 package dorkbox.network.dns.resolver;
 
-import dorkbox.network.dns.DnsResponse;
+import dorkbox.network.dns.clientHandlers.DnsResponse;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;

@@ -29,9 +29,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dorkbox.network.dns.DnsQuestion;
-import dorkbox.network.dns.DnsResponse;
 import dorkbox.network.dns.clientHandlers.DatagramDnsQueryEncoder;
 import dorkbox.network.dns.clientHandlers.DatagramDnsResponseDecoder;
+import dorkbox.network.dns.clientHandlers.DnsResponse;
 import dorkbox.network.dns.constants.DnsRecordType;
 import dorkbox.network.dns.resolver.addressProvider.DefaultDnsServerAddressStreamProvider;
 import dorkbox.network.dns.resolver.addressProvider.DnsServerAddressStream;

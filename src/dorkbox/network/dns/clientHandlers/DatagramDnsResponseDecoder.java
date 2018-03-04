@@ -18,7 +18,6 @@ package dorkbox.network.dns.clientHandlers;
 import java.util.List;
 
 import dorkbox.network.dns.DnsInput;
-import dorkbox.network.dns.DnsResponse;
 import dorkbox.network.dns.exceptions.WireParseException;
 import dorkbox.network.dns.records.Header;
 import io.netty.buffer.ByteBuf;

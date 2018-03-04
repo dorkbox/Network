@@ -21,7 +21,7 @@ import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;
 
 import dorkbox.network.dns.DnsQuestion;
-import dorkbox.network.dns.DnsResponse;
+import dorkbox.network.dns.clientHandlers.DnsResponse;
 import dorkbox.network.dns.constants.DnsSection;
 import dorkbox.network.dns.records.DnsRecord;
 import io.netty.channel.Channel;
