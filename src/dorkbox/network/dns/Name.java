@@ -520,6 +520,25 @@ class Name implements Comparable, Serializable {
     }
 
     /**
+     * Generates a new Name with the first n labels are removed
+     *
+     * @return The parent name
+     */
+    public
+    Name parent(final int n) {
+        if (n < 1) {
+            throw new IllegalArgumentException("must remove 1 or more " + "labels");
+        }
+        try {
+            Name newname = new Name();
+            newname.append(name, offset(n), getlabels() - n);
+            return newname;
+        } catch (NameTooLongException e) {
+            throw new IllegalStateException("Name.subdomain: concatenate failed");
+        }
+    }
+
+    /**
      * Generates a new Name with the first n labels replaced by a wildcard
      *
      * @return The wildcard name
@@ -893,6 +912,7 @@ class Name implements Comparable, Serializable {
     /**
      * Computes a hashcode based on the value
      */
+    @Override
     public
     int hashCode() {
         if (hashcode != 0) {
@@ -909,6 +929,7 @@ class Name implements Comparable, Serializable {
     /**
      * Are these two Names equivalent?
      */
+    @Override
     public
     boolean equals(Object arg) {
         if (arg == this) {
@@ -938,6 +959,7 @@ class Name implements Comparable, Serializable {
      *
      * @return The representation of this name as a (printable) String.
      */
+    @Override
     public
     String toString() {
         return toString(false);

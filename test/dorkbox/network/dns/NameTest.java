@@ -815,6 +815,15 @@ class NameTest extends TestCase {
     }
 
     public
+    void test_parent() throws TextParseException {
+        Name dom = Name.fromString("a.b.c.");
+        Name exp = Name.fromString("b.c.");
+
+        Name n = dom.parent(1);
+        assertEquals(exp, n);
+    }
+
+    public
     void test_wild_abs() throws TextParseException {
         Name sub = Name.fromString("a.b.c.");
         Name exp = Name.fromString("*.");
