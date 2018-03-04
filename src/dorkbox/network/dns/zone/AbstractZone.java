@@ -21,9 +21,7 @@ import dorkbox.network.dns.constants.DnsClass;
 public abstract class AbstractZone implements Zone {
 
 	protected ZoneType type;
-
 	protected int dnsClass;
-
 	protected Name name;
 
 	public AbstractZone(ZoneType type, Name name) {
