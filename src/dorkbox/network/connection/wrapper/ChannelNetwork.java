@@ -41,9 +41,9 @@ class ChannelNetwork implements ConnectionPoint {
     @Override
     public
     void write(Object object) throws Exception {
+        shouldFlush.set(true);
         // we don't care, or want to save the future. This is so GC is less.
         channel.write(object, voidPromise);
-        shouldFlush.set(true);
     }
 
     /**
