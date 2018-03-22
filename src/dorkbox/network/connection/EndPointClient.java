@@ -224,9 +224,6 @@ class EndPointClient extends EndPoint {
 
         synchronized (bootstrapLock) {
             // we're done with registration, so no need to keep this around
-            if (bootstrapIterator.hasNext()) {
-                System.err.println("WHAT");
-            }
             bootstrapIterator = null;
             registration.countDown();
         }
