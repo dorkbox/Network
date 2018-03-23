@@ -140,6 +140,8 @@ class Server<C extends Connection> extends EndPointServer {
         }
 
         if (udpPort > 0) {
+            // This is what allows us to have UDP behave "similar" to TCP, in that a session is established based on the port/ip of the
+            // remote connection. This allows us to reuse channels and have "state" for a UDP connection that normally wouldn't exist.
             udpBootstrap = new SessionBootstrap();
         }
         else {
