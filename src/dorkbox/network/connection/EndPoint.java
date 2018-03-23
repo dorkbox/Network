@@ -63,6 +63,13 @@ class EndPoint extends Shutdownable {
     // TODO: maybe some sort of STUN-like connection keep-alive??
 
 
+    /**
+     * Defines if we are allowed to use the native OS-specific network interface (non-native to java) for boosted networking performance.
+     */
+    @Property
+    public static boolean enableNativeLibrary = true;
+
+
     public static final String LOCAL_CHANNEL = "local_channel";
 
     /**

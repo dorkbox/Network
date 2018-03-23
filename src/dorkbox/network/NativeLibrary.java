@@ -18,6 +18,7 @@ package dorkbox.network;
 import java.io.File;
 import java.lang.reflect.Field;
 
+import dorkbox.network.connection.EndPoint;
 import dorkbox.util.NativeLoader;
 import dorkbox.util.OS;
 import io.netty.channel.epoll.Epoll;
@@ -36,7 +37,7 @@ class NativeLibrary {
      * reason, netty will fall back to it's own logic.
      */
     static {
-        if (OS.isLinux() || OS.isMacOsX()) {
+        if (EndPoint.enableNativeLibrary && (OS.isLinux() || OS.isMacOsX())) {
             // try to load the native libraries for Linux/MacOsX...
             String originalLibraryPath = SystemPropertyUtil.get("java.library.path");
             File outputDirectory;
@@ -140,5 +141,4 @@ class NativeLibrary {
         // not Linux/MacOsX
         return true;
     }
-
 }
