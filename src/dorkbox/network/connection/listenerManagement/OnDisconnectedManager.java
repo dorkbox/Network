@@ -30,6 +30,8 @@ import dorkbox.network.connection.Listener.OnDisconnected;
 public final
 class OnDisconnectedManager<C extends Connection> extends ConcurrentManager<C, OnDisconnected<C>> {
 
+    private static final AtomicBoolean disconnectBoolean = new AtomicBoolean(false);
+
     public
     OnDisconnectedManager(final Logger logger) {
         super(logger);
@@ -39,8 +41,9 @@ class OnDisconnectedManager<C extends Connection> extends ConcurrentManager<C, O
      * @return true if a listener was found, false otherwise
      */
     public
-    boolean notifyDisconnected(final C connection, final AtomicBoolean shutdown) {
-        return doAction(connection, shutdown);
+    boolean notifyDisconnected(final C connection) {
+        // we override the boolean, because we ALWAYS want to call the disconnect listeners!
+        return doAction(connection, disconnectBoolean);
     }
 
     @Override
