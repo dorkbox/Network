@@ -342,6 +342,15 @@ class DnsNameResolverContext<T> {
 
                 if (promise.isDone() || future.isCancelled()) {
                     queryLifecycleObserver.queryCancelled(allowedQueries);
+
+
+                    // Check if we need to release the envelope itself. If the query was cancelled the getNow() will
+                    // return null as well as the Future will be failed with a CancellationException.
+                    DnsResponse result = future.getNow();
+                    if (result != null) {
+                        result.release();
+                    }
+
                     return;
                 }
 
