@@ -131,6 +131,10 @@ class NativeLibrary {
      */
     public static
     boolean isAvailable() {
+        if (!EndPoint.enableNativeLibrary) {
+            return false;
+        }
+
         if (OS.isLinux()) {
             return Epoll.isAvailable();
         }
