@@ -171,14 +171,14 @@ class RegistrationWrapper {
                     }
 
                     if (this.endPoint.disableRemoteKeyValidation) {
-                        logger2.warn("Invalid or non-matching public key from remote server, their public key has changed. Toggling extra flag in channel to indicate key change. To fix, remove entry for: {}", byAddress);
+                        logger2.warn("Invalid or non-matching public key from remote connection, their public key has changed. Toggling extra flag in channel to indicate key change. To fix, remove entry for: {}", byAddress);
 
                         metaChannel.changedRemoteKey = true;
                         return true;
                     }
                     else {
                         // keys do not match, abort!
-                        logger2.error("Invalid or non-matching public key from remote server, their public key has changed. To fix, remove entry for: {}", byAddress);
+                        logger2.error("Invalid or non-matching public key from remote connection, their public key has changed. To fix, remove entry for: {}", byAddress);
                         return false;
                     }
                 }
