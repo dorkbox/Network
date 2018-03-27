@@ -33,19 +33,41 @@ import dorkbox.util.exceptions.SecurityException;
 
 public
 class ReconnectTest extends BaseTest {
-    AtomicInteger serverCount;
-    AtomicInteger clientCount;
+    AtomicInteger receivedCount;
 
     @Test
     public
-    void socketReuse() throws SecurityException, IOException {
-        this.serverCount = new AtomicInteger(0);
-        this.clientCount = new AtomicInteger(0);
+    void socketReuseUDP() throws IOException, SecurityException {
+        socketReuse(false, true);
+    }
+
+    @Test
+    public
+    void socketReuseTCP() throws IOException, SecurityException {
+        socketReuse(true, false);
+    }
+
+    @Test
+    public
+    void socketReuseTCPUDP() throws IOException, SecurityException {
+        socketReuse(true, true);
+    }
+
+    private
+    void socketReuse(final boolean useTCP, final boolean useUDP) throws SecurityException, IOException {
+        this.receivedCount = new AtomicInteger(0);
 
         Configuration configuration = new Configuration();
-        // configuration.tcpPort = tcpPort;
-        configuration.udpPort = udpPort;
         configuration.host = host;
+
+        if (useTCP) {
+            configuration.tcpPort = tcpPort;
+        }
+
+        if (useUDP) {
+            configuration.udpPort = udpPort;
+        }
+
 
         Server server = new Server(configuration);
         addEndPoint(server);
@@ -54,17 +76,21 @@ class ReconnectTest extends BaseTest {
             @Override
             public
             void connected(Connection connection) {
-                // connection.send()
-                //           .TCP("-- TCP from server");
-                connection.send()
-                          .UDP("-- UDP from server");
+                if (useTCP) {
+                    connection.send()
+                              .TCP("-- TCP from server");
+                }
+                if (useUDP) {
+                    connection.send()
+                              .UDP("-- UDP from server");
+                }
             }
         });
         listeners.add(new Listener.OnMessageReceived<Connection, String>() {
             @Override
             public
             void received(Connection connection, String object) {
-                int incrementAndGet = ReconnectTest.this.serverCount.incrementAndGet();
+                int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
                 System.out.println("----- <S " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
@@ -78,33 +104,40 @@ class ReconnectTest extends BaseTest {
             @Override
             public
             void connected(Connection connection) {
-                // connection.send()
-                //           .TCP("-- TCP from client");
-                connection.send()
-                          .UDP("-- UDP from client");
+                if (useTCP) {
+                    connection.send()
+                              .TCP("-- TCP from client");
+                }
+                if (useUDP) {
+                    connection.send()
+                              .UDP("-- UDP from client");
+                }
             }
         });
         listeners1.add(new Listener.OnMessageReceived<Connection, String>() {
             @Override
             public
             void received(Connection connection, String object) {
-                int incrementAndGet = ReconnectTest.this.clientCount.incrementAndGet();
+                int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
                 System.out.println("----- <C " + connection + "> " + incrementAndGet + " : " + object);
             }
         });
 
         server.bind(false);
 
-        int count = 100;
+        int count = 10;
+        int initialCount = 2;
+        if (useTCP && useUDP) {
+            initialCount += 2;
+        }
         for (int i = 1; i < count + 1; i++) {
             client.connect(5000);
 
             int waitingRetryCount = 10;
-            // int target = i * 2;
-            int target = i;
-            while (this.serverCount.get() != target || this.clientCount.get() != target) {
+            int target = i * initialCount;
+            while (this.receivedCount.get() != target) {
                 if (waitingRetryCount-- < 0) {
-                    throw new IOException("Unable to reconnect in 5000 ms");
+                    throw new IOException("Invalid target count...");
                 }
                 try {
                     Thread.sleep(100);
@@ -115,7 +148,7 @@ class ReconnectTest extends BaseTest {
             client.closeConnections();
         }
 
-        assertEquals(count * 2 * 2, this.clientCount.get() + this.serverCount.get());
+        assertEquals(count * initialCount, this.receivedCount.get());
 
         stopEndPoints();
         waitForThreads(10);
@@ -124,8 +157,7 @@ class ReconnectTest extends BaseTest {
     @Test
     public
     void localReuse() throws SecurityException, IOException {
-        this.serverCount = new AtomicInteger(0);
-        this.clientCount = new AtomicInteger(0);
+        this.receivedCount = new AtomicInteger(0);
 
         Server server = new Server();
         addEndPoint(server);
@@ -143,7 +175,7 @@ class ReconnectTest extends BaseTest {
                   @Override
                   public
                   void received(Connection connection, String object) {
-                      int incrementAndGet = ReconnectTest.this.serverCount.incrementAndGet();
+                      int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
                       System.out.println("----- <S " + connection + "> " + incrementAndGet + " : " + object);
                   }
               });
@@ -167,7 +199,7 @@ class ReconnectTest extends BaseTest {
                   @Override
                   public
                   void received(Connection connection, String object) {
-                      int incrementAndGet = ReconnectTest.this.clientCount.incrementAndGet();
+                      int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
                       System.out.println("----- <C " + connection + "> " + incrementAndGet + " : " + object);
                   }
               });
@@ -178,7 +210,7 @@ class ReconnectTest extends BaseTest {
             client.connect(5000);
 
             int target = i;
-            while (this.serverCount.get() != target || this.clientCount.get() != target) {
+            while (this.receivedCount.get() != target) {
                 System.out.println("----- Waiting...");
                 try {
                     Thread.sleep(100);
@@ -189,7 +221,7 @@ class ReconnectTest extends BaseTest {
             client.closeConnections();
         }
 
-        assertEquals(count * 2, this.clientCount.get() + this.serverCount.get());
+        assertEquals(count * 2, this.receivedCount.get());
 
         stopEndPoints();
         waitForThreads(10);
