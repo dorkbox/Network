@@ -14,6 +14,7 @@ import dorkbox.network.dns.DnsOutput;
 import dorkbox.network.dns.Name;
 import dorkbox.network.dns.constants.DnsRecordType;
 import dorkbox.network.dns.constants.DnsResponseCode;
+import dorkbox.network.dns.constants.ExtendedFlags;
 import dorkbox.network.dns.utils.Tokenizer;
 
 /**
@@ -100,6 +101,7 @@ class OPTRecord extends DnsRecord {
      *
      * @return true if the records are equal, false otherwise.
      */
+    @Override
     public
     boolean equals(final Object arg) {
         return super.equals(arg) && ttl == ((OPTRecord) arg).ttl;
