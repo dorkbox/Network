@@ -34,7 +34,7 @@
 //
 package dorkbox.network.dns;
 
-import dorkbox.network.dns.records.ExtendedFlags;
+import dorkbox.network.dns.constants.ExtendedFlags;
 import junit.framework.TestCase;
 
 public
@@ -42,7 +42,7 @@ class ExtendedFlagsTest extends TestCase {
     public
     void test_string() {
         // a regular one
-        assertEquals("do", ExtendedFlags.string(ExtendedFlags.DO));
+        assertEquals("do", ExtendedFlags.DO.string());
 
         // one that doesn't exist
         assertTrue(ExtendedFlags.string(1)
@@ -65,7 +65,7 @@ class ExtendedFlagsTest extends TestCase {
     public
     void test_value() {
         // regular one
-        assertEquals(ExtendedFlags.DO, ExtendedFlags.value("do"));
+        assertEquals(ExtendedFlags.DO.value(), ExtendedFlags.value("do"));
 
         // one thats undefined but within range
         assertEquals(16, ExtendedFlags.value("FLAG16"));

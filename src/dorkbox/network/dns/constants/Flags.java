@@ -3,103 +3,147 @@
 package dorkbox.network.dns.constants;
 
 import dorkbox.network.dns.Mnemonic;
-import dorkbox.network.dns.records.ExtendedFlags;
 
 /**
  * Constants and functions relating to flags in the DNS header.
  *
- * @author Brian Wellington
+ * In DNS query header there is a flag field in the second 16 bit word in query from bit 5 through bit 11 ([RFC1035] section 4.1.1)
+ *
+ * https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-12
  */
 
-public final
-class Flags {
-
-    private static Mnemonic flags = new Mnemonic("DNS Header Flag", Mnemonic.CASE_LOWER);
+public
+enum Flags {
 
     /**
      * query/response
      */
-    public static final byte QR = 0;
+    QR(0, "qr"),
 
     /**
      * authoritative answer
      */
-    public static final byte AA = 5;
+    AA(5, "aa"),
 
     /**
      * truncated
      */
-    public static final byte TC = 6;
+    TC(6, "tc"),
 
     /**
      * recursion desired
      */
-    public static final byte RD = 7;
+    RD(7, "rd"),
 
     /**
      * recursion available
      */
-    public static final byte RA = 8;
+    RA(8, "ra"),
+
+    /**
+     * RESERVED
+     */
+    RESERVED(9, "__"),
 
     /**
      * authenticated data
      */
-    public static final byte AD = 10;
+    AD(10, "ad"),
 
     /**
      * (security) checking disabled
      */
-    public static final byte CD = 11;
+    CD(11, "cd"),
 
     /**
      * dnssec ok (extended)
      */
-    public static final int DO = ExtendedFlags.DO;
+    DO(ExtendedFlags.DO.value(), ExtendedFlags.DO.string());
 
+
+    private static Mnemonic flags = new Mnemonic("DNS Header Flag", Mnemonic.CASE_LOWER);
     static {
         flags.setMaximum(0xF);
         flags.setPrefix("FLAG");
         flags.setNumericAllowed(true);
 
-        flags.add(QR, "qr");
-        flags.add(AA, "aa");
-        flags.add(TC, "tc");
-        flags.add(RD, "rd");
-        flags.add(RA, "ra");
-        flags.add(AD, "ad");
-        flags.add(CD, "cd");
+        flags.add(QR.flagValue, "qr");
+        flags.add(AA.flagValue, "aa");
+        flags.add(TC.flagValue, "tc");
+        flags.add(RD.flagValue, "rd");
+        flags.add(RA.flagValue, "ra");
+        flags.add(AD.flagValue, "ad");
+        flags.add(CD.flagValue, "cd");
     }
 
-    private
-    Flags() {}
+    private final byte flagValue;
+    private final String textValue;
 
-    /**
-     * Converts a numeric Flag into a String
-     */
+    Flags(final int flagValue, final String textValue) {
+        this.flagValue = (byte) flagValue;
+        this.textValue = textValue;
+    }
+
+    public
+    byte value() {
+        return flagValue;
+    }
+
+    public
+    String string() {
+        return textValue;
+    }
+
+
     public static
-    String string(int i) {
-        return flags.getText(i);
+    Flags toFlag(final int flagBit) {
+        for (Flags flag : values()) {
+            if (flag.value() == flagBit) {
+                return flag;
+            }
+        }
+
+        throw new IllegalArgumentException("Invalid flag " + flagBit);
     }
 
-    /**
-     * Converts a String representation of an Flag into its numeric value
-     */
     public static
-    int value(String s) {
-        return flags.getValue(s);
+    Flags toFlag(final String flagName) {
+        for (Flags flag : values()) {
+            if (flag.string().equals(flagName)) {
+                return flag;
+            }
+        }
+
+        throw new IllegalArgumentException("Invalid flag " + flagName);
     }
 
+
+    // /**
+    //  * Converts a numeric Flag into a String
+    //  */
+    // public static
+    // String string(int i) {
+    //     return flags.getText(i);
+    // }
+    //
+    // /**
+    //  * Converts a String representation of an Flag into its numeric value
+    //  */
+    // public static
+    // int value(String s) {
+    //     return flags.getValue(s);
+    // }
+
     /**
-     * Indicates if a bit in the flags field is a flag or not.  If it's part of
-     * the rcode or opcode, it's not.
+     * Indicates if a bit in the flags field is a flag or not.  If it's part of the rcode or opcode, it's not.
      */
     public static
     boolean isFlag(int index) {
-        flags.check(index);
-        if ((index >= 1 && index <= 4) || (index >= 12)) {
+        // Checks that a numeric value is within the range
+        if (index < 0 || index > 0xF || (index >= 1 && index <= 4) || (index >= 12)) {
             return false;
         }
+
         return true;
     }
-
 }

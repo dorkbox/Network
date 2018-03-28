@@ -138,33 +138,40 @@ class Header implements Cloneable {
      * @see Flags
      */
     public
-    void setFlag(int bit) {
-        checkFlag(bit);
-        flags = setFlag(flags, bit, true);
+    void setFlag(Flags flag) {
+        checkFlag(flag);
+        flags = setFlag(flags, flag, true);
     }
 
     static private
-    void checkFlag(int bit) {
-        if (!validFlag(bit)) {
-            throw new IllegalArgumentException("invalid flag bit " + bit);
+    void checkFlag(int flag) {
+        if (!Flags.isFlag(flag)) {
+            throw new IllegalArgumentException("invalid flag bit " + flag);
         }
     }
 
     static private
-    boolean validFlag(int bit) {
-        return (bit >= 0 && bit <= 0xF && Flags.isFlag(bit));
+    void checkFlag(Flags flag) {
+        if (!validFlag(flag)) {
+            throw new IllegalArgumentException("invalid flag bit " + flag);
+        }
+    }
+
+    static private
+    boolean validFlag(Flags flag) {
+        return flag != null && (flag.value() >= 0 && flag.value() <= 0xF && Flags.isFlag(flag.value()));
     }
 
     static
-    int setFlag(int flags, int bit, boolean value) {
-        checkFlag(bit);
+    int setFlag(int flags, Flags flag, boolean value) {
+        checkFlag(flag);
 
         // bits are indexed from left to right
         if (value) {
-            return flags |= (1 << (15 - bit));
+            return flags |= (1 << (15 - flag.value()));
         }
         else {
-            return flags &= ~(1 << (15 - bit));
+            return flags &= ~(1 << (15 - flag.value()));
         }
     }
 
@@ -174,15 +181,15 @@ class Header implements Cloneable {
      * @see Flags
      */
     public
-    void unsetFlag(int bit) {
-        checkFlag(bit);
-        flags = setFlag(flags, bit, false);
+    void unsetFlag(Flags flag) {
+        checkFlag(flag);
+        flags = setFlag(flags, flag, false);
     }
 
     boolean[] getFlags() {
         boolean[] array = new boolean[16];
         for (int i = 0; i < array.length; i++) {
-            if (validFlag(i)) {
+            if (Flags.isFlag(i)) {
                 array[i] = getFlag(i);
             }
         }
@@ -195,10 +202,21 @@ class Header implements Cloneable {
      * @see Flags
      */
     public
-    boolean getFlag(int bit) {
-        checkFlag(bit);
+    boolean getFlag(Flags flag) {
+        // bit s are indexed from left to right
+        return (flags & (1 << (15 - flag.value()))) != 0;
+    }
+
+    /**
+     * Retrieves a flag.
+     *
+     * @param flagValue ALWAYS checked before using, so additional checks are not necessary
+     * @see Flags
+     */
+    private
+    boolean getFlag(int flagValue) {
         // bits are indexed from left to right
-        return (flags & (1 << (15 - bit))) != 0;
+        return (flags & (1 << (15 - flagValue))) != 0;
     }
 
     void setCount(int field, int value) {
@@ -328,13 +346,13 @@ class Header implements Cloneable {
     /**
      * Converts the header's flags into a String
      */
-    public
     String printFlags() {
         StringBuilder sb = new StringBuilder();
 
         for (int i = 0; i < 16; i++) {
-            if (validFlag(i) && getFlag(i)) {
-                sb.append(Flags.string(i));
+            if (Flags.isFlag(i) && getFlag(i)) {
+                Flags flag = Flags.toFlag(i);
+                sb.append(flag.string());
                 sb.append(" ");
             }
         }

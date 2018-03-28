@@ -42,42 +42,61 @@ class FlagsTest extends TestCase {
     public
     void test_string() {
         // a regular one
-        assertEquals("aa", Flags.string(Flags.AA));
+        assertEquals("aa", Flags.AA.string());
 
         // one that doesn't exist
-        assertTrue(Flags.string(12)
-                        .startsWith("flag"));
+        try {
+            Flags.toFlag(12);
+            fail("IllegalArgumentException not thrown");
+        } catch (IllegalArgumentException ignored) {
+        }
 
         try {
-            Flags.string(-1);
+            Flags.toFlag(-1);
             fail("IllegalArgumentException not thrown");
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException ignored) {
         }
 
         //  (max is 0xF)
         try {
-            Flags.string(0x10);
+            Flags.toFlag(0x10);
             fail("IllegalArgumentException not thrown");
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException ignored) {
         }
     }
 
     public
     void test_value() {
         // regular one
-        assertEquals(Flags.CD, Flags.value("cd"));
+        assertEquals(Flags.CD, Flags.toFlag("cd"));
 
-        // one thats undefined but within range
-        assertEquals(13, Flags.value("FLAG13"));
+        // one that's undefined but within range
+        try {
+            Flags.toFlag("FLAG13");
+            fail("IllegalArgumentException not thrown");
+        } catch (IllegalArgumentException ignored) {
+        }
 
-        // one thats undefined but out of range
-        assertEquals(-1, Flags.value("FLAG" + 0x10));
+        // one that's undefined but out of range
+        try {
+            Flags.toFlag("FLAG" + 0x10);
+            fail("IllegalArgumentException not thrown");
+        } catch (IllegalArgumentException ignored) {
+        }
 
-        // something that unknown
-        assertEquals(-1, Flags.value("THIS IS DEFINITELY UNKNOWN"));
+        // something that's unknown
+        try {
+            Flags.toFlag("THIS IS DEFINITELY UNKNOWN");
+            fail("IllegalArgumentException not thrown");
+        } catch (IllegalArgumentException ignored) {
+        }
 
         // empty string
-        assertEquals(-1, Flags.value(""));
+        try {
+            Flags.toFlag("");
+            fail("IllegalArgumentException not thrown");
+        } catch (IllegalArgumentException ignored) {
+        }
     }
 
     public
@@ -85,8 +104,9 @@ class FlagsTest extends TestCase {
         try {
             Flags.isFlag(-1);
             fail("IllegalArgumentException not thrown");
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException ignored) {
         }
+
         assertTrue(Flags.isFlag(0));
         assertFalse(Flags.isFlag(1)); // opcode
         assertFalse(Flags.isFlag(2));
@@ -102,11 +122,12 @@ class FlagsTest extends TestCase {
         assertFalse(Flags.isFlag(12));
         assertFalse(Flags.isFlag(13));
         assertFalse(Flags.isFlag(14));
-        assertFalse(Flags.isFlag(14));
+        assertFalse(Flags.isFlag(15));
+
         try {
             Flags.isFlag(16);
             fail("IllegalArgumentException not thrown");
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException ignored) {
         }
     }
 }

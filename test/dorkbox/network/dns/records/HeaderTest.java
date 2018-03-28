@@ -165,23 +165,23 @@ class HeaderTest extends TestCase {
 
     public
     void test_flags() {
-        m_h.setFlag(0);
-        m_h.setFlag(5);
-        assertTrue(m_h.getFlag(0));
+        m_h.setFlag(Flags.toFlag(0));
+        m_h.setFlag(Flags.toFlag(5));
+        assertTrue(m_h.getFlag(Flags.toFlag(0)));
         assertTrue(m_h.getFlags()[0]);
-        assertTrue(m_h.getFlag(5));
+        assertTrue(m_h.getFlag(Flags.toFlag(5)));
         assertTrue(m_h.getFlags()[5]);
 
-        m_h.unsetFlag(0);
-        assertFalse(m_h.getFlag(0));
+        m_h.unsetFlag(Flags.toFlag(0));
+        assertFalse(m_h.getFlag(Flags.toFlag(0)));
         assertFalse(m_h.getFlags()[0]);
-        assertTrue(m_h.getFlag(5));
+        assertTrue(m_h.getFlag(Flags.toFlag(5)));
         assertTrue(m_h.getFlags()[5]);
 
-        m_h.unsetFlag(5);
-        assertFalse(m_h.getFlag(0));
+        m_h.unsetFlag(Flags.toFlag(5));
+        assertFalse(m_h.getFlag(Flags.toFlag(0)));
         assertFalse(m_h.getFlags()[0]);
-        assertFalse(m_h.getFlag(5));
+        assertFalse(m_h.getFlag(Flags.toFlag(5)));
         assertFalse(m_h.getFlags()[5]);
 
         boolean[] flags = m_h.getFlags();
@@ -196,47 +196,47 @@ class HeaderTest extends TestCase {
     public
     void test_flags_invalid() {
         try {
-            m_h.setFlag(-1);
+            m_h.setFlag(Flags.toFlag(-1));
             fail("IllegalArgumentException not thrown");
         } catch (IllegalArgumentException e) {
         }
         try {
-            m_h.setFlag(1);
+            m_h.setFlag(Flags.toFlag(1));
             fail("IllegalArgumentException not thrown");
         } catch (IllegalArgumentException e) {
         }
         try {
-            m_h.setFlag(16);
+            m_h.setFlag(Flags.toFlag(16));
             fail("IllegalArgumentException not thrown");
         } catch (IllegalArgumentException e) {
         }
         try {
-            m_h.unsetFlag(-1);
+            m_h.unsetFlag(Flags.toFlag(-1));
             fail("IllegalArgumentException not thrown");
         } catch (IllegalArgumentException e) {
         }
         try {
-            m_h.unsetFlag(13);
+            m_h.unsetFlag(Flags.toFlag(13));
             fail("IllegalArgumentException not thrown");
         } catch (IllegalArgumentException e) {
         }
         try {
-            m_h.unsetFlag(16);
+            m_h.unsetFlag(Flags.toFlag(16));
             fail("IllegalArgumentException not thrown");
         } catch (IllegalArgumentException e) {
         }
         try {
-            m_h.getFlag(-1);
+            m_h.getFlag(Flags.toFlag(-1));
             fail("IllegalArgumentException not thrown");
         } catch (IllegalArgumentException e) {
         }
         try {
-            m_h.getFlag(4);
+            m_h.getFlag(Flags.toFlag(4));
             fail("IllegalArgumentException not thrown");
         } catch (IllegalArgumentException e) {
         }
         try {
-            m_h.getFlag(16);
+            m_h.getFlag(Flags.toFlag(16));
             fail("IllegalArgumentException not thrown");
         } catch (IllegalArgumentException e) {
         }
@@ -280,7 +280,7 @@ class HeaderTest extends TestCase {
             if ((i > 0 && i < 5) || i > 11) {
                 continue;
             }
-            assertFalse(m_h.getFlag(i));
+            assertFalse(m_h.getFlag(Flags.toFlag(i)));
         }
     }
 
@@ -305,9 +305,9 @@ class HeaderTest extends TestCase {
         m_h.setOpcode(0xE); // 1110
         assertEquals(0xE, m_h.getOpcode());
 
-        assertFalse(m_h.getFlag(0));
+        assertFalse(m_h.getFlag(Flags.toFlag(0)));
         for (int i = 5; i < 12; ++i) {
-            assertFalse(m_h.getFlag(i));
+            assertFalse(m_h.getFlag(Flags.toFlag(i)));
         }
         assertEquals(0, m_h.getRcode());
     }
@@ -446,7 +446,7 @@ class HeaderTest extends TestCase {
             if ((i > 0 && i < 5) || i > 11) {
                 continue;
             }
-            assertEquals(m_h.getFlag(i), h2.getFlag(i));
+            assertEquals(m_h.getFlag(Flags.toFlag(i)), h2.getFlag(Flags.toFlag(i)));
         }
         for (int i = 0; i < 4; ++i) {
             assertEquals(m_h.getCount(i), h2.getCount(i));
