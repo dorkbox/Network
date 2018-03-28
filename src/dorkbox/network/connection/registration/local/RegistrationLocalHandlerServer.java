@@ -32,14 +32,6 @@ class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
     }
 
     /**
-     * STEP 1: Channel is first created
-     */
-//  Calls the super class to init the local channel
-//  @Override
-//  protected void initChannel(Channel channel) {
-//  }
-
-    /**
      * STEP 2: Channel is now active. Start the registration process (Client starts the process)
      */
     @Override
@@ -73,6 +65,7 @@ class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
         MetaChannel metaChannel = channel.attr(META_CHANNEL)
                                          .getAndSet(null);
         if (metaChannel != null) {
+            registrationWrapper.connection0(metaChannel, null);
             ConnectionImpl connection = metaChannel.connection;
 
             if (connection != null) {

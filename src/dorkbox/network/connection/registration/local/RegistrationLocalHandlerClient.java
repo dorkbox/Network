@@ -33,14 +33,6 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
     }
 
     /**
-     * STEP 1: Channel is first created
-     */
-//  Calls the super class to init the local channel
-//  @Override
-//  protected void initChannel(Channel channel) {
-//  }
-
-    /**
      * STEP 2: Channel is now active. Start the registration process
      */
     @Override
@@ -75,10 +67,12 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
             // Event though a local channel is XOR with everything else, we still have to make the client clean up it's state.
             registrationWrapper.startNextProtocolRegistration();
 
+            registrationWrapper.connection0(metaChannel, null);
             ConnectionImpl connection = metaChannel.connection;
 
             // have to setup connection handler
             pipeline.addLast(CONNECTION_HANDLER, connection);
+
 
             registrationWrapper.connectionConnected0(connection);
         }

@@ -43,8 +43,6 @@ class RegistrationLocalHandler extends RegistrationHandler {
                .set(metaChannel);
 
         logger.trace("New LOCAL connection.");
-
-        registrationWrapper.connection0(metaChannel, null);
     }
 
     @Override
