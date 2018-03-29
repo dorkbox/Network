@@ -129,7 +129,9 @@ class SessionManager extends ChannelInboundHandlerAdapter {
         // We make a copy of this b/c of concurrent modification, in the event this is closed BEFORE the child-channels are closed
         ArrayList<DatagramSessionChannel> channels = new ArrayList<DatagramSessionChannel>(datagramChannels.values());
         for (DatagramSessionChannel datagramSessionChannel : channels) {
-            datagramSessionChannel.close();
+            if (datagramSessionChannel.isActive()) {
+                datagramSessionChannel.close();
+            }
         }
     }
 
