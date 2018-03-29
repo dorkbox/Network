@@ -101,11 +101,7 @@ class FlagsTest extends TestCase {
 
     public
     void test_isFlag() {
-        try {
-            Flags.isFlag(-1);
-            fail("IllegalArgumentException not thrown");
-        } catch (IllegalArgumentException ignored) {
-        }
+        assertFalse(Flags.isFlag(-1)); // invalid
 
         assertTrue(Flags.isFlag(0));
         assertFalse(Flags.isFlag(1)); // opcode
@@ -124,10 +120,6 @@ class FlagsTest extends TestCase {
         assertFalse(Flags.isFlag(14));
         assertFalse(Flags.isFlag(15));
 
-        try {
-            Flags.isFlag(16);
-            fail("IllegalArgumentException not thrown");
-        } catch (IllegalArgumentException ignored) {
-        }
+        assertFalse(Flags.isFlag(16)); // invalid
     }
 }
