@@ -19,6 +19,7 @@ import java.net.InetSocketAddress;
 
 import dorkbox.network.Broadcast;
 import dorkbox.network.Server;
+import dorkbox.network.connection.EndPoint;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.DatagramPacket;
@@ -51,7 +52,9 @@ class BroadcastServer {
 
                 channel.writeAndFlush(new DatagramPacket(directBuffer, remoteAddress, localAddress));
 
-                logger.info("Responded to host discovery from: {}", remoteAddress);
+                logger.info("Responded to host discovery from [{}]", EndPoint.getHostDetails(remoteAddress));
+
+                byteBuf.release();
                 return true;
             }
         }
