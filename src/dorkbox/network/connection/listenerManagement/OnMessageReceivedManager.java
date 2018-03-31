@@ -102,19 +102,14 @@ class OnMessageReceivedManager<C extends Connection> {
         final Class<?> type = identifyType(listener);
 
         synchronized (this) {
-            // access a snapshot of the listeners (single-writer-principle)
-            final IdentityMap<Type, ConcurrentIterator> listeners = REF.get(this);
-
             ConcurrentIterator subscribedListeners = listeners.get(type);
             if (subscribedListeners == null) {
                 subscribedListeners = new ConcurrentIterator();
                 listeners.put(type, subscribedListeners);
             }
 
+            //noinspection unchecked
             subscribedListeners.add(listener);
-
-            // save this snapshot back to the original (single writer principle)
-            REF.lazySet(this, listeners);
         }
     }
 
@@ -130,18 +125,14 @@ class OnMessageReceivedManager<C extends Connection> {
         int size = -1; // default is "not found"
         synchronized (this) {
             // access a snapshot of the listeners (single-writer-principle)
-            final IdentityMap<Type, ConcurrentIterator> listeners = REF.get(this);
-
             final ConcurrentIterator concurrentIterator = listeners.get(type);
             if (concurrentIterator != null) {
+                //noinspection unchecked
                 boolean removed = concurrentIterator.remove(listener);
                 if (removed) {
                     size = concurrentIterator.size();
                 }
             }
-
-            // save this snapshot back to the original (single writer principle)
-            REF.lazySet(this, listeners);
         }
 
         return size;
@@ -237,11 +228,6 @@ class OnMessageReceivedManager<C extends Connection> {
         return found;
     }
 
-    public synchronized
-    void removeAll() {
-        listeners.clear();
-    }
-
     /**
      * @return true if the listener was removed, false otherwise
      */
@@ -249,13 +235,7 @@ class OnMessageReceivedManager<C extends Connection> {
     boolean removeAll(final Class<?> classType) {
         boolean found;
 
-        // access a snapshot of the listeners (single-writer-principle)
-        final IdentityMap<Type, ConcurrentIterator> listeners = REF.get(this);
-
         found = listeners.remove(classType) != null;
-
-        // save this snapshot back to the original (single writer principle)
-        REF.lazySet(this, listeners);
 
         return found;
     }
@@ -263,10 +243,8 @@ class OnMessageReceivedManager<C extends Connection> {
     /**
      * called on shutdown
      */
-    public
+    public synchronized
     void clear() {
-        final IdentityMap<Type, ConcurrentIterator> listeners = REF.get(this);
-
         // The iterators for this map are NOT THREAD SAFE!
         // using .entries() is what we are supposed to use!
         final IdentityMap.Entries<Type, ConcurrentIterator> entries = listeners.entries();
@@ -277,8 +255,5 @@ class OnMessageReceivedManager<C extends Connection> {
         }
 
         listeners.clear();
-
-        // save this snapshot back to the original (single writer principle)
-        REF.lazySet(this, listeners);
     }
 }
