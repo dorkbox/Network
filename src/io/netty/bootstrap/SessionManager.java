@@ -182,6 +182,7 @@ class SessionManager extends ChannelInboundHandlerAdapter {
 
                 try {
                     final DatagramSessionChannel finalSessionChannel = sessionChannel;
+                    // the childGroup is the HANDSHAKE group. Once handshake is done, this will be passed off to a worker group
                     childGroup.register(sessionChannel)
                               .addListener(new ChannelFutureListener() {
                                   @Override
