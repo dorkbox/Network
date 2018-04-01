@@ -13,22 +13,22 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
-package dorkbox.network.pipeline;
+package dorkbox.network.pipeline.discovery;
+
+import java.net.InetAddress;
 
 /**
- * Magic bytes used to identify packets when they are specific types
+ * Holds the broadcast response data
  */
 public
-class MagicBytes {
+class BroadcastResponse {
+    public final InetAddress remoteAddress;
+    public final int tcpPort;
+    public final int udpPort;
 
-    // BROADCAST ...
-    public static final byte broadcastID = (byte) 42;
-    public static final byte broadcastResponseID = (byte) 57;
-
-    public static final byte HAS_TCP = (byte) (1 << 1);
-    public static final byte HAS_UDP = (byte) (1 << 2);
-
-    // max number of bytes in a broadcast packet (if both TCP and UDP are enabled)
-    public static final int maxPacketSize = 6;
-    // END BROADCAST ...
+    BroadcastResponse(final InetAddress remoteAddress, final int tcpPort, final int udpPort) {
+        this.remoteAddress = remoteAddress;
+        this.tcpPort = tcpPort;
+        this.udpPort = udpPort;
+    }
 }

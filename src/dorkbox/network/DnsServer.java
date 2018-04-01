@@ -23,6 +23,7 @@ import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Shutdownable;
 import dorkbox.network.dns.DnsQuestion;
 import dorkbox.network.dns.Name;
+import dorkbox.network.dns.constants.DnsClass;
 import dorkbox.network.dns.constants.DnsRecordType;
 import dorkbox.network.dns.records.ARecord;
 import dorkbox.network.dns.serverHandlers.DnsServerHandler;
@@ -84,7 +85,10 @@ class DnsServer extends Shutdownable {
     void main(String[] args) {
         DnsServer server = new DnsServer("localhost", 2053);
 
-        // server.aRecord("google.com", DnsClass.IN, 10, "127.0.0.1");
+        // MasterZone zone = new MasterZone();
+
+
+        server.aRecord("google.com", DnsClass.IN, 10, "127.0.0.1");
 
         // server.bind(false);
         server.bind();
@@ -123,32 +127,31 @@ class DnsServer extends Shutdownable {
 
 
         final EventLoopGroup boss;
-        final EventLoopGroup worker;
+        final EventLoopGroup work;
 
         if (OS.isAndroid()) {
             // android ONLY supports OIO (not NIO)
-            boss = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            boss = new OioEventLoopGroup(1, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            work = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-            // JNI network stack is MUCH faster (but only on linux)
-            boss = new EpollEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new EpollEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            // epoll network stack is MUCH faster (but only on linux)
+            boss = new EpollEventLoopGroup(1, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            work = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
             // KQueue network stack is MUCH faster (but only on macosx)
-            boss = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            boss = new KQueueEventLoopGroup(1, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            work = new KQueueEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else {
             // sometimes the native libraries cannot be loaded, so fall back to NIO
-            boss = new NioEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new NioEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            boss = new NioEventLoopGroup(1, new NamedThreadFactory(threadName + "-boss", threadGroup));
+            work = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
 
-
         manageForShutdown(boss);
-        manageForShutdown(worker);
+        manageForShutdown(work);
 
 
         tcpBootstrap = new ServerBootstrap();
@@ -160,7 +163,7 @@ class DnsServer extends Shutdownable {
             tcpBootstrap.channel(OioServerSocketChannel.class);
         }
         else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-            // JNI network stack is MUCH faster (but only on linux)
+            // epoll network stack is MUCH faster (but only on linux)
             tcpBootstrap.channel(EpollServerSocketChannel.class);
         }
         else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
@@ -174,7 +177,7 @@ class DnsServer extends Shutdownable {
         // TODO: If we use netty for an HTTP server,
         // Beside the usual ChannelOptions the Native Transport allows to enable TCP_CORK which may come in handy if you implement a HTTP Server.
 
-        tcpBootstrap.group(boss, worker)
+        tcpBootstrap.group(boss, work)
                     .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
                     .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
@@ -200,18 +203,18 @@ class DnsServer extends Shutdownable {
             udpBootstrap.channel(OioDatagramChannel.class);
         }
         else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-            // JNI network stack is MUCH faster (but only on linux)
+            // epoll network stack is MUCH faster (but only on linux)
             udpBootstrap.channel(EpollDatagramChannel.class);
         }
         else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
-            // JNI network stack is MUCH faster (but only on macosx)
+            // KQueue network stack is MUCH faster (but only on macosx)
             udpBootstrap.channel(KQueueDatagramChannel.class);
         }
         else {
             udpBootstrap.channel(NioDatagramChannel.class);
         }
 
-        udpBootstrap.group(worker)
+        udpBootstrap.group(work)
                     .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                     .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(EndPoint.WRITE_BUFF_LOW, EndPoint.WRITE_BUFF_HIGH))
 

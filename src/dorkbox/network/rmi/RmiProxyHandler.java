@@ -46,7 +46,11 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import dorkbox.network.connection.*;
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.KryoExtra;
+import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.RmiSerializationManager;
 
 /**
@@ -275,10 +279,12 @@ class RmiProxyHandler implements InvocationHandler {
 
         // Sends our invokeMethod to the remote connection, which the RmiBridge listens for
         if (this.udp) {
-            this.connection.UDP(invokeMethod);
+            // flush is necessary in case this is called outside of a network worker thread
+            this.connection.UDP(invokeMethod).flush();
         }
         else {
-            this.connection.TCP(invokeMethod);
+            // flush is necessary in case this is called outside of a network worker thread
+            this.connection.send(invokeMethod).flush();
         }
 
         if (logger.isTraceEnabled()) {

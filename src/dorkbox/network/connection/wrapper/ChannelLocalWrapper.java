@@ -42,6 +42,7 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
     ChannelLocalWrapper(MetaChannel metaChannel, final RmiObjectHandler rmiObjectHandler) {
         this.channel = metaChannel.localChannel;
         this.rmiObjectHandler = rmiObjectHandler;
+        this.remoteAddress = ((LocalAddress) this.channel.remoteAddress()).id();
     }
 
     /**
@@ -74,15 +75,6 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
     public
     ConnectionPoint udp() {
         return this;
-    }
-
-    /**
-     * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
-     */
-    @Override
-    public final
-    void init() {
-        this.remoteAddress = ((LocalAddress) this.channel.remoteAddress()).id();
     }
 
     /**

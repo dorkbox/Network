@@ -22,7 +22,7 @@ interface ConnectionBridgeBase {
     /**
      * Sends the message to other listeners INSIDE this endpoint. It does not send it to a remote address.
      */
-    void self(Object message);
+    ConnectionPoint self(Object message);
 
     /**
      * Sends the message over the network using TCP. (or via LOCAL when it's a local channel).

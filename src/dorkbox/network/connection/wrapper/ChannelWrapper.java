@@ -29,11 +29,6 @@ interface ChannelWrapper {
     ConnectionPoint udp();
 
     /**
-     * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
-     */
-    void init();
-
-    /**
      * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
      */
     void flush();

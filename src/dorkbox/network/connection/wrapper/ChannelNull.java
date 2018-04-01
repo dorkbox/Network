@@ -33,12 +33,14 @@ class ChannelNull implements ConnectionPoint {
     ChannelNull() {
     }
 
-    /**
-     * Write an object to the underlying channel
-     */
     @Override
     public
     void write(Object object) {
+    }
+
+    @Override
+    public
+    void flush() {
     }
 
     /**
@@ -47,6 +49,7 @@ class ChannelNull implements ConnectionPoint {
     @Override
     public
     boolean isWritable() {
+        // this channel is ALWAYS writable! (it just does nothing...)
         return true;
     }
 

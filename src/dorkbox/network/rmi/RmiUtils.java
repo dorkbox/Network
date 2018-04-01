@@ -99,6 +99,15 @@ class RmiUtils {
     }
 
 
+    /**
+     * @param logger
+     * @param kryo
+     * @param asmEnabled
+     * @param iFace this is never null.
+     * @param impl this is NULL on the rmi "client" side. This is NOT NULL on the "server" side (where the object lives)
+     * @param classId
+     * @return
+     */
     public static
     CachedMethod[] getCachedMethods(final Logger logger, final Kryo kryo, final boolean asmEnabled, final Class<?> iFace, final Class<?> impl, final int classId) {
         MethodAccess ifaceMethodAccess = null;
@@ -145,28 +154,30 @@ class RmiUtils {
 
             // copy because they can be overridden
             boolean overriddenMethod = false;
-            Method tweakMethod = method;
             MethodAccess tweakMethodAccess = ifaceMethodAccess;
+
 
             // this is how we detect if the method has been changed from the interface -> implementation + connection parameter
             if (declaringClass.equals(impl)) {
                 tweakMethodAccess = implMethodAccess;
                 overriddenMethod = true;
 
-                if (logger.isTraceEnabled())
-
-                logger.trace("Overridden method: {}.{}", impl, method.getName());
+                if (logger.isTraceEnabled()) {
+                    logger.trace("Overridden method: {}.{}", impl, method.getName());
+                }
             }
 
+
             CachedMethod cachedMethod = null;
-            if (tweakMethodAccess != null) {
+            // reflectAsm doesn't like "Object" class methods...
+            if (tweakMethodAccess != null && method.getDeclaringClass() != Object.class) {
                 try {
-                    final int index = tweakMethodAccess.getIndex(tweakMethod.getName(), parameterTypes);
+                    final int index = tweakMethodAccess.getIndex(method.getName(), parameterTypes);
 
                     AsmCachedMethod asmCachedMethod = new AsmCachedMethod();
                     asmCachedMethod.methodAccessIndex = index;
                     asmCachedMethod.methodAccess = tweakMethodAccess;
-                    asmCachedMethod.name = tweakMethod.getName();
+                    asmCachedMethod.name = method.getName();
 
                     if (overriddenMethod) {
                         // logger.error(tweakMethod.getName() + " " + Arrays.toString(parameterTypes) + " index: " + index +
@@ -188,7 +199,7 @@ class RmiUtils {
 
                     cachedMethod = asmCachedMethod;
                 } catch (Exception e) {
-                    logger.trace("Unable to use ReflectAsm for {}.{}", declaringClass, tweakMethod.getName(), e);
+                    logger.trace("Unable to use ReflectAsm for {}.{} (using java reflection instead)", declaringClass, method.getName(), e);
                 }
             }
 
@@ -200,7 +211,7 @@ class RmiUtils {
             cachedMethod.methodClassID = classId;
 
             // we ALSO have to setup "normal" reflection access to these methods
-            cachedMethod.method = tweakMethod;
+            cachedMethod.method = method;
             cachedMethod.methodIndex = i;
 
             // Store the serializer for each final parameter.
@@ -363,5 +374,4 @@ class RmiUtils {
 
         return methodsArray;
     }
-
 }

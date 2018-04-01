@@ -21,7 +21,7 @@ import dorkbox.network.rmi.RemoteObject;
  * Supporting methods for RMI connections
  */
 public
-interface IRmiConnection {
+interface RmiConnection {
 
     /**
      * Used by RMI for the LOCAL side, to get the proxy object as an interface

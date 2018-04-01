@@ -112,12 +112,11 @@ class RegistrationWrapper {
     }
 
     /**
-     * Internal call by the pipeline to notify the "Connection" object that it has "connected", meaning that modifications to the pipeline
-     * are finished.
+     * Internal call by the pipeline to notify the "Connection" object that it has "connected".
      */
     public
-    void connectionConnected0(ConnectionImpl networkConnection) {
-        this.endPoint.connectionConnected0(networkConnection);
+    void connectionConnected0(ConnectionImpl connection) {
+        this.endPoint.connectionConnected0(connection);
     }
 
     /**
@@ -126,7 +125,7 @@ class RegistrationWrapper {
      * @param metaChannel can be NULL (when getting the baseClass)
      */
     public
-    Connection connection0(MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
+    ConnectionImpl connection0(MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
         return this.endPoint.connection0(metaChannel, remoteAddress);
     }
 

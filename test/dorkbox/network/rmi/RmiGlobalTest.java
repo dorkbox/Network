@@ -34,7 +34,9 @@
  */
 package dorkbox.network.rmi;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 
@@ -166,12 +168,14 @@ class RmiGlobalTest extends BaseTest {
 
 
         // Test sending a reference to a remote object (the receiving end should receive the IMPL object, not the proxy object)
+        System.out.println("Sending proxied object to remote...");
         MessageWithTestCow m = new MessageWithTestCow(test);
         m.number = 678;
         m.text = "sometext";
 
         connection.send()
-                  .TCP(m);
+                  .TCP(m)
+                  .flush();
     }
 
 

@@ -16,6 +16,7 @@
 package dorkbox.network.connection;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.EventLoopGroup;
 
 public
 class BootstrapWrapper {
@@ -30,6 +31,11 @@ class BootstrapWrapper {
         this.address = address;
         this.port = port;
         this.bootstrap = bootstrap;
+    }
+
+    public
+    BootstrapWrapper clone(EventLoopGroup group) {
+        return new BootstrapWrapper(type, address, port, bootstrap.clone(group));
     }
 
     @Override

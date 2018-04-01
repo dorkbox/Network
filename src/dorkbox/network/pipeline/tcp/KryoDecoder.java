@@ -36,7 +36,7 @@ class KryoDecoder extends ByteToMessageDecoder {
 
     @SuppressWarnings("unused")
     protected
-    Object readObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) throws IOException {
+    Object readObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) throws Exception {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         return serializationManager.read(in, length);
     }
@@ -167,7 +167,7 @@ class KryoDecoder extends ByteToMessageDecoder {
                 object = readObject(serializationManager, context, in, length);
                 out.add(object);
             } catch (Exception ex) {
-                context.fireExceptionCaught(new IOException("Unable to deserialize object!", ex));
+                context.fireExceptionCaught(new IOException("Unable to deserialize object for " + this.getClass(), ex));
             }
         }
     }

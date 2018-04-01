@@ -20,19 +20,22 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.EventLoopGroup;
 
 @Sharable
 public abstract
 class RegistrationHandler extends ChannelInboundHandlerAdapter {
-    protected static final String CONNECTION_HANDLER = "connectionHandler";
+    protected static final String CONNECTION_HANDLER = "connection";
 
     protected final RegistrationWrapper registrationWrapper;
     protected final org.slf4j.Logger logger;
     protected final String name;
+    protected final EventLoopGroup workerEventLoop;
 
     public
-    RegistrationHandler(final String name, RegistrationWrapper registrationWrapper) {
+    RegistrationHandler(final String name, RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
         this.name = name;
+        this.workerEventLoop = workerEventLoop;
         this.logger = org.slf4j.LoggerFactory.getLogger(this.name);
         this.registrationWrapper = registrationWrapper;
     }
@@ -74,7 +77,6 @@ class RegistrationHandler extends ChannelInboundHandlerAdapter {
     @Override
     public
     void channelReadComplete(final ChannelHandlerContext context) throws Exception {
-        context.flush();
     }
 
     @Override

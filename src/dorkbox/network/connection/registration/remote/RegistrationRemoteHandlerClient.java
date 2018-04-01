@@ -36,12 +36,13 @@ import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
+import io.netty.channel.EventLoopGroup;
 
 public
 class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
-    RegistrationRemoteHandlerClient(final String name, final RegistrationWrapper registrationWrapper) {
-        super(name, registrationWrapper);
+    RegistrationRemoteHandlerClient(final String name, final RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
+        super(name, registrationWrapper, workerEventLoop);
 
         // check to see if we need to delete an IP address as commanded from the user prompt
         String ipAsString = System.getProperty(DELETE_IP);
@@ -92,7 +93,7 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
     @SuppressWarnings("Duplicates")
     void readClient(final Channel channel, final Registration registration, final String type, final MetaChannel metaChannel) {
-        InetSocketAddress remoteAddress = (InetSocketAddress) channel.remoteAddress();
+        final InetSocketAddress remoteAddress = (InetSocketAddress) channel.remoteAddress();
 
         //  IN: session ID + public key + ecc parameters (which are a nonce. the SERVER defines what these are)
         // OUT: remote ECDH shared payload
@@ -124,7 +125,6 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
             EccPublicKeySerializer.write(output, (ECPublicKeyParameters) metaChannel.ecdhKey.getPublic());
             outboundRegister.payload = output.toBytes();
 
-            metaChannel.updateRoundTripOnWrite();
             channel.writeAndFlush(outboundRegister);
             return;
         }
@@ -171,46 +171,59 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
             Registration outboundRegister = new Registration(metaChannel.sessionId);
 
             // do we have any more registrations?
-            boolean hasMoreRegistrations = registrationWrapper.hasMoreRegistrations();
-            outboundRegister.hasMore = hasMoreRegistrations;
-
-            metaChannel.updateRoundTripOnWrite();
+            outboundRegister.hasMore = registrationWrapper.hasMoreRegistrations();
             channel.writeAndFlush(outboundRegister);
 
-
-            if (hasMoreRegistrations) {
-                // start the process for the next protocol.
-                registrationWrapper.startNextProtocolRegistration();
-            }
-
-            // always return!
+            // wait for ack from the server before registering the next protocol
             return;
         }
 
 
-        // // when we have a "continuing registration" for another protocol, we have to have another roundtrip.
-        // if (registration.payload != null) {
-        //     metaChannel.updateRoundTripTime();
-        //     channel.writeAndFlush(new Registration(metaChannel.sessionId));
-        //     return;
-        // }
+        // IN: upgrade=true if we must upgrade this connection
+        if (registration.upgrade) {
+            // this pipeline can now be marked to be upgraded
+
+            // upgrade the connection to an encrypted connection
+            // this pipeline encoder/decoder can now be upgraded, and the "connection" added
+            upgradeEncoders(channel, metaChannel, remoteAddress);
+            upgradeDecoders(channel, metaChannel);
+        }
+
+        // IN: hasMore=true if we have more registrations to do, false otherwise
+        if (registration.hasMore) {
+            registrationWrapper.startNextProtocolRegistration();
+            return;
+        }
 
 
-        // We ONLY get here after the server acks our registration status.
-        // The server will only ack if we DO NOT have more registrations. If we have more registrations, the server waits.
-        setupConnectionCrypto(metaChannel, remoteAddress);
-        setupConnection(metaChannel, channel);
+        //
+        //
+        // we only get this when we are 100% done with the registration of all connection types.
+        //
+        //
 
-        // wait for a "round trip" amount of time, then notify the APP!
-        final long delay = TimeUnit.NANOSECONDS.toMillis(metaChannel.getRoundTripTime() * 2);
-        channel.eventLoop()
-               .schedule(new Runnable() {
-                   @Override
-                   public
-                   void run() {
-                       logger.trace("Notify Connection");
-                       notifyConnection(metaChannel);
-                   }
-               }, delay, TimeUnit.MILLISECONDS);
+
+        if (!registration.upgraded) {
+            // setup the pipeline with the real connection
+            upgradePipeline(metaChannel, remoteAddress);
+
+            // tell the server we are upgraded (it will bounce back telling us to connect)
+            registration.upgraded = true;
+            channel.writeAndFlush(registration);
+            return;
+        }
+
+
+        // remove the ConnectionWrapper (that was used to upgrade the connection)
+        cleanupPipeline(metaChannel);
+
+        workerEventLoop.schedule(new Runnable() {
+            @Override
+            public
+            void run() {
+                logger.trace("Notify Connection");
+                doConnect(metaChannel);
+            }
+        }, 20, TimeUnit.MILLISECONDS);
     }
 }

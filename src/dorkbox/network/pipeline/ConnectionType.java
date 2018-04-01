@@ -16,19 +16,9 @@
 package dorkbox.network.pipeline;
 
 /**
- * Magic bytes used to identify packets when they are specific types
+ * What is the underlying connection type?
  */
 public
-class MagicBytes {
-
-    // BROADCAST ...
-    public static final byte broadcastID = (byte) 42;
-    public static final byte broadcastResponseID = (byte) 57;
-
-    public static final byte HAS_TCP = (byte) (1 << 1);
-    public static final byte HAS_UDP = (byte) (1 << 2);
-
-    // max number of bytes in a broadcast packet (if both TCP and UDP are enabled)
-    public static final int maxPacketSize = 6;
-    // END BROADCAST ...
+enum ConnectionType {
+    LOCAL, OIO, NIO, EPOLL, KQUEUE
 }

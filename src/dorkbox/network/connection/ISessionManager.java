@@ -35,6 +35,11 @@ interface ISessionManager {
 
     /**
      * Invoked when a Channel is open, bound to a local address, and connected to a remote address.
+     */
+    void addConnection(ConnectionImpl connection);
+
+    /**
+     * Invoked when a Channel is open, bound to a local address, and connected to a remote address.
      * <p>
      * Will auto-flush the connection queue if necessary.
      */

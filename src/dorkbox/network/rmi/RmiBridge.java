@@ -293,8 +293,7 @@ class RmiBridge {
         }
 
         // System.err.println("Sending: " + invokeMethod.responseID);
-        connection.send()
-                  .TCP(invokeMethodResult);
+        connection.send(invokeMethodResult).flush();
 
         // logger.error("{} sent data: {}  with id ({})", connection, result, invokeMethod.responseID);
     }

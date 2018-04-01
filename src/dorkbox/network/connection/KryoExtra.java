@@ -25,7 +25,6 @@ import com.esotericsoftware.kryo.Kryo;
 
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
-import dorkbox.network.pipeline.MagicBytes;
 import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.bytes.BigEndian;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
@@ -40,7 +39,7 @@ import net.jpountz.lz4.LZ4FastDecompressor;
  * Nothing in this class is thread safe
  */
 public
-class KryoExtra<C extends ICryptoConnection> extends Kryo {
+class KryoExtra<C extends CryptoConnection> extends Kryo {
     // snappycomp   :       7.534 micros/op;  518.5 MB/s (output: 55.1%)
     // snappyuncomp :       1.391 micros/op; 2808.1 MB/s
     // lz4comp      :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
@@ -52,7 +51,7 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
     private final ByteBufOutput writer = new ByteBufOutput();
 
     // volatile to provide object visibility for entire class
-    public volatile IRmiConnection connection;
+    public volatile RmiConnection connection;
 
     private final GCMBlockCipher aesEngine = new GCMBlockCipher(new AESFastEngine());
 
@@ -94,9 +93,6 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
         // connection will always be NULL during connection initialization
         this.connection = null;
 
-        // during INIT and handshake, we don't use connection encryption/compression
-        buffer.writeByte(0);
-
         // write the object to the NORMAL output buffer!
         writer.setBuffer(buffer);
 
@@ -114,15 +110,15 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
 
         ByteBuf inputBuf = buffer;
 
-        // read off the magic byte
-        final byte magicByte = buffer.readByte();
-
         // read the object from the buffer.
         reader.setBuffer(inputBuf);
 
         return readClassAndObject(reader); // this properly sets the readerIndex, but only if it's the correct buffer
     }
 
+    /**
+     * This is NOT ENCRYPTED (and is only done on the loopback connection!)
+     */
     public synchronized
     void writeCompressed(final C connection, final ByteBuf buffer, final Object message) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
@@ -180,10 +176,10 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
 
         byte[] compressOutput = this.compressOutput;
 
-        int maxLengthLengthOffset = 5;
+        int maxLengthLengthOffset = 4; // length is never negative, so 4 is OK (5 means it's negative)
         int maxCompressedLength = compressor.maxCompressedLength(length);
 
-        // add 5 so there is room to write the compressed size to the buffer
+        // add 4 so there is room to write the compressed size to the buffer
         int maxCompressedLengthWithOffset = maxCompressedLength + maxLengthLengthOffset;
 
         // lazy initialize the compression output buffer
@@ -194,7 +190,7 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
         }
 
 
-        // LZ4 compress. output offset max 5 bytes to leave room for length of tempOutput data
+        // LZ4 compress. output offset max 4 bytes to leave room for length of tempOutput data
         int compressedLength = compressor.compress(inputArray, inputOffset, length, compressOutput, maxLengthLengthOffset, maxCompressedLength);
 
         // bytes can now be written to, because our compressed data is stored in a temp array.
@@ -209,13 +205,13 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
         // now write the ORIGINAL (uncompressed) length to the front of the byte array (this is NOT THE BUFFER!). This is so we can use the FAST decompress version
         OptimizeUtilsByteArray.writeInt(inputArray, length, true, inputOffset);
 
-        // write out the "magic" byte.
-        buffer.writeByte(MagicBytes.crypto);
-
         // have to copy over the orig data, because we used the temp buffer. Also have to account for the length of the uncompressed size
         buffer.writeBytes(inputArray, inputOffset, compressedLength + lengthLength);
     }
 
+    /**
+     * This is NOT ENCRYPTED (and is only done on the loopback connection!)
+     */
     public
     Object readCompressed(final C connection, final ByteBuf buffer, int length) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
@@ -228,15 +224,12 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
 
         ByteBuf inputBuf = buffer;
 
-        // read off the magic byte
-        final byte magicByte = buffer.readByte();
-
         // get the decompressed length (at the beginning of the array)
         final int uncompressedLength = OptimizeUtilsByteBuf.readInt(buffer, true);
         final int lengthLength = OptimizeUtilsByteArray.intLength(uncompressedLength, true); // because 1-5 bytes for the decompressed size
 
-        // have to adjust for the magic byte and uncompressed length
-        length = length - 1 - lengthLength;
+        // have to adjust for uncompressed length
+        length = length - lengthLength;
 
 
         ///////// decompress data -- as it's ALWAYS compressed
@@ -363,10 +356,10 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
 
         byte[] compressOutput = this.compressOutput;
 
-        int maxLengthLengthOffset = 5;
+        int maxLengthLengthOffset = 4; // length is never negative, so 4 is OK (5 means it's negative)
         int maxCompressedLength = compressor.maxCompressedLength(length);
 
-        // add 5 so there is room to write the compressed size to the buffer
+        // add 4 so there is room to write the compressed size to the buffer
         int maxCompressedLengthWithOffset = maxCompressedLength + maxLengthLengthOffset;
 
         // lazy initialize the compression output buffer
@@ -378,7 +371,7 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
 
 
 
-        // LZ4 compress. output offset max 5 bytes to leave room for length of tempOutput data
+        // LZ4 compress. output offset max 4 bytes to leave room for length of tempOutput data
         int compressedLength = compressor.compress(inputArray, inputOffset, length, compressOutput, maxLengthLengthOffset, maxCompressedLength);
 
         // bytes can now be written to, because our compressed data is stored in a temp array.
@@ -394,7 +387,7 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
         OptimizeUtilsByteArray.writeInt(inputArray, length, true, inputOffset);
 
         // correct length for encryption
-        length = compressedLength + lengthLength; // +1 to +5 for the uncompressed size bytes
+        length = compressedLength + lengthLength; // +1 to +4 for the uncompressed size bytes
 
 
 
@@ -432,9 +425,6 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
             throw new IOException("Unable to AES encrypt the data", e);
         }
 
-        // write out the "magic" byte.
-        buffer.writeByte(MagicBytes.crypto);
-
         // write out our GCM counter
         OptimizeUtilsByteBuf.writeLong(buffer, nextGcmSequence, true);
 
@@ -454,15 +444,11 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
 
         ByteBuf inputBuf = buffer;
 
-        // read off the magic byte
-        final byte magicByte = buffer.readByte();
-
         final long gcmIVCounter = OptimizeUtilsByteBuf.readLong(buffer, true);
 
-        // compression can ONLY happen if it's ALSO crypto'd
 
-        // have to adjust for the magic byte and the gcmIVCounter
-        length = length - 1 - OptimizeUtilsByteArray.longLength(gcmIVCounter, true);
+        // have to adjust for the gcmIVCounter
+        length = length - OptimizeUtilsByteArray.longLength(gcmIVCounter, true);
 
 
         /////////// decrypting data
@@ -543,7 +529,7 @@ class KryoExtra<C extends ICryptoConnection> extends Kryo {
         // get the decompressed length (at the beginning of the array)
         inputArray = decryptOutputArray;
         final int uncompressedLength = OptimizeUtilsByteArray.readInt(inputArray, true);
-        inputOffset = OptimizeUtilsByteArray.intLength(uncompressedLength, true); // because 1-5 bytes for the decompressed size
+        inputOffset = OptimizeUtilsByteArray.intLength(uncompressedLength, true); // because 1-4 bytes for the decompressed size
 
 
         byte[] decompressOutputArray = this.decompressOutput;

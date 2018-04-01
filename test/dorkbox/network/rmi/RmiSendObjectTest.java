@@ -163,7 +163,8 @@ class RmiSendObjectTest extends BaseTest {
                                       // When a remote proxy object is sent, the other side receives its actual remote object.
                                       // we have to manually flush, since we are in a separate thread that does not auto-flush.
                                       connection.send()
-                                                .TCP(otherObject);
+                                                .TCP(otherObject)
+                                                .flush();
                                   }
                               }.start();
                           }

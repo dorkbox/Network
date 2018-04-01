@@ -15,7 +15,9 @@
  */
 package dorkbox.network.connection;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -44,6 +46,7 @@ import dorkbox.util.Property;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.exceptions.SecurityException;
+import io.netty.channel.local.LocalAddress;
 import io.netty.util.NetUtil;
 
 /**
@@ -63,11 +66,45 @@ class EndPoint extends Shutdownable {
     // TODO: maybe some sort of STUN-like connection keep-alive??
 
 
+    public static
+    String getHostDetails(final SocketAddress socketAddress) {
+        StringBuilder builder = new StringBuilder();
+        getHostDetails(builder, socketAddress);
+        return builder.toString();
+    }
+
+    public static
+    void getHostDetails(StringBuilder stringBuilder, final SocketAddress socketAddress) {
+        if (socketAddress instanceof InetSocketAddress) {
+            InetSocketAddress address = (InetSocketAddress) socketAddress;
+
+            InetAddress address1 = address.getAddress();
+
+            String hostName = address1.getHostName();
+            String hostAddress = address1.getHostAddress();
+
+            if (!hostName.equals(hostAddress)) {
+                stringBuilder.append(hostName)
+                             .append('/')
+                             .append(hostAddress);
+            }
+            else {
+                stringBuilder.append(hostAddress);
+            }
+
+            stringBuilder.append(':')
+                         .append(address.getPort());
+        }
+        else if (socketAddress instanceof LocalAddress) {
+            stringBuilder.append(socketAddress.toString());
+        }
+    }
+
     /**
      * Defines if we are allowed to use the native OS-specific network interface (non-native to java) for boosted networking performance.
      */
     @Property
-    public static boolean enableNativeLibrary = true;
+    public static boolean enableNativeLibrary = false;
 
 
     public static final String LOCAL_CHANNEL = "local_channel";
@@ -122,7 +159,8 @@ class EndPoint extends Shutdownable {
      */
     private volatile int idleTimeoutMs = 0;
 
-    private AtomicBoolean isConnected = new AtomicBoolean(false);
+    // the connection status of this endpoint. Once a server has connected to ANY client, it will always return true until server.close() is called
+    protected final AtomicBoolean isConnected = new AtomicBoolean(false);
 
 
     /**
@@ -244,7 +282,7 @@ class EndPoint extends Shutdownable {
      */
     public
     void disableRemoteKeyValidation() {
-        if (isConnected()) {
+        if (isConnected.get()) {
             logger.error("Cannot disable the remote key validation after this endpoint is connected!");
         }
         else {
@@ -302,16 +340,6 @@ class EndPoint extends Shutdownable {
     }
 
     /**
-     * Return the connection status of this endpoint.
-     * <p/>
-     * Once a server has connected to ANY client, it will always return true until server.close() is called
-     */
-    public final
-    boolean isConnected() {
-        return isConnected.get();
-    }
-
-    /**
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
      */
     public
@@ -342,7 +370,7 @@ class EndPoint extends Shutdownable {
      * @param remoteAddress be NULL (when getting the baseClass or when creating a local channel)
      */
     protected final
-    Connection connection0(final MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
+    ConnectionImpl connection0(final MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
         ConnectionImpl connection;
 
         RmiBridge rmiBridge = null;
@@ -357,7 +385,6 @@ class EndPoint extends Shutdownable {
             ChannelWrapper wrapper;
 
             connection = newConnection(logger, this, rmiBridge);
-            metaChannel.connection = connection;
 
             if (metaChannel.localChannel != null) {
                 if (rmiEnabled) {
@@ -378,6 +405,9 @@ class EndPoint extends Shutdownable {
 
             // now initialize the connection channels with whatever extra info they might need.
             connection.init(wrapper, connectionManager);
+
+            isConnected.set(true);
+            connectionManager.addConnection(connection);
         }
         else {
             // getting the connection baseClass
@@ -393,14 +423,9 @@ class EndPoint extends Shutdownable {
      * Internal call by the pipeline to notify the "Connection" object that it has "connected", meaning that modifications
      * to the pipeline are finished.
      * <p/>
-     * Only the CLIENT injects in front of this)
+     * Only the CLIENT injects in front of this
      */
     void connectionConnected0(ConnectionImpl connection) {
-        isConnected.set(true);
-
-        // prep the channel wrapper
-        connection.prep();
-
         connectionManager.onConnected(connection);
     }
 
@@ -427,6 +452,13 @@ class EndPoint extends Shutdownable {
     ConnectionBridgeBase send();
 
     /**
+     * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
+     * is available to use. If you want specify the protocol, use {@link #send()}, followed by the protocol you wish to use.
+     */
+    public abstract
+    ConnectionPoint send(final Object message);
+
+    /**
      * Closes all connections ONLY (keeps the server/client running).  To STOP the client/server, use stop().
      * <p/>
      * This is used, for example, when reconnecting to a server.
@@ -434,17 +466,7 @@ class EndPoint extends Shutdownable {
      * The server should ALWAYS use STOP.
      */
     void closeConnections(boolean shouldKeepListeners) {
-        // give a chance to other threads.
-        Thread.yield();
 
-        // stop does the same as this + more.  Only keep the listeners for connections IF we are the client. If we remove listeners as a client,
-        // ALL of the client logic will be lost. The server is reactive, so listeners are added to connections as needed (instead of before startup)
-        connectionManager.closeConnections(shouldKeepListeners);
-
-        // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
-        registrationWrapper.clearSessions();
-
-        isConnected.set(false);
     }
 
     /**
@@ -462,8 +484,6 @@ class EndPoint extends Shutdownable {
     @Override
     protected
     void shutdownChannelsPre() {
-        closeConnections(false);
-
         // this does a closeConnections + clear_listeners
         connectionManager.stop();
     }

@@ -43,7 +43,7 @@ import io.netty.util.ResourceLeakDetector;
 public abstract
 class BaseTest {
 
-    public static final String host = "localhost";
+    public static final String host = "127.0.0.1";
     public static final int tcpPort = 54558;
     public static final int udpPort = 54779;
 
@@ -75,8 +75,9 @@ class BaseTest {
 
 //        rootLogger.setLevel(Level.OFF);
 
-        rootLogger.setLevel(Level.DEBUG);
-//        rootLogger.setLevel(Level.TRACE);
+        // rootLogger.setLevel(Level.INFO);
+        // rootLogger.setLevel(Level.DEBUG);
+       rootLogger.setLevel(Level.TRACE);
 //        rootLogger.setLevel(Level.ALL);
 
 
@@ -116,25 +117,19 @@ class BaseTest {
      */
     public
     void stopEndPoints() {
-        stopEndPoints(1);
+        stopEndPoints(0);
     }
 
     public
     void stopEndPoints(final int stopAfterMillis) {
-        final String name = Thread.currentThread().getThreadGroup()
-                                  .getName();
+        ThreadGroup threadGroup = Thread.currentThread()
+                                        .getThreadGroup();
+        final String name = threadGroup.getName();
 
-        // no need to run inside another thread if we are not inside the client/server thread
-        if (!name.contains(THREADGROUP_NAME)) {
-            stopEndPoints_outsideThread();
-            return;
-        }
-
-
-        if (stopAfterMillis > 0) {
+        if (name.contains(THREADGROUP_NAME)) {
             // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will
             // DEADLOCK
-            final Thread thread = new Thread(getThreadGroup(), new Runnable() {
+            final Thread thread = new Thread(threadGroup.getParent(), new Runnable() {
                 @Override
                 public
                 void run() {
@@ -143,106 +138,98 @@ class BaseTest {
                         // ARE NOT in the same thread group as netty!
                         Thread.sleep(stopAfterMillis);
 
-                        stopEndPoints_outsideThread();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        stopEndPoints(stopAfterMillis);
+                    } catch (InterruptedException ignored) {
                     }
                 }
             }, "UnitTest shutdown");
 
             thread.setDaemon(true);
             thread.start();
-        }
-    }
+        } else {
+            synchronized (this.endPointConnections) {
+                for (EndPoint endPointConnection : this.endPointConnections) {
+                    endPointConnection.stop();
+                    endPointConnection.waitForShutdown();
+                }
 
-    private
-    void stopEndPoints_outsideThread() {
-        synchronized (BaseTest.this.endPointConnections) {
-            for (EndPoint endPointConnection : BaseTest.this.endPointConnections) {
-                endPointConnection.stop();
-                endPointConnection.waitForShutdown();
+                this.endPointConnections.clear();
+                this.endPointConnections.notifyAll();
             }
-            BaseTest.this.endPointConnections.clear();
         }
-    }
-
-
-    private
-    ThreadGroup getThreadGroup() {
-        ThreadGroup threadGroup = Thread.currentThread()
-                                        .getThreadGroup();
-        final String name = threadGroup.getName();
-        if (name.contains(THREADGROUP_NAME)) {
-            threadGroup = threadGroup.getParent();
-        }
-        return threadGroup;
-    }
-
-    public
-    void waitForThreads(int stopAfterSecondsOrMillis) {
-        if (stopAfterSecondsOrMillis < 1000) {
-            stopAfterSecondsOrMillis *= 1000;
-        }
-        stopEndPoints(stopAfterSecondsOrMillis);
-        waitForThreads0(stopAfterSecondsOrMillis);
     }
 
     /**
-     * Wait for threads until they are done (no timeout)
+     * Wait for network client/server threads to shutdown on their own, BUT WILL ERROR (+ shutdown) if they take longer than 2 minutes.
      */
     public
     void waitForThreads() {
-        waitForThreads0(0);
+        waitForThreads(0);
     }
 
-    private
-    void waitForThreads0(final int stopAfterMillis) {
+    /**
+     * Wait for network client/server threads to shutdown for the specified time.
+     *
+     * @param stopAfterSeconds how many seconds to wait
+     */
+    public
+    void waitForThreads(int stopAfterSeconds) {
+        final int stopAfterMillis = stopAfterSeconds * 1000; // this must be in milliseconds
+
         this.fail_check = false;
 
-        Thread thread = null;
+        synchronized (this.endPointConnections) {
+            Thread thread = null;
+            if (!this.endPointConnections.isEmpty()) {
+                // make sure to run this thread in the MAIN thread group..
+                ThreadGroup threadGroup = Thread.currentThread()
+                                                .getThreadGroup();
+                if (threadGroup.getName()
+                               .contains(THREADGROUP_NAME)) {
+                    threadGroup = threadGroup.getParent();
+                }
 
-        if (stopAfterMillis > 0L) {
-            stopEndPoints(stopAfterMillis);
-
-            // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will
-            // DEADLOCK
-            thread = new Thread(getThreadGroup(), new Runnable() {
-                @Override
-                public
-                void run() {
-                    try {
+                thread = new Thread(threadGroup, new Runnable() {
+                    @Override
+                    public
+                    void run() {
                         // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
                         // ARE NOT in the same thread group as netty!
-                        Thread.sleep(stopAfterMillis + 120000L); // test must run in 2 minutes or it fails
+                        try {
+                            if (stopAfterMillis > 0L) {
+                                // if we specify a time, then we stop, otherwise we wait the timeout.
+                                Thread.sleep(stopAfterMillis);
+                            }
+                            else {
+                                Thread.sleep(120 * 1000L); // wait minimum of 2 minutes before we automatically fail the unit test.
+                            }
 
-                        BaseTest.this.fail_check = true;
-                    } catch (InterruptedException ignored) {
+                            System.err.println("Test did not complete in a timely manner...");
+                            BaseTest.this.fail_check = true;
+                            stopEndPoints();
+                        } catch (InterruptedException ignored) {
+                        }
                     }
-                }
-            }, "UnitTest timeout");
+                }, "UnitTest timeout fail condition");
+                thread.setDaemon(true);
+                thread.start();
+            }
 
-            thread.setDaemon(true);
-            thread.start();
-        }
-
-        while (true) {
-            synchronized (this.endPointConnections) {
-                if (this.endPointConnections.isEmpty()) {
-                    break;
+            while (!this.endPointConnections.isEmpty()) {
+                try {
+                    this.endPointConnections.wait(stopAfterMillis);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
             }
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException ignored) {
+
+            if (thread != null) {
+                thread.interrupt();
             }
-        }
 
-        if (this.fail_check) {
-            fail("Test did not complete in a timely manner.");
-        }
-
-        if (thread != null) {
-            thread.interrupt();
+            if (this.fail_check) {
+                fail("Test did not complete in a timely manner.");
+            }
         }
 
         // Give sockets a chance to close before starting the next test.

@@ -65,7 +65,7 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
                 int index = out.writerIndex();
 
                 // now set the frame length
-                // (reservedLengthLength) 5 is the reserved space for the integer.
+                // (reservedLengthLength) 4 is the reserved space for the integer.
                 int length = index - startIndex;
 
                 // specify the header.

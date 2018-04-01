@@ -55,6 +55,7 @@ class ChannelNetwork implements ConnectionPoint {
         return channel.isWritable();
     }
 
+    @Override
     public
     void flush() {
         if (shouldFlush.compareAndSet(true, false)) {
@@ -71,7 +72,9 @@ class ChannelNetwork implements ConnectionPoint {
     public
     void close(long maxShutdownWaitTimeInMilliSeconds) {
         shouldFlush.set(false);
-        channel.close()
-               .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+        if (channel.isActive()) {
+            channel.close()
+                   .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+        }
     }
 }

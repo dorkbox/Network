@@ -18,18 +18,22 @@ package dorkbox.network.connection.registration.remote;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.EventLoopGroup;
 
 @SuppressWarnings("Duplicates")
 public
 class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient {
     public
-    RegistrationRemoteHandlerClientUDP(final String name, final RegistrationWrapper registrationWrapper) {
-        super(name, registrationWrapper);
+    RegistrationRemoteHandlerClientUDP(final String name,
+                                       final RegistrationWrapper registrationWrapper,
+                                       final EventLoopGroup workerEventLoop) {
+        super(name, registrationWrapper, workerEventLoop);
     }
 
     /**
@@ -53,12 +57,6 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
             if (firstSession != null) {
                 outboundRegister.sessionID = firstSession.sessionId;
                 outboundRegister.hasMore = registrationWrapper.hasMoreRegistrations();
-
-
-                // when we have a "continuing registration" for another protocol, we have to have another roundtrip.
-                // outboundRegister.payload = new byte[0];
-
-                firstSession.updateRoundTripOnWrite();
             }
 
             // no size info, since this is UDP, it is not segmented
@@ -102,7 +100,15 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
         }
         else {
             logger.error("Error registering UDP with remote server!");
-            shutdown(channel, 0);
+            // this is what happens when the registration happens too quickly...
+            Object connection = context.pipeline()
+                                       .last();
+            if (connection instanceof ConnectionImpl) {
+                ((ConnectionImpl) connection).channelRead(context, message);
+            }
+            else {
+                shutdown(channel, 0);
+            }
         }
     }
 }

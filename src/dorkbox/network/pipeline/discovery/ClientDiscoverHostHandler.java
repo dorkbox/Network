@@ -15,29 +15,33 @@
  */
 package dorkbox.network.pipeline.discovery;
 
-import dorkbox.network.Broadcast;
+import java.net.InetAddress;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.util.AttributeKey;
 
-import java.net.InetSocketAddress;
-
 public
 class ClientDiscoverHostHandler extends SimpleChannelInboundHandler<DatagramPacket> {
-    // This uses CHANNEL LOCAL to save the data.
+    // This uses CHANNEL LOCAL DATA to save the data.
 
-    public static final AttributeKey<InetSocketAddress> STATE = AttributeKey.valueOf(ClientDiscoverHostHandler.class, "Discover.state");
+    public static final AttributeKey<BroadcastResponse> STATE = AttributeKey.valueOf(ClientDiscoverHostHandler.class, "Discover.state");
+
+    ClientDiscoverHostHandler() {
+    }
 
     @Override
     protected
     void channelRead0(final ChannelHandlerContext context, final DatagramPacket message) throws Exception {
-        ByteBuf data = message.content();
-        if (data.readableBytes() == 1 && data.readByte() == Broadcast.broadcastResponseID) {
-            context.channel()
-                   .attr(STATE)
-                   .set(message.sender());
+        ByteBuf byteBuf = message.content();
+
+        InetAddress remoteAddress = message.sender()
+                                           .getAddress();
+
+        if (BroadcastServer.isDiscoveryResponse(byteBuf, remoteAddress, context.channel())) {
+            // the state/ports/etc are set inside the isDiscoveryResponse() method...
             context.channel()
                    .close();
         }

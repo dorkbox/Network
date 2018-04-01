@@ -20,10 +20,9 @@ import java.util.List;
 
 import org.slf4j.LoggerFactory;
 
-import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.CryptoConnection;
 import dorkbox.network.serialization.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
@@ -43,12 +42,12 @@ class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
     @Override
     public
     void decode(ChannelHandlerContext context, DatagramPacket in, List<Object> out) throws Exception {
-        ChannelHandler last = context.pipeline()
-                                     .last();
+        CryptoConnection last = (CryptoConnection) context.pipeline()
+                                                          .last();
 
         try {
             ByteBuf data = in.content();
-            Object object = serializationManager.readWithCrypto((ConnectionImpl) last, data, data.readableBytes());
+            Object object = serializationManager.readWithCrypto(last, data, data.readableBytes());
             out.add(object);
         } catch (IOException e) {
             String message = "Unable to deserialize object";

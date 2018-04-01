@@ -25,9 +25,4 @@ interface ConnectionBridge extends ConnectionBridgeBase {
      * @return Ping can have a listener attached, which will get called when the ping returns.
      */
     Ping ping();
-
-    /**
-     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
-     */
-    void flush();
 }

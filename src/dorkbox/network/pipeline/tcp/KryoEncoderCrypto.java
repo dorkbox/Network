@@ -17,7 +17,7 @@ package dorkbox.network.pipeline.tcp;
 
 import java.io.IOException;
 
-import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.CryptoConnection;
 import dorkbox.network.serialization.CryptoSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -39,8 +39,8 @@ class KryoEncoderCrypto extends KryoEncoder {
                      final Object msg,
                      final ByteBuf buffer) throws IOException {
 
-        ConnectionImpl connection = (ConnectionImpl) context.pipeline()
-                                                            .last();
+        CryptoConnection connection = (CryptoConnection) context.pipeline()
+                                                                .last();
         serializationManager.writeWithCrypto(connection, buffer, msg);
     }
 }

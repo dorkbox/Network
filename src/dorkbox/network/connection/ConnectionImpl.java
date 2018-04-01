@@ -23,12 +23,16 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.slf4j.Logger;
 
+import dorkbox.network.Client;
+import dorkbox.network.connection.Listener.OnMessageReceived;
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
@@ -54,6 +58,7 @@ import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.collections.LockFreeHashMap;
 import dorkbox.util.collections.LockFreeIntMap;
 import dorkbox.util.generics.ClassHelper;
+import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.bootstrap.DatagramSessionChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -80,9 +85,9 @@ import io.netty.util.concurrent.Promise;
 @SuppressWarnings("unused")
 @Sharable
 public
-class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConnection, Connection, Listeners, ConnectionBridge {
+class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConnection, Connection, Listeners, ConnectionBridge {
     public static
-    boolean isTcp(Class<? extends Channel> channelClass) {
+    boolean isTcpChannel(Class<? extends Channel> channelClass) {
         return channelClass == OioSocketChannel.class ||
                channelClass == NioSocketChannel.class ||
                channelClass == KQueueSocketChannel.class ||
@@ -90,7 +95,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     }
 
     public static
-    boolean isUdp(Class<? extends Channel> channelClass) {
+    boolean isUdpChannel(Class<? extends Channel> channelClass) {
         return channelClass == OioDatagramChannel.class ||
                channelClass == NioDatagramChannel.class ||
                channelClass == KQueueDatagramChannel.class ||
@@ -99,7 +104,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     }
 
     public static
-    boolean isLocal(Class<? extends Channel> channelClass) {
+    boolean isLocalChannel(Class<? extends Channel> channelClass) {
         return channelClass == LocalChannel.class;
     }
 
@@ -111,15 +116,13 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     private final Object writeLock = new Object();
 
     private final AtomicBoolean closeInProgress = new AtomicBoolean(false);
-    private final AtomicBoolean alreadyClosed = new AtomicBoolean(false);
-    private final Object closeInProgressLock = new Object();
+    private final AtomicBoolean channelIsClosed = new AtomicBoolean(false);
 
     private final Object messageInProgressLock = new Object();
     private final AtomicBoolean messageInProgress = new AtomicBoolean(false);
 
     private ISessionManager sessionManager;
     private ChannelWrapper channelWrapper;
-    private boolean isLoopback;
 
     private volatile PingFuture pingFuture = null;
 
@@ -140,6 +143,11 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
     private final AtomicLong aes_gcm_iv = new AtomicLong(0);
 
+
+    // when closing this connection, HOW MANY endpoints need to be closed?
+    private CountDownLatch closeLatch;
+
+
     //
     // RMI fields
     //
@@ -149,6 +157,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
     private final LockFreeIntMap<RemoteObjectCallback> rmiRegistrationCallbacks;
     private volatile int rmiCallbackId = 0;
+
 
     /**
      * All of the parameters can be null, when metaChannel wants to get the base class type
@@ -175,8 +184,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
     /**
      * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
-     * <p/>
-     * This happens BEFORE prep.
      */
     final
     void init(final ChannelWrapper channelWrapper, final ISessionManager sessionManager) {
@@ -186,23 +193,33 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         //noinspection SimplifiableIfStatement
         if (this.channelWrapper instanceof ChannelNetworkWrapper) {
             this.remoteKeyChanged = ((ChannelNetworkWrapper) this.channelWrapper).remoteKeyChanged();
+
+            int count = 0;
+            if (channelWrapper.tcp() != null) {
+                count++;
+            }
+
+            if (channelWrapper.udp() != null) {
+                count++;
+
+                // we received a hint to close this channel from the remote end.
+                add(new OnMessageReceived<Connection, DatagramCloseMessage>() {
+                    @Override
+                    public
+                    void received(final Connection connection, final DatagramCloseMessage message) {
+                        connection.close();
+                    }
+                });
+            }
+
+            // when closing this connection, HOW MANY endpoints need to be closed?
+            closeLatch = new CountDownLatch(count);
         }
         else {
             this.remoteKeyChanged = false;
-        }
 
-        isLoopback = channelWrapper.isLoopback();
-    }
-
-    /**
-     * Prepare the channel wrapper, since it doesn't have access to certain fields during it's initialization.
-     * <p/>
-     * This happens AFTER init.
-     */
-    final
-    void prep() {
-        if (this.channelWrapper != null) {
-            this.channelWrapper.init();
+            // when closing this connection, HOW MANY endpoints need to be closed?
+            closeLatch = new CountDownLatch(1);
         }
     }
 
@@ -256,7 +273,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     @Override
     public
     boolean isLoopback() {
-        return isLoopback;
+        return channelWrapper.isLoopback();
     }
 
     /**
@@ -330,20 +347,20 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
     /**
      * INTERNAL USE ONLY. Used to initiate a ping, and to return a ping.
-     * Sends a ping message attempted in the following order: UDP, TCP
+     *
+     * Sends a ping message attempted in the following order: UDP, TCP,LOCAL
      */
     public final
     void ping0(PingMessage ping) {
         if (this.channelWrapper.udp() != null) {
-            UDP(ping);
+            UDP(ping).flush();
         }
         else if (this.channelWrapper.tcp() != null) {
-            TCP(ping);
+            TCP(ping).flush();
         }
         else {
             self(ping);
         }
-        flush();
     }
 
     /**
@@ -418,13 +435,42 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     }
 
     /**
+     * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
+     * is available to use. If you want specify the protocol, use {@link #send()}, followed by the protocol you wish to use.
+     *
+     * By default, this will try in the following order:
+     *  - TCP (if available)
+     *  - UDP (if available)
+     *  - LOCAL
+     */
+    @Override
+    public final
+    ConnectionPoint send(final Object message) {
+        if (this.channelWrapper.tcp() != null) {
+            return TCP(message);
+        }
+        else if (this.channelWrapper.udp() != null) {
+            return UDP(message);
+        }
+        else {
+            self(message);
+
+            // we have to return something, otherwise dependent code will throw a null pointer exception
+            return ChannelNull.get();
+        }
+    }
+
+    /**
      * Sends the object to other listeners INSIDE this endpoint. It does not send it to a remote address.
      */
     @Override
     public final
-    void self(Object message) {
+    ConnectionPoint self(Object message) {
         logger.trace("Sending LOCAL {}", message);
         this.sessionManager.onMessage(this, message);
+
+        // THIS IS REALLY A LOCAL CONNECTION!
+        return this.channelWrapper.tcp();
     }
 
     /**
@@ -432,7 +478,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
      */
     @Override
     public final
-    ConnectionPoint TCP(Object message) {
+    ConnectionPoint TCP(final Object message) {
         if (!closeInProgress.get()) {
             logger.trace("Sending TCP {}", message);
 
@@ -440,7 +486,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             try {
                 tcp.write(message);
             } catch (Exception e) {
-                logger.error("Unable to write TCP object {}", message.getClass());
+                logger.error("Unable to write TCP object {}", message.getClass(), e);
             }
             return tcp;
         }
@@ -465,7 +511,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             try {
                 udp.write(message);
             } catch (Exception e) {
-                logger.error("Unable to write TCP object {}", message.getClass());
+                logger.error("Unable to write UDP object {}", message.getClass(), e);
             }
             return udp;
         }
@@ -479,8 +525,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
     /**
      * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
      */
-    @Override
-    public final
+    final
     void flush() {
         this.channelWrapper.flush();
     }
@@ -532,7 +577,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         ReferenceCountUtil.release(message);
     }
 
-    public
+    private
     void channelRead(Object object) {
         // prevent close from occurring SMACK in the middle of a message in progress.
         // delay close until it's finished.
@@ -573,8 +618,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         Channel channel = context.channel();
         Class<? extends Channel> channelClass = channel.getClass();
 
-        boolean isTCP = isTcp(channelClass);
-        boolean isLocal = isLocal(channelClass);
+        boolean isTCP = isTcpChannel(channelClass);
+        boolean isUDP = false;
+        boolean isLocal = isLocalChannel(channelClass);
 
         if (this.logger.isInfoEnabled()) {
             String type;
@@ -582,55 +628,115 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             if (isTCP) {
                 type = "TCP";
             }
-            else if (isUdp(channelClass)) {
-                type = "UDP";
-            }
-            else if (isLocal) {
-                type = "LOCAL";
-            }
             else {
-                type = "UNKNOWN";
+                isUDP = isUdpChannel(channelClass);
+                if (isUDP) {
+                    type = "UDP";
+                }
+                else if (isLocal) {
+                    type = "LOCAL";
+                }
+                else {
+                    type = "UNKNOWN";
+                }
             }
 
-            this.logger.info("Closed remote {} connection: {}",
+            this.logger.info("Closed remote {} connection [{}]",
                              type,
-                             channel.remoteAddress()
-                                    .toString());
+                             EndPoint.getHostDetails(channel.remoteAddress()));
         }
+
+        // TODO: tell the remote endpoint that it needs to close (via a message, which might get there...).
+
 
         if (this.endPoint instanceof EndPointClient) {
             ((EndPointClient) this.endPoint).abortRegistration();
         }
 
-        // our master channels are TCP/LOCAL (which are mutually exclusive). Only key disconnect events based on the status of them.
-        if (isTCP || isLocal) {
-            // this is because channelInactive can ONLY happen when netty shuts down the channel.
-            //   and connection.close() can be called by the user.
-            // will auto-flush if necessary
-            this.sessionManager.onDisconnected(this);
 
-            // close TCP/UDP together!
-            close();
+        /*
+         * Only close if we are:
+         *  - local (mutually exclusive to TCP/UDP)
+         *  - TCP (and TCP+UDP)
+         *  - UDP (and not part of TCP+UDP)
+         *
+         * DO NOT call close if we are:
+         *  - UDP (part of TCP+UDP)
+         */
+        if (isLocal ||
+            isTCP ||
+            (isUDP && this.channelWrapper.tcp() == null)) {
+
+            // we can get to this point in two ways. We only want this to happen once
+            // - remote endpoint disconnects (and so closes us)
+            // - local endpoint calls close(), and netty will call this.
+
+
+            // this must happen first, because client.close() depends on it!
+            // onDisconnected() must happen last.
+            boolean doClose = channelIsClosed.compareAndSet(false, true);
+
+            if (!closeInProgress.get()) {
+                if (endPoint instanceof EndPointClient) {
+                    // client closes single connection
+                    ((Client) endPoint).close();
+                } else {
+                    // server only closes this connection.
+                    close();
+                }
+            }
+
+            if (doClose) {
+                // this is because channelInactive can ONLY happen when netty shuts down the channel.
+                //   and connection.close() can be called by the user.
+                // will auto-flush if necessary
+                this.sessionManager.onDisconnected(this);
+            }
         }
 
-        synchronized (this.closeInProgressLock) {
-            this.alreadyClosed.set(true);
-            this.closeInProgressLock.notify();
-        }
+        closeLatch.countDown();
+
+        // UDP connections ALWAYS have to shutdown their event loop (because of how session management works)
+        // if (isUDP || this.endPoint instanceof EndPointClient) {
+        //     // also have to shutdown this eventloop, but ONLY for the client!
+        //     channel.eventLoop()
+        //            .shutdownGracefully();
+        // }
     }
 
     /**
-     * Closes the connection
+     * Closes the connection, but does not remove any listeners
      */
     @Override
     public final
     void close() {
-        close(false);
+        close(true);
     }
 
 
+    /**
+     * we can get to this point in two ways. We only want this to happen once
+     *  - remote endpoint disconnects (and so netty calls us)
+     *  - local endpoint calls close() directly
+     *
+     * NOTE: If we remove all listeners and we are the client, then we remove ALL logic from the client!
+     */
     final
     void close(final boolean keepListeners) {
+        // if we are in the same thread as netty, run in a new thread to prevent deadlocks with messageInProgress
+        if (!this.closeInProgress.get() && this.messageInProgress.get() && Shutdownable.isNettyThread()) {
+            Shutdownable.runNewThread("Close connection Thread", new Runnable() {
+                @Override
+                public
+                void run() {
+                    close(keepListeners);
+                }
+            });
+
+            return;
+        }
+
+
         // only close if we aren't already in the middle of closing.
         if (this.closeInProgress.compareAndSet(false, true)) {
             int idleTimeoutMs = this.endPoint.getIdleTimeout();
@@ -641,7 +747,8 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
 
             // if we are in the middle of a message, hold off.
             synchronized (this.messageInProgressLock) {
-                if (this.messageInProgress.get()) {
+                // while loop is to prevent spurious wakeups!
+                while (this.messageInProgress.get()) {
                     try {
                         this.messageInProgressLock.wait(idleTimeoutMs);
                     } catch (InterruptedException ignored) {
@@ -652,8 +759,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             // flush any pending messages
             this.channelWrapper.flush();
 
-            this.channelWrapper.close(this, this.sessionManager);
-
             // close out the ping future
             PingFuture pingFuture2 = this.pingFuture;
             if (pingFuture2 != null) {
@@ -661,18 +766,22 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             }
             this.pingFuture = null;
 
-            // want to wait for the "channelInactive" method to FINISH before allowing our current thread to continue!
-            synchronized (this.closeInProgressLock) {
-                if (!this.alreadyClosed.get()) {
+
+
+            synchronized (this.channelIsClosed) {
+                if (!this.channelIsClosed.get()) {
+                    // this will have netty call "channelInactive()"
+                    this.channelWrapper.close(this, this.sessionManager);
+
+                    // want to wait for the "channelInactive()" method to FINISH ALL TYPES before allowing our current thread to continue!
                     try {
-                        this.closeInProgressLock.wait(idleTimeoutMs);
-                    } catch (Exception ignored) {
+                        closeLatch.await(idleTimeoutMs, TimeUnit.MILLISECONDS);
+                    } catch (InterruptedException ignored) {
                     }
                 }
             }
 
-            // remove all listeners, but ONLY if we are the server. If we remove all listeners and we are the client, then we remove
-            // ALL logic from the client! The server is OK because the server listeners per connection are dynamically added
+            // remove all listeners AFTER we close the channel.
             if (!keepListeners) {
                 removeAll();
             }
@@ -687,7 +796,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
             }
         }
     }
-
 
     /**
      * Marks the connection to be closed as soon as possible. This is evaluated when the current
@@ -958,8 +1066,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
 
         // this means we are creating a NEW object on the server, bound access to only this connection
-        TCP(message);
-        flush();
+        send(message).flush();
     }
 
     @Override
@@ -985,8 +1092,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements ICryptoConn
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
 
         // this means we are creating a NEW object on the server, bound access to only this connection
-        TCP(message);
-        flush();
+        send(message).flush();
     }
 
 

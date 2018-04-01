@@ -41,6 +41,17 @@ class EndPointServer extends EndPoint {
     }
 
     /**
+     * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
+     * is available to use. If you want specify the protocol, use {@link #send()}, followed by the protocol you wish to use.
+     */
+    @Override
+    public
+    ConnectionPoint send(final Object message) {
+        return this.connectionManager.send(message);
+    }
+
+
+    /**
      * When called by a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener,
      * and ALL connections are notified of that listener.
      * <br>
@@ -78,7 +89,7 @@ class EndPointServer extends EndPoint {
      */
     public
     void add(Connection connection) {
-        connectionManager.addConnection(connection);
+        connectionManager.addConnection0(connection);
     }
 
     /**

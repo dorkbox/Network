@@ -29,6 +29,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 
+import dorkbox.network.pipeline.MagicBytes;
+import dorkbox.network.pipeline.discovery.BroadcastResponse;
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostHandler;
 import dorkbox.network.pipeline.discovery.ClientDiscoverHostInitializer;
 import dorkbox.util.OS;
@@ -48,9 +50,6 @@ import io.netty.channel.socket.oio.OioDatagramChannel;
 @SuppressWarnings({"unused", "AutoBoxing"})
 public final
 class Broadcast {
-    public static final byte broadcastID = (byte) 42;
-    public static final byte broadcastResponseID = (byte) 57;
-
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(Client.class.getSimpleName());
 
     /**
@@ -74,10 +73,10 @@ class Broadcast {
      * @return the first server found, or null if no server responded.
      */
     public static
-    String discoverHost(int udpPort, int discoverTimeoutMillis) {
-        InetAddress discoverHost = discoverHostAddress(udpPort, discoverTimeoutMillis);
+    BroadcastResponse discoverHost(int udpPort, int discoverTimeoutMillis) {
+        BroadcastResponse discoverHost = discoverHostAddress(udpPort, discoverTimeoutMillis);
         if (discoverHost != null) {
-            return discoverHost.getHostAddress();
+            return discoverHost;
         }
         return null;
     }
@@ -93,8 +92,8 @@ class Broadcast {
      * @return the first server found, or null if no server responded.
      */
     public static
-    InetAddress discoverHostAddress(int udpPort, int discoverTimeoutMillis) {
-        List<InetAddress> servers = discoverHost0(udpPort, discoverTimeoutMillis, false);
+    BroadcastResponse discoverHostAddress(int udpPort, int discoverTimeoutMillis) {
+        List<BroadcastResponse> servers = discoverHost0(udpPort, discoverTimeoutMillis, false);
         if (servers.isEmpty()) {
             return null;
         }
@@ -114,18 +113,18 @@ class Broadcast {
      * @return the list of found servers (if they responded)
      */
     public static
-    List<InetAddress> discoverHosts(int udpPort, int discoverTimeoutMillis) {
+    List<BroadcastResponse> discoverHosts(int udpPort, int discoverTimeoutMillis) {
         return discoverHost0(udpPort, discoverTimeoutMillis, true);
     }
 
 
     private static
-    List<InetAddress> discoverHost0(int udpPort, int discoverTimeoutMillis, boolean fetchAllServers) {
+    List<BroadcastResponse> discoverHost0(int udpPort, int discoverTimeoutMillis, boolean fetchAllServers) {
         // fetch a buffer that contains the serialized object.
         ByteBuf buffer = Unpooled.buffer(1);
-        buffer.writeByte(broadcastID);
+        buffer.writeByte(MagicBytes.broadcastID);
 
-        List<InetAddress> servers = new ArrayList<InetAddress>();
+        List<BroadcastResponse> servers = new ArrayList<BroadcastResponse>();
 
         Logger logger2 = logger;
 
@@ -134,7 +133,7 @@ class Broadcast {
             networkInterfaces = NetworkInterface.getNetworkInterfaces();
         } catch (SocketException e) {
             logger2.error("Host discovery failed.", e);
-            return new ArrayList<InetAddress>(0);
+            return new ArrayList<BroadcastResponse>(0);
         }
 
 
@@ -155,7 +154,7 @@ class Broadcast {
 
                 try {
                     if (logger2.isInfoEnabled()) {
-                        logger2.info("Searching for host on {}:{}", address, udpPort);
+                        logger2.info("Searching for host on [{}:{}]", address.getHostAddress(), udpPort);
                     }
 
                     EventLoopGroup group;
@@ -207,9 +206,8 @@ class Broadcast {
                             }
                         }
                         else {
-                            InetSocketAddress attachment = channel1.attr(ClientDiscoverHostHandler.STATE)
-                                                                   .get();
-                            servers.add(attachment.getAddress());
+                            BroadcastResponse broadcastResponse = channel1.attr(ClientDiscoverHostHandler.STATE).get();
+                            servers.add(broadcastResponse);
                         }
 
 
@@ -244,9 +242,9 @@ class Broadcast {
                                 }
                             }
                             else {
-                                InetSocketAddress attachment = channel1.attr(ClientDiscoverHostHandler.STATE)
-                                                                       .get();
-                                servers.add(attachment.getAddress());
+                                BroadcastResponse broadcastResponse = channel1.attr(ClientDiscoverHostHandler.STATE).get();
+                                servers.add(broadcastResponse);
+
                                 if (!fetchAllServers) {
                                     break;
                                 }
@@ -272,21 +270,48 @@ class Broadcast {
 
 
         if (logger2.isInfoEnabled() && !servers.isEmpty()) {
+            StringBuilder stringBuilder = new StringBuilder(256);
+
             if (fetchAllServers) {
-                StringBuilder stringBuilder = new StringBuilder(256);
                 stringBuilder.append("Discovered servers: (")
                              .append(servers.size())
                              .append(")");
-                for (InetAddress server : servers) {
+
+                for (BroadcastResponse server : servers) {
                     stringBuilder.append("/n")
-                                 .append(server)
-                                 .append(":")
-                                 .append(udpPort);
+                                 .append(server.remoteAddress)
+                                 .append(":");
+
+                    if (server.tcpPort > 0) {
+                        stringBuilder.append(server.tcpPort);
+
+                        if (server.udpPort > 0) {
+                            stringBuilder.append(":");
+                        }
+                    }
+                    if (server.udpPort > 0) {
+                        stringBuilder.append(udpPort);
+                    }
                 }
                 logger2.info(stringBuilder.toString());
             }
             else {
-                logger2.info("Discovered server: {}:{}", servers.get(0), udpPort);
+                BroadcastResponse server = servers.get(0);
+                stringBuilder.append(server.remoteAddress)
+                             .append(":");
+
+                if (server.tcpPort > 0) {
+                    stringBuilder.append(server.tcpPort);
+
+                    if (server.udpPort > 0) {
+                        stringBuilder.append(":");
+                    }
+                }
+                if (server.udpPort > 0) {
+                    stringBuilder.append(udpPort);
+                }
+
+                logger2.info("Discovered server [{}]", stringBuilder.toString());
             }
         }
 

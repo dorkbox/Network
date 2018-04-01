@@ -56,7 +56,8 @@ class RmiObjectNetworkHandler extends RmiObjectHandler {
 
                 // For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
                 RmiRegistration registrationResult = connection.createNewRmiObject(interfaceClass, interfaceClass, callbackId);
-                connection.TCP(registrationResult);
+                connection.send(registrationResult);
+                // connection transport is flushed in calling method (don't need to do it here)
             }
 
             // Check if we are getting an already existing REMOTE object. This check is always AFTER the check to create a new object
@@ -65,7 +66,8 @@ class RmiObjectNetworkHandler extends RmiObjectHandler {
                 //
                 // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
                 RmiRegistration registrationResult = connection.getExistingRmiObject(interfaceClass, registration.rmiId, callbackId);
-                connection.TCP(registrationResult);
+                connection.send(registrationResult);
+                // connection transport is flushed in calling method (don't need to do it here)
             }
         }
         else {

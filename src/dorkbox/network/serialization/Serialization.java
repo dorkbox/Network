@@ -43,7 +43,7 @@ import com.esotericsoftware.kryo.util.IntMap;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
 import com.esotericsoftware.kryo.util.Util;
 
-import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.CryptoConnection;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.rmi.CachedMethod;
@@ -64,6 +64,7 @@ import dorkbox.util.serialization.EccPublicKeySerializer;
 import dorkbox.util.serialization.IesParametersSerializer;
 import dorkbox.util.serialization.IesWithCipherParametersSerializer;
 import dorkbox.util.serialization.UnmodifiableCollectionsSerializer;
+import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.buffer.ByteBuf;
 
 /**
@@ -75,7 +76,7 @@ import io.netty.buffer.ByteBuf;
  */
 @SuppressWarnings({"unused", "StaticNonFinalField"})
 public
-class Serialization implements CryptoSerializationManager, RmiSerializationManager {
+class Serialization<C extends CryptoConnection> implements CryptoSerializationManager<C>, RmiSerializationManager {
 
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(Serialization.class.getSimpleName());
 
@@ -182,17 +183,18 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
      *         Kryo#newDefaultSerializer(Class)
      */
     public static
-    Serialization DEFAULT(final boolean references,
+    <C extends CryptoConnection> Serialization<C> DEFAULT(final boolean references,
                           final boolean registrationRequired,
                           final boolean implementationRequired,
                           final SerializerFactory factory) {
 
-        final Serialization serialization = new Serialization(references,
+        final Serialization<C> serialization = new Serialization<C>(references,
                                                               registrationRequired,
                                                               implementationRequired,
                                                               factory);
 
         serialization.register(PingMessage.class);
+        serialization.register(DatagramCloseMessage.class);
         serialization.register(byte[].class);
 
         serialization.register(IESParameters.class, new IesParametersSerializer());
@@ -241,7 +243,7 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
         }
     }
     private boolean initialized = false;
-    private final ObjectPool<KryoExtra> kryoPool;
+    private final ObjectPool<KryoExtra<C>> kryoPool;
 
     // used to determine if we should forbid interface registration OUTSIDE of RMI registration.
     private final boolean forbidInterfaceRegistration;
@@ -311,13 +313,13 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
 
         this.forbidInterfaceRegistration = implementationRequired;
 
-        this.kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra>() {
+        this.kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra<C>>() {
             @Override
             public
-            KryoExtra create() {
+            KryoExtra<C> create() {
                 synchronized (Serialization.this) {
                     // we HAVE to pre-allocate the KRYOs
-                    KryoExtra kryo = new KryoExtra(Serialization.this);
+                    KryoExtra<C> kryo = new KryoExtra<C>(Serialization.this);
 
                     kryo.getFieldSerializerConfig()
                         .setUseAsm(useAsm);
@@ -662,7 +664,7 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
     @Override
     public final
     void write(final ByteBuf buffer, final Object message) throws IOException {
-        final KryoExtra kryo = kryoPool.take();
+        final KryoExtra<C> kryo = kryoPool.take();
         try {
             kryo.write(buffer, message);
         } finally {
@@ -680,7 +682,7 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
     @Override
     public final
     Object read(final ByteBuf buffer, final int length) throws IOException {
-        final KryoExtra kryo = kryoPool.take();
+        final KryoExtra<C> kryo = kryoPool.take();
         try {
             return kryo.read(buffer);
         } finally {
@@ -694,7 +696,7 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
     @Override
     public
     void writeFullClassAndObject(final Logger logger, final Output output, final Object value) throws IOException {
-        KryoExtra kryo = kryoPool.take();
+        KryoExtra<C> kryo = kryoPool.take();
         boolean prev = false;
 
         try {
@@ -720,7 +722,7 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
     @Override
     public
     Object readFullClassAndObject(final Logger logger, final Input input) throws IOException {
-        KryoExtra kryo = kryoPool.take();
+        KryoExtra<C> kryo = kryoPool.take();
         boolean prev = false;
 
         try {
@@ -751,9 +753,9 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
 
         // initialize the kryo pool with at least 1 kryo instance. This ALSO makes sure that all of our class registration is done
         // correctly and (if not) we are are notified on the initial thread (instead of on the network update thread)
-        KryoExtra kryo = null;
+        KryoExtra<C> kryo = null;
         try {
-            kryo = takeKryo();
+            kryo = kryoPool.take();
 
             ClassResolver classResolver = kryo.getClassResolver();
 
@@ -819,8 +821,8 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
      */
     @Override
     public final
-    void writeWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final Object message) throws IOException {
-        final KryoExtra kryo = kryoPool.take();
+    void writeWithCrypto(final C connection, final ByteBuf buffer, final Object message) throws IOException {
+        final KryoExtra<C> kryo = kryoPool.take();
         try {
             // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
             if (connection.isLoopback()) {
@@ -845,8 +847,8 @@ class Serialization implements CryptoSerializationManager, RmiSerializationManag
     @SuppressWarnings("Duplicates")
     @Override
     public final
-    Object readWithCrypto(final ConnectionImpl connection, final ByteBuf buffer, final int length) throws IOException {
-        final KryoExtra kryo = kryoPool.take();
+    Object readWithCrypto(final C connection, final ByteBuf buffer, final int length) throws IOException {
+        final KryoExtra<C> kryo = kryoPool.take();
         try {
             // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
             if (connection.isLoopback()) {

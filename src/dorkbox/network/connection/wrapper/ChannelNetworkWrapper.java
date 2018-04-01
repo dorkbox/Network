@@ -27,6 +27,7 @@ import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.rmi.RmiObjectHandler;
 import dorkbox.util.FastThreadLocal;
+import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.util.NetUtil;
 
 public
@@ -108,15 +109,6 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     }
 
     /**
-     * Initialize the connection with any extra info that is needed but was unavailable at the channel construction.
-     */
-    @Override
-    public final
-    void init() {
-        // nothing to do.
-    }
-
-    /**
      * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
      */
     @Override
@@ -170,6 +162,15 @@ class ChannelNetworkWrapper implements ChannelWrapper {
         }
 
         if (this.udp != null) {
+            // send a hint to the other connection that we should close. While not always 100% successful, this helps clean up connections
+            // on the remote end
+            try {
+                this.udp.write(new DatagramCloseMessage());
+                this.udp.flush();
+                Thread.yield();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
             this.udp.close(maxShutdownWaitTimeInMilliSeconds);
         }
 

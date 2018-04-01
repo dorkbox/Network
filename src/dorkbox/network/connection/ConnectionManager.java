@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection;
 
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
@@ -201,6 +202,12 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             throw new IllegalArgumentException("listener cannot be null.");
         }
 
+        if (logger.isTraceEnabled()) {
+            logger.trace("listener removed: {}",
+                         listener.getClass()
+                                 .getName());
+        }
+
         boolean found = false;
         int remainingListeners = 0;
 
@@ -237,12 +244,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             if (remainingListeners == 0) {
                 hasAtLeastOneListener.set(false);
             }
-
-            if (logger.isTraceEnabled()) {
-                logger.trace("listener removed: {}",
-                             listener.getClass()
-                                     .getName());
-            }
         }
         else {
             logger.error("No matching listener types. Unable to remove listener: {}",
@@ -261,12 +262,12 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public final
     Listeners removeAll() {
-        onMessageReceivedManager.removeAll();
+        onConnectedManager.clear();
+        onDisconnectedManager.clear();
+        onIdleManager.clear();
+        onMessageReceivedManager.clear();
 
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
-            logger2.trace("ALL listeners removed !!");
-        }
+        logger.trace("ALL listeners removed !!");
 
         return this;
     }
@@ -311,6 +312,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public final
     void onMessage(final ConnectionImpl connection, final Object message) {
+        logger.trace("onMessage({}, {})", connection.id(), message.getClass());
         notifyOnMessage0(connection, message, false);
     }
 
@@ -320,6 +322,9 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         if (connection.manageRmi(message)) {
             // if we are an RMI message/registration, we have very specific, defined behavior. We do not use the "normal" listener callback pattern
             // because these methods are rare, and require special functionality
+
+            // make sure we flush the message to the socket!
+            connection.flush();
             return true;
         }
 
@@ -372,13 +377,16 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         }
     }
 
+
     /**
      * Invoked when a Channel is open, bound to a local address, and connected to a remote address.
      */
     @Override
     public
     void onConnected(final ConnectionImpl connection) {
-        addConnection(connection);
+        logger.trace("onConnected({})", connection.id());
+
+        // we add the connection in a different step!
 
         boolean foundListener = onConnectedManager.notifyConnected((C) connection, shutdown);
 
@@ -401,7 +409,9 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public
     void onDisconnected(final ConnectionImpl connection) {
-        boolean foundListener = onDisconnectedManager.notifyDisconnected((C) connection, shutdown);
+        logger.trace("onDisconnected({})", connection.id());
+
+        boolean foundListener = onDisconnectedManager.notifyDisconnected((C) connection);
 
         if (foundListener) {
             connection.flush();
@@ -423,6 +433,25 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     }
 
     /**
+     * Invoked when a Channel is open, bound to a local address, and connected to a remote address.
+     */
+    @Override
+    public
+    void addConnection(ConnectionImpl connection) {
+        logger.trace("addConnection({})", connection.id());
+
+        addConnection0(connection);
+
+        // now have to account for additional (local) listener managers.
+        // access a snapshot of the managers (single-writer-principle)
+        final IdentityMap<Connection, ConnectionManager> localManagers = localManagersREF.get(this);
+        ConnectionManager localManager = localManagers.get(connection);
+        if (localManager != null) {
+            localManager.addConnection(connection);
+        }
+    }
+
+    /**
      * Adds a custom connection to the server.
      * <p>
      * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
@@ -430,7 +459,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      *
      * @param connection the connection to add
      */
-    void addConnection(final Connection connection) {
+    void addConnection0(final Connection connection) {
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
         // use-case 99% of the time)
@@ -457,7 +486,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      *
      * @param connection the connection to remove
      */
-    public
     void removeConnection(Connection connection) {
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
@@ -599,6 +627,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     final
     void closeConnections(boolean keepListeners) {
+        LinkedList<ConnectionImpl> closeConnections = new LinkedList<ConnectionImpl>();
+
         // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
         // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
         // use-case 99% of the time)
@@ -609,18 +639,18 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
                 // Close the connection.  Make sure the close operation ends because
                 // all I/O operations are asynchronous in Netty.
                 // Also necessary otherwise workers won't close.
-
-
-                if (keepListeners && connection instanceof ConnectionImpl) {
-                    ((ConnectionImpl) connection).close(true);
-                }
-                else {
-                    connection.close();
+                if (connection instanceof ConnectionImpl) {
+                    closeConnections.add((ConnectionImpl) connection);
                 }
             }
 
             this.connectionEntries.clear();
             this.connectionsHead = null;
+        }
+
+        // must be outside of the synchronize, otherwise we can potentially deadlock
+        for (ConnectionImpl connection : closeConnections) {
+            connection.close(keepListeners);
         }
     }
 
@@ -704,7 +734,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
      */
     @Override
     public
-    void self(final Object message) {
+    ConnectionPoint self(final Object message) {
         ConcurrentEntry<ConnectionImpl> current = connectionsREF.get(this);
         ConnectionImpl c;
         while (current != null) {
@@ -713,6 +743,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
             onMessage(c, message);
         }
+        return this;
     }
 
     /**
@@ -749,6 +780,44 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
              .UDP(message);
         }
         return this;
+    }
+
+    /**
+     * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
+     * is available to use. If you want specify the protocol, use {@link ConnectionManager#TCP(Object)}, etc.
+     * <p>
+     * By default, this will try in the following order:
+     * - TCP (if available)
+     * - UDP (if available)
+     * - LOCAL
+     */
+    protected
+    ConnectionPoint send(final Object message) {
+        ConcurrentEntry<Connection> current = connectionsREF.get(this);
+        Connection c;
+        while (current != null) {
+            c = current.getValue();
+            current = current.next();
+
+            c.send(message);
+        }
+        return this;
+    }
+
+    /**
+     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport socket.
+     */
+    @Override
+    public
+    void flush() {
+        ConcurrentEntry<ConnectionImpl> current = connectionsREF.get(this);
+        ConnectionImpl c;
+        while (current != null) {
+            c = current.getValue();
+            current = current.next();
+
+            c.flush();
+        }
     }
 
     @Override

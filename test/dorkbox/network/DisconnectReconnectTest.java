@@ -30,11 +30,11 @@ import dorkbox.util.exceptions.SecurityException;
 
 public
 class DisconnectReconnectTest extends BaseTest {
+    private final Timer timer = new Timer();
 
     @Test
     public
     void reconnect() throws SecurityException, IOException {
-        final Timer timer = new Timer();
 
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
@@ -51,11 +51,12 @@ class DisconnectReconnectTest extends BaseTest {
                   @Override
                   public
                   void connected(final Connection connection) {
+                      System.out.println("Disconnecting after 2 seconds.");
                       timer.schedule(new TimerTask() {
                           @Override
                           public
                           void run() {
-                              System.out.println("Disconnecting after 2 seconds.");
+                              System.out.println("Disconnecting....");
                               connection.close();
                           }
                       }, 2000);
@@ -72,24 +73,26 @@ class DisconnectReconnectTest extends BaseTest {
                   @Override
                   public
                   void disconnected(Connection connection) {
-                      if (reconnectCount.getAndIncrement() == 2) {
+                      int count = reconnectCount.getAndIncrement();
+                      if (count == 3) {
+                          System.out.println("Shutting down");
                           stopEndPoints();
-                          return;
                       }
-
-                      System.out.println("Reconnecting: " + reconnectCount.get());
-                      try {
-                          client.reconnect();
-                      } catch (IOException e) {
-                          e.printStackTrace();
+                      else {
+                          System.out.println("Reconnecting: " + count);
+                          try {
+                              client.reconnect();
+                          } catch (IOException e) {
+                              e.printStackTrace();
+                          }
                       }
-
                   }
               });
         client.connect(5000);
 
         waitForThreads();
+
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.get());
-        assertEquals(3, reconnectCount.get());
+        assertEquals(4, reconnectCount.get());
     }
 }

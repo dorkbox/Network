@@ -33,7 +33,7 @@ import dorkbox.util.exceptions.SecurityException;
 
 public
 class ReconnectTest extends BaseTest {
-    AtomicInteger receivedCount;
+    private final AtomicInteger receivedCount = new AtomicInteger(0);
 
     @Test
     public
@@ -55,7 +55,7 @@ class ReconnectTest extends BaseTest {
 
     private
     void socketReuse(final boolean useTCP, final boolean useUDP) throws SecurityException, IOException {
-        this.receivedCount = new AtomicInteger(0);
+        receivedCount.set(0);
 
         Configuration configuration = new Configuration();
         configuration.host = host;
@@ -92,6 +92,10 @@ class ReconnectTest extends BaseTest {
             void received(Connection connection, String object) {
                 int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
                 System.out.println("----- <S " + connection + "> " + incrementAndGet + " : " + object);
+
+                synchronized (receivedCount) {
+                    receivedCount.notifyAll();
+                }
             }
         });
 
@@ -120,32 +124,45 @@ class ReconnectTest extends BaseTest {
             void received(Connection connection, String object) {
                 int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
                 System.out.println("----- <C " + connection + "> " + incrementAndGet + " : " + object);
+
+                synchronized (receivedCount) {
+                    receivedCount.notifyAll();
+                }
             }
         });
 
         server.bind(false);
 
-        int count = 10;
+        int count = 100;
         int initialCount = 2;
         if (useTCP && useUDP) {
             initialCount += 2;
         }
         for (int i = 1; i < count + 1; i++) {
+            System.out.println(".....");
             client.connect(5000);
 
-            int waitingRetryCount = 10;
+
+            int waitingRetryCount = 20;
             int target = i * initialCount;
-            while (this.receivedCount.get() != target) {
-                if (waitingRetryCount-- < 0) {
-                    throw new IOException("Invalid target count...");
-                }
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException ignored) {
+
+            synchronized (receivedCount) {
+                while (this.receivedCount.get() != target) {
+                    if (waitingRetryCount-- < 0) {
+                        System.out.println("Aborting...");
+                        stopEndPoints();
+                        assertEquals(target, this.receivedCount.get());
+                    }
+                    try {
+                        receivedCount.wait(1000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
 
-            client.closeConnections();
+            client.close();
+            System.out.println(".....");
         }
 
         assertEquals(count * initialCount, this.receivedCount.get());
@@ -157,7 +174,7 @@ class ReconnectTest extends BaseTest {
     @Test
     public
     void localReuse() throws SecurityException, IOException {
-        this.receivedCount = new AtomicInteger(0);
+        receivedCount.set(0);
 
         Server server = new Server();
         addEndPoint(server);
@@ -167,7 +184,7 @@ class ReconnectTest extends BaseTest {
                   public
                   void connected(Connection connection) {
                       connection.send()
-                                .TCP("-- LOCAL from server");
+                                .self("-- LOCAL from server");
                   }
               });
         server.listeners()
@@ -190,7 +207,7 @@ class ReconnectTest extends BaseTest {
                   public
                   void connected(Connection connection) {
                       connection.send()
-                                .TCP("-- LOCAL from client");
+                                .self("-- LOCAL from client");
                   }
               });
 
@@ -209,16 +226,16 @@ class ReconnectTest extends BaseTest {
         for (int i = 1; i < count + 1; i++) {
             client.connect(5000);
 
-            int target = i;
+            int target = i * 2;
             while (this.receivedCount.get() != target) {
                 System.out.println("----- Waiting...");
                 try {
                     Thread.sleep(100);
-                } catch (InterruptedException ex) {
+                } catch (InterruptedException ignored) {
                 }
             }
 
-            client.closeConnections();
+            client.close();
         }
 
         assertEquals(count * 2, this.receivedCount.get());

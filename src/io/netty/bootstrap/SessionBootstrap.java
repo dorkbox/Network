@@ -59,11 +59,18 @@ class SessionBootstrap extends AbstractBootstrap<SessionBootstrap, Channel> {
     private final SessionBootstrapConfig config = new SessionBootstrapConfig(this);
     private volatile EventLoopGroup childGroup;
     private volatile ChannelHandler childHandler;
+
     @SuppressWarnings("unchecked")
     private volatile AddressResolverGroup<SocketAddress> resolver = (AddressResolverGroup<SocketAddress>) DEFAULT_RESOLVER;
 
+    private final int tcpPort;
+    private final int udpPort;
+
     public
-    SessionBootstrap() { }
+    SessionBootstrap(final int tcpPort, final int udpPort) {
+        this.tcpPort = tcpPort;
+        this.udpPort = udpPort;
+    }
 
     private
     SessionBootstrap(SessionBootstrap bootstrap) {
@@ -80,6 +87,9 @@ class SessionBootstrap extends AbstractBootstrap<SessionBootstrap, Channel> {
         synchronized (bootstrap.childAttrs) {
             childAttrs.putAll(bootstrap.childAttrs);
         }
+
+        this.tcpPort = bootstrap.tcpPort;
+        this.udpPort = bootstrap.udpPort;
     }
 
     /**
@@ -251,8 +261,8 @@ class SessionBootstrap extends AbstractBootstrap<SessionBootstrap, Channel> {
                       @Override
                       public
                       void run() {
-                          pipeline.addLast(new SessionManager(ch,
-                                                              currentChildGroup,
+                          pipeline.addLast(new SessionManager(tcpPort, udpPort,
+                                                              ch, currentChildGroup,
                                                               currentChildHandler,
                                                               currentChildOptions,
                                                               currentChildAttrs));

@@ -21,7 +21,7 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
  * Supporting methods for encrypting data to a remote endpoint
  */
 public
-interface ICryptoConnection extends IRmiConnection {
+interface CryptoConnection extends RmiConnection, Connection {
 
     /**
      * This is the per-message sequence number.

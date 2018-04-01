@@ -245,7 +245,7 @@ class DnsClient extends Shutdownable {
             channelType = OioDatagramChannel.class;
         }
         else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-            // JNI network stack is MUCH faster (but only on linux)
+            // epoll network stack is MUCH faster (but only on linux)
             eventLoopGroup = new EpollEventLoopGroup(1, new NamedThreadFactory(THREAD_NAME + "-DNS", threadGroup));
             channelType = EpollDatagramChannel.class;
         }
@@ -661,8 +661,8 @@ class DnsClient extends Shutdownable {
             }
         }
 
-        String msg = "Could not ask question to DNS server for A/AAAA record: {}";
-        logger.error(msg, hostname);
+        String msg = "Could not ask question to DNS server for A/AAAA record: " + hostname;
+        logger.error(msg);
 
         UnknownHostException cause = (UnknownHostException) resolve.cause();
         if (cause != null) {

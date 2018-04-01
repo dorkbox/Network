@@ -15,6 +15,8 @@
  */
 package dorkbox.network;
 
+import static dorkbox.network.pipeline.ConnectionType.LOCAL;
+
 import java.io.IOException;
 import java.net.Socket;
 
@@ -24,7 +26,6 @@ import dorkbox.network.connection.EndPointServer;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerTCP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerUDP;
-import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
 import dorkbox.util.exceptions.SecurityException;
@@ -33,20 +34,15 @@ import io.netty.bootstrap.SessionBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.EpollDatagramChannel;
-import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.kqueue.KQueueDatagramChannel;
-import io.netty.channel.kqueue.KQueueEventLoopGroup;
 import io.netty.channel.kqueue.KQueueServerSocketChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalServerChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
@@ -142,7 +138,8 @@ class Server<C extends Connection> extends EndPointServer {
         if (udpPort > 0) {
             // This is what allows us to have UDP behave "similar" to TCP, in that a session is established based on the port/ip of the
             // remote connection. This allows us to reuse channels and have "state" for a UDP connection that normally wouldn't exist.
-            udpBootstrap = new SessionBootstrap();
+            // Additionally, this is what responds to discovery broadcast packets
+            udpBootstrap = new SessionBootstrap(tcpPort, udpPort);
         }
         else {
             udpBootstrap = null;
@@ -150,56 +147,26 @@ class Server<C extends Connection> extends EndPointServer {
 
 
         String threadName = Server.class.getSimpleName();
+        final EventLoopGroup workerEventLoop = newEventLoop(DEFAULT_THREAD_POOL_SIZE, threadName);
 
-
-        final EventLoopGroup boss;
-        final EventLoopGroup worker;
-
-        if (OS.isAndroid()) {
-            // android ONLY supports OIO (not NIO)
-            boss = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        }
-        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-            // JNI network stack is MUCH faster (but only on linux)
-            boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        }
-        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
-            // KQueue network stack is MUCH faster (but only on macosx)
-            boss = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new KQueueEventLoopGroup(EndPoint.DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        }
-        else {
-            boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            worker = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        }
-
-        manageForShutdown(boss);
-        manageForShutdown(worker);
 
         // always use local channels on the server.
-        {
-            EventLoopGroup localBoss;
-            EventLoopGroup localWorker;
-
-            if (localBootstrap != null) {
-                localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-boss-LOCAL",
-                                                                                                       threadGroup));
-                localWorker = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-worker-LOCAL",
-                                                                                                         threadGroup));
-
-                localBootstrap.group(localBoss, localWorker)
-                              .channel(LocalServerChannel.class)
-                              .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                              .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
-                              .localAddress(new LocalAddress(localChannelName))
-                              .childHandler(new RegistrationLocalHandlerServer(threadName, registrationWrapper));
-
-                manageForShutdown(localBoss);
-                manageForShutdown(localWorker);
-            }
+        if (localBootstrap != null) {
+            localBootstrap.group(newEventLoop(LOCAL, 1, threadName + "-JVM-BOSS"),
+                                 newEventLoop(LOCAL, 1, threadName + "-JVM-HAND"))
+                          .channel(LocalServerChannel.class)
+                          .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                          .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
+                          .localAddress(new LocalAddress(localChannelName))
+                          .childHandler(new RegistrationLocalHandlerServer(threadName, registrationWrapper, workerEventLoop));
         }
+
+        // don't even bother with TCP/UDP if it's not enabled
+        if (tcpBootstrap == null && udpBootstrap == null) {
+            return;
+        }
+
+
 
         if (tcpBootstrap != null) {
             if (OS.isAndroid()) {
@@ -207,7 +174,7 @@ class Server<C extends Connection> extends EndPointServer {
                 tcpBootstrap.channel(OioServerSocketChannel.class);
             }
             else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-                // JNI network stack is MUCH faster (but only on linux)
+                // epoll network stack is MUCH faster (but only on linux)
                 tcpBootstrap.channel(EpollServerSocketChannel.class);
             }
             else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
@@ -221,15 +188,15 @@ class Server<C extends Connection> extends EndPointServer {
             // TODO: If we use netty for an HTTP server,
             // Beside the usual ChannelOptions the Native Transport allows to enable TCP_CORK which may come in handy if you implement a HTTP Server.
 
-            tcpBootstrap.group(boss, worker)
+            tcpBootstrap.group(newEventLoop(1, threadName + "-TCP-BOSS"),
+                               newEventLoop(1, threadName + "-TCP-HAND"))
                         .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
                         .option(ChannelOption.SO_REUSEADDR, true)
                         .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
 
                         .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .childOption(ChannelOption.SO_KEEPALIVE, true)
-                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName,
-                                                                             registrationWrapper));
+                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName, registrationWrapper, workerEventLoop));
 
             // have to check options.host for "0.0.0.0". we don't bind to "0.0.0.0", we bind to "null" to get the "any" address!
             if (hostName.equals("0.0.0.0")) {
@@ -252,7 +219,7 @@ class Server<C extends Connection> extends EndPointServer {
                 udpBootstrap.channel(OioDatagramChannel.class);
             }
             else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-                // JNI network stack is MUCH faster (but only on linux)
+                // epoll network stack is MUCH faster (but only on linux)
                 udpBootstrap.channel(EpollDatagramChannel.class);
             }
             else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
@@ -267,7 +234,9 @@ class Server<C extends Connection> extends EndPointServer {
 
             // Netty4 has a default of 2048 bytes as upper limit for datagram packets, we want this to be whatever we specify
             FixedRecvByteBufAllocator recvByteBufAllocator = new FixedRecvByteBufAllocator(EndPoint.udpMaxSize);
-            udpBootstrap.group(worker)
+
+            udpBootstrap.group(newEventLoop(1, threadName + "-UDP-BOSS"),
+                               newEventLoop(1, threadName + "-UDP-HAND"))
                         .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .option(ChannelOption.RCVBUF_ALLOCATOR, recvByteBufAllocator)
                         .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
@@ -276,7 +245,7 @@ class Server<C extends Connection> extends EndPointServer {
                         // TODO: move broadcast to it's own handler, and have UDP server be able to be bound to a specific IP
                         // OF NOTE: At the end in my case I decided to bind to .255 broadcast address on Linux systems. (to receive broadcast packets)
                         .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets! see: http://developerweb.net/viewtopic.php?id=5722
-                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, registrationWrapper));
+                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, registrationWrapper, workerEventLoop));
 
             // // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
             // if (hostName.equals("0.0.0.0")) {
@@ -344,7 +313,7 @@ class Server<C extends Connection> extends EndPointServer {
                 throw new IllegalArgumentException("Could not bind to LOCAL address '" + localChannelName + "' on the server.", future.cause());
             }
 
-            logger.info("Listening on LOCAL address: '{}'", localChannelName);
+            logger.info("Listening on LOCAL address: [{}]", localChannelName);
             manageForShutdown(future);
         }
 
@@ -365,7 +334,7 @@ class Server<C extends Connection> extends EndPointServer {
                 throw new IllegalArgumentException("Could not bind to address " + hostName + " TCP port " + tcpPort + " on the server.", future.cause());
             }
 
-            logger.info("Listening on TCP at {}:{}", hostName, tcpPort);
+            logger.info("TCP server listen address [{}:{}]", hostName, tcpPort);
             manageForShutdown(future);
         }
 
@@ -384,7 +353,7 @@ class Server<C extends Connection> extends EndPointServer {
                                                    future.cause());
             }
 
-            logger.info("Listening on UDP at {}:{}", hostName, udpPort);
+            logger.info("UDP server listen address [{}:{}]", hostName, udpPort);
             manageForShutdown(future);
         }
 

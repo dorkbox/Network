@@ -39,14 +39,19 @@ import dorkbox.util.exceptions.SecurityException;
 public
 class MultipleThreadTest extends BaseTest {
     private final Object lock = new Object();
+    private volatile boolean stillRunning = false;
+
+    private final Object finalRunLock = new Object();
+    private volatile boolean finalStillRunning = false;
+
     private final int messageCount = 150;
     private final int threadCount = 15;
     private final int clientCount = 13;
 
     private final List<Client> clients = new ArrayList<Client>(this.clientCount);
 
-    int perClientReceiveTotal = (MultipleThreadTest.this.messageCount * MultipleThreadTest.this.threadCount);
-    int serverReceiveTotal = perClientReceiveTotal * MultipleThreadTest.this.clientCount;
+    int perClientReceiveTotal = (this.messageCount * this.threadCount);
+    int serverReceiveTotal = perClientReceiveTotal * this.clientCount;
 
     AtomicInteger sent = new AtomicInteger(0);
     AtomicInteger totalClientReceived = new AtomicInteger(0);
@@ -57,6 +62,14 @@ class MultipleThreadTest extends BaseTest {
     @Test
     public
     void multipleThreads() throws SecurityException, IOException {
+        // our clients should receive messageCount * threadCount * clientCount TOTAL messages
+        final int totalClientReceivedCountExpected = this.clientCount * this.messageCount * this.threadCount;
+        final int totalServerReceivedCountExpected = this.clientCount * this.messageCount;
+
+        System.err.println("CLIENT RECEIVES: " + totalClientReceivedCountExpected);
+        System.err.println("SERVER RECEIVES: " + totalServerReceivedCountExpected);
+
+
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.host = host;
@@ -66,6 +79,7 @@ class MultipleThreadTest extends BaseTest {
 
 
         final Server server = new Server(configuration);
+        server.disableRemoteKeyValidation();
 
         addEndPoint(server);
         server.bind(false);
@@ -94,8 +108,10 @@ class MultipleThreadTest extends BaseTest {
                                 //System.err.println(dataClass.data);
                                 MultipleThreadTest.this.sentStringsToClientDebug.put(incrementAndGet, dataClass);
                                 connection.send()
-                                          .TCP(dataClass);
+                                          .TCP(dataClass)
+                                          .flush();
                             }
+
                         }
                     }.start();
                 }
@@ -107,20 +123,31 @@ class MultipleThreadTest extends BaseTest {
             public
             void received(Connection connection, DataClass object) {
                 int incrementAndGet = MultipleThreadTest.this.receivedServer.getAndIncrement();
-
                 //System.err.println("server #" + incrementAndGet);
-                if (incrementAndGet == serverReceiveTotal) {
-                    System.err.println("Server DONE " + incrementAndGet);
-                    stopEndPoints();
+
+
+                if (incrementAndGet % MultipleThreadTest.this.messageCount == 0) {
+                    System.err.println("Server receive DONE for client " + incrementAndGet);
+
+                    stillRunning = false;
                     synchronized (MultipleThreadTest.this.lock) {
                         MultipleThreadTest.this.lock.notifyAll();
+                    }
+                }
+
+                if (incrementAndGet == totalServerReceivedCountExpected) {
+                    System.err.println("Server DONE: " + incrementAndGet);
+
+                    finalStillRunning = false;
+                    synchronized (MultipleThreadTest.this.finalRunLock) {
+                        MultipleThreadTest.this.finalRunLock.notifyAll();
                     }
                 }
             }
         });
 
         // ----
-
+        finalStillRunning = true;
         for (int i = 1; i <= this.clientCount; i++) {
             final int index = i;
 
@@ -154,26 +181,35 @@ class MultipleThreadTest extends BaseTest {
                           }
                       }
                   });
+
+
+            stillRunning = true;
+
             client.connect(5000);
+
+            while (stillRunning) {
+                synchronized (this.lock) {
+                    try {
+                        this.lock.wait(5 * 1000); // 5 secs
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+
+        while (finalStillRunning) {
+            synchronized (this.finalRunLock) {
+                try {
+                    this.finalRunLock.wait(5 * 1000); // 5 secs
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
         }
 
         // CLIENT will wait until it's done connecting, but SERVER is async.
         // the ONLY way to safely work in the server is with LISTENERS. Everything else can FAIL, because of it's async nature.
-
-        // our clients should receive messageCount * threadCount * clientCount TOTAL messages
-        int totalClientReceivedCountExpected = this.threadCount * this.clientCount * this.messageCount;
-        int totalServerReceivedCountExpected = this.clientCount * this.messageCount;
-
-        System.err.println("CLIENT RECEIVES: " + totalClientReceivedCountExpected);
-        System.err.println("SERVER RECEIVES: " + totalServerReceivedCountExpected);
-
-        synchronized (this.lock) {
-            try {
-                this.lock.wait(5 * 1000); // 5 secs
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
 
         if (!this.sentStringsToClientDebug.isEmpty()) {
             System.err.println("MISSED DATA: " + this.sentStringsToClientDebug.size());
@@ -184,7 +220,9 @@ class MultipleThreadTest extends BaseTest {
 
         stopEndPoints();
         assertEquals(totalClientReceivedCountExpected, totalClientReceived.get());
-        assertEquals(totalServerReceivedCountExpected, this.receivedServer.get() - 1); // offset by 1 since we start at 1.
+
+        // offset by 1 since we start at 1
+        assertEquals(totalServerReceivedCountExpected, receivedServer.get()-1);
     }
 
 

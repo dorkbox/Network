@@ -20,14 +20,15 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.EventLoopGroup;
 import io.netty.util.AttributeKey;
 
 public abstract
 class RegistrationLocalHandler extends RegistrationHandler {
     public static final AttributeKey<MetaChannel> META_CHANNEL = AttributeKey.valueOf(RegistrationLocalHandler.class, "MetaChannel.local");
 
-    RegistrationLocalHandler(String name, RegistrationWrapper registrationWrapper) {
-        super(name, registrationWrapper);
+    RegistrationLocalHandler(String name, RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
+        super(name, registrationWrapper, workerEventLoop);
     }
 
     /**
@@ -47,6 +48,12 @@ class RegistrationLocalHandler extends RegistrationHandler {
 
     @Override
     public
+    void channelActive(final ChannelHandlerContext context) throws Exception {
+        // to suppress warnings in the super class
+    }
+
+    @Override
+    public
     void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
         Channel channel = context.channel();
 
@@ -57,12 +64,6 @@ class RegistrationLocalHandler extends RegistrationHandler {
         if (channel.isOpen()) {
             channel.close();
         }
-    }
-
-    @Override
-    public
-    void channelActive(ChannelHandlerContext context) throws Exception {
-        // not used (so we prevent the warnings from the super class)
     }
 
     // this SHOULDN'T ever happen, but we might shutdown in the middle of registration

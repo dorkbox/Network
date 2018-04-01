@@ -15,18 +15,22 @@
  */
 package dorkbox.network.connection.registration.remote;
 
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.EventLoopGroup;
 
 public
 class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer {
 
     public
-    RegistrationRemoteHandlerServerTCP(final String name, final RegistrationWrapper registrationWrapper) {
-        super(name, registrationWrapper);
+    RegistrationRemoteHandlerServerTCP(final String name,
+                                       final RegistrationWrapper registrationWrapper,
+                                       final EventLoopGroup workerEventLoop) {
+        super(name, registrationWrapper, workerEventLoop);
     }
 
     /**
@@ -47,6 +51,7 @@ class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer
             if (sessionId == 0) {
                 metaChannel = registrationWrapper.createSessionServer();
                 metaChannel.tcpChannel = channel;
+                // TODO: use this: channel.voidPromise();
                 logger.debug("New TCP connection. Saving meta-channel id: {}", metaChannel.sessionId);
             }
             else {
@@ -59,11 +64,20 @@ class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer
                 }
             }
 
-            readServer(channel, registration, "TCP server", metaChannel);
+            readServer(context, channel, registration, "TCP server", metaChannel);
         }
         else {
             logger.error("Error registering TCP with remote client!");
-            shutdown(channel, 0);
+
+            // this is what happens when the registration happens too quickly...
+            Object connection = context.pipeline()
+                                       .last();
+            if (connection instanceof ConnectionImpl) {
+                ((ConnectionImpl) connection).channelRead(context, message);
+            }
+            else {
+                shutdown(channel, 0);
+            }
         }
     }
 }

@@ -22,14 +22,15 @@ import dorkbox.network.connection.registration.Registration;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.EventLoopGroup;
 import io.netty.util.ReferenceCountUtil;
 
 public
 class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
 
     public
-    RegistrationLocalHandlerClient(String name, RegistrationWrapper registrationWrapper) {
-        super(name, registrationWrapper);
+    RegistrationLocalHandlerClient(String name, RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
+        super(name, registrationWrapper, workerEventLoop);
     }
 
     /**
@@ -67,13 +68,10 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
             // Event though a local channel is XOR with everything else, we still have to make the client clean up it's state.
             registrationWrapper.startNextProtocolRegistration();
 
-            registrationWrapper.connection0(metaChannel, null);
-            ConnectionImpl connection = metaChannel.connection;
+            ConnectionImpl connection = registrationWrapper.connection0(metaChannel, null);
 
             // have to setup connection handler
             pipeline.addLast(CONNECTION_HANDLER, connection);
-
-
             registrationWrapper.connectionConnected0(connection);
         }
         else {

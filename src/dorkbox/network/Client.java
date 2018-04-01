@@ -15,6 +15,8 @@
  */
 package dorkbox.network;
 
+import static dorkbox.network.pipeline.ConnectionType.LOCAL;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
@@ -30,26 +32,20 @@ import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerC
 import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.TimeoutException;
-import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.EpollDatagramChannel;
-import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.kqueue.KQueueDatagramChannel;
-import io.netty.channel.kqueue.KQueueEventLoopGroup;
 import io.netty.channel.kqueue.KQueueSocketChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
@@ -112,41 +108,18 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
 
         localChannelName = config.localChannelName;
         hostName = config.host;
+        final EventLoopGroup workerEventLoop = newEventLoop(DEFAULT_THREAD_POOL_SIZE, threadName);
 
-        final EventLoopGroup boss;
-
-        if (OS.isAndroid()) {
-            // android ONLY supports OIO (not NIO)
-            boss = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        }
-        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-            // JNI network stack is MUCH faster (but only on linux)
-            boss = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        }
-        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
-            // KQueue network stack is MUCH faster (but only on macosx)
-            boss = new KQueueEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        }
-        else {
-            boss = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
-        }
-
-        manageForShutdown(boss);
 
         if (config.localChannelName != null && config.tcpPort <= 0 && config.udpPort <= 0) {
             // no networked bootstraps. LOCAL connection only
             Bootstrap localBootstrap = new Bootstrap();
             bootstraps.add(new BootstrapWrapper("LOCAL", config.localChannelName, -1, localBootstrap));
 
-            EventLoopGroup localBoss = new DefaultEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName + "-LOCAL",
-                                                                                                                  threadGroup));
-
-            localBootstrap.group(localBoss)
+            localBootstrap.group(newEventLoop(LOCAL, 1, threadName + "-JVM-BOSS"))
                           .channel(LocalChannel.class)
                           .remoteAddress(new LocalAddress(config.localChannelName))
-                          .handler(new RegistrationLocalHandlerClient(threadName, registrationWrapper));
-
-            manageForShutdown(localBoss);
+                          .handler(new RegistrationLocalHandlerClient(threadName, registrationWrapper, workerEventLoop));
         }
         else {
             if (config.host == null) {
@@ -166,7 +139,7 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                     tcpBootstrap.channel(OioSocketChannel.class);
                 }
                 else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-                    // JNI network stack is MUCH faster (but only on linux)
+                    // epoll network stack is MUCH faster (but only on linux)
                     tcpBootstrap.channel(EpollSocketChannel.class);
                 }
                 else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
@@ -177,12 +150,11 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                     tcpBootstrap.channel(NioSocketChannel.class);
                 }
 
-                tcpBootstrap.group(boss)
+                tcpBootstrap.group(newEventLoop(1, threadName + "-TCP-BOSS"))
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .remoteAddress(config.host, config.tcpPort)
-                            .handler(new RegistrationRemoteHandlerClientTCP(threadName,
-                                                                            registrationWrapper));
+                            .handler(new RegistrationRemoteHandlerClientTCP(threadName, registrationWrapper, workerEventLoop));
 
                 // android screws up on this!!
                 tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid())
@@ -199,7 +171,7 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                     udpBootstrap.channel(OioDatagramChannel.class);
                 }
                 else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-                    // JNI network stack is MUCH faster (but only on linux)
+                    // epoll network stack is MUCH faster (but only on linux)
                     udpBootstrap.channel(EpollDatagramChannel.class);
                 }
                 else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
@@ -211,15 +183,14 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                 }
 
 
-                udpBootstrap.group(boss)
+                udpBootstrap.group(newEventLoop(1, threadName + "-UDP-BOSS"))
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             // Netty4 has a default of 2048 bytes as upper limit for datagram packets.
                             .option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(EndPoint.udpMaxSize))
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .localAddress(new InetSocketAddress(0))  // bind to wildcard
                             .remoteAddress(new InetSocketAddress(config.host, config.udpPort))
-                            .handler(new RegistrationRemoteHandlerClientUDP(threadName,
-                                                                            registrationWrapper));
+                            .handler(new RegistrationRemoteHandlerClientUDP(threadName, registrationWrapper, workerEventLoop));
 
                 // Enable to READ and WRITE MULTICAST data (ie, 192.168.1.0)
                 // in order to WRITE: write as normal, just make sure it ends in .255
@@ -253,8 +224,8 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
      */
     public
     void reconnect(final int connectionTimeout) throws IOException {
-        // close out all old connections
-        closeConnections();
+        // make sure we are closed first
+        close();
 
         connect(connectionTimeout);
     }
@@ -283,13 +254,32 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
      *                 if the client is unable to connect in the requested time
      */
     public
-    void connect(int connectionTimeout) throws IOException {
+    void connect(final int connectionTimeout) throws IOException {
         this.connectionTimeout = connectionTimeout;
 
         // make sure we are not trying to connect during a close or stop event.
         // This will wait until we have finished shutting down.
         synchronized (shutdownInProgress) {
         }
+
+        // if we are in the SAME thread as netty -- start in a new thread (otherwise we will deadlock)
+        if (isNettyThread()) {
+            runNewThread("Restart Thread", new Runnable(){
+                @Override
+                public
+                void run() {
+                    try {
+                        connect(connectionTimeout);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+
+            return;
+        }
+
+
 
         if (isShutdown()) {
             throw new IOException("Unable to connect when shutdown...");
@@ -300,14 +290,25 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
         }
         else {
             if (config.tcpPort > 0 && config.udpPort > 0) {
-                logger.info("Connecting to server: {} at TCP/UDP port: {}", hostName, config.tcpPort, config.udpPort);
-            } else {
-                logger.info("Connecting to server: {} at TCP port: {}", hostName, config.tcpPort);
+                logger.info("Connecting to TCP/UDP server [{}:{}]", hostName, config.tcpPort, config.udpPort);
+            }
+            else if (config.tcpPort > 0) {
+                logger.info("Connecting to TCP server  [{}:{}]", hostName, config.tcpPort);
+            }
+            else {
+                logger.info("Connecting to UDP server  [{}:{}]", hostName, config.udpPort);
             }
         }
 
         // have to start the registration process. This will wait until registration is complete and RMI methods are initialized
+        // if this is called in the event dispatch thread for netty, it will deadlock!
         startRegistration();
+
+
+        if (config.tcpPort == 0 && config.udpPort > 0) {
+            // AFTER registration is complete, if we are UDP only -- setup a heartbeat (must be the larger of 2x the idle timeout OR 10 seconds)
+            startUdpHeartbeat();
+        }
     }
 
     @Override
@@ -471,14 +472,33 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
     }
 
     /**
-     * Closes all connections ONLY (keeps the client running). To STOP the client, use stop().
+     * Closes all connections ONLY (keeps the client running), does not remove any listeners. To STOP the client, use stop().
      * <p/>
      * This is used, for example, when reconnecting to a server.
      */
     @Override
     public
     void close() {
-        closeConnections();
+        closeConnection();
+
+        // String threadName = Client.class.getSimpleName();
+        // synchronized (bootstraps) {
+        //     ArrayList<BootstrapWrapper> newList = new ArrayList<BootstrapWrapper>(bootstraps.size());
+        //
+        //     for (BootstrapWrapper bootstrap : bootstraps) {
+        //         EventLoopGroup group = bootstrap.bootstrap.group();
+        //
+        //         removeFromShutdown(group);
+        //         group.shutdownGracefully();
+        //
+        //         String name = threadName + "-" + bootstrap.type + "-BOSS";
+        //
+        //         newList.add(bootstrap.clone(newEventLoop(1, name)));
+        //     }
+        //
+        //     bootstraps.clear();
+        //     bootstraps.addAll(newList);
+        // }
     }
 }
 

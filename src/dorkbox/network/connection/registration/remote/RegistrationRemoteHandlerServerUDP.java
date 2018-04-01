@@ -15,20 +15,24 @@
  */
 package dorkbox.network.connection.registration.remote;
 
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.EventLoopGroup;
 
 @SuppressWarnings("Duplicates")
 @Sharable
 public
 class RegistrationRemoteHandlerServerUDP extends RegistrationRemoteHandlerServer {
     public
-    RegistrationRemoteHandlerServerUDP(final String name, final RegistrationWrapper registrationWrapper) {
-        super(name, registrationWrapper);
+    RegistrationRemoteHandlerServerUDP(final String name,
+                                       final RegistrationWrapper registrationWrapper,
+                                       final EventLoopGroup workerEventLoop) {
+        super(name, registrationWrapper, workerEventLoop);
     }
 
     @Override
@@ -60,11 +64,20 @@ class RegistrationRemoteHandlerServerUDP extends RegistrationRemoteHandlerServer
                 metaChannel.udpChannel = channel;
             }
 
-            readServer(channel, registration, "UDP server", metaChannel);
+            readServer(context, channel, registration, "UDP server", metaChannel);
         }
         else {
             logger.error("Error registering UDP with remote client!");
-            shutdown(channel, 0);
+
+            // this is what happens when the registration happens too quickly...
+            Object connection = context.pipeline()
+                                       .last();
+            if (connection instanceof ConnectionImpl) {
+                ((ConnectionImpl) connection).channelRead(context, message);
+            }
+            else {
+                shutdown(channel, 0);
+            }
         }
     }
 }

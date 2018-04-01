@@ -76,7 +76,7 @@ class SessionManager extends ChannelInboundHandlerAdapter {
         return Long_.from(combined);
     }
 
-    private final BroadcastServer broadcastServer = new BroadcastServer();
+    private final BroadcastServer broadcastServer;
     // Does not need to be thread safe, because access only happens in the event loop
     private final LongObjectHashMap<DatagramSessionChannel> datagramChannels = new LongObjectHashMap<DatagramSessionChannel>();
 
@@ -91,7 +91,8 @@ class SessionManager extends ChannelInboundHandlerAdapter {
     private final DatagramSessionChannelConfig sessionConfig;
 
 
-    SessionManager(final Channel channel,
+    SessionManager(final int tcpPort, final int udpPort,
+                   final Channel channel,
                    EventLoopGroup childGroup,
                    ChannelHandler childHandler,
                    Entry<ChannelOption<?>, Object>[] childOptions,
@@ -117,6 +118,8 @@ class SessionManager extends ChannelInboundHandlerAdapter {
                        .setAutoRead(true);
             }
         };
+
+        broadcastServer = new BroadcastServer(tcpPort, udpPort);
     }
 
     @Override
@@ -148,7 +151,7 @@ class SessionManager extends ChannelInboundHandlerAdapter {
         InetSocketAddress remoteAddress = packet.sender();
 
         // check to see if it's a broadcast packet or not
-        if (broadcastServer.isBroadcast(channel, content, localAddress, remoteAddress)) {
+        if (broadcastServer.isDiscoveryRequest(channel, content, localAddress, remoteAddress)) {
             // don't bother creating channels if this is a broadcast event. Just respond and be finished
             return;
         }

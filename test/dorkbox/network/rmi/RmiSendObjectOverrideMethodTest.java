@@ -30,6 +30,7 @@ import dorkbox.network.Server;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -39,12 +40,25 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
 
     @Test
     public
-    void rmiNetwork() throws SecurityException, IOException {
+    void rmiTcp() throws SecurityException, IOException {
         rmi(new Config() {
             @Override
             public
             void apply(final Configuration configuration) {
                 configuration.tcpPort = tcpPort;
+                configuration.host = host;
+            }
+        });
+    }
+
+    @Test
+    public
+    void rmiUdp() throws SecurityException, IOException {
+        rmi(new Config() {
+            @Override
+            public
+            void apply(final Configuration configuration) {
+                configuration.udpPort = udpPort;
                 configuration.host = host;
             }
         });
@@ -89,6 +103,8 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
     void rmi(final Config config) throws SecurityException, IOException {
         Configuration configuration = new Configuration();
         config.apply(configuration);
+
+        final boolean isUDP = configuration.udpPort > 0;
 
         configuration.serialization = Serialization.DEFAULT();
         configuration.serialization.registerRmiImplementation(TestObject.class, TestObjectImpl.class);
@@ -164,8 +180,15 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
                                       // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
                                       // that is where that object acutally exists.
                                       // we have to manually flush, since we are in a separate thread that does not auto-flush.
-                                      connection.send()
-                                                .TCP(otherObject);
+                                      ConnectionBridge send = connection.send();
+
+                                      if (isUDP) {
+                                        send.UDP(otherObject)
+                                            .flush();
+                                      } else {
+                                        send.TCP(otherObject)
+                                            .flush();
+                                      }
                                   }
                               }.start();
                           }

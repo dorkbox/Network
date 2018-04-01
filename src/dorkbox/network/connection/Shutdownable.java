@@ -1,5 +1,10 @@
 package dorkbox.network.connection;
 
+import static dorkbox.network.pipeline.ConnectionType.EPOLL;
+import static dorkbox.network.pipeline.ConnectionType.KQUEUE;
+import static dorkbox.network.pipeline.ConnectionType.NIO;
+import static dorkbox.network.pipeline.ConnectionType.OIO;
+
 import java.security.AccessControlException;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -10,11 +15,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 
+import dorkbox.network.NativeLibrary;
+import dorkbox.network.pipeline.ConnectionType;
+import dorkbox.util.NamedThreadFactory;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 import io.netty.util.internal.PlatformDependent;
@@ -71,6 +84,31 @@ class Shutdownable {
     @Property
     public static long maxShutdownWaitTimeInMilliSeconds = 2000L; // in milliseconds
 
+    /**
+     * Checks to see if we are running in the netty thread. This is (usually) to prevent potential deadlocks in code that CANNOT be run from
+     * inside a netty worker.
+     */
+    public static
+    boolean isNettyThread() {
+        return Thread.currentThread()
+                     .getThreadGroup()
+                     .getName()
+                     .contains(THREADGROUP_NAME);
+    }
+
+    /**
+     * Runs a runnable inside a NEW thread that is NOT in the same thread group as Netty
+     */
+    public static
+    void runNewThread(final String threadName, final Runnable runnable) {
+        Thread thread = new Thread(Thread.currentThread()
+                                         .getThreadGroup()
+                                         .getParent(),
+                                   runnable);
+        thread.setDaemon(true);
+        thread.setName(threadName);
+        thread.start();
+    }
 
     protected final org.slf4j.Logger logger;
 
@@ -145,8 +183,18 @@ class Shutdownable {
         }
     }
 
+    /**
+     * Remove an eventloop group to be tracked & managed for shutdown
+     */
+    protected final
+    void removeFromShutdown(EventLoopGroup loopGroup) {
+        synchronized (eventLoopGroups) {
+            eventLoopGroups.remove(loopGroup);
+        }
+    }
+
     // server only does this on stop. Client does this on closeConnections
-    void shutdownChannels() {
+    void shutdownAllChannels() {
         synchronized (shutdownChannelList) {
             // now we stop all of our channels. For the server, this will close the server manager for UDP sessions
             for (ChannelFuture f : shutdownChannelList) {
@@ -163,6 +211,31 @@ class Shutdownable {
         }
     }
 
+    // shutdown all event loops associated
+    void shutdownEventLoops() {
+        // we want to WAIT until after the event executors have completed shutting down.
+        List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
+
+        List<EventLoopGroup> loopGroups;
+        synchronized (eventLoopGroups) {
+            loopGroups = new ArrayList<EventLoopGroup>(eventLoopGroups.size());
+            loopGroups.addAll(eventLoopGroups);
+        }
+
+        for (EventLoopGroup loopGroup : loopGroups) {
+            shutdownThreadList.add(loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds,
+                                                                maxShutdownWaitTimeInMilliSeconds * 10,
+                                                                TimeUnit.MILLISECONDS));
+            Thread.yield();
+        }
+
+        // now wait for them to finish!
+        // It can take a few seconds to shut down the executor. This will affect unit testing, where connections are quickly created/stopped
+        for (Future<?> f : shutdownThreadList) {
+            f.syncUninterruptibly();
+            Thread.yield();
+        }
+    }
 
     protected final
     String stopWithErrorMessage(Logger logger, String errorMessage, Throwable throwable) {
@@ -188,6 +261,72 @@ class Shutdownable {
         return true;
     }
 
+
+    /**
+     * Creates a new event loop based on the OS type and specified configuration
+     *
+     * @param threadCount number of threads for the event loop
+     *
+     * @return a new event loop group based on the specified parameters
+     */
+    protected
+    EventLoopGroup newEventLoop(final int threadCount, final String threadName) {
+        if (OS.isAndroid()) {
+            // android ONLY supports OIO
+            return newEventLoop(OIO, threadCount, threadName);
+        }
+        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
+            // epoll network stack is MUCH faster (but only on linux)
+            return newEventLoop(EPOLL, threadCount, threadName);
+        }
+        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
+            // KQueue network stack is MUCH faster (but only on macosx)
+            return newEventLoop(KQUEUE, threadCount, threadName);
+        }
+        else {
+            return newEventLoop(NIO, threadCount, threadName);
+        }
+    }
+
+    /**
+     * Creates a new event loop based on the specified configuration
+     *
+     * @param connectionType LOCAL, NIO, EPOLL, etc...
+     * @param threadCount number of threads for the event loop
+     *
+     * @return a new event loop group based on the specified parameters
+     */
+    protected
+    EventLoopGroup newEventLoop(final ConnectionType connectionType, final int threadCount, final String threadName) {
+        NamedThreadFactory threadFactory = new NamedThreadFactory(threadName, threadGroup);
+
+        EventLoopGroup group;
+
+        switch (connectionType) {
+            case LOCAL:
+                group = new DefaultEventLoopGroup(threadCount, threadFactory);
+                break;
+            case OIO:
+                group = new OioEventLoopGroup(threadCount, threadFactory);
+                break;
+            case NIO:
+                group = new NioEventLoopGroup(threadCount, threadFactory);
+                break;
+            case EPOLL:
+                group = new EpollEventLoopGroup(threadCount, threadFactory);
+                break;
+            case KQUEUE:
+                group = new KQueueEventLoopGroup(threadCount, threadFactory);
+                break;
+
+            default:
+                group = new DefaultEventLoopGroup(threadCount, threadFactory);
+                break;
+        }
+
+        manageForShutdown(group);
+        return group;
+    }
 
     /**
      * Check to see if the current thread is running from it's OWN thread, or from Netty... This is used to prevent deadlocks.
@@ -276,32 +415,9 @@ class Shutdownable {
         // This will wait until we have finished starting up/shutting down.
         synchronized (shutdownInProgress) {
             shutdownChannelsPre();
-            shutdownChannels();
+            shutdownAllChannels();
 
-            // we want to WAIT until after the event executors have completed shutting down.
-            List<Future<?>> shutdownThreadList = new LinkedList<Future<?>>();
-
-            List<EventLoopGroup> loopGroups;
-            synchronized (eventLoopGroups) {
-                loopGroups = new ArrayList<EventLoopGroup>(eventLoopGroups.size());
-                loopGroups.addAll(eventLoopGroups);
-            }
-
-            for (EventLoopGroup loopGroup : loopGroups) {
-                shutdownThreadList.add(loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds,
-                                                                    maxShutdownWaitTimeInMilliSeconds * 4,
-                                                                    TimeUnit.MILLISECONDS));
-                Thread.yield();
-            }
-
-            // now wait for them to finish!
-            // It can take a few seconds to shut down the executor. This will affect unit testing, where connections are quickly created/stopped
-            for (Future<?> f : shutdownThreadList) {
-                f.syncUninterruptibly();
-                Thread.yield();
-            }
-
-
+            shutdownEventLoops();
 
             logger.info("Stopping endpoint.");
 

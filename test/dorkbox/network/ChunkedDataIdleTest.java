@@ -63,12 +63,31 @@ public class ChunkedDataIdleTest extends BaseTest {
 
     // have to test sending objects
     @Test
-    public void SendUdp() throws SecurityException, IOException {
+    public
+    void SendUdp() throws SecurityException, IOException {
         final Data mainData = new Data();
         populateData(mainData);
 
 
         System.err.println("-- UDP");
+        Configuration configuration = new Configuration();
+        // configuration.tcpPort = tcpPort;
+        configuration.udpPort = udpPort;
+        configuration.host = host;
+        configuration.serialization = Serialization.DEFAULT();
+        register(configuration.serialization);
+
+        sendObject(mainData, configuration, ConnectionType.UDP);
+    }
+
+    // have to test sending objects
+    @Test
+    public void SendTcpUdp_Udp() throws SecurityException, IOException {
+        final Data mainData = new Data();
+        populateData(mainData);
+
+
+        System.err.println("-- UDP (with TCP connection alive)");
         Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
@@ -81,7 +100,7 @@ public class ChunkedDataIdleTest extends BaseTest {
 
     // have to test sending objects
     @Test
-    public void SendTcpAndUdp() throws SecurityException, IOException {
+    public void SendTcpUdp_Tcp() throws SecurityException, IOException {
         final Data mainData = new Data();
         populateData(mainData);
 
@@ -95,7 +114,7 @@ public class ChunkedDataIdleTest extends BaseTest {
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
-        sendObject(mainData, configuration, ConnectionType.UDP);
+        sendObject(mainData, configuration, ConnectionType.TCP);
     }
 
 

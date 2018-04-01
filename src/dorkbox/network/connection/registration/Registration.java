@@ -35,6 +35,12 @@ class Registration {
     // true if we have more registrations to process, false if we are done
     public boolean hasMore;
 
+    // true when we are ready to setup the connection (hasMore will always be false if this is true). False when we are ready to connect
+    public boolean upgrade;
+
+    // true when we are fully upgraded
+    public boolean upgraded;
+
     private
     Registration() {
         // for serialization

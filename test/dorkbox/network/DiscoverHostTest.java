@@ -27,6 +27,7 @@ import org.junit.Test;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
+import dorkbox.network.pipeline.discovery.BroadcastResponse;
 import dorkbox.util.exceptions.SecurityException;
 
 public
@@ -48,7 +49,7 @@ class DiscoverHostTest extends BaseTest {
 
         // ----
 
-        String host = Broadcast.discoverHost(udpPort, 2000);
+        BroadcastResponse host = Broadcast.discoverHost(udpPort, 2000);
         if (host == null) {
             stopEndPoints();
             fail("No servers found. Maybe you are behind a VPN service or your network is mis-configured?");
@@ -77,7 +78,7 @@ class DiscoverHostTest extends BaseTest {
               });
         client.connect(2000);
 
-        waitForThreads(2);
+        waitForThreads(20);
 
         if (!this.connected) {
             fail("Unable to connect to server.");

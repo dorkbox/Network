@@ -68,6 +68,12 @@ interface Connection {
     ConnectionBridge send();
 
     /**
+     * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
+     * is available to use. If you want specify the protocol, use {@link #send()}, followed by the protocol you wish to use.
+     */
+    ConnectionPoint send(Object message);
+
+    /**
      * Expose methods to send objects to a destination when the connection has become idle.
      */
     IdleBridge sendOnIdle(IdleSender<?, ?> sender);
@@ -83,7 +89,7 @@ interface Connection {
     Listeners listeners();
 
     /**
-     * Closes the connection
+     * Closes the connection, but does not remove any listeners
      */
     void close();
 
