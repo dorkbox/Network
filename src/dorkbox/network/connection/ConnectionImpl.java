@@ -695,13 +695,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
         }
 
         closeLatch.countDown();
-
-        // UDP connections ALWAYS have to shutdown their event loop (because of how session management works)
-        // if (isUDP || this.endPoint instanceof EndPointClient) {
-        //     // also have to shutdown this eventloop, but ONLY for the client!
-        //     channel.eventLoop()
-        //            .shutdownGracefully();
-        // }
     }
 
     /**
