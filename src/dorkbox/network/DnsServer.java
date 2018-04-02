@@ -63,6 +63,17 @@ import io.netty.util.NetUtil;
  * Finally, across our DNS infrastructure we have deprecated ANY queries and have proposed to the IETF to restrict ANY queries to only
  * authorized parties. By neutering ANY, we've significantly reduced the maximum size of responses even for zone files that need to be
  * large due to a large number of records.
+ *
+ *
+ *
+ * ALSO: see LINK-LOCAL MULTICAST NAME RESOLUTION
+ * https://en.wikipedia.org/wiki/Link-Local_Multicast_Name_Resolution
+ *
+ * In responding to queries, responders listen on UDP port 5355 on the following link-scope Multicast address:
+ *
+ * IPv4 - 224.0.0.252, MAC address of 01-00-5E-00-00-FC
+ * IPv6 - FF02:0:0:0:0:0:1:3 (this notation can be abbreviated as FF02::1:3), MAC address of 33-33-00-01-00-03
+ * The responders also listen on TCP port 5355 on the unicast address that the host uses to respond to queries.
  */
 public
 class DnsServer extends Shutdownable {
