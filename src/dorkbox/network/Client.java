@@ -37,7 +37,6 @@ import dorkbox.util.exceptions.SecurityException;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
 import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.EpollDatagramChannel;
@@ -108,8 +107,6 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
 
         localChannelName = config.localChannelName;
         hostName = config.host;
-        final EventLoopGroup workerEventLoop = newEventLoop(DEFAULT_THREAD_POOL_SIZE, threadName);
-
 
         if (config.localChannelName != null && config.tcpPort <= 0 && config.udpPort <= 0) {
             // no networked bootstraps. LOCAL connection only
@@ -119,7 +116,7 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
             localBootstrap.group(newEventLoop(LOCAL, 1, threadName + "-JVM-BOSS"))
                           .channel(LocalChannel.class)
                           .remoteAddress(new LocalAddress(config.localChannelName))
-                          .handler(new RegistrationLocalHandlerClient(threadName, registrationWrapper, workerEventLoop));
+                          .handler(new RegistrationLocalHandlerClient(threadName, registrationWrapper));
         }
         else {
             if (config.host == null) {
@@ -154,7 +151,8 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                             .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .remoteAddress(config.host, config.tcpPort)
-                            .handler(new RegistrationRemoteHandlerClientTCP(threadName, registrationWrapper, workerEventLoop));
+                            .handler(new RegistrationRemoteHandlerClientTCP(threadName, registrationWrapper,
+                                                                            newEventLoop(WORKER_THREAD_POOL_SIZE, threadName)));
 
                 // android screws up on this!!
                 tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid())
@@ -190,7 +188,8 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                             .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                             .localAddress(new InetSocketAddress(0))  // bind to wildcard
                             .remoteAddress(new InetSocketAddress(config.host, config.udpPort))
-                            .handler(new RegistrationRemoteHandlerClientUDP(threadName, registrationWrapper, workerEventLoop));
+                            .handler(new RegistrationRemoteHandlerClientUDP(threadName, registrationWrapper,
+                                                                            newEventLoop(WORKER_THREAD_POOL_SIZE, threadName)));
 
                 // Enable to READ and WRITE MULTICAST data (ie, 192.168.1.0)
                 // in order to WRITE: write as normal, just make sure it ends in .255

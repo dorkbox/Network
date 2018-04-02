@@ -132,22 +132,22 @@ class DnsServer extends Shutdownable {
         if (OS.isAndroid()) {
             // android ONLY supports OIO (not NIO)
             boss = new OioEventLoopGroup(1, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            work = new OioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            work = new OioEventLoopGroup(WORKER_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else if (OS.isLinux() && NativeLibrary.isAvailable()) {
             // epoll network stack is MUCH faster (but only on linux)
             boss = new EpollEventLoopGroup(1, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            work = new EpollEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            work = new EpollEventLoopGroup(WORKER_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
             // KQueue network stack is MUCH faster (but only on macosx)
             boss = new KQueueEventLoopGroup(1, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            work = new KQueueEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            work = new KQueueEventLoopGroup(WORKER_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
         else {
             // sometimes the native libraries cannot be loaded, so fall back to NIO
             boss = new NioEventLoopGroup(1, new NamedThreadFactory(threadName + "-boss", threadGroup));
-            work = new NioEventLoopGroup(DEFAULT_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
+            work = new NioEventLoopGroup(WORKER_THREAD_POOL_SIZE, new NamedThreadFactory(threadName, threadGroup));
         }
 
         manageForShutdown(boss);

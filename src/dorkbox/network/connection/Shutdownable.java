@@ -72,11 +72,10 @@ class Shutdownable {
     public static final int WRITE_BUFF_LOW = 8 * 1024;
 
     /**
-     * this can be changed to a more specialized value, if necessary
+     * The number of threads used for the worker threads.
      */
     @Property
-    public static int DEFAULT_THREAD_POOL_SIZE = Runtime.getRuntime()
-                                                        .availableProcessors() * 2;
+    public static int WORKER_THREAD_POOL_SIZE = Math.min(Runtime.getRuntime().availableProcessors() / 2, 1);
 
     /**
      * The amount of time in milli-seconds to wait for this endpoint to close all {@link Channel}s and shutdown gracefully.

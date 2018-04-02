@@ -34,13 +34,17 @@ import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.crypto.CryptoECC;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.ChannelPromise;
+import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.GenericFutureListener;
 
 public abstract
@@ -349,82 +353,107 @@ class RegistrationRemoteHandler extends RegistrationHandler {
         }
     }
 
-    final void cleanupPipeline(final MetaChannel metaChannel) {
+    final
+    void cleanupPipeline(final MetaChannel metaChannel, final long delay) {
         final int idleTimeout = this.registrationWrapper.getIdleTimeout();
 
         try {
             // REMOVE our channel wrapper (only used for encryption) with the actual connection
             metaChannel.connection = ((ConnectionWrapper) metaChannel.connection).connection;
 
-
             if (metaChannel.tcpChannel != null) {
-                final ChannelPipeline pipeline = metaChannel.tcpChannel.pipeline();
-                if (registrationWrapper.isClient()) {
-                    pipeline.remove(RegistrationRemoteHandlerClientTCP.class);
-                }
-                else {
-                    pipeline.remove(RegistrationRemoteHandlerServerTCP.class);
-                }
-                pipeline.remove(ConnectionWrapper.class);
-
-                if (idleTimeout > 0) {
-                    pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, idleTimeout, TimeUnit.MILLISECONDS));
-                } else {
-                    pipeline.remove(IDLE_HANDLER);
-                }
-
-                pipeline.addLast(CONNECTION_HANDLER, metaChannel.connection);
-
-                // we also DEREGISTER and run on a different event loop!
-                ChannelFuture future = metaChannel.tcpChannel.deregister();
-                future.addListener(new GenericFutureListener<Future<? super Void>>() {
-                    @Override
-                    public
-                    void operationComplete(final Future<? super Void> f) throws Exception {
-                        if (f.isSuccess()) {
-                            workerEventLoop.register(metaChannel.tcpChannel);
-                        }
-                    }
-                });
+                cleanupPipeline0(delay, idleTimeout, metaChannel, metaChannel.connection, metaChannel.tcpChannel, true);
             }
 
             if (metaChannel.udpChannel != null) {
-                final ChannelPipeline pipeline = metaChannel.udpChannel.pipeline();
-                if (registrationWrapper.isClient()) {
-                    pipeline.remove(RegistrationRemoteHandlerClientUDP.class);
-                }
-                else {
-                    pipeline.remove(RegistrationRemoteHandlerServerUDP.class);
-                }
-                pipeline.remove(ConnectionWrapper.class);
-
-                if (idleTimeout > 0) {
-                    pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, idleTimeout, TimeUnit.MILLISECONDS));
-                }
-                else {
-                    pipeline.remove(IDLE_HANDLER);
-                }
-
-                pipeline.addLast(CONNECTION_HANDLER, metaChannel.connection);
-
-                // we also DEREGISTER and run on a different event loop!
-                // ONLY necessary for UDP-CLIENT, because for UDP-SERVER, the SessionManager takes care of this!
-                // if (registrationWrapper.isClient()) {
-                //     ChannelFuture future = metaChannel.udpChannel.deregister();
-                //     future.addListener(new GenericFutureListener<Future<? super Void>>() {
-                //         @Override
-                //         public
-                //         void operationComplete(final Future<? super Void> f) throws Exception {
-                //             if (f.isSuccess()) {
-                //                 workerEventLoop.register(metaChannel.udpChannel);
-                //             }
-                //         }
-                //     });
-                // }
+                cleanupPipeline0(delay, idleTimeout, metaChannel, metaChannel.connection, metaChannel.udpChannel, false);
             }
         } catch (Exception e) {
             logger.error("Error during pipeline replace", e);
         }
+    }
+
+    private
+    void cleanupPipeline0(final long delay,
+                          final int idleTimeout,
+                          final MetaChannel metaChannel,
+                          final ChannelHandler connection,
+                          final Channel channel,
+                          final boolean isTcp) {
+        final ChannelPipeline pipeline = channel.pipeline();
+
+        boolean isClient = registrationWrapper.isClient();
+        if (isClient) {
+            if (isTcp) {
+                pipeline.remove(RegistrationRemoteHandlerClientTCP.class);
+            }
+            else {
+                pipeline.remove(RegistrationRemoteHandlerClientUDP.class);
+            }
+        }
+        else {
+            if (isTcp) {
+                pipeline.remove(RegistrationRemoteHandlerServerTCP.class);
+            }
+            else {
+                pipeline.remove(RegistrationRemoteHandlerServerUDP.class);
+            }
+        }
+
+        pipeline.remove(ConnectionWrapper.class);
+
+        if (idleTimeout > 0) {
+            pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, idleTimeout, TimeUnit.MILLISECONDS));
+        }
+        else {
+            pipeline.remove(IDLE_HANDLER);
+        }
+
+        pipeline.addLast(CONNECTION_HANDLER, connection);
+
+        // we also DEREGISTER from the HANDSHAKE event-loop and run on the worker event-loop!
+        // if (isClient) {
+            ChannelFuture future = channel.deregister();
+            future.addListener(new GenericFutureListener<Future<? super Void>>() {
+                @Override
+                public
+                void operationComplete(final Future<? super Void> f) throws Exception {
+                    if (f.isSuccess()) {
+                        // final EventLoop next = workerEventLoop.next();
+
+                        final ChannelPromise channelPromise = channel.newPromise();
+                        channelPromise.addListener(new FutureListener<Void>() {
+                            @Override
+                            public
+                            void operationComplete(final Future<Void> future) throws Exception {
+                                EventLoop loop = channel.eventLoop();
+                                loop.schedule(new Runnable() {
+                                    @Override
+                                    public
+                                    void run() {
+                                        logger.trace("Notify Connection");
+                                        doConnect(metaChannel);
+                                    }
+                                }, delay, TimeUnit.MILLISECONDS);
+                            }
+                        });
+
+                        // TODO: TCP and UDP have to register on DIFFERENT event loops
+                        workerEventLoop.register(channelPromise);
+                    }
+                }
+            });
+        // }
+        // else {
+        //     channel.eventLoop().schedule(new Runnable() {
+        //         @Override
+        //         public
+        //         void run() {
+        //             logger.trace("Notify Connection");
+        //             doConnect(metaChannel);
+        //         }
+        //     }, delay, TimeUnit.MILLISECONDS);
+        // }
     }
 
     final

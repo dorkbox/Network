@@ -18,7 +18,6 @@ package dorkbox.network.connection.registration.remote;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
-import java.util.concurrent.TimeUnit;
 
 import org.bouncycastle.crypto.BasicAgreement;
 import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
@@ -215,15 +214,6 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
 
         // remove the ConnectionWrapper (that was used to upgrade the connection)
-        cleanupPipeline(metaChannel);
-
-        workerEventLoop.schedule(new Runnable() {
-            @Override
-            public
-            void run() {
-                logger.trace("Notify Connection");
-                doConnect(metaChannel);
-            }
-        }, 20, TimeUnit.MILLISECONDS);
+        cleanupPipeline(metaChannel, 20);
     }
 }

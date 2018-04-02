@@ -21,15 +21,14 @@ import dorkbox.network.connection.registration.MetaChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.EventLoopGroup;
 import io.netty.util.ReferenceCountUtil;
 
 public
 class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
 
     public
-    RegistrationLocalHandlerServer(String name, RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
-        super(name, registrationWrapper, workerEventLoop);
+    RegistrationLocalHandlerServer(String name, RegistrationWrapper registrationWrapper) {
+        super(name, registrationWrapper);
     }
 
     /**

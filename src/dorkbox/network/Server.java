@@ -34,7 +34,6 @@ import io.netty.bootstrap.SessionBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
 import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.EpollDatagramChannel;
@@ -147,18 +146,16 @@ class Server<C extends Connection> extends EndPointServer {
 
 
         String threadName = Server.class.getSimpleName();
-        final EventLoopGroup workerEventLoop = newEventLoop(DEFAULT_THREAD_POOL_SIZE, threadName);
-
 
         // always use local channels on the server.
         if (localBootstrap != null) {
             localBootstrap.group(newEventLoop(LOCAL, 1, threadName + "-JVM-BOSS"),
-                                 newEventLoop(LOCAL, 1, threadName + "-JVM-HAND"))
+                                 newEventLoop(LOCAL, 1, threadName ))
                           .channel(LocalServerChannel.class)
                           .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                           .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                           .localAddress(new LocalAddress(localChannelName))
-                          .childHandler(new RegistrationLocalHandlerServer(threadName, registrationWrapper, workerEventLoop));
+                          .childHandler(new RegistrationLocalHandlerServer(threadName, registrationWrapper));
         }
 
         // don't even bother with TCP/UDP if it's not enabled
@@ -196,7 +193,8 @@ class Server<C extends Connection> extends EndPointServer {
 
                         .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .childOption(ChannelOption.SO_KEEPALIVE, true)
-                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName, registrationWrapper, workerEventLoop));
+                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName, registrationWrapper,
+                                                                             newEventLoop(WORKER_THREAD_POOL_SIZE, threadName)));
 
             // have to check options.host for "0.0.0.0". we don't bind to "0.0.0.0", we bind to "null" to get the "any" address!
             if (hostName.equals("0.0.0.0")) {
@@ -245,7 +243,8 @@ class Server<C extends Connection> extends EndPointServer {
                         // TODO: move broadcast to it's own handler, and have UDP server be able to be bound to a specific IP
                         // OF NOTE: At the end in my case I decided to bind to .255 broadcast address on Linux systems. (to receive broadcast packets)
                         .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets! see: http://developerweb.net/viewtopic.php?id=5722
-                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, registrationWrapper, workerEventLoop));
+                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, registrationWrapper,
+                                                                             newEventLoop(WORKER_THREAD_POOL_SIZE, threadName)));
 
             // // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
             // if (hostName.equals("0.0.0.0")) {

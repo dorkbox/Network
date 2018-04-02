@@ -224,19 +224,10 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
 
 
         // remove the ConnectionWrapper (that was used to upgrade the connection)
-        cleanupPipeline(metaChannel);
+        // wait for a "round trip" amount of time, then notify the APP!
+        cleanupPipeline(metaChannel, delay);
 
         // this tells the client we are ready to connect (we just bounce back the original message)
         channel.writeAndFlush(registration);
-
-        // wait for a "round trip" amount of time, then notify the APP!
-        workerEventLoop.schedule(new Runnable() {
-            @Override
-            public
-            void run() {
-                logger.trace("Notify Connection");
-                doConnect(metaChannel);
-            }
-        }, delay, TimeUnit.MILLISECONDS);
     }
 }

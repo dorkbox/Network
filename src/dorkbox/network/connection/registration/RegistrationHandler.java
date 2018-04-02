@@ -32,6 +32,11 @@ class RegistrationHandler extends ChannelInboundHandlerAdapter {
     protected final String name;
     protected final EventLoopGroup workerEventLoop;
 
+    /**
+     * @param name
+     * @param registrationWrapper
+     * @param workerEventLoop can be null for local JVM connections
+     */
     public
     RegistrationHandler(final String name, RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
         this.name = name;

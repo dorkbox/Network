@@ -20,15 +20,14 @@ import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.RegistrationHandler;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.EventLoopGroup;
 import io.netty.util.AttributeKey;
 
 public abstract
 class RegistrationLocalHandler extends RegistrationHandler {
     public static final AttributeKey<MetaChannel> META_CHANNEL = AttributeKey.valueOf(RegistrationLocalHandler.class, "MetaChannel.local");
 
-    RegistrationLocalHandler(String name, RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
-        super(name, registrationWrapper, workerEventLoop);
+    RegistrationLocalHandler(String name, RegistrationWrapper registrationWrapper) {
+        super(name, registrationWrapper, null);
     }
 
     /**
