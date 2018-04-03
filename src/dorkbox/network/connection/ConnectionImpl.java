@@ -32,7 +32,6 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.slf4j.Logger;
 
 import dorkbox.network.Client;
-import dorkbox.network.connection.Listener.OnMessageReceived;
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
@@ -58,7 +57,6 @@ import dorkbox.network.serialization.CryptoSerializationManager;
 import dorkbox.util.collections.LockFreeHashMap;
 import dorkbox.util.collections.LockFreeIntMap;
 import dorkbox.util.generics.ClassHelper;
-import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.bootstrap.DatagramSessionChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -201,15 +199,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
 
             if (channelWrapper.udp() != null) {
                 count++;
-
-                // we received a hint to close this channel from the remote end.
-                add(new OnMessageReceived<Connection, DatagramCloseMessage>() {
-                    @Override
-                    public
-                    void received(final Connection connection, final DatagramCloseMessage message) {
-                        connection.close();
-                    }
-                });
             }
 
             // when closing this connection, HOW MANY endpoints need to be closed?
@@ -570,6 +559,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
         super.userEventTriggered(context, event);
     }
 
+    /**
+     * @param context can be NULL when running deferred messages from registration process.
+     * @param message the received message
+     */
     @Override
     public
     void channelRead(ChannelHandlerContext context, Object message) throws Exception {

@@ -267,8 +267,6 @@ class RegistrationWrapper {
     }
 
     /**
-     * For UDP, this map "exists forever" because we have to look up each session on inbound coms
-     * <p>
      * The session ID '0' is reserved to mean "no session ID yet"
      */
     public

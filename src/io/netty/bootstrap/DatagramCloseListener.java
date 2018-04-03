@@ -15,8 +15,17 @@
  */
 package io.netty.bootstrap;
 
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.Listener;
+
 /**
- * Used as a hint to close remote UDP connections
+ * Uses a hint to close remote UDP connections
  */
 public
-class DatagramCloseMessage {}
+class DatagramCloseListener implements Listener.OnMessageReceived<Connection, DatagramCloseMessage> {
+    @Override
+    public
+    void received(final Connection connection, final DatagramCloseMessage message) {
+        connection.close();
+    }
+}

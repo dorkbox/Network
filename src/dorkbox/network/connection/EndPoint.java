@@ -46,6 +46,7 @@ import dorkbox.util.Property;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.exceptions.SecurityException;
+import io.netty.bootstrap.DatagramCloseListener;
 import io.netty.channel.local.LocalAddress;
 import io.netty.util.NetUtil;
 
@@ -260,6 +261,12 @@ class EndPoint extends Shutdownable {
 
         // add the ping listener (internal use only!)
         connectionManager.add(new PingSystemListener());
+
+        // add the UDP "close hint" to close remote connections (internal use only!)
+        if (config.udpPort > 0) {
+            connectionManager.add(new DatagramCloseListener());
+        }
+
 
         if (rmiEnabled) {
             rmiHandler = null;
