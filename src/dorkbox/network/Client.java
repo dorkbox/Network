@@ -479,25 +479,16 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
     public
     void close() {
         closeConnection();
+    }
 
-        // String threadName = Client.class.getSimpleName();
-        // synchronized (bootstraps) {
-        //     ArrayList<BootstrapWrapper> newList = new ArrayList<BootstrapWrapper>(bootstraps.size());
-        //
-        //     for (BootstrapWrapper bootstrap : bootstraps) {
-        //         EventLoopGroup group = bootstrap.bootstrap.group();
-        //
-        //         removeFromShutdown(group);
-        //         group.shutdownGracefully();
-        //
-        //         String name = threadName + "-" + bootstrap.type + "-BOSS";
-        //
-        //         newList.add(bootstrap.clone(newEventLoop(1, name)));
-        //     }
-        //
-        //     bootstraps.clear();
-        //     bootstraps.addAll(newList);
-        // }
+    /**
+     * Checks to see if this client has connected yet or not.
+     *
+     * @return true if we are connected, false otherwise.
+     */
+    public
+    boolean isConnected() {
+        return super.isConnected.get();
     }
 }
 
