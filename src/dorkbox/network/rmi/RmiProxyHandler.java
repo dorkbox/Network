@@ -56,7 +56,9 @@ import dorkbox.network.serialization.RmiSerializationManager;
 /**
  * Handles network communication when methods are invoked on a proxy.
  * <p>
- * The only methods than can be invoked are INTERFACE methods and OBJECT methods
+ * If the method return type is 'void', then we don't have to explicitly set 'transmitReturnValue' to false
+ * <p>
+ * If there are no checked exceptions thrown, then we don't have to explicitly set 'transmitExceptions' to false
  */
 public
 class RmiProxyHandler implements InvocationHandler {
@@ -80,7 +82,10 @@ class RmiProxyHandler implements InvocationHandler {
     private int timeoutMillis = 3000;
     private boolean isAsync = false;
 
+    // if the return type is 'void', then this has no meaning.
     private boolean transmitReturnValue = true;
+
+    // if there are no checked exceptions thrown, then this has no meaning
     private boolean transmitExceptions = true;
 
     private boolean enableToString;
@@ -248,10 +253,17 @@ class RmiProxyHandler implements InvocationHandler {
 
 
         byte responseID = (byte) 0;
-        // An invocation doesn't need a response is if it's
-        // ASYNC and no return values or exceptions are wanted back
         Class<?> returnType = method.getReturnType();
-        boolean ignoreResponse = this.isAsync && !(this.transmitReturnValue || this.transmitExceptions);
+
+        // If the method return type is 'void', then we don't have to explicitly set 'transmitReturnValue' to false
+        boolean hasReturnValue = returnType != void.class && this.transmitReturnValue;
+
+        // If there are no checked exceptions thrown, then we don't have to explicitly set 'transmitExceptions' to false
+        boolean shouldTransmitExceptions = (method.getExceptionTypes().length != 0 || method.getGenericExceptionTypes().length != 0) && this.transmitExceptions;
+
+        // If we are async (but still have a return type or throw checked exceptions) then we ignore the response
+        // If we are 'void' return type and do not throw checked exceptions then we ignore the response
+        boolean ignoreResponse = (this.isAsync || returnType == void.class) && !(hasReturnValue || shouldTransmitExceptions);
         if (ignoreResponse) {
             invokeMethod.responseData = (byte) 0; // 0 means do not respond.
         }
@@ -299,8 +311,7 @@ class RmiProxyHandler implements InvocationHandler {
         }
 
         // 0 means respond immediately because it's
-        // ASYNC and no return values or exceptions are wanted back
-        if (this.isAsync) {
+        if (ignoreResponse) {
             if (returnType.isPrimitive()) {
                 if (returnType == int.class) {
                     return 0;
@@ -332,7 +343,7 @@ class RmiProxyHandler implements InvocationHandler {
 
         try {
             Object result = waitForResponse(this.lastResponseID);
-            if (result != null && result instanceof Exception) {
+            if (result instanceof Exception) {
                 throw (Exception) result;
             }
             else {
