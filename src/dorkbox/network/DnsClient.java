@@ -122,7 +122,7 @@ class DnsClient extends Shutdownable {
      */
     public static
     String getVersion() {
-        return "2.8";
+        return "2.10";
     }
 
     /**
