@@ -33,7 +33,6 @@ import io.netty.handler.timeout.IdleStateEvent;
 @Sharable
 public
 class KryoDecoderUdp extends MessageToMessageDecoder<Object> {
-
     private final CryptoSerializationManager serializationManager;
 
     public
@@ -76,17 +75,15 @@ class KryoDecoderUdp extends MessageToMessageDecoder<Object> {
     void decode(ChannelHandlerContext context, Object message, List<Object> out) throws Exception {
         ByteBuf data = (ByteBuf) ((AddressedEnvelope) message).content();
 
-        if (data != null) {
-            try {
-                // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-                Object read = serializationManager.read(data, data.writerIndex());
-                out.add(read);
-            } catch (IOException e) {
-                String msg = "Unable to deserialize object";
-                LoggerFactory.getLogger(this.getClass())
-                             .error(msg, e);
-                throw new IOException(msg, e);
-            }
+        try {
+            // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
+            Object object = serializationManager.read(data, data.writerIndex());
+            out.add(object);
+        } catch (IOException e) {
+            String msg = "Unable to deserialize object";
+            LoggerFactory.getLogger(this.getClass())
+                         .error(msg, e);
+            throw new IOException(msg, e);
         }
     }
 }

@@ -26,7 +26,6 @@ import io.netty.util.AttributeKey;
 public
 class ClientDiscoverHostHandler extends SimpleChannelInboundHandler<DatagramPacket> {
     // This uses CHANNEL LOCAL DATA to save the data.
-
     public static final AttributeKey<BroadcastResponse> STATE = AttributeKey.valueOf(ClientDiscoverHostHandler.class, "Discover.state");
 
     ClientDiscoverHostHandler() {

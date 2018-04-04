@@ -34,11 +34,12 @@ public
 class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
 
     private static final int maxSize = EndPoint.udpMaxSize;
+
     private final CryptoSerializationManager serializationManager;
 
 
     public
-    KryoEncoderUdp(CryptoSerializationManager serializationManager) {
+    KryoEncoderUdp(final CryptoSerializationManager serializationManager) {
         super();
         this.serializationManager = serializationManager;
     }

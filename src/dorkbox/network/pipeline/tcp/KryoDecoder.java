@@ -29,7 +29,7 @@ class KryoDecoder extends ByteToMessageDecoder {
     private final CryptoSerializationManager serializationManager;
 
     public
-    KryoDecoder(CryptoSerializationManager serializationManager) {
+    KryoDecoder(final CryptoSerializationManager serializationManager) {
         super();
         this.serializationManager = serializationManager;
     }
@@ -44,7 +44,6 @@ class KryoDecoder extends ByteToMessageDecoder {
     @Override
     protected
     void decode(ChannelHandlerContext context, ByteBuf in, List<Object> out) throws Exception {
-
         // Make sure if the length field was received,
         // and read the length of the next object from the socket.
         int lengthLength = OptimizeUtilsByteBuf.canReadInt(in);
