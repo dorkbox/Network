@@ -441,9 +441,6 @@ class Shutdownable {
             // when the eventloop closes, the associated selectors are ALSO closed!
             stopExtraActions();
 
-            // we also want to stop the thread group
-            threadGroup.interrupt();
-
             isShutdown = true;
         }
 
