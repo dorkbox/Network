@@ -13,10 +13,9 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
-package io.netty.bootstrap;
+package dorkbox.network.connection;
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Listener;
+import io.netty.bootstrap.DatagramCloseMessage;
 
 /**
  * Uses a hint to close remote UDP connections
@@ -26,6 +25,8 @@ class DatagramCloseListener implements Listener.OnMessageReceived<Connection, Da
     @Override
     public
     void received(final Connection connection, final DatagramCloseMessage message) {
-        connection.close();
+        if (connection instanceof ConnectionImpl) {
+            ((ConnectionImpl) connection).forceClose();
+        }
     }
 }
