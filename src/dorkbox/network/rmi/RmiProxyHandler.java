@@ -83,10 +83,10 @@ class RmiProxyHandler implements InvocationHandler {
     private boolean isAsync = false;
 
     // if the return type is 'void', then this has no meaning.
-    private boolean transmitReturnValue = true;
+    private boolean transmitReturnValue = false;
 
     // if there are no checked exceptions thrown, then this has no meaning
-    private boolean transmitExceptions = true;
+    private boolean transmitExceptions = false;
 
     private boolean enableToString;
 
@@ -256,14 +256,15 @@ class RmiProxyHandler implements InvocationHandler {
         Class<?> returnType = method.getReturnType();
 
         // If the method return type is 'void', then we don't have to explicitly set 'transmitReturnValue' to false
-        boolean hasReturnValue = returnType != void.class && this.transmitReturnValue;
+        boolean shouldReturnValue = returnType != void.class || this.transmitReturnValue;
 
         // If there are no checked exceptions thrown, then we don't have to explicitly set 'transmitExceptions' to false
-        boolean shouldTransmitExceptions = (method.getExceptionTypes().length != 0 || method.getGenericExceptionTypes().length != 0) && this.transmitExceptions;
+        boolean shouldTransmitExceptions = (method.getExceptionTypes().length != 0 || method.getGenericExceptionTypes().length != 0) || this.transmitExceptions;
 
         // If we are async (but still have a return type or throw checked exceptions) then we ignore the response
         // If we are 'void' return type and do not throw checked exceptions then we ignore the response
-        boolean ignoreResponse = (this.isAsync || returnType == void.class) && !(hasReturnValue || shouldTransmitExceptions);
+        boolean ignoreResponse = (this.isAsync || returnType == void.class) && !(shouldReturnValue || shouldTransmitExceptions);
+
         if (ignoreResponse) {
             invokeMethod.responseData = (byte) 0; // 0 means do not respond.
         }
@@ -278,16 +279,17 @@ class RmiProxyHandler implements InvocationHandler {
             }
             // Pack other data into the high bits.
             byte responseData = responseID;
-            if (this.transmitReturnValue) {
+            if (shouldReturnValue) {
                 responseData |= (byte) RmiBridge.returnValueMask;
             }
-            if (this.transmitExceptions) {
+            if (shouldTransmitExceptions) {
                 responseData |= (byte) RmiBridge.returnExceptionMask;
             }
             invokeMethod.responseData = responseData;
         }
 
-        this.lastResponseID = (byte) (invokeMethod.responseData & RmiBridge.responseIdMask);
+        byte lastResponseID = (byte) (invokeMethod.responseData & RmiBridge.responseIdMask);
+        this.lastResponseID = lastResponseID;
 
         // Sends our invokeMethod to the remote connection, which the RmiBridge listens for
         if (this.udp) {
@@ -310,8 +312,11 @@ class RmiProxyHandler implements InvocationHandler {
                           "#" + method.getName() + "(" + argString + ")");
         }
 
-        // 0 means respond immediately because it's
-        if (ignoreResponse) {
+        // MUST use 'waitForLastResponse()' or 'waitForResponse'('getLastResponseID()') to get the response
+        // If we are async then we return immediately
+        // If we are 'void' return type and do not throw checked exceptions then we return immediately
+        boolean respondImmediately = this.isAsync || (returnType == void.class) && !(shouldReturnValue || shouldTransmitExceptions);
+        if (respondImmediately) {
             if (returnType.isPrimitive()) {
                 if (returnType == int.class) {
                     return 0;
@@ -342,7 +347,7 @@ class RmiProxyHandler implements InvocationHandler {
         }
 
         try {
-            Object result = waitForResponse(this.lastResponseID);
+            Object result = waitForResponse(lastResponseID);
             if (result instanceof Exception) {
                 throw (Exception) result;
             }
