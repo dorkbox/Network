@@ -27,6 +27,7 @@ import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import dorkbox.network.Configuration;
 import dorkbox.network.connection.bridge.ConnectionBridgeBase;
@@ -46,7 +47,6 @@ import dorkbox.util.Property;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.exceptions.SecurityException;
-import io.netty.bootstrap.DatagramCloseListener;
 import io.netty.channel.local.LocalAddress;
 import io.netty.util.NetUtil;
 
@@ -281,7 +281,9 @@ class EndPoint extends Shutdownable {
             globalRmiBridge = null;
         }
 
-        serializationManager.finishInit();
+        Logger readLogger = LoggerFactory.getLogger(type.getSimpleName() + ".READ");
+        Logger writeLogger = LoggerFactory.getLogger(type.getSimpleName() + ".WRITE");
+        serializationManager.finishInit(readLogger, writeLogger);
     }
 
     /**

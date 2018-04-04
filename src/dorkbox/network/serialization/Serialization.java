@@ -66,6 +66,7 @@ import dorkbox.util.serialization.IesWithCipherParametersSerializer;
 import dorkbox.util.serialization.UnmodifiableCollectionsSerializer;
 import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 
 /**
  * Threads reading/writing, it messes up a single instance. it is possible to use a single kryo with the use of synchronize, however - that
@@ -272,6 +273,8 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
 
     // reflectASM doesn't work on android
     private final boolean useAsm = !useUnsafeMemory && !Util.IS_ANDROID;
+    private Logger wireReadLogger;
+    private Logger wireWriteLogger;
 
     /**
      * By default, the serialization manager will compress+encrypt data to connections with remote IPs, and only compress on the loopback IP
@@ -666,7 +669,16 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     void write(final ByteBuf buffer, final Object message) throws IOException {
         final KryoExtra<C> kryo = kryoPool.take();
         try {
-            kryo.write(buffer, message);
+            if (wireWriteLogger.isTraceEnabled()) {
+                int start = buffer.writerIndex();
+                kryo.write(buffer, message);
+                int end = buffer.writerIndex();
+
+                wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+            }
+            else {
+                kryo.write(buffer, message);
+            }
         } finally {
             kryoPool.put(kryo);
         }
@@ -684,7 +696,18 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     Object read(final ByteBuf buffer, final int length) throws IOException {
         final KryoExtra<C> kryo = kryoPool.take();
         try {
-            return kryo.read(buffer);
+            if (wireReadLogger.isTraceEnabled()) {
+                int start = buffer.readerIndex();
+                Object object = kryo.read(buffer);
+                int end = buffer.readerIndex();
+
+                wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+
+                return object;
+            }
+            else {
+                return kryo.read(buffer);
+            }
         } finally {
             kryoPool.put(kryo);
         }
@@ -695,14 +718,13 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      */
     @Override
     public
-    void writeFullClassAndObject(final Logger logger, final Output output, final Object value) throws IOException {
+    void writeFullClassAndObject(final Output output, final Object value) throws IOException {
         KryoExtra<C> kryo = kryoPool.take();
         boolean prev = false;
 
         try {
             prev = kryo.isRegistrationRequired();
             kryo.setRegistrationRequired(false);
-
             kryo.writeClassAndObject(output, value);
         } catch (Exception ex) {
             final String msg = "Unable to serialize buffer";
@@ -721,14 +743,13 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      */
     @Override
     public
-    Object readFullClassAndObject(final Logger logger, final Input input) throws IOException {
+    Object readFullClassAndObject(final Input input) throws IOException {
         KryoExtra<C> kryo = kryoPool.take();
         boolean prev = false;
 
         try {
             prev = kryo.isRegistrationRequired();
             kryo.setRegistrationRequired(false);
-
             return kryo.readClassAndObject(input);
         } catch (Exception ex) {
             final String msg = "Unable to deserialize buffer";
@@ -748,7 +769,10 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      */
     @Override
     public synchronized
-    void finishInit() {
+    void finishInit(final Logger wireReadLogger, final Logger wireWriteLogger) {
+        this.wireReadLogger = wireReadLogger;
+        this.wireWriteLogger = wireWriteLogger;
+
         initialized = true;
 
         // initialize the kryo pool with at least 1 kryo instance. This ALSO makes sure that all of our class registration is done
@@ -771,7 +795,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                     int id = classResolver.getRegistration(remoteIfaceClass.ifaceClass)
                                           .getId();
 
-                    CachedMethod[] cachedMethods = RmiUtils.getCachedMethods(logger, kryo, useAsm,
+                    CachedMethod[] cachedMethods = RmiUtils.getCachedMethods(Serialization.logger, kryo, useAsm,
                                                                              remoteIfaceClass.ifaceClass,
                                                                              null,
                                                                              id);
@@ -787,7 +811,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                     int id = classResolver.getRegistration(remoteImplClass.implClass)
                                           .getId();
 
-                    CachedMethod[] cachedMethods = RmiUtils.getCachedMethods(logger, kryo, useAsm,
+                    CachedMethod[] cachedMethods = RmiUtils.getCachedMethods(Serialization.logger, kryo, useAsm,
                                                                              remoteImplClass.ifaceClass,
                                                                              remoteImplClass.implClass,
                                                                              id);
@@ -826,10 +850,28 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         try {
             // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
             if (connection.isLoopback()) {
-                kryo.writeCompressed(connection, buffer, message);
+                if (wireWriteLogger.isTraceEnabled()) {
+                    int start = buffer.writerIndex();
+                    kryo.writeCompressed(connection, buffer, message);
+                    int end = buffer.writerIndex();
+
+                    wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+                }
+                else {
+                    kryo.writeCompressed(connection, buffer, message);
+                }
             }
             else {
-                kryo.writeCrypto(connection, buffer, message);
+                if (wireWriteLogger.isTraceEnabled()) {
+                    int start = buffer.writerIndex();
+                    kryo.writeCrypto(connection, buffer, message);
+                    int end = buffer.writerIndex();
+
+                    wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+                }
+                else {
+                    kryo.writeCrypto(connection, buffer, message);
+                }
             }
         } finally {
             kryoPool.put(kryo);
@@ -852,10 +894,32 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         try {
             // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
             if (connection.isLoopback()) {
-                return kryo.readCompressed(connection, buffer, length);
+                if (wireReadLogger.isTraceEnabled()) {
+                    int start = buffer.readerIndex();
+                    Object object = kryo.readCompressed(connection, buffer, length);
+                    int end = buffer.readerIndex();
+
+                    wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+
+                    return object;
+                }
+                else {
+                    return kryo.readCompressed(connection, buffer, length);
+                }
             }
             else {
-                return kryo.readCrypto(connection, buffer, length);
+                if (wireReadLogger.isTraceEnabled()) {
+                    int start = buffer.readerIndex();
+                    Object object = kryo.readCrypto(connection, buffer, length);
+                    int end = buffer.readerIndex();
+
+                    wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+
+                    return object;
+                }
+                else {
+                    return kryo.readCrypto(connection, buffer, length);
+                }
             }
         } finally {
             kryoPool.put(kryo);
