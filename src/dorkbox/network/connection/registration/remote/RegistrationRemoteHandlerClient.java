@@ -18,6 +18,8 @@ package dorkbox.network.connection.registration.remote;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.bouncycastle.crypto.BasicAgreement;
 import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
@@ -28,6 +30,7 @@ import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -190,6 +193,8 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
         // IN: hasMore=true if we have more registrations to do, false otherwise
         if (registration.hasMore) {
+            logger.trace("Starting another protocol registration");
+            metaChannel.totalProtocols.incrementAndGet();
             registrationWrapper.startNextProtocolRegistration();
             return;
         }
@@ -213,7 +218,61 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
         }
 
 
-        // remove the ConnectionWrapper (that was used to upgrade the connection)
-        cleanupPipeline(metaChannel, 20);
+        // IN: upgraded=true this means we are ready to connect, and the server is done with it's onConnect calls
+        //              we defer the messages until after our own onConnect() is called...
+
+
+        // we have to wait for ALL messages to be received, this way we can prevent out-of-order oddities...
+        int protocolsRemaining = metaChannel.totalProtocols.decrementAndGet();
+        if (protocolsRemaining > 0) {
+            logger.trace("{} done. Waiting for {} more protocols registrations to arrive...", type, protocolsRemaining);
+            return;
+        }
+
+        // remove the ConnectionWrapper (that was used to upgrade the connection) and cleanup the pipeline
+        // always wait until AFTER the server calls "onConnect", then we do this
+        cleanupPipeline(metaChannel, new Runnable() {
+            @Override
+            public
+            void run() {
+                // this method runs after the "onConnect()" runs and only after all of the channels have be correctly updated
+
+                // get all of the out of order messages that we missed
+                List<Object> messages = new LinkedList<Object>();
+
+                if (metaChannel.tcpChannel != null) {
+                    List<Object> list = getOutOfOrderMessagesAndReset(metaChannel.tcpChannel);
+                    if (list != null) {
+                        logger.trace("Getting deferred TCP messages: {}", list.size());
+                        messages.addAll(list);
+                    }
+                }
+
+                if (metaChannel.udpChannel != null) {
+                    List<Object> list = getOutOfOrderMessagesAndReset(metaChannel.udpChannel);
+                    if (list != null) {
+                        logger.trace("Getting deferred UDP messages: {}", list.size());
+                        messages.addAll(list);
+                    }
+                }
+
+                // now call 'onMessage' in the connection object with our messages!
+                try {
+                    ConnectionImpl connection = (ConnectionImpl) metaChannel.connection;
+
+                    for (Object message : messages) {
+                        logger.trace("    deferred onMessage({}, {})", connection.id(), message);
+                        try {
+                            connection.channelRead(null, message);
+                        } catch (Exception e) {
+                            logger.error("Error running deferred messages!", e);
+                        }
+                    }
+
+                } catch (Exception e) {
+                    logger.error("Error initialising deferred messages!", e);
+                }
+            }
+        });
     }
 }

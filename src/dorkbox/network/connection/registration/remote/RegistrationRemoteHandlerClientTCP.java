@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection.registration.remote;
 
-import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -69,25 +68,24 @@ class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient
             else {
                 metaChannel = registrationWrapper.getSession(sessionId);
 
+                // TCP channel registration is ALWAYS first, so this is the correct way to do this.
                 if (metaChannel == null) {
                     metaChannel = registrationWrapper.createSessionClient(sessionId);
                     metaChannel.tcpChannel = channel;
+
                     logger.debug("New TCP connection. Saving meta-channel id: {}", metaChannel.sessionId);
                 }
+
+                // have to add a way for us to store messages in case the remote end calls "onConnect()" and sends messages before we are ready.
+                prepChannelForOutOfOrderMessages(channel);
             }
 
+            logger.trace("TCP read");
             readClient(channel, registration, "TCP client", metaChannel);
         }
         else {
-            logger.error("Error registering TCP with remote server!");
-
-            // this is what happens when the registration happens too quickly...
-            Object connection = context.pipeline().last();
-            if (connection instanceof ConnectionImpl) {
-                ((ConnectionImpl) connection).channelRead(context, message);
-            } else {
-                shutdown(channel, 0);
-            }
+            logger.trace("Out of order TCP message from server!");
+            saveOutOfOrderMessage(channel, message);
         }
     }
 }

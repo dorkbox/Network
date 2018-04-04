@@ -116,7 +116,6 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
             outboundRegister.eccParameters = CryptoECC.generateSharedParameters(registrationWrapper.getSecureRandom());
 
             channel.writeAndFlush(outboundRegister);
-            metaChannel.updateRoundTripOnWrite();
             return;
         }
 
@@ -173,7 +172,6 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
             outboundRegister.payload = output.toBytes();
 
             channel.writeAndFlush(outboundRegister);
-            metaChannel.updateRoundTripOnWrite();
             return;
         }
 
@@ -202,7 +200,6 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
             }
 
             channel.flush();
-            metaChannel.updateRoundTripOnWrite();
             return;
         }
 
@@ -214,20 +211,29 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
         //
         //
 
-        // make sure we don't try to upgrade the client again.
-        registration.upgrade = false;
 
-        // have to get the delay before we update the round-trip time. We cannot have a delay that is BIGGER than our idle timeout!
-        final int idleTimeout = Math.max(2, this.registrationWrapper.getIdleTimeout()-2); // 2 because it is a reasonable amount for the "standard" delay amount
-        final long delay = Math.max(idleTimeout, TimeUnit.NANOSECONDS.toMillis(metaChannel.getRoundTripTime()));
-        logger.trace("Notify delay MS: {}", delay);
+        // remove the ConnectionWrapper (that was used to upgrade the connection) and cleanup the pipeline
+        cleanupPipeline(metaChannel, new Runnable() {
+            @Override
+            public
+            void run() {
+                // this method runs after the "onConnect()" runs and only after all of the channels have be correctly updated
 
+                // this tells the client we are ready to connect (we just bounce back the original message over ALL protocols)
+                if (metaChannel.tcpChannel != null) {
+                    logger.trace("Sending TCP upgraded command");
+                    Registration reg = new Registration(registration.sessionID);
+                    reg.upgraded = true;
+                    metaChannel.tcpChannel.writeAndFlush(reg);
+                }
 
-        // remove the ConnectionWrapper (that was used to upgrade the connection)
-        // wait for a "round trip" amount of time, then notify the APP!
-        cleanupPipeline(metaChannel, delay);
-
-        // this tells the client we are ready to connect (we just bounce back the original message)
-        channel.writeAndFlush(registration);
+                if (metaChannel.udpChannel != null) {
+                    logger.trace("Sending UDP upgraded command");
+                    Registration reg = new Registration(registration.sessionID);
+                    reg.upgraded = true;
+                    metaChannel.udpChannel.writeAndFlush(reg);
+                }
+            }
+        });
     }
 }

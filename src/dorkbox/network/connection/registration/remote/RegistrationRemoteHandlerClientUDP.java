@@ -18,7 +18,6 @@ package dorkbox.network.connection.registration.remote;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
-import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
@@ -89,26 +88,26 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
 
                 if (metaChannel == null) {
                     metaChannel = registrationWrapper.createSessionClient(sessionId);
+
                     logger.debug("New UDP connection. Saving meta-channel id: {}", metaChannel.sessionId);
+                }
+                else if (metaChannel.udpChannel == null) {
+                    logger.debug("Using TCP connection meta-channel for UDP connection");
                 }
 
                 // in the event that we start with a TCP channel first, we still have to set the UDP channel
                 metaChannel.udpChannel = channel;
+
+                // have to add a way for us to store messages in case the remote end calls "onConnect()" and sends messages before we are ready.
+                // note: UDP channels are also unique (just like TCP channels) because of the SessionManager we added
+                prepChannelForOutOfOrderMessages(channel);
             }
 
             readClient(channel, registration, "UDP client", metaChannel);
         }
         else {
-            logger.error("Error registering UDP with remote server!");
-            // this is what happens when the registration happens too quickly...
-            Object connection = context.pipeline()
-                                       .last();
-            if (connection instanceof ConnectionImpl) {
-                ((ConnectionImpl) connection).channelRead(context, message);
-            }
-            else {
-                shutdown(channel, 0);
-            }
+            logger.trace("Out of order UDP message from server!");
+            saveOutOfOrderMessage(channel, message);
         }
     }
 }
