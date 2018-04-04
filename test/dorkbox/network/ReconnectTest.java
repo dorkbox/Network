@@ -98,6 +98,8 @@ class ReconnectTest extends BaseTest {
                 }
             }
         });
+        server.bind(false);
+
 
         // ----
 
@@ -131,7 +133,7 @@ class ReconnectTest extends BaseTest {
             }
         });
 
-        server.bind(false);
+
 
         int count = 100;
         int initialCount = 2;
@@ -149,7 +151,7 @@ class ReconnectTest extends BaseTest {
             synchronized (receivedCount) {
                 while (this.receivedCount.get() != target) {
                     if (waitingRetryCount-- < 0) {
-                        System.out.println("Aborting...");
+                        System.out.println("Aborting unit test... wrong count!");
                         stopEndPoints();
                         assertEquals(target, this.receivedCount.get());
                     }
