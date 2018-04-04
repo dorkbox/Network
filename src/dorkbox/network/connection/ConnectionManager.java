@@ -312,7 +312,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public final
     void onMessage(final ConnectionImpl connection, final Object message) {
-        logger.trace("onMessage({}, {})", connection.id(), message.getClass());
         notifyOnMessage0(connection, message, false);
     }
 
@@ -384,8 +383,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public
     void onConnected(final ConnectionImpl connection) {
-        logger.trace("onConnected({})", connection.id());
-
         // we add the connection in a different step!
 
         boolean foundListener = onConnectedManager.notifyConnected((C) connection, shutdown);
@@ -438,8 +435,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public
     void addConnection(ConnectionImpl connection) {
-        logger.trace("addConnection({})", connection.id());
-
         addConnection0(connection);
 
         // now have to account for additional (local) listener managers.
