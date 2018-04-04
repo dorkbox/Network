@@ -138,6 +138,7 @@ class RmiGlobalTest extends BaseTest {
         test.moo("Foo");
 
         assertEquals(0, test.id());
+
         // wait for the response to id()
         assertEquals(remoteObjectID, remoteObject.waitForLastResponse());
 
