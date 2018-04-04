@@ -76,8 +76,8 @@ class BaseTest {
 //        rootLogger.setLevel(Level.OFF);
 
         // rootLogger.setLevel(Level.INFO);
-        // rootLogger.setLevel(Level.DEBUG);
-       rootLogger.setLevel(Level.TRACE);
+        rootLogger.setLevel(Level.DEBUG);
+       // rootLogger.setLevel(Level.TRACE);
 //        rootLogger.setLevel(Level.ALL);
 
 
