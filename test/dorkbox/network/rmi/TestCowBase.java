@@ -5,5 +5,5 @@ package dorkbox.network.rmi;
  */
 public
 interface TestCowBase {
-    void throwException();
+    void throwException() throws UnsupportedOperationException;
 }
