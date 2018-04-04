@@ -31,10 +31,12 @@ import dorkbox.network.connection.listenerManagement.OnConnectedManager;
 import dorkbox.network.connection.listenerManagement.OnDisconnectedManager;
 import dorkbox.network.connection.listenerManagement.OnIdleManager;
 import dorkbox.network.connection.listenerManagement.OnMessageReceivedManager;
+import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.util.Property;
 import dorkbox.util.collections.ConcurrentEntry;
 import dorkbox.util.generics.ClassHelper;
 import dorkbox.util.generics.TypeResolver;
+import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.util.concurrent.ImmediateEventExecutor;
 import io.netty.util.concurrent.Promise;
 
@@ -312,7 +314,29 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     @Override
     public final
     void onMessage(final ConnectionImpl connection, final Object message) {
-        notifyOnMessage0(connection, message, false);
+        // add the ping listener (internal use only!)
+        Class<?> messageClass = message.getClass();
+        if (messageClass == PingMessage.class) {
+            PingMessage ping = (PingMessage) message;
+            if (ping.isReply) {
+                connection.updatePingResponse(ping);
+            }
+            else {
+                // return the ping from whence it came
+                ping.isReply = true;
+
+                connection.ping0(ping);
+            }
+        }
+
+        // add the UDP "close hint" to close remote connections (internal use only!)
+        else if (messageClass == DatagramCloseMessage.class) {
+            connection.forceClose();
+        }
+
+        else {
+            notifyOnMessage0(connection, message, false);
+        }
     }
 
     @SuppressWarnings("Duplicates")

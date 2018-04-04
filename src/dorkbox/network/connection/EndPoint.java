@@ -31,7 +31,6 @@ import org.slf4j.LoggerFactory;
 
 import dorkbox.network.Configuration;
 import dorkbox.network.connection.bridge.ConnectionBridgeBase;
-import dorkbox.network.connection.ping.PingSystemListener;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
@@ -258,15 +257,6 @@ class EndPoint extends Shutdownable {
         // we don't care about un-instantiated/constructed members, since the class type is the only interest.
         //noinspection unchecked
         connectionManager = new ConnectionManager(type.getSimpleName(), connection0(null, null).getClass());
-
-        // add the ping listener (internal use only!)
-        connectionManager.add(new PingSystemListener());
-
-        // add the UDP "close hint" to close remote connections (internal use only!)
-        if (config.udpPort > 0) {
-            connectionManager.add(new DatagramCloseListener());
-        }
-
 
         if (rmiEnabled) {
             rmiHandler = null;
