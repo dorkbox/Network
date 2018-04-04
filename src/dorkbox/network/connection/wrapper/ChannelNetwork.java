@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection.wrapper;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import dorkbox.network.connection.ConnectionPoint;
@@ -69,12 +70,26 @@ class ChannelNetwork implements ConnectionPoint {
         return channel.eventLoop().newPromise();
     }
 
-    public
-    void close(long maxShutdownWaitTimeInMilliSeconds) {
+    void close(final int delay, final long maxShutdownWaitTimeInMilliSeconds) {
         shouldFlush.set(false);
         if (channel.isActive()) {
-            channel.close()
-                   .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+            if (delay > 0) {
+                // for UDP, we send a hint to the other connection that we should close. While not always 100% successful, this helps
+                // clean up connections on the remote end. So we want to wait a short amount of time for this to be successful
+                channel.eventLoop()
+                       .schedule(new Runnable() {
+                           @Override
+                           public
+                           void run() {
+                               channel.close()
+                                      .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+                           }
+                       }, delay, TimeUnit.MILLISECONDS);
+            }
+            else {
+                channel.close()
+                       .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+            }
         }
     }
 }

@@ -154,24 +154,29 @@ class ChannelNetworkWrapper implements ChannelWrapper {
 
     @Override
     public
-    void close(final ConnectionImpl connection, final ISessionManager sessionManager) {
+    void close(final ConnectionImpl connection, final ISessionManager sessionManager, boolean hintedClose) {
         long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
         if (this.tcp != null) {
-            this.tcp.close(maxShutdownWaitTimeInMilliSeconds);
+            this.tcp.close(0, maxShutdownWaitTimeInMilliSeconds);
         }
 
         if (this.udp != null) {
-            // send a hint to the other connection that we should close. While not always 100% successful, this helps clean up connections
-            // on the remote end
-            try {
-                this.udp.write(new DatagramCloseMessage());
-                this.udp.flush();
-                Thread.yield();
-            } catch (Exception e) {
-                e.printStackTrace();
+            if (hintedClose) {
+                // we already hinted that we should close this channel... don't do it again!
+                this.udp.close(0, maxShutdownWaitTimeInMilliSeconds);
             }
-            this.udp.close(maxShutdownWaitTimeInMilliSeconds);
+            else {
+                // send a hint to the other connection that we should close. While not always 100% successful, this helps clean up connections
+                // on the remote end
+                try {
+                    this.udp.write(new DatagramCloseMessage());
+                    this.udp.flush();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                this.udp.close(200, maxShutdownWaitTimeInMilliSeconds);
+            }
         }
 
         // we need to yield the thread here, so that the socket has a chance to close

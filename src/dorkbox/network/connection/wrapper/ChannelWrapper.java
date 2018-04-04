@@ -53,7 +53,7 @@ interface ChannelWrapper {
      */
     String getRemoteHost();
 
-    void close(ConnectionImpl connection, ISessionManager sessionManager);
+    void close(ConnectionImpl connection, ISessionManager sessionManager, boolean hintedClose);
 
     int id();
 

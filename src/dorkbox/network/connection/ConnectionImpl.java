@@ -690,6 +690,11 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
         closeLatch.countDown();
     }
 
+    final void
+    forceClose() {
+        this.channelWrapper.close(this, this.sessionManager, true);
+    }
+
     /**
      * Closes the connection, but does not remove any listeners
      */
@@ -757,7 +762,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
             synchronized (this.channelIsClosed) {
                 if (!this.channelIsClosed.get()) {
                     // this will have netty call "channelInactive()"
-                    this.channelWrapper.close(this, this.sessionManager);
+                    this.channelWrapper.close(this, this.sessionManager, false);
 
                     // want to wait for the "channelInactive()" method to FINISH ALL TYPES before allowing our current thread to continue!
                     try {

@@ -122,7 +122,7 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
 
     @Override
     public
-    void close(ConnectionImpl connection, ISessionManager sessionManager) {
+    void close(ConnectionImpl connection, ISessionManager sessionManager, boolean hintedClose) {
         long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
 
         this.shouldFlush.set(false);
