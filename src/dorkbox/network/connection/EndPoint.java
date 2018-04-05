@@ -47,6 +47,10 @@ import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.channel.local.LocalAddress;
+import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.resolver.DefaultNameResolver;
+import io.netty.resolver.InetSocketAddressResolver;
 import io.netty.util.NetUtil;
 
 /**
@@ -64,6 +68,26 @@ class EndPoint extends Shutdownable {
     // TODO: will also want an UDP keepalive? (TCP is already there b/c of socket options, but might need a heartbeat to detect dead connections?)
     //          routers sometimes need a heartbeat to keep the connection
     // TODO: maybe some sort of STUN-like connection keep-alive??
+
+
+    static {
+        // have to load some classes early to prevent stack overflow issues on windows
+        ConnectionImpl.isTcpChannel(null);
+        ConnectionImpl.isUdpChannel(null);
+
+        Object clazz = ByteToMessageDecoder.class;
+        clazz = IdleStateHandler.class;
+
+        try {
+            // this class is a private, inner class to IdleStateHandler...
+            clazz = Class.forName("io.netty.handler.timeout.IdleStateHandler$AbstractIdleTask");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        clazz = DefaultNameResolver.class;
+        clazz = InetSocketAddressResolver.class;
+    }
 
 
     public static
