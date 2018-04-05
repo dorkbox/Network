@@ -39,7 +39,7 @@ class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient
     void channelActive(final ChannelHandlerContext context) throws Exception {
         super.channelActive(context);
 
-        logger.trace("Start new TCP Connection. Sending request to server");
+        logger.trace("Starting a new TCP Connection. Sending request to server");
 
         Registration registration = new Registration(0);
         registration.publicKey = this.registrationWrapper.getPublicKey();
