@@ -123,6 +123,10 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                 throw new IllegalArgumentException("You must define what host you want to connect to.");
             }
 
+            if (config.host.equals("0.0.0.0")) {
+                throw new IllegalArgumentException("You cannot connect to 0.0.0.0, you must define what host you want to connect to.");
+            }
+
             if (config.tcpPort <= 0 && config.udpPort <= 0) {
                 throw new IllegalArgumentException("You must define what port you want to connect to.");
             }
