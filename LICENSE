@@ -1,105 +1,120 @@
-    - Dorkbox Network - Apache 2.0 License
-      https://github.com/dorkbox
-      Copyright 2010, dorkbox, llc
-        Encrypted, high-performance, and event-driven/reactive network stack for Java 6+
+ - Network - 
+   https://git.dorkbox.com/dorkbox/Network
+   Copyright 2018 - The Apache Software License, Version 2.0
+     dorkbox, llc
+   Encrypted, high-performance, and event-driven/reactive network stack for Java 6+
 
 
-    - Bennidi Iterator - MIT License
-      https://github.com/bennidi/mbassador
-      Copyright 2012, Benjamin Diedrichsen
-        Fast iterators from the MBassador project
+ - Bennidi Iterator - 
+   https://github.com/bennidi/mbassador
+   Copyright 2012 - MIT License
+     Benjamin Diedrichsen
+   Fast iterators from the MBassador project
 
 
-    - BouncyCastle - MIT License
-      http://www.bouncycastle.org
-      Copyright 2000-2009, The Legion Of The Bouncy Castle
+ - BouncyCastle - 
+   http://www.bouncycastle.org
+   Copyright 2009 - MIT License
+     The Legion Of The Bouncy Castle
 
 
-    - Dorkbox ObjectPool - Apache 2.0 License
-      https://github.com/dorkbox
-      Copyright 2014, dorkbox, llc
-        Fast, lightweight, and compatible blocking/non-blocking/soft-reference object pool for Java 6+
+ - Dorkbox Utils - 
+   https://git.dorkbox.com/dorkbox/Utilities
+   Copyright 2018 - The Apache Software License, Version 2.0
+     dorkbox, llc
 
 
-    - Dorkbox Utils - Apache 2.0 License
-      https://github.com/dorkbox
-      Copyright 2010, dorkbox, llc
+ - FastThreadLocal - 
+   https://github.com/LWJGL/lwjgl3/blob/5819c9123222f6ce51f208e022cb907091dd8023/modules/core/src/main/java/org/lwjgl/system/FastThreadLocal.java
+   Copyright 2014 - BSD 3-Clause License
+     Lightweight Java Game Library Project
+     Riven
 
 
-    - FastThreadLocal - BSD 3-clause License
-      https://github.com/LWJGL/lwjgl3/blob/5819c9123222f6ce51f208e022cb907091dd8023/modules/core/src/main/java/org/lwjgl/system/FastThreadLocal.java
-      Copyright 2012-2014, Lightweight Java Game Library Project
-       Riven
-        Optimized and Fast ThreadLocals
+ - Javassist - 
+   http://www.csg.is.titech.ac.jp/~chiba/java
+   Copyright 1999 - BSD 3-Clause License
+     Shigeru Chiba
+     Bill Burke
+     Jason T. Greene
+   Licensed under the MPL/LGPL/Apache triple license
 
 
-    - Javassist - Apache 2.0 License
-      http://www.csg.is.titech.ac.jp/~chiba/javassist
-      Copyright 1999, Shigeru Chiba
-       Bill Burke
-       Jason T. Greene
-        Licensed under the MPL/LGPL/Apache triple license
+ - Kryo - 
+   https://github.com/EsotericSoftware/kryo
+   Copyright 2008 - BSD 3-Clause License
+     Nathan Sweet
 
 
-    - Kryo - BSD 3-clause License
-      https://github.com/EsotericSoftware/kryo
-      Copyright 2008, Nathan Sweet
+ - kryo-serializers - 
+   https://github.com/magro/kryo-serializers
+   Copyright 2010 - The Apache Software License, Version 2.0
+     Martin Grotzke
+     Rafael Winterhalter
 
 
-    - kryo-serializers - Apache 2.0 License
-      https://github.com/magro/kryo-serializers
-      Copyright 2010, Martin Grotzke
-       Rafael Winterhalter
+ - KryoNet RMI - 
+   https://github.com/EsotericSoftware/kryonet
+   Copyright 2008 - BSD 3-Clause License
+     Nathan Sweet
 
 
-    - KryoNet RMI - BSD 3-clause License
-      https://github.com/EsotericSoftware/kryonet
-      Copyright 2008, Nathan Sweet
+ - LAN HostDiscovery from Apache Commons JCS - 
+   https://issues.apache.org/jira/browse/JCS-40
+   Copyright 2014 - The Apache Software License, Version 2.0
+     The Apache Software Foundation
 
 
-    - LAN HostDiscovery from Apache Commons JCS - Apache 2.0 License
-      https://issues.apache.org/jira/browse/JCS-40
-      Copyright 2001-2014, The Apache Software Foundation
+ - LZ4 and XXhash - 
+   https://github.com/jpountz/lz4-java
+   Copyright 2011, 2012 - The Apache Software License, Version 2.0
+     Yann Collet
+     Adrien Grand
 
 
-    - LZ4 and XXhash - Apache 2.0 License
-      https://github.com/jpountz/lz4-java
-      Copyright 2011, Yann Collet
-      Copyright 2012, Adrien Grand
+ - MathUtils, IntArray, IntMap - 
+   http://github.com/libgdx/libgdx/
+   Copyright 2013 - The Apache Software License, Version 2.0
+     Mario Zechner <badlogicgames@gmail.com>
+     Nathan Sweet <nathan.sweet@gmail.com>
 
 
-    - MathUtils, IntArray, IntMap - Apache 2.0 License
-      http://github.com/libgdx/libgdx/
-      Copyright 2013
-       Mario Zechner <badlogicgames@gmail.com>
-       Nathan Sweet <nathan.sweet@gmail.com>
+ - MinLog-SLF4J - 
+   https://git.dorkbox.com/dorkbox/MinLog-SLF4J
+   https://github.com/EsotericSoftware/minlog
+   Copyright 2008 - The Apache Software License, Version 2.0
+     dorkbox, llc
+     Nathan Sweet
+     Dan Brown
+   Drop-in replacement for MinLog to log through SLF4j.
 
 
-    - MinLogToSLF4j - BSD 3-clause License
-      https://github.com/dorkbox
-      https://github.com/EsotericSoftware/minlog
-      Copyright 2008, Nathan Sweet
-       Dan Brown
-       dorkbox, llc
-        Drop-in replacement for MinLog to log through SLF4j.
+ - ObjectPool - 
+   https://git.dorkbox.com/dorkbox/ObjectPool
+   Copyright 2018 - The Apache Software License, Version 2.0
+     dorkbox, llc
 
 
-    - ReflectASM - BSD 3-clause License
-      https://github.com/EsotericSoftware/reflectasm
-      Copyright 2008, Nathan Sweet
+ - ReflectASM - 
+   https://github.com/EsotericSoftware/reflectasm
+   Copyright 2008 - BSD 3-Clause License
+     Nathan Sweet
 
 
-    - SLF4J - MIT License
-      http://www.slf4j.org
-      Copyright 2004-2008, QOS.ch
+ - SLF4J - 
+   http://www.slf4j.org
+   Copyright 2008 - MIT License
+     QOS.ch
 
 
-    - TypeTools - Apache 2.0 License
-      https://github.com/jhalterman/typetools/
-      Copyright 2002-2017, Jonathan Halterman
-        Tools for resolving generic types
+ - TypeTools - 
+   https://github.com/jhalterman/typetools/
+   Copyright 2017 - The Apache Software License, Version 2.0
+     Jonathan Halterman
+   Tools for resolving generic types
 
 
-    - XBill DNS - BSD 3-clause License
-      http://www.xbill.org/dnsjava
-      Copyright 1999-2005, Brian Wellington
+ - XBill DNS - 
+   http://www.xbill.org/dnsjava
+   Copyright 2005 - BSD 3-Clause License
+     Brian Wellington
