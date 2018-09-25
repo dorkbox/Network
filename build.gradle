@@ -468,7 +468,6 @@ nexusStaging {
 }
 
 signing {
-    required {hasProperty('sonatypeUsername')}
     sign publishing.publications.maven
 }
 
