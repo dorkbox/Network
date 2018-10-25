@@ -186,7 +186,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
                     // connections -- even if this "slows down" the speed/performance of what "local" connections offer.
                     proxyObject = connection.getProxyObject(registration.rmiId, interfaceClass);
 
-                    if (proxyObject != null) {
+                    if (proxyObject != null && registration.remoteObject != null) {
                         // have to save A and B so we can correctly switch as necessary
                         //noinspection SynchronizeOnNonFinalField
                         synchronized (implToProxy) {
