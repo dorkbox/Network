@@ -68,7 +68,7 @@ apply plugin: 'java-library'
 
 project.description = 'Encrypted, high-performance, and event-driven/reactive network stack for Java 6+'
 project.group = 'com.dorkbox'
-project.version = '2.11'
+project.version = '2.12'
 
 project.ext.name = 'Network'
 project.ext.url = 'https://git.dorkbox.com/dorkbox/Network'
