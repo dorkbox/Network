@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import com.esotericsoftware.kryo.ClassResolver;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;
+import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory;
 import com.esotericsoftware.kryo.factories.SerializerFactory;
@@ -381,9 +382,25 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                             //  the server will ONLY send this object to the client, where on the client it becomes the proxy/interface.
                             RemoteImplClass remoteImplClass = (RemoteImplClass) clazz;
 
-                            // registers the implementation, so that when it is WRITTEN, it becomes a "magic" proxy object
-                            int id = kryo.register(remoteImplClass.implClass, remoteObjectSerializer)
-                                         .getId();
+                            int id;
+
+                            // check to see if the interface is already registered. If so, we override it with the implementation class
+                            EditableDefaultClassResolver classResolver = (EditableDefaultClassResolver) kryo.getClassResolver();
+                            Registration registration = classResolver.getRegistration(remoteImplClass.ifaceClass);
+                            if (registration != null) {
+                                // override it with the implementation
+                                int oldId = registration.getId();
+                                id = kryo.register(remoteImplClass.implClass, remoteObjectSerializer, oldId).getId();
+
+                                // delete the old one (since it shouldn't be stored anywhere)
+                                classResolver.deleteRegistrationType(remoteImplClass.ifaceClass);
+                            }
+                            else {
+                                // we have a new registration.
+
+                                // registers the implementation, so that when it is WRITTEN, it becomes a "magic" proxy object
+                                id = kryo.register(remoteImplClass.implClass, remoteObjectSerializer).getId();
+                            }
 
                             // sets up the RMI, so when we receive the iface class from the client, we know what impl to use
                             // if this is over-written, we don't care.
