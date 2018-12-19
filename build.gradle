@@ -349,9 +349,9 @@ task compileUtils(type: JavaCompile) {
                      'dorkbox.util.crypto.CryptoAES')
 
     // entire packages/directories
-    include('dorkbox.util.serialization/**/*.java')
-    include('dorkbox.util.entropy/**/*.java')
-    include('dorkbox.util.storage/**/*.java')
+    include('dorkbox/util/serialization/**/*.java')
+    include('dorkbox/util/entropy/**/*.java')
+    include('dorkbox/util/storage/**/*.java')
 
 
     classpath = sourceSets.main.compileClasspath
