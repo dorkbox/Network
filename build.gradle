@@ -52,7 +52,7 @@ plugins {
     id 'io.codearte.nexus-staging' version '0.11.0'
 
     id "com.dorkbox.CrossCompile" version "1.0.1"
-    id "com.dorkbox.VersionUpdate" version "1.2"
+    id "com.dorkbox.VersionUpdate" version "1.4"
 
     // setup checking for the latest version of a plugin or dependency (and updating the gradle build)
     id "se.patrikerdes.use-latest-versions" version "0.2.3"
