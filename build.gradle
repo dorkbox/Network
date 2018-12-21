@@ -317,7 +317,7 @@ task compileUtils(type: JavaCompile) {
                      'dorkbox.util.NativeLoader',
 
                      'dorkbox.util.generics.TypeResolver',
-                     // 'dorkbox.util.generics.DefaultMethodHelper',  // this class must be compiled java 8+
+                     'dorkbox.util.generics.DefaultMethodHelper',  // this class must be compiled java 8+
                      'dorkbox.util.generics.ClassHelper',
 
                      'dorkbox.util.bytes.BigEndian',
@@ -362,9 +362,15 @@ task compileUtils(type: JavaCompile) {
 //////    Compile files to different target version
 ///////////////////////////////
 //task compileFilesToJava8(type: JavaCompile) {
-//    source = sourceSets.main.java.srcDirs
+//    // we don't want the default include of **/*.java
+//    getIncludes().clear()
+//
+//    source = Collections.singletonList('../Utilities/src')
 //
 //    include 'dorkbox/util/generics/DefaultMethodHelper.java'
+//
+//    sourceCompatibility = 1.8
+//    targetCompatibility = 1.8
 //
 //    classpath = sourceSets.main.compileClasspath
 //    destinationDir = sourceSets.main.output.classesDir
