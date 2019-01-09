@@ -49,7 +49,7 @@ import dorkbox.network.connection.KryoExtra;
  * @author Nathan Sweet <misc@n4te.com>
  */
 public
-class RemoteObjectSerializer<T> extends Serializer<T> {
+class RemoteObjectSerializer extends Serializer<Object> {
 
     private final IdentityMap<Class<?>, Class<?>> rmiImplToIface;
 
@@ -61,22 +61,21 @@ class RemoteObjectSerializer<T> extends Serializer<T> {
 
     @Override
     public
-    void write(Kryo kryo, Output output, T object) {
+    void write(Kryo kryo, Output output, Object object) {
         KryoExtra kryoExtra = (KryoExtra) kryo;
         int id = kryoExtra.connection.getRegisteredId(object);
         output.writeInt(id, true);
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
     @Override
     public
-    T read(Kryo kryo, Input input, Class implementationType) {
+    Object read(Kryo kryo, Input input, Class implementationType) {
         KryoExtra kryoExtra = (KryoExtra) kryo;
         int objectID = input.readInt(true);
 
         // We have to lookup the iface, since the proxy object requires it
         Class<?> iface = rmiImplToIface.get(implementationType);
 
-        return (T) kryoExtra.connection.getProxyObject(objectID, iface);
+        return kryoExtra.connection.getProxyObject(objectID, iface);
     }
 }
