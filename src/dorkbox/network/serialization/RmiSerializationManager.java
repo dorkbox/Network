@@ -103,21 +103,6 @@ interface RmiSerializationManager extends SerializationManager {
     Class<?> getRmiImpl(Class<?> iFace);
 
     /**
-     * Enable this endpoint (a "client") to access methods and create objects (RMI) on a "remote server". This is NOT bi-directional, and the "remote server"
-     * cannot access or create remote objects on this endpoint.
-     * <p>
-     * This is the same as calling {@link RmiSerializationManager#registerRmi(Class, Class)} with a null parameter for the implementation class.
-     * <p>
-     * There is additional overhead to using RMI.
-     * <p>
-     * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
-     * return value which is not {@link dorkbox.network.rmi.RemoteObject#setAsync(boolean) ignored}, an extra byte is written.
-     * <p>
-     * If the type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
-     */
-    RmiSerializationManager registerRmi(Class<?> ifaceClass);
-
-    /**
      * Enable a "remote client" to access methods and create objects (RMI) for this endpoint. This is NOT bi-directional, and this endpoint cannot access or \
      * create remote objects on the "remote client".
      * <p>

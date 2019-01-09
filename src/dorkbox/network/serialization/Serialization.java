@@ -140,7 +140,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
 
     public static
     Serialization DEFAULT() {
-        return DEFAULT(true, true, true, null);
+        return DEFAULT(true, true, null);
     }
 
     /**
@@ -160,28 +160,15 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      *         <p>
      *         Registered classes are serialized as an int id, avoiding the overhead of serializing the class name, but have the
      *         drawback of needing to know the classes to be serialized up front.
-     * @param implementationRequired If true, interfaces are not permitted to be registered, outside of the {@link #registerRmi(Class, Class)} and
-     *         {@link #registerRmi(Class, Class)} methods. If false, then interfaces can also be registered.
-     *         <p>
-     *         Enabling interface registration permits matching a different RMI client/server serialization scheme, since
-     *         interfaces are generally in a "common" package, accessible to both the RMI client and server.
-     *         <p>
-     *         Generally, one should not register interfaces, because they have no meaning (ignoring "default" implementations in
-     *         newer versions of java...)
-     *         <p>
      * @param factory Sets the serializer factory to use when no {@link Kryo#addDefaultSerializer(Class, Class) default serializers} match
      *         an object's type. Default is {@link ReflectionSerializerFactory} with {@link FieldSerializer}. @see
      *         Kryo#newDefaultSerializer(Class)
      */
     public static
-    <C extends CryptoConnection> Serialization<C> DEFAULT(final boolean references,
-                          final boolean registrationRequired,
-                          final boolean implementationRequired,
-                          final SerializerFactory factory) {
+    <C extends CryptoConnection> Serialization<C> DEFAULT(final boolean references, final boolean registrationRequired, final SerializerFactory factory) {
 
         final Serialization<C> serialization = new Serialization<C>(references,
                                                               registrationRequired,
-                                                              implementationRequired,
                                                               factory);
 
         serialization.register(PingMessage.class);
@@ -236,9 +223,6 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     private boolean initialized = false;
     private final ObjectPool<KryoExtra<C>> kryoPool;
 
-    // used to determine if we should forbid interface registration OUTSIDE of RMI registration.
-    private final boolean forbidInterfaceRegistration;
-
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class)
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
     // Object checking is performed during actual registration.
@@ -282,15 +266,6 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      *         Registered classes are serialized as an int id, avoiding the overhead of serializing the class name, but have the
      *         drawback of needing to know the classes to be serialized up front.
      *         <p>
-     * @param implementationRequired If true, interfaces are not permitted to be registered, outside of the {@link #registerRmi(Class, Class)} and
-     *         {@link #registerRmi(Class, Class)} methods. If false, then interfaces can also be registered.
-     *         <p>
-     *         Enabling interface registration permits matching a different RMI client/server serialization scheme, since
-     *         interfaces are generally in a "common" package, accessible to both the RMI client and server.
-     *         <p>
-     *         Generally, one should not register interfaces, because they have no meaning (ignoring "default" implementations in
-     *         newer versions of java...)
-     *         <p>
      * @param factory Sets the serializer factory to use when no {@link Kryo#addDefaultSerializer(Class, Class) default serializers} match
      *         an object's type. Default is {@link ReflectionSerializerFactory} with {@link FieldSerializer}. @see
      *         Kryo#newDefaultSerializer(Class)
@@ -298,10 +273,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     public
     Serialization(final boolean references,
                   final boolean registrationRequired,
-                  final boolean implementationRequired,
                   final SerializerFactory factory) {
-
-        this.forbidInterfaceRegistration = implementationRequired;
 
         this.kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra<C>>() {
             @Override
@@ -311,10 +283,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                     // we HAVE to pre-allocate the KRYOs
                     KryoExtra<C> kryo = new KryoExtra<C>(Serialization.this);
 
-                    boolean traceEnabled = logger.isTraceEnabled();
-
-                    kryo.getFieldSerializerConfig()
-                        .setUseAsm(useAsm);
+                    kryo.getFieldSerializerConfig().setUseAsm(useAsm);
                     kryo.setRegistrationRequired(registrationRequired);
 
                     kryo.setReferences(references);
@@ -334,59 +303,38 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                     }
 
                     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
+                    // additionally, if a class registered is an INTERFACE, then we register it as an RMI class.
                     for (Object clazz : classesToRegister) {
                         if (clazz instanceof Class) {
+                            // CAN register for RMI in this case
                             Class aClass = (Class) clazz;
-                            int id = kryo.register(aClass).getId();
 
-                            if (traceEnabled) {
-                                logger.trace("Registering {} -> {}", id, aClass.getName());
+                            if (aClass.isInterface()) {
+                                kryo.register(aClass, remoteObjectSerializer);
+                            }
+                            else {
+                                kryo.register(aClass);
                             }
                         }
                         else if (clazz instanceof ClassSerializer) {
+                            // cannot register for RMI in this case
                             ClassSerializer classSerializer = (ClassSerializer) clazz;
-                            int id = kryo.register(classSerializer.clazz, classSerializer.serializer).getId();
-
-                            if (traceEnabled) {
-                                logger.trace("Registering {} -> {} using {}", id, classSerializer.clazz.getName(), classSerializer.serializer.getClass().getName());
-                            }
+                            kryo.register(classSerializer.clazz, classSerializer.serializer);
                         }
                         else if (clazz instanceof ClassSerializer1) {
+                            // cannot register for RMI in this case
                             ClassSerializer1 classSerializer = (ClassSerializer1) clazz;
                             kryo.register(classSerializer.clazz, classSerializer.id);
-
-                            if (traceEnabled) {
-                                logger.trace("Registering {} (specified) -> {}", classSerializer.id, classSerializer.clazz);
-                            }
                         }
                         else if (clazz instanceof ClassSerializer2) {
+                            // cannot register for RMI in this case
                             ClassSerializer2 classSerializer = (ClassSerializer2) clazz;
                             kryo.register(classSerializer.clazz, classSerializer.serializer, classSerializer.id);
-
-                            if (traceEnabled) {
-                                logger.trace("Registering {} (specified) -> {} using {}", classSerializer.id, classSerializer.clazz.getName(), classSerializer.serializer.getClass().getName());
-                            }
                         }
                         else if (clazz instanceof RmiClassSerializer) {
-                            // "client" always sends kryo-ID (of iface) with RMI-ID (or command to create/get one)
-                            // "server" always responds with kryo-ID (of impl) with RMI-ID of remote object. When creating proxy object, "client" looks-up kryo-id of iface from impl
-
-                            RmiClassSerializer remoteImplClass = (RmiClassSerializer) clazz;
-
-                            int id = kryo.register(remoteImplClass.ifaceClass, remoteObjectSerializer).getId();
-                            if (traceEnabled) {
-                                logger.trace("Registering {} -> RMI interface     : {}", id, remoteImplClass.ifaceClass);
-                            }
-
-                            // we only want to use an implementation class IFF we plan on having one, otherwise ignore it
-                            if (remoteImplClass.implClass != null) {
-                                // NOTE: as a "server" we must have the "remote object" serializer write out the INTERFACE CLASS ID so that the "client" (if it DOES NOT have an impl)
-                                //  can read this as the correct class!
-                                int id2 = kryo.register(remoteImplClass.implClass, remoteObjectSerializer).getId();
-                                if (traceEnabled) {
-                                    logger.trace("Registering {} -> RMI implementation: {}", id2, remoteImplClass.implClass);
-                                }
-                            }
+                            // CAN register for RMI in this case
+                            RmiClassSerializer rmiClass = (RmiClassSerializer) clazz;
+                            kryo.register(rmiClass.ifaceClass, remoteObjectSerializer);
                         }
                     }
 
@@ -441,10 +389,12 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class) call.");
         }
-        else if (forbidInterfaceRegistration && clazz.isInterface()) {
-            throw new IllegalArgumentException("Cannot register an interface for serialization. It must be an implementation.");
-        }
         else {
+            if (clazz.isInterface()) {
+                // we have to enable RMI
+                usesRmi = true;
+            }
+
             classesToRegister.add(clazz);
         }
 
@@ -468,8 +418,8 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, int) call.");
         }
-        else if (forbidInterfaceRegistration && clazz.isInterface()) {
-            throw new IllegalArgumentException("Cannot register an interface for serialization. It must be an implementation.");
+        else if (clazz.isInterface()) {
+            throw new IllegalArgumentException("Cannot register an interface with specified ID for serialization. It must be an implementation.");
         }
         else {
             classesToRegister.add(new ClassSerializer1(clazz, id));
@@ -493,8 +443,8 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer) call.");
         }
-        else if (forbidInterfaceRegistration && clazz.isInterface()) {
-            throw new IllegalArgumentException("Cannot register an interface for serialization. It must be an implementation.");
+        else if (clazz.isInterface()) {
+            throw new IllegalArgumentException("Cannot register an interface with specified serializer for serialization. It must be an implementation.");
         }
         else {
             classesToRegister.add(new ClassSerializer(clazz, serializer));
@@ -520,11 +470,57 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer, int) call.");
         }
-        else if (forbidInterfaceRegistration && clazz.isInterface()) {
-            throw new IllegalArgumentException("Cannot register an interface for serialization. It must be an implementation.");
+        else if (clazz.isInterface()) {
+            throw new IllegalArgumentException("Cannot register an interface with specified ID/serializer for serialization. It must be an implementation.");
         }
         else {
             classesToRegister.add(new ClassSerializer2(clazz, serializer, id));
+        }
+
+        return this;
+    }
+
+    /**
+     * Enable a "remote client" to access methods and create objects (RMI) for this endpoint. This is NOT bi-directional, and this endpoint cannot access or
+     * create remote objects on the "remote client".
+     * <p>
+     * There is additional overhead to using RMI.
+     * <p>
+     * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
+     * return value which is not {@link dorkbox.network.rmi.RemoteObject#setAsync(boolean) ignored}, an extra byte is written.
+     * <p>
+     * If the type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
+     * <p>
+     *
+     * @throws IllegalArgumentException if the iface/impl have previously been overridden
+     */
+    @Override
+    public synchronized
+    <Iface, Impl extends Iface> RmiSerializationManager registerRmi(Class<Iface> ifaceClass, Class<Impl> implClass) {
+        if (initialized) {
+            logger.warn("Serialization manager already initialized. Ignoring duplicate registerRmiImplementation(Class, Class) call.");
+            return this;
+        }
+
+        if (!ifaceClass.isInterface()) {
+            throw new IllegalArgumentException("Cannot register an implementation for RMI access. It must be an interface.");
+        }
+        if (implClass.isInterface()) {
+            throw new IllegalArgumentException("Cannot register an interface for RMI implementations. It must be an implementation.");
+        }
+
+        usesRmi = true;
+        classesToRegister.add(new RmiClassSerializer(ifaceClass, implClass));
+
+        // rmiIfaceToImpl tells us, "the server" how to create a (requested) remote object
+        // this MUST BE UNIQUE otherwise unexpected and BAD things can happen.
+        Class<?> a = this.rmiIfaceToImpl.put(ifaceClass, implClass);
+        Class<?> b = this.rmiImplToIface.put(implClass, ifaceClass);
+
+        if (a != null || b != null) {
+            throw new IllegalArgumentException("Unable to override interface (" + ifaceClass + ") and implementation (" + implClass + ") " +
+                                               "because they have already been overridden by something else. It is critical that they are" +
+                                               " both unique per JVM");
         }
 
         return this;
@@ -557,6 +553,95 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     }
 
     /**
+     * Called when initialization is complete. This is to prevent (and recognize) out-of-order class/serializer registration. If an ID
+     * is already in use by a different type, a {@link KryoException} is thrown.
+     */
+    @Override
+    public synchronized
+    void finishInit(final Logger wireReadLogger, final Logger wireWriteLogger) {
+        this.wireReadLogger = wireReadLogger;
+        this.wireWriteLogger = wireWriteLogger;
+
+        initialized = true;
+
+        // initialize the kryo pool with at least 1 kryo instance. This ALSO makes sure that all of our class registration is done
+        // correctly and (if not) we are are notified on the initial thread (instead of on the network update thread)
+        KryoExtra<C> kryo = null;
+        try {
+            kryo = kryoPool.take();
+
+            ClassResolver classResolver = kryo.getClassResolver();
+
+            boolean traceEnabled = logger.isTraceEnabled();
+
+            // now initialize the RMI cached methods, so that they are "final" when the network threads need access to it.
+            for (Object clazz : classesToRegister) {
+                // LOG CLASS ID REGISTRATIONS (if trace logging is enabled)
+                if (traceEnabled) {
+                    if (clazz instanceof Class) {
+                        Class aClass = (Class) clazz;
+
+                        int id = classResolver.getRegistration(aClass).getId();
+                        logger.trace("Registered {} -> {}", id, aClass.getName());
+                    }
+                    else if (clazz instanceof ClassSerializer) {
+                        ClassSerializer classSerializer = (ClassSerializer) clazz;
+
+                        int id = classResolver.getRegistration(classSerializer.clazz).getId();
+                        logger.trace("Registered {} -> {} using {}", id, classSerializer.clazz.getName(), classSerializer.serializer.getClass().getName());
+                    }
+                    else if (clazz instanceof ClassSerializer1) {
+                        ClassSerializer1 classSerializer = (ClassSerializer1) clazz;
+
+                        logger.trace("Registered {} -> (specified) {}", classSerializer.id, classSerializer.clazz);
+                    }
+                    else if (clazz instanceof ClassSerializer2) {
+                        ClassSerializer2 classSerializer = (ClassSerializer2) clazz;
+
+                        logger.trace("Registered {} -> (specified) {} using {}", classSerializer.id, classSerializer.clazz.getName(), classSerializer.serializer.getClass().getName());
+                    }
+                    else if (clazz instanceof RmiClassSerializer) {
+                        RmiClassSerializer remoteImplClass = (RmiClassSerializer) clazz;
+
+                        int id = classResolver.getRegistration(remoteImplClass.ifaceClass).getId();
+                        logger.trace("Registered {} -> (RMI) {}", id, remoteImplClass.ifaceClass.getName());
+                    }
+                }
+
+                if (clazz instanceof Class) {
+                    Class aClass = (Class) clazz;
+
+                    if (aClass.isInterface()) {
+                        int id = classResolver.getRegistration(aClass).getId();
+
+                        CachedMethod[] cachedMethods = RmiUtils.getCachedMethods(Serialization.logger, kryo, useAsm,
+                                                                                 aClass,
+                                                                                 null,
+                                                                                 id);
+                        methodCache.put(id, cachedMethods);
+                    }
+                }
+                else if (clazz instanceof RmiClassSerializer) {
+                    // this is done on the endpoint that will HOST the remote object. The other endpoint will access this object via RMI objects
+                    RmiClassSerializer rmiClass = (RmiClassSerializer) clazz;
+                    int id = classResolver.getRegistration(rmiClass.ifaceClass).getId();
+
+                    CachedMethod[] cachedMethods = RmiUtils.getCachedMethods(Serialization.logger, kryo, useAsm,
+                                                                             rmiClass.ifaceClass,
+                                                                             rmiClass.implClass,
+                                                                             id);
+                    methodCache.put(id, cachedMethods);
+                }
+            }
+
+        } finally {
+            if (kryo != null) {
+                kryoPool.put(kryo);
+            }
+        }
+    }
+
+    /**
      * @return takes a kryo instance from the pool.
      */
     @Override
@@ -583,123 +668,6 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     public
     Class<?> getRmiImpl(Class<?> iface) {
         return rmiIfaceToImpl.get(iface);
-    }
-
-    /**
-     * Enable this endpoint (a "client") to access methods and create objects (RMI) on a "remote server". This is NOT bi-directional, and the "remote server"
-     * cannot access or create remote objects on this endpoint.
-     * <p>
-     * This is the same as calling {@link RmiSerializationManager#registerRmi(Class, Class)} with a null parameter for the implementation class.
-     * <p>
-     * There is additional overhead to using RMI.
-     * <p>
-     * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
-     * return value which is not {@link dorkbox.network.rmi.RemoteObject#setAsync(boolean) ignored}, an extra byte is written.
-     * <p>
-     * If the type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
-     */
-    @Override
-    public synchronized
-    RmiSerializationManager registerRmi(Class<?> ifaceClass) {
-        return registerRmi(ifaceClass, null);
-    }
-
-    /**
-     * Enable a "remote client" to access methods and create objects (RMI) for this endpoint. This is NOT bi-directional, and this endpoint cannot access or \
-     * create remote objects on the "remote client".
-     * <p>
-     * Calling this method with a null parameter for the implementation class is the same as calling {@link RmiSerializationManager#registerRmi(Class)}
-     * <p>
-     * There is additional overhead to using RMI.
-     * <p>
-     * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
-     * return value which is not {@link dorkbox.network.rmi.RemoteObject#setAsync(boolean) ignored}, an extra byte is written.
-     * <p>
-     * If the type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
-     * <p>
-     *
-     * @throws IllegalArgumentException if the iface/impl have previously been overridden
-     */
-    @Override
-    public synchronized
-    <Iface, Impl extends Iface> RmiSerializationManager registerRmi(Class<Iface> ifaceClass, Class<Impl> implClass) {
-        if (initialized) {
-            logger.warn("Serialization manager already initialized. Ignoring duplicate registerRmiImplementation(Class, Class) call.");
-            return this;
-        }
-
-        if (!ifaceClass.isInterface()) {
-            throw new IllegalArgumentException("Cannot register an implementation for RMI access. It must be an interface.");
-        }
-        if (implClass != null && implClass.isInterface()) {
-            throw new IllegalArgumentException("Cannot register an interface for RMI implementations. It must be an implementation.");
-        }
-
-        usesRmi = true;
-        classesToRegister.add(new RmiClassSerializer(ifaceClass, implClass));
-
-        // we only want to assign an implementation class IFF we plan on having one, otherwise ignore it
-        if (implClass != null) {
-            // rmiIfaceToImpl tells the "server" how to create a (requested) remote object
-            // this MUST BE UNIQUE otherwise unexpected and BAD things can happen.
-            Class<?> a = this.rmiIfaceToImpl.put(ifaceClass, implClass);
-            Class<?> b = this.rmiImplToIface.put(implClass, ifaceClass);
-
-            if (a != null || b != null) {
-                throw new IllegalArgumentException("Unable to override interface (" + ifaceClass + ") and implementation (" + implClass + ") " +
-                                                   "because they have already been overridden by something else. It is critical that they are" +
-                                                   " both unique per JVM");
-            }
-        }
-
-        return this;
-    }
-
-    /**
-     * Called when initialization is complete. This is to prevent (and recognize) out-of-order class/serializer registration. If an ID
-     * is already in use by a different type, a {@link KryoException} is thrown.
-     */
-    @Override
-    public synchronized
-    void finishInit(final Logger wireReadLogger, final Logger wireWriteLogger) {
-        this.wireReadLogger = wireReadLogger;
-        this.wireWriteLogger = wireWriteLogger;
-
-        initialized = true;
-
-        // initialize the kryo pool with at least 1 kryo instance. This ALSO makes sure that all of our class registration is done
-        // correctly and (if not) we are are notified on the initial thread (instead of on the network update thread)
-        KryoExtra<C> kryo = null;
-        try {
-            kryo = kryoPool.take();
-
-            ClassResolver classResolver = kryo.getClassResolver();
-
-            // now initialize the RMI cached methods, so that they are "final" when the network threads need access to it.
-            for (Object clazz : classesToRegister) {
-                if (clazz instanceof RmiClassSerializer) {
-                    // THIS IS DONE ON THE "SERVER"
-                    //  "server" means the side of the connection that has the implementation details for the RMI object
-                    //  "client" means the side of the connection that accesses the "server" side object via a proxy object
-                    //  the client will NEVER send this object to the server.
-                    //  the server will ONLY send this object to the client, where on the client it becomes the proxy/interface.
-                    RmiClassSerializer remoteImplClass = (RmiClassSerializer) clazz;
-                    int id = classResolver.getRegistration(remoteImplClass.ifaceClass)
-                                          .getId();
-
-                    CachedMethod[] cachedMethods = RmiUtils.getCachedMethods(Serialization.logger, kryo, useAsm,
-                                                                             remoteImplClass.ifaceClass,
-                                                                             remoteImplClass.implClass,
-                                                                             id);
-                    methodCache.put(id, cachedMethods);
-                }
-            }
-
-        } finally {
-            if (kryo != null) {
-                kryoPool.put(kryo);
-            }
-        }
     }
 
     @Override
