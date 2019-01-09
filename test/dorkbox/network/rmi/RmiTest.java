@@ -218,7 +218,7 @@ class RmiTest extends BaseTest {
         Configuration configuration = new Configuration();
         config.apply(configuration);
 
-        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
         // for Client -> Server RMI (ID 1)
@@ -275,7 +275,7 @@ class RmiTest extends BaseTest {
         configuration = new Configuration();
         config.apply(configuration);
 
-        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
+        configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
         // for Client -> Server RMI (ID 1)

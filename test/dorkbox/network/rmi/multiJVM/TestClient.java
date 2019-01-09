@@ -78,10 +78,8 @@ class TestClient
         configuration.udpPort = 2001;
         configuration.host = "localhost";
 
-        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
+        configuration.serialization = Serialization.DEFAULT();
         RmiTest.register(configuration.serialization);
-        configuration.serialization.registerRmi(TestCow.class);
-
 
         try {
             final Client client = new Client(configuration);

@@ -106,9 +106,10 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
 
         final boolean isUDP = configuration.udpPort > 0;
 
-        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
+        configuration.serialization = Serialization.DEFAULT();
         configuration.serialization.registerRmi(TestObject.class, TestObjectImpl.class);
         configuration.serialization.registerRmi(OtherObject.class, OtherObjectImpl.class);
+        configuration.serialization.register(OtherObjectImpl.class); // registered because this class is sent over the wire
 
         Server server = new Server(configuration);
         server.setIdleTimeout(0);
@@ -138,9 +139,12 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
         configuration = new Configuration();
         config.apply(configuration);
 
-        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
+        configuration.serialization = Serialization.DEFAULT();
         configuration.serialization.registerRmi(TestObject.class, TestObjectImpl.class);
         configuration.serialization.registerRmi(OtherObject.class, OtherObjectImpl.class);
+        configuration.serialization.register(OtherObjectImpl.class); // registered because this class is sent over the wire
+
+
 
         Client client = new Client(configuration);
         client.setIdleTimeout(0);

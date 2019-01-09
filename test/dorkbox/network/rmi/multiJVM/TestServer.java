@@ -21,8 +21,9 @@ class TestServer
         configuration.tcpPort = 2000;
         configuration.udpPort = 2001;
 
-        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
+        configuration.serialization = Serialization.DEFAULT();
         RmiTest.register(configuration.serialization);
+
         configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
 
         Server server = null;
