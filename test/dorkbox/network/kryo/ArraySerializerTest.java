@@ -28,7 +28,7 @@ public class ArraySerializerTest extends KryoTestCase {
 	}
 
 	public void testArraysASM () {
-	    kryo.setAsmEnabled(true);
+        kryo.getFieldSerializerConfig().setUseAsm(true);
 
 		kryo.register(int[].class);
 		kryo.register(int[][].class);
@@ -73,7 +73,7 @@ public class ArraySerializerTest extends KryoTestCase {
 	}
 
 	public void testArraysUnsafe () {
-        kryo.setAsmEnabled(false);
+        kryo.getFieldSerializerConfig().setUseAsm(false);
 
         kryo.register(int[].class);
         kryo.register(int[][].class);
