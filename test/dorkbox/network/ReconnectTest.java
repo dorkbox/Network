@@ -31,6 +31,7 @@ import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
 import dorkbox.util.exceptions.SecurityException;
 
+// NOTE: UDP is unreliable, EVEN ON LOOPBACK! So this can fail with UDP. TCP will never fail.
 public
 class ReconnectTest extends BaseTest {
     private final AtomicInteger receivedCount = new AtomicInteger(0);
