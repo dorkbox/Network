@@ -41,7 +41,7 @@ class RmiObjectIdExhaustionTest extends BaseTest {
         manager.register(UnsupportedOperationException.class);
     }
 
-    // @Test // NOTE: change final to test!
+    // @Test // NOTE: remove final from RmiBridge.INVALID_RMI to test!
     public
     void rmiNetwork() throws SecurityException, IOException, InterruptedException {
         rmi(new Config() {
@@ -60,7 +60,7 @@ class RmiObjectIdExhaustionTest extends BaseTest {
         Thread.sleep(2000L);
     }
 
-    // @Test // NOTE: change final to test!
+    // @Test // NOTE: remove final from RmiBridge.INVALID_RMI to test!
     public
     void rmiLocal() throws SecurityException, IOException, InterruptedException {
         rmi(new Config() {
@@ -80,7 +80,7 @@ class RmiObjectIdExhaustionTest extends BaseTest {
 
     public
     void rmi(final Config config) throws SecurityException, IOException {
-        // NOTE: change final to test!
+        // NOTE: remove final from RmiBridge.INVALID_RMI to test!
         // RmiBridge.INVALID_RMI = 4;
 
         Configuration configuration = new Configuration();
@@ -88,13 +88,7 @@ class RmiObjectIdExhaustionTest extends BaseTest {
 
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
-
-        // for Client -> Server RMI (ID 1)
-        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
-
-        // for Server -> Client RMI (ID 2)
-        configuration.serialization.registerRmiInterface(TestCow.class);
-
+        configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
 
         final Server server = new Server(configuration);
         server.setIdleTimeout(0);
@@ -102,18 +96,16 @@ class RmiObjectIdExhaustionTest extends BaseTest {
         addEndPoint(server);
         server.bind(false);
 
+
+
+
         // ----
         configuration = new Configuration();
         config.apply(configuration);
 
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
-
-        // for Client -> Server RMI (ID 1)
-        configuration.serialization.registerRmiInterface(TestCow.class);
-
-        // for Server -> Client RMI (ID 2)
-        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
+        configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
 
 
         final Client client = new Client(configuration);

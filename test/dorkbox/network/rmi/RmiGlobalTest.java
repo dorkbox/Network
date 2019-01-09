@@ -222,11 +222,8 @@ class RmiGlobalTest extends BaseTest {
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
-        // for Server -> Client RMI (ID: CLIENT_GLOBAL_OBJECT_ID) - NOTICE: none of the super classes/interfaces are registered!
-        configuration.serialization.registerRmiInterface(TestCow.class);
-
-        // for Client -> Server RMI (ID: SERVER_GLOBAL_OBJECT_ID) - NOTICE: none of the super classes/interfaces are registered!
-        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
+        // NOTICE: none of the super classes/interfaces are registered!
+        configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
 
         final Server server = new Server(configuration);
         server.setIdleTimeout(0);
@@ -286,11 +283,8 @@ class RmiGlobalTest extends BaseTest {
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
-        // for Server -> Client RMI (ID: CLIENT_GLOBAL_OBJECT_ID)
-        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
-
-        // for Client -> Server RMI (ID: SERVER_GLOBAL_OBJECT_ID)
-        configuration.serialization.registerRmiInterface(TestCow.class);
+        // NOTICE: none of the super classes/interfaces are registered!
+        configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
 
 
         final Client client = new Client(configuration);
@@ -340,7 +334,8 @@ class RmiGlobalTest extends BaseTest {
                   }
               });
 
-        client.connect(5000);
+        // client.connect(5000);
+        client.connect(0);
         waitForThreads();
     }
 

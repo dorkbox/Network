@@ -103,30 +103,37 @@ interface RmiSerializationManager extends SerializationManager {
     Class<?> getRmiImpl(Class<?> iFace);
 
     /**
-     * Enable remote method invocation (RMI) for this connection. There is additional overhead to using RMI.
+     * Enable this endpoint (a "client") to access methods and create objects (RMI) on a "remote server". This is NOT bi-directional, and the "remote server"
+     * cannot access or create remote objects on this endpoint.
+     * <p>
+     * This is the same as calling {@link RmiSerializationManager#registerRmi(Class, Class)} with a null parameter for the implementation class.
+     * <p>
+     * There is additional overhead to using RMI.
      * <p>
      * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
      * return value which is not {@link dorkbox.network.rmi.RemoteObject#setAsync(boolean) ignored}, an extra byte is written.
      * <p>
      * If the type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
      */
-    RmiSerializationManager registerRmiInterface(Class<?> ifaceClass);
+    RmiSerializationManager registerRmi(Class<?> ifaceClass);
 
     /**
-     * Enable remote method invocation (RMI) for this connection. There is additional overhead to using RMI.
+     * Enable a "remote client" to access methods and create objects (RMI) for this endpoint. This is NOT bi-directional, and this endpoint cannot access or \
+     * create remote objects on the "remote client".
+     * <p>
+     * Calling this method with a null parameter for the implementation class is the same as calling {@link RmiSerializationManager#registerRmi(Class)}
+     * <p>
+     * There is additional overhead to using RMI.
      * <p>
      * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
      * return value which is not {@link dorkbox.network.rmi.RemoteObject#setAsync(boolean) ignored}, an extra byte is written.
      * <p>
      * If the type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
-     * <p>
-     * This method overrides the interface -> implementation. This is so incoming proxy objects will get auto-changed into their correct
-     * implementation type, so this side of the connection knows what to do with the proxy object.
      * <p>
      *
      * @throws IllegalArgumentException if the iface/impl have previously been overridden
      */
-    <Iface, Impl extends Iface> RmiSerializationManager registerRmiImplementation(Class<Iface> ifaceClass, Class<Impl> implClass);
+    <Iface, Impl extends Iface> RmiSerializationManager registerRmi(Class<Iface> ifaceClass, Class<Impl> implClass);
 
     /**
      * Gets the cached methods for the specified class ID

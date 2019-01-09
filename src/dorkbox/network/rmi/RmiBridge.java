@@ -54,7 +54,7 @@ import dorkbox.util.collections.LockFreeIntBiMap;
  * object transformation (because there is no serialization occurring) using a series of weak hashmaps.
  * <p/>
  * <p/>
- * Objects are {@link RmiSerializationManager#registerRmiInterface(Class)}, and endpoint connections can then {@link
+ * Objects are {@link RmiSerializationManager#registerRmi(Class, Class)}, and endpoint connections can then {@link
  * Connection#createRemoteObject(Class, RemoteObjectCallback)} for the registered objects.
  * <p/>
  * It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a return value which
@@ -236,7 +236,7 @@ class RmiBridge {
                          .append(argString)
                          .append(")");
 
-            if (cachedMethod.overriddenMethod) {
+            if (cachedMethod.overriddenMethod != null) {
                 // did we override our cached method? This is not common.
                 stringBuilder.append(" [Connection method override]");
             }
@@ -279,8 +279,8 @@ class RmiBridge {
         }
 
         InvokeMethodResult invokeMethodResult = new InvokeMethodResult();
-        invokeMethodResult.objectID = invokeMethod.objectID;
-        invokeMethodResult.responseID = (byte) responseID;
+        invokeMethodResult.rmiObjectId = invokeMethod.objectID;
+        invokeMethodResult.responseId = (byte) responseID;
 
 
         // Do not return non-primitives if transmitReturnVal is false

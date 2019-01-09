@@ -34,6 +34,8 @@
  */
 package dorkbox.network.rmi;
 
+import java.lang.reflect.Method;
+
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Serializer;
@@ -47,6 +49,7 @@ import dorkbox.network.connection.KryoExtra;
  */
 public
 class InvokeMethodSerializer extends Serializer<InvokeMethod> {
+    private static final boolean DEBUG = false;
 
     public
     InvokeMethodSerializer() {
@@ -56,9 +59,12 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
     @SuppressWarnings("rawtypes")
     public
     void write(final Kryo kryo, final Output output, final InvokeMethod object) {
-        // System.err.println(":: objectID " + object.objectID);
-        // System.err.println(":: methodClassID " + object.cachedMethod.methodClassID);
-        // System.err.println(":: methodIndex " + object.cachedMethod.methodIndex);
+        if (DEBUG) {
+            System.err.println("WRITING");
+            System.err.println(":: objectID " + object.objectID);
+            System.err.println(":: methodClassID " + object.cachedMethod.methodClassID);
+            System.err.println(":: methodIndex " + object.cachedMethod.methodIndex);
+        }
 
         output.writeInt(object.objectID, true);
         output.writeInt(object.cachedMethod.methodClassID, true);
@@ -90,9 +96,12 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
         int methodClassID = input.readInt(true);
         byte methodIndex = input.readByte();
 
-        // System.err.println(":: objectID " + objectID);
-        // System.err.println(":: methodClassID " + methodClassID);
-        // System.err.println(":: methodIndex " + methodIndex);
+        if (DEBUG) {
+            System.err.println("READING");
+            System.err.println(":: objectID " + objectID);
+            System.err.println(":: methodClassID " + methodClassID);
+            System.err.println(":: methodIndex " + methodIndex);
+        }
 
         CachedMethod cachedMethod;
         try {
@@ -107,10 +116,13 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
         Object[] args;
         Serializer<?>[] serializers = cachedMethod.serializers;
 
+        Method method;
         int argStartIndex;
 
-        if (cachedMethod.overriddenMethod) {
+        if (cachedMethod.overriddenMethod != null) {
             // did we override our cached method? This is not common.
+            method = cachedMethod.overriddenMethod;
+
             // this is specifically when we override an interface method, with an implementation method + Connection parameter (@ index 0)
             argStartIndex = 1;
 
@@ -118,12 +130,15 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
             args[0] = ((KryoExtra) kryo).connection;
         }
         else {
+            method = cachedMethod.method;
             argStartIndex = 0;
             args = new Object[serializers.length];
         }
 
-        Class<?>[] parameterTypes = cachedMethod.method.getParameterTypes();
 
+        Class<?>[] parameterTypes = method.getParameterTypes();
+
+        // we don't start at 0 for the arguments, in case we have an overwritten method (in which case, the 1st arg is always "Connection.class")
         for (int i = 0, n = serializers.length, j = argStartIndex; i < n; i++, j++) {
             Serializer<?> serializer = serializers[i];
 

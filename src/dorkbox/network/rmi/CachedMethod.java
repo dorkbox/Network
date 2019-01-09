@@ -53,7 +53,7 @@ class CachedMethod {
      * in some cases, we want to override the cached method, with one that supports passing 'Connection' as the first argument. This is
      * completely OPTIONAL, however - greatly adds functionality to RMI methods.
      */
-    public boolean overriddenMethod;
+    public Method overriddenMethod;
 
     @SuppressWarnings("rawtypes")
     public Serializer[] serializers;
@@ -61,5 +61,11 @@ class CachedMethod {
     public
     Object invoke(final Connection connection, Object target, Object[] args) throws Exception {
         return this.method.invoke(target, args);
+    }
+
+    @Override
+    public
+    String toString() {
+        return "CachedMethod{" + method.getName() + ", methodClassID=" + methodClassID + ", methodIndex=" + methodIndex + '}';
     }
 }

@@ -42,6 +42,7 @@ public
 class InvokeMethod implements RmiMessage {
     public int objectID; // the registered kryo ID for the object
 
+    // This class is NOT sent across the wire. We use a custom serializer to manage this.
     public CachedMethod cachedMethod;
     public Object[] args;
 

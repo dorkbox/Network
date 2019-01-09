@@ -21,17 +21,18 @@ class TestServer
         configuration.tcpPort = 2000;
         configuration.udpPort = 2001;
 
-        configuration.serialization = Serialization.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
         RmiTest.register(configuration.serialization);
-        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
+        configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
 
         Server server = null;
         try {
             server = new Server(configuration);
+            server.disableRemoteKeyValidation();
         } catch (SecurityException e) {
             e.printStackTrace();
         }
 
-        // server.setIdleTimeout(0);
+        server.setIdleTimeout(0);
         server.bind(true);
     }}

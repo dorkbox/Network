@@ -54,8 +54,12 @@ class RmiObjectNetworkHandler extends RmiObjectHandler {
                 //
                 // CREATE a new ID, and register the ID and new object (must create a new one) in the object maps
 
+                // have to lookup the implementation class
+                Class<?> rmiImpl = connection.getEndPoint().getSerialization().getRmiImpl(interfaceClass);
+
+
                 // For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
-                RmiRegistration registrationResult = connection.createNewRmiObject(interfaceClass, interfaceClass, callbackId);
+                RmiRegistration registrationResult = connection.createNewRmiObject(interfaceClass, rmiImpl, callbackId);
                 connection.send(registrationResult);
                 // connection transport is flushed in calling method (don't need to do it here)
             }

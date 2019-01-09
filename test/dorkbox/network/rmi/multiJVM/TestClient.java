@@ -37,8 +37,8 @@ class TestClient
 
 //        rootLogger.setLevel(Level.OFF);
 
-        rootLogger.setLevel(Level.DEBUG);
-       // rootLogger.setLevel(Level.TRACE);
+        // rootLogger.setLevel(Level.DEBUG);
+       rootLogger.setLevel(Level.TRACE);
 //        rootLogger.setLevel(Level.ALL);
 
 
@@ -78,14 +78,15 @@ class TestClient
         configuration.udpPort = 2001;
         configuration.host = "localhost";
 
-        configuration.serialization = Serialization.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
         RmiTest.register(configuration.serialization);
-        configuration.serialization.registerRmiInterface(TestCow.class);
+        configuration.serialization.registerRmi(TestCow.class);
 
 
         try {
             final Client client = new Client(configuration);
-            // client.setIdleTimeout(0);
+            client.disableRemoteKeyValidation();
+            client.setIdleTimeout(0);
 
             client.listeners()
                   .add(new dorkbox.network.connection.Listener.OnConnected<Connection>() {
@@ -121,7 +122,7 @@ class TestClient
                       }
                   });
 
-            client.connect(3330);
+            client.connect(0);
 
             client.waitForShutdown();
         } catch (Exception e) {

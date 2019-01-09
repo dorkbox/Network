@@ -42,12 +42,6 @@ class RmiRegistration implements RmiMessage {
      */
     public int callbackId;
 
-    @SuppressWarnings("unused")
-    private
-    RmiRegistration() {
-        // for serialization
-    }
-
     /**
      * When requesting a new or existing remote object
      * SENT FROM "local" -> "remote"

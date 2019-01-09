@@ -106,9 +106,9 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
 
         final boolean isUDP = configuration.udpPort > 0;
 
-        configuration.serialization = Serialization.DEFAULT();
-        configuration.serialization.registerRmiImplementation(TestObject.class, TestObjectImpl.class);
-        configuration.serialization.registerRmiImplementation(OtherObject.class, OtherObjectImpl.class);
+        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
+        configuration.serialization.registerRmi(TestObject.class, TestObjectImpl.class);
+        configuration.serialization.registerRmi(OtherObject.class, OtherObjectImpl.class);
 
         Server server = new Server(configuration);
         server.setIdleTimeout(0);
@@ -138,9 +138,9 @@ class RmiSendObjectOverrideMethodTest extends BaseTest {
         configuration = new Configuration();
         config.apply(configuration);
 
-        configuration.serialization = Serialization.DEFAULT();
-        configuration.serialization.registerRmiInterface(TestObject.class);
-        configuration.serialization.registerRmiInterface(OtherObject.class);
+        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
+        configuration.serialization.registerRmi(TestObject.class, TestObjectImpl.class);
+        configuration.serialization.registerRmi(OtherObject.class, OtherObjectImpl.class);
 
         Client client = new Client(configuration);
         client.setIdleTimeout(0);

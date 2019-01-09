@@ -101,7 +101,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
 
         int argStartIndex;
 
-        if (cachedMethod.overriddenMethod) {
+        if (cachedMethod.overriddenMethod != null) {
             // did we override our cached method? This is not common.
             // this is specifically when we override an interface method, with an implementation method + Connection parameter (@ index 0)
             argStartIndex = 1;

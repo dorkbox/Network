@@ -38,6 +38,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.util.IdentityMap;
 
 import dorkbox.network.connection.KryoExtra;
 
@@ -50,8 +51,12 @@ import dorkbox.network.connection.KryoExtra;
 public
 class RemoteObjectSerializer<T> extends Serializer<T> {
 
+    private final IdentityMap<Class<?>, Class<?>> rmiImplToIface;
+
     public
-    RemoteObjectSerializer() {
+    RemoteObjectSerializer(final IdentityMap<Class<?>, Class<?>> rmiImplToIface) {
+        super(false);
+        this.rmiImplToIface = rmiImplToIface;
     }
 
     @Override
@@ -65,9 +70,13 @@ class RemoteObjectSerializer<T> extends Serializer<T> {
     @SuppressWarnings({"rawtypes", "unchecked"})
     @Override
     public
-    T read(Kryo kryo, Input input, Class type) {
+    T read(Kryo kryo, Input input, Class implementationType) {
         KryoExtra kryoExtra = (KryoExtra) kryo;
         int objectID = input.readInt(true);
-        return (T) kryoExtra.connection.getProxyObject(objectID, type);
+
+        // We have to lookup the iface, since the proxy object requires it
+        Class<?> iface = rmiImplToIface.get(implementationType);
+
+        return (T) kryoExtra.connection.getProxyObject(objectID, iface);
     }
 }

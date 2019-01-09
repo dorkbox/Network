@@ -171,6 +171,7 @@ class RmiTest extends BaseTest {
     public static
     void register(dorkbox.network.serialization.CryptoSerializationManager manager) {
         manager.register(Object.class); // Needed for Object#toString, hashCode, etc.
+        manager.register(TestCow.class);
         manager.register(MessageWithTestCow.class);
         manager.register(UnsupportedOperationException.class);
     }
@@ -217,14 +218,14 @@ class RmiTest extends BaseTest {
         Configuration configuration = new Configuration();
         config.apply(configuration);
 
-        configuration.serialization = Serialization.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
         register(configuration.serialization);
 
         // for Client -> Server RMI (ID 1)
-        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
+        configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
 
         // for Server -> Client RMI (ID 2)
-        configuration.serialization.registerRmiInterface(TestCow.class);
+        // configuration.serialization.registerRmiInterface(TestCow.class);
 
 
         final Server server = new Server(configuration);
@@ -274,14 +275,15 @@ class RmiTest extends BaseTest {
         configuration = new Configuration();
         config.apply(configuration);
 
-        configuration.serialization = Serialization.DEFAULT();
+        configuration.serialization = Serialization.DEFAULT(true, true, false, null);
         register(configuration.serialization);
 
         // for Client -> Server RMI (ID 1)
-        configuration.serialization.registerRmiInterface(TestCow.class);
+        // the 'TestCow' object lives on the 'Server'. The 'Client' accesses remote methods on it
+        // configuration.serialization.registerRmiInterface(TestCow.class);
 
-        // for Server -> Client RMI (ID 2)
-        configuration.serialization.registerRmiImplementation(TestCow.class, TestCowImpl.class);
+        // // for Server -> Client RMI (ID 2)
+        configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
 
 
         final Client client = new Client(configuration);

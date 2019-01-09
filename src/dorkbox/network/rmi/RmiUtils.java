@@ -100,18 +100,13 @@ class RmiUtils {
 
 
     /**
-     * @param logger
-     * @param kryo
-     * @param asmEnabled
      * @param iFace this is never null.
      * @param impl this is NULL on the rmi "client" side. This is NOT NULL on the "server" side (where the object lives)
-     * @param classId
-     * @return
      */
     public static
     CachedMethod[] getCachedMethods(final Logger logger, final Kryo kryo, final boolean asmEnabled, final Class<?> iFace, final Class<?> impl, final int classId) {
-        MethodAccess ifaceMethodAccess = null;
-        MethodAccess implMethodAccess = null;
+        MethodAccess ifaceAsmMethodAccess = null;
+        MethodAccess implAsmMethodAccess = null;
 
         // RMI is **ALWAYS** based upon an interface, so we must always make sure to get the methods of the interface, instead of the
         // implementation, otherwise we will have the wrong order of methods, so invoking a method by it's index will fail.
@@ -120,22 +115,24 @@ class RmiUtils {
         final int size = methods.length;
         final CachedMethod[] cachedMethods = new CachedMethod[size];
 
+        final Method[] implMethods;
+
         if (impl != null) {
             if (impl.isInterface()) {
                 throw new IllegalArgumentException("Cannot have type as an interface, it must be an implementation");
             }
 
-            final Method[] implMethods = getMethods(impl);
-            overwriteMethodsWithConnectionParam(implMethods, methods);
-
+            implMethods = getMethods(impl);
 
             // reflectASM
             //   doesn't work on android (set correctly by the serialization manager)
             //   can't get any method from the 'Object' object (we get from the interface, which is NOT 'Object')
             //   and it MUST be public (iFace is always public)
             if (asmEnabled) {
-                implMethodAccess = getReflectAsmMethod(logger, impl);
+                implAsmMethodAccess = getReflectAsmMethod(logger, impl);
             }
+        } else {
+            implMethods = null;
         }
 
         // reflectASM
@@ -143,7 +140,7 @@ class RmiUtils {
         //   can't get any method from the 'Object' object (we get from the interface, which is NOT 'Object')
         //   and it MUST be public (iFace is always public)
         if (asmEnabled) {
-            ifaceMethodAccess = getReflectAsmMethod(logger, iFace);
+            ifaceAsmMethodAccess = getReflectAsmMethod(logger, iFace);
         }
 
         for (int i = 0; i < size; i++) {
@@ -153,49 +150,43 @@ class RmiUtils {
             Class<?>[] parameterTypes = method.getParameterTypes();
 
             // copy because they can be overridden
-            boolean overriddenMethod = false;
-            MethodAccess tweakMethodAccess = ifaceMethodAccess;
+            CachedMethod cachedMethod = null;
+            MethodAccess ifaceORimplMethodAccess = ifaceAsmMethodAccess;
 
+            // reflectAsm doesn't like "Object" class methods
+            boolean canUseAsm = asmEnabled && method.getDeclaringClass() != Object.class;
+
+            Method overwrittenMethod = null;
 
             // this is how we detect if the method has been changed from the interface -> implementation + connection parameter
-            if (declaringClass.equals(impl)) {
-                tweakMethodAccess = implMethodAccess;
-                overriddenMethod = true;
+            if (implMethods != null) {
+                overwrittenMethod = getOverwriteMethodWithConnectionParam(implMethods, method);
+                if (overwrittenMethod != null) {
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("Overridden method: {}.{}", impl, method.getName());
+                    }
 
-                if (logger.isTraceEnabled()) {
-                    logger.trace("Overridden method: {}.{}", impl, method.getName());
+                    // still might be null!
+                    ifaceORimplMethodAccess = implAsmMethodAccess;
                 }
             }
 
 
-            CachedMethod cachedMethod = null;
-            // reflectAsm doesn't like "Object" class methods...
-            if (tweakMethodAccess != null && method.getDeclaringClass() != Object.class) {
+            if (canUseAsm) {
                 try {
-                    final int index = tweakMethodAccess.getIndex(method.getName(), parameterTypes);
+                    int index;
+                    if (overwrittenMethod != null) {
+                        // have to take into account the overwritten method's first parameter will ALWAYS be "Connection"
+                        index = ifaceORimplMethodAccess.getIndex(method.getName(), overwrittenMethod.getParameterTypes());
+                    } else {
+                        index = ifaceORimplMethodAccess.getIndex(method.getName(), parameterTypes);
+                    }
+
 
                     AsmCachedMethod asmCachedMethod = new AsmCachedMethod();
                     asmCachedMethod.methodAccessIndex = index;
-                    asmCachedMethod.methodAccess = tweakMethodAccess;
+                    asmCachedMethod.methodAccess = ifaceORimplMethodAccess;
                     asmCachedMethod.name = method.getName();
-
-                    if (overriddenMethod) {
-                        // logger.error(tweakMethod.getName() + " " + Arrays.toString(parameterTypes) + " index: " + index +
-                        //             " methodIndex: " + i + " classID: " + classId);
-
-                        // This is because we have to store the serializer for each parameter, but ONLY for the ORIGINAL method, not the overridden one.
-                        // this gets our parameters "back to the original" method. We do this to minimize the overhead of sending the args over
-                        int length = parameterTypes.length;
-                        if (length == 1) {
-                            parameterTypes = new Class<?>[0];
-                        }
-                        else {
-                            length--;
-                            Class<?>[] newArgs = new Class<?>[length];
-                            System.arraycopy(parameterTypes, 1, newArgs, 0, length);
-                            parameterTypes = newArgs;
-                        }
-                    }
 
                     cachedMethod = asmCachedMethod;
                 } catch (Exception e) {
@@ -207,10 +198,11 @@ class RmiUtils {
                 cachedMethod = new CachedMethod();
             }
 
-            cachedMethod.overriddenMethod = overriddenMethod;
+
             cachedMethod.methodClassID = classId;
 
-            // we ALSO have to setup "normal" reflection access to these methods
+            // this MIGHT be null, but if it is not, this is the method we will invoke INSTEAD of the "normal" method
+            cachedMethod.overriddenMethod = overwrittenMethod;
             cachedMethod.method = method;
             cachedMethod.methodIndex = i;
 
@@ -229,9 +221,9 @@ class RmiUtils {
         return cachedMethods;
     }
 
-    // NOTE: does not null check
     /**
      * This will overwrite an original (iface based) method with a method from the implementation ONLY if there is the extra 'Connection' parameter (as per above)
+     * NOTE: does not null check
      *
      * @param implMethods methods from the implementation
      * @param origMethods methods from the interface
@@ -241,47 +233,62 @@ class RmiUtils {
         for (int i = 0, origMethodsSize = origMethods.length; i < origMethodsSize; i++) {
             final Method origMethod = origMethods[i];
 
-            String origName = origMethod.getName();
-            Class<?>[] origTypes = origMethod.getParameterTypes();
-            int origLength = origTypes.length + 1;
+            Method overwriteMethodsWithConnectionParam = getOverwriteMethodWithConnectionParam(implMethods, origMethod);
+            if (overwriteMethodsWithConnectionParam != null) {
+                origMethods[i] = overwriteMethodsWithConnectionParam;
+            }
+        }
+    }
 
-            for (Method implMethod : implMethods) {
-                String implName = implMethod.getName();
-                Class<?>[] implTypes = implMethod.getParameterTypes();
-                int implLength = implTypes.length;
+    /**
+     * This will overwrite an original (iface based) method with a method from the implementation ONLY if there is the extra 'Connection' parameter (as per above)
+     * NOTE: does not null check
+     *
+     * @param implMethods methods from the implementation
+     * @param origMethod original method from the interface
+     */
+    private static
+    Method getOverwriteMethodWithConnectionParam(final Method[] implMethods, final Method origMethod) {
+        String origName = origMethod.getName();
+        Class<?>[] origTypes = origMethod.getParameterTypes();
+        int origLength = origTypes.length + 1;
 
-                if (origLength != implLength || !(origName.equals(implName))) {
-                    continue;
+        for (Method implMethod : implMethods) {
+            String implName = implMethod.getName();
+            Class<?>[] implTypes = implMethod.getParameterTypes();
+            int implLength = implTypes.length;
+
+            if (origLength != implLength || !(origName.equals(implName))) {
+                continue;
+            }
+
+            // checkLength > 0
+            Class<?> shouldBeConnectionType = implTypes[0];
+            if (ClassHelper.hasInterface(Connection.class, shouldBeConnectionType)) {
+                // now we check to see if our "check" method is equal to our "cached" method + Connection
+                if (implLength == 1) {
+                    // we only have "Connection" as a parameter
+                    return implMethod;
                 }
-
-                // checkLength > 0
-                Class<?> shouldBeConnectionType = implTypes[0];
-                if (ClassHelper.hasInterface(Connection.class, shouldBeConnectionType)) {
-                    // now we check to see if our "check" method is equal to our "cached" method + Connection
-                    if (implLength == 1) {
-                        // we only have "Connection" as a parameter
-                        origMethods[i] = implMethod;
-                        break;
-                    }
-                    else {
-                        boolean found = true;
-                        for (int k = 1; k < implLength; k++) {
-                            if (origTypes[k - 1] != implTypes[k]) {
-                                // make sure all the parameters match. Cannot use arrays.equals(*), because one will have "Connection" as
-                                // a parameter - so we check that the rest match
-                                found = false;
-                                break;
-                            }
-                        }
-
-                        if (found) {
-                            origMethods[i] = implMethod;
+                else {
+                    boolean found = true;
+                    for (int k = 1; k < implLength; k++) {
+                        if (origTypes[k - 1] != implTypes[k]) {
+                            // make sure all the parameters match. Cannot use arrays.equals(*), because one will have "Connection" as
+                            // a parameter - so we check that the rest match
+                            found = false;
                             break;
                         }
+                    }
+
+                    if (found) {
+                        return implMethod;
                     }
                 }
             }
         }
+
+        return null;
     }
 
     /**
