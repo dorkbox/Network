@@ -1280,12 +1280,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
      *
      * @see RemoteObject
      *
-     * @param objectID this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
+     * @param rmiId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
      * @param iFace this is the RMI interface
      */
     @Override
     public
-    RemoteObject getProxyObject(final int objectID, final Class<?> iFace) {
+    RemoteObject getProxyObject(final int rmiId, final Class<?> iFace) {
         if (iFace == null) {
             throw new IllegalArgumentException("iface cannot be null.");
         }
@@ -1296,14 +1296,13 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
         // we want to have a connection specific cache of IDs
         // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
         // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
-        RemoteObject remoteObject = proxyIdCache.get(objectID);
+        RemoteObject remoteObject = proxyIdCache.get(rmiId);
 
         if (remoteObject == null) {
             // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-            // remoteObject = rmiBridge.createProxyObject(this, objectID, iFace);
 
             // the ACTUAL proxy is created in the connection impl.
-            RmiProxyHandler proxyObject = new RmiProxyHandler(this, objectID, iFace);
+            RmiProxyHandler proxyObject = new RmiProxyHandler(this, rmiId, iFace);
             proxyListeners.add(proxyObject.getListener());
 
             Class<?>[] temp = new Class<?>[2];
@@ -1312,7 +1311,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
 
             remoteObject = (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(), temp, proxyObject);
 
-            proxyIdCache.put(objectID, remoteObject);
+            proxyIdCache.put(rmiId, remoteObject);
         }
 
         return remoteObject;

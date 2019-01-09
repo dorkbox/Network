@@ -39,8 +39,8 @@ package dorkbox.network.rmi;
  */
 public
 class InvokeMethodResult implements RmiMessage {
-    public int objectID;
+    public int rmiObjectId;
 
-    public byte responseID;
+    public byte responseId;
     public Object result;
 }

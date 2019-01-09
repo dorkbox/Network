@@ -256,7 +256,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
                             if (o instanceof RemoteObject) {
                                 RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(o);
 
-                                int id = handler.objectID;
+                                int id = handler.rmiObjectId;
                                 field.set(message, connection.getImplementationObject(id));
                                 fields.add(field);
                             }
@@ -309,7 +309,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
                     if (o instanceof RemoteObject) {
                         RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(o);
 
-                        int id = handler.objectID;
+                        int id = handler.rmiObjectId;
                         field.set(message, connection.getImplementationObject(id));
                     }
                     else {

@@ -71,7 +71,7 @@ class RmiProxyHandler implements InvocationHandler {
     private final boolean[] pendingResponses = new boolean[64];
 
     private final ConnectionImpl connection;
-    public final int objectID; // this is the RMI id
+    public final int rmiObjectId; // this is the RMI id
     public final int ID; // this is the KRYO id
 
 
@@ -97,16 +97,16 @@ class RmiProxyHandler implements InvocationHandler {
 
     /**
      * @param connection this is really the network client -- there is ONLY ever 1 connection
-     * @param objectID this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
+     * @param rmiId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
      * @param iFace this is the RMI interface
      */
     public
-    RmiProxyHandler(final ConnectionImpl connection, final int objectID, final Class<?> iFace) {
+    RmiProxyHandler(final ConnectionImpl connection, final int rmiId, final Class<?> iFace) {
         super();
 
         this.connection = connection;
-        this.objectID = objectID;
-        this.proxyString = "<proxy #" + objectID + ">";
+        this.rmiObjectId = rmiId;
+        this.proxyString = "<proxy #" + rmiId + ">";
 
         EndPoint endPointConnection = this.connection.getEndPoint();
         final RmiSerializationManager serializationManager = endPointConnection.getSerialization();
@@ -114,8 +114,7 @@ class RmiProxyHandler implements InvocationHandler {
         KryoExtra kryoExtra = null;
         try {
             kryoExtra = serializationManager.takeKryo();
-            this.ID = kryoExtra.getRegistration(iFace)
-                          .getId();
+            this.ID = kryoExtra.getRegistration(iFace).getId();
         } finally {
             if (kryoExtra != null) {
                 serializationManager.returnKryo(kryoExtra);
@@ -128,9 +127,9 @@ class RmiProxyHandler implements InvocationHandler {
             @Override
             public
             void received(Connection connection, InvokeMethodResult invokeMethodResult) {
-                byte responseID = invokeMethodResult.responseID;
+                byte responseID = invokeMethodResult.responseId;
 
-                if (invokeMethodResult.objectID != objectID) {
+                if (invokeMethodResult.rmiObjectId != rmiId) {
                     return;
                 }
 
@@ -165,7 +164,7 @@ class RmiProxyHandler implements InvocationHandler {
 
             String name = method.getName();
             if (name.equals("close")) {
-                connection.removeRmiListeners(objectID, getListener());
+                connection.removeRmiListeners(rmiObjectId, getListener());
                 return null;
             }
             else if (name.equals("setResponseTimeout")) {
@@ -227,10 +226,10 @@ class RmiProxyHandler implements InvocationHandler {
         }
 
         InvokeMethod invokeMethod = new InvokeMethod();
-        invokeMethod.objectID = this.objectID;
+        invokeMethod.objectID = this.rmiObjectId;
         invokeMethod.args = args;
 
-        // which method do we access?
+        // which method do we access? We always want to access the IMPLEMENTATION (if available!)
         CachedMethod[] cachedMethods = connection.getEndPoint()
                                                  .getSerialization()
                                                  .getMethods(ID);
@@ -419,7 +418,7 @@ class RmiProxyHandler implements InvocationHandler {
     int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + this.objectID;
+        result = prime * result + this.rmiObjectId;
         return result;
     }
 
@@ -436,6 +435,6 @@ class RmiProxyHandler implements InvocationHandler {
             return false;
         }
         RmiProxyHandler other = (RmiProxyHandler) obj;
-        return this.objectID == other.objectID;
+        return this.rmiObjectId == other.rmiObjectId;
     }
 }

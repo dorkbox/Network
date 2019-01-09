@@ -32,14 +32,14 @@ class InvocationResultSerializer extends FieldSerializer<InvokeMethodResult> {
     public
     void write(Kryo kryo, Output output, InvokeMethodResult result) {
         super.write(kryo, output, result);
-        output.writeInt(result.objectID, true);
+        output.writeInt(result.rmiObjectId, true);
     }
 
     @Override
     public
     InvokeMethodResult read(Kryo kryo, Input input, Class<InvokeMethodResult> type) {
         InvokeMethodResult result = super.read(kryo, input, type);
-        result.objectID = input.readInt(true);
+        result.rmiObjectId = input.readInt(true);
         return result;
     }
 }
