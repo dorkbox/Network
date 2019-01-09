@@ -152,7 +152,10 @@ class ReconnectTest extends BaseTest {
             synchronized (receivedCount) {
                 while (this.receivedCount.get() != target) {
                     if (waitingRetryCount-- < 0) {
-                        System.out.println("Aborting unit test... wrong count!");
+                        System.err.println("Aborting unit test... wrong count!");
+                        if (useUDP) {
+                            System.err.println("NOTE: UDP can fail, even on loopback!");
+                        }
                         stopEndPoints();
                         assertEquals(target, this.receivedCount.get());
                     }
