@@ -1144,8 +1144,21 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
 
         try {
             kryo = manager.takeKryo();
+
+            // because the INTERFACE is what is registered with kryo (not the impl) we have to temporarily permit unregistered classes (which have an ID of -1)
+            // so we can cache the instantiator for this class.
+            boolean registrationRequired = kryo.isRegistrationRequired();
+
+            kryo.setRegistrationRequired(false);
+
             // this is what creates a new instance of the impl class, and stores it as an ID.
             object = kryo.newInstance(implementationClass);
+
+            if (registrationRequired) {
+                // only if it's different should we call this again.
+                kryo.setRegistrationRequired(true);
+            }
+
 
             rmiId = rmiBridge.register(object);
 
