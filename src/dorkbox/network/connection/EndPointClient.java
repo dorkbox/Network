@@ -70,12 +70,22 @@ class EndPointClient extends EndPoint {
 
         // have to BLOCK (must be outside of the synchronize call), we don't want the client to run before registration is complete
         try {
-            if (!registration.await(connectionTimeout, TimeUnit.MILLISECONDS)) {
-                closeConnection();
-                throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds");
+            if (connectionTimeout > 0) {
+                if (!registration.await(connectionTimeout, TimeUnit.MILLISECONDS)) {
+                    closeConnection();
+                    throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds");
+                }
+            }
+            else {
+                registration.await();
             }
         } catch (InterruptedException e) {
-            throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds", e);
+            if (connectionTimeout > 0) {
+                throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds", e);
+            }
+            else {
+                throw new IOException("Unable to complete registration.", e);
+            }
         }
     }
 

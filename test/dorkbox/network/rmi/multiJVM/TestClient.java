@@ -122,8 +122,7 @@ class TestClient
                       }
                   });
 
-            client.connect(0);
-
+            client.connect(3000);
             client.waitForShutdown();
         } catch (Exception e) {
             e.printStackTrace();
