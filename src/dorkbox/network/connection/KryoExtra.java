@@ -22,13 +22,13 @@ import org.bouncycastle.crypto.modes.GCMBlockCipher;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.util.DefaultClassResolver;
 import com.esotericsoftware.kryo.util.DefaultStreamFactory;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
 
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
 import dorkbox.network.serialization.CryptoSerializationManager;
-import dorkbox.network.serialization.EditableDefaultClassResolver;
 import dorkbox.util.bytes.BigEndian;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
@@ -88,7 +88,7 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
 
     public
     KryoExtra(final CryptoSerializationManager serializationManager) {
-        super(new EditableDefaultClassResolver(), new MapReferenceResolver(), new DefaultStreamFactory());
+        super(new DefaultClassResolver(), new MapReferenceResolver(), new DefaultStreamFactory());
 
         this.serializationManager = serializationManager;
     }
