@@ -154,7 +154,14 @@ class ReconnectTest extends BaseTest {
                     if (waitingRetryCount-- < 0) {
                         System.err.println("Aborting unit test... wrong count!");
                         if (useUDP) {
-                            System.err.println("NOTE: UDP can fail, even on loopback!");
+                            // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
+                            // it results in severe UDP packet loss and contention.
+                            //
+                            // http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM
+                            // also, a google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
+                            // Usually it's with ISPs.
+
+                            System.err.println("NOTE: UDP can fail, even on loopback! See: http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM");
                         }
                         stopEndPoints();
                         assertEquals(target, this.receivedCount.get());

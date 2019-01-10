@@ -77,7 +77,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     RegistrationRemoteHandler(final String name, final RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
         super(name, registrationWrapper, workerEventLoop);
 
-        this.serializationManager = registrationWrapper.getSerializtion();
+        this.serializationManager = registrationWrapper.getSerialization();
     }
 
     /**

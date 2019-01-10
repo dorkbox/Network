@@ -80,12 +80,12 @@ class RegistrationWrapper {
     }
 
     public
-    CryptoSerializationManager getSerializtion() {
+    CryptoSerializationManager getSerialization() {
         return endPoint.getSerialization();
     }
 
     /**
-     * The amount of milli-seconds that must elapse with no read or write before {@link Listener:idle()} will be triggered
+     * The amount of milli-seconds that must elapse with no read or write before Listener.OnIdle() will be triggered
      */
     public
     int getIdleTimeout() {
