@@ -310,10 +310,6 @@ class RmiGlobalTest extends BaseTest {
 
                       System.err.println("Finished test for: Server (LOCAL) -> Client (REMOTE)");
 
-                      // connection.send()
-                      //           .TCP(m)
-                      //           .flush();
-
                       // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
                       connection.getRemoteObject(SERVER_GLOBAL_OBJECT_ID, new RemoteObjectCallback<TestCow>() {
                           @Override

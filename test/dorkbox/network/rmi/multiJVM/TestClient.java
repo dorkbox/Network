@@ -50,10 +50,6 @@ class TestClient
         Logger kryoLogger = (Logger) LoggerFactory.getLogger("com.esotericsoftware");
         kryoLogger.setLevel(Level.ERROR);
 
-        // we only want error messages
-        Logger barchartLogger = (Logger) LoggerFactory.getLogger("com.barchart");
-        barchartLogger.setLevel(Level.ERROR);
-
         PatternLayoutEncoder encoder = new PatternLayoutEncoder();
         encoder.setContext(context);
         encoder.setPattern("%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n");

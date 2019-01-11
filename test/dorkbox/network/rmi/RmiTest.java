@@ -221,11 +221,8 @@ class RmiTest extends BaseTest {
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
-        // for Client -> Server RMI (ID 1)
+        // for Client -> Server RMI
         configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
-
-        // for Server -> Client RMI (ID 2)
-        // configuration.serialization.registerRmiInterface(TestCow.class);
 
 
         final Server server = new Server(configuration);
@@ -278,11 +275,9 @@ class RmiTest extends BaseTest {
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
-        // for Client -> Server RMI (ID 1)
-        // the 'TestCow' object lives on the 'Server'. The 'Client' accesses remote methods on it
-        // configuration.serialization.registerRmiInterface(TestCow.class);
+        // configuration.serialization.register(ExtraClassTest1.class);
 
-        // // for Server -> Client RMI (ID 2)
+        // // for Server -> Client RMI
         configuration.serialization.registerRmi(TestCow.class, TestCowImpl.class);
 
 
@@ -337,5 +332,25 @@ class RmiTest extends BaseTest {
         client.connect(5000);
 
         waitForThreads();
+    }
+
+    private static
+    class ExtraClassTest1 {
+        int foo = 0;
+
+        public
+        ExtraClassTest1(final int foo) {
+            this.foo = foo;
+        }
+    }
+
+    private static
+    class ExtraClassTest2 {
+        int foo = 0;
+
+        public
+        ExtraClassTest2(final int foo) {
+            this.foo = foo;
+        }
     }
 }
