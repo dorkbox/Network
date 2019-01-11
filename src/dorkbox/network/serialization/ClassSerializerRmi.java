@@ -30,7 +30,8 @@ class ClassSerializerRmi extends ClassRegistration {
     }
 
     <C extends CryptoConnection> void register(final KryoExtra<C> kryo, final RemoteObjectSerializer remoteObjectSerializer) {
-        id = kryo.register(clazz, remoteObjectSerializer).getId();
+        this.id = kryo.register(clazz, remoteObjectSerializer).getId();
+        this.serializer = remoteObjectSerializer;
     }
 
     void log(final Logger logger) {

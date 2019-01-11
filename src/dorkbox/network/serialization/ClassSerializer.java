@@ -24,8 +24,6 @@ import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.rmi.RemoteObjectSerializer;
 
 class ClassSerializer extends ClassRegistration {
-    final Serializer<?> serializer;
-
     ClassSerializer(final Class<?> clazz, final Serializer<?> serializer) {
         super(clazz);
         this.serializer = serializer;

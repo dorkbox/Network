@@ -480,7 +480,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                 registration.log(logger);
 
                 // now save all of the registration IDs for quick verification/access
-                registrationDetails[i] = new Object[] {registration.id, registration.clazz.getName()};
+                registrationDetails[i] = new Object[] {registration.id, registration.clazz.getName(), registration.serializer.getClass().getName()};
 
 
 
@@ -505,7 +505,11 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
             writer.setBuffer(buffer);
 
             kryo.setRegistrationRequired(false);
-            kryo.writeObject(writer, registrationDetails);
+            try {
+                kryo.writeCompressed(null, buffer, registrationDetails);
+            } catch (Exception e) {
+                logger.error("Unable to write compressed data for registration details");
+            }
 
             savedRegistrationDetails = new byte[buffer.writerIndex()];
             buffer.getBytes(0, savedRegistrationDetails);
@@ -523,6 +527,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     /**
      * @return true if kryo registration is required for all classes sent over the wire
      */
+    @SuppressWarnings("Duplicates")
     @Override
     public
     boolean verifyKryoRegistration(byte[] otherRegistrationData) {
@@ -562,13 +567,15 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                     Object[] classNew = classRegistrations[index];
                     int idNew = (Integer) classNew[0];
                     String nameNew = (String) classNew[1];
+                    String serializerNew = (String) classNew[2];
 
                     int idOrg = classOrg.id;
                     String nameOrg = classOrg.clazz.getName();
+                    String serializerOrg = classOrg.serializer.getClass().getName();
 
-                    if (idNew != idOrg || !nameOrg.equals(nameNew)) {
-                        logger.error("Server registration : {} -> {}", idOrg, nameOrg);
-                        logger.error("Client registration : {} -> {}", idNew, nameNew);
+                    if (idNew != idOrg || !nameOrg.equals(nameNew) || !serializerNew.equalsIgnoreCase(serializerOrg)) {
+                        logger.error("Server registration : {} -> {} ({})", idOrg, nameOrg, serializerOrg);
+                        logger.error("Client registration : {} -> {} ({})", idNew, nameNew, serializerNew);
                     }
                 }
             }
@@ -579,8 +586,9 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                     Object[] holderClass = classRegistrations[index];
                     int id = (Integer) holderClass[0];
                     String name = (String) holderClass[1];
+                    String serializer = (String) holderClass[2];
 
-                    logger.error("Missing server registration : {} -> {}", id, name);
+                    logger.error("Missing server registration : {} -> {} ({})", id, name, serializer);
                 }
             }
         } catch(Exception e) {
