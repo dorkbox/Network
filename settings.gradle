@@ -22,5 +22,3 @@ for (project in rootProject.children) {
     assert (project.projectDir.directory)
     assert (project.buildFile.file)
 }
-
-enableFeaturePreview('STABLE_PUBLISHING')
