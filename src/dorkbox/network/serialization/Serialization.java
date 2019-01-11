@@ -19,7 +19,6 @@ import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
 
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
@@ -78,7 +77,7 @@ import io.netty.buffer.Unpooled;
  * Additionally, this serialization manager will register the entire class+interface hierarchy for an object. If you want to specify a
  * serialization scheme for a specific class in an objects hierarchy, you must register that first.
  */
-@SuppressWarnings({"unused", "StaticNonFinalField"})
+@SuppressWarnings({"StaticNonFinalField"})
 public
 class Serialization<C extends CryptoConnection> implements CryptoSerializationManager<C> {
 
@@ -149,30 +148,6 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         return serialization;
     }
 
-    public static
-    Serializer resolveSerializerInstance(Kryo k, Class superClass, Class<? extends Serializer> serializerClass) {
-        try {
-            try {
-                return serializerClass.getConstructor(Kryo.class, Class.class)
-                                      .newInstance(k, superClass);
-            } catch (NoSuchMethodException ex1) {
-                try {
-                    return serializerClass.getConstructor(Kryo.class)
-                                          .newInstance(k);
-                } catch (NoSuchMethodException ex2) {
-                    try {
-                        return serializerClass.getConstructor(Class.class)
-                                              .newInstance(superClass);
-                    } catch (NoSuchMethodException ex3) {
-                        return serializerClass.newInstance();
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            throw new IllegalArgumentException(
-                    "Unable to create serializer \"" + serializerClass.getName() + "\" for class: " + superClass.getName(), ex);
-        }
-    }
     private boolean initialized = false;
     private final ObjectPool<KryoExtra<C>> kryoPool;
 
@@ -275,32 +250,6 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                 }
             }
         });
-    }
-
-    private static
-    ArrayList<Class<?>> getHierarchy(Class<?> clazz) {
-        final ArrayList<Class<?>> allClasses = new ArrayList<Class<?>>();
-        LinkedList<Class<?>> parseClasses = new LinkedList<Class<?>>();
-        parseClasses.add(clazz);
-
-        Class<?> nextClass;
-        while (!parseClasses.isEmpty()) {
-            nextClass = parseClasses.removeFirst();
-            allClasses.add(nextClass);
-
-            // add all interfaces from our class (if any)
-            parseClasses.addAll(Arrays.asList(nextClass.getInterfaces()));
-
-            Class<?> superclass = nextClass.getSuperclass();
-            if (superclass != null) {
-                parseClasses.add(superclass);
-            }
-        }
-
-        // remove the first class, because we don't need it
-        allClasses.remove(clazz);
-
-        return allClasses;
     }
 
     /**
@@ -500,11 +449,9 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
 
             // now MERGE all of the registrations (since we can have registrations overwrite newer/specific registrations
 
-            int size = classesToRegister.size();
             ArrayList<ClassRegistration> mergedRegistrations = new ArrayList<ClassRegistration>();
 
             for (ClassRegistration registration : classesToRegister) {
-                Class<?> clazz = registration.clazz;
                 int id = registration.id;
 
                 // if we ALREADY contain this registration (based ONLY on ID), then overwrite the existing one and REMOVE the current one
@@ -672,6 +619,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     /**
      * Returns a kryo instance to the pool.
      */
+    @SuppressWarnings("unchecked")
     @Override
     public
     void returnKryo(KryoExtra kryo) {

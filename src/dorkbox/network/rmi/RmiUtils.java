@@ -381,4 +381,55 @@ class RmiUtils {
 
         return methodsArray;
     }
+
+    public static
+    Serializer resolveSerializerInstance(Kryo k, Class superClass, Class<? extends Serializer> serializerClass) {
+        try {
+            try {
+                return serializerClass.getConstructor(Kryo.class, Class.class)
+                                      .newInstance(k, superClass);
+            } catch (NoSuchMethodException ex1) {
+                try {
+                    return serializerClass.getConstructor(Kryo.class)
+                                          .newInstance(k);
+                } catch (NoSuchMethodException ex2) {
+                    try {
+                        return serializerClass.getConstructor(Class.class)
+                                              .newInstance(superClass);
+                    } catch (NoSuchMethodException ex3) {
+                        return serializerClass.newInstance();
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            throw new IllegalArgumentException(
+                    "Unable to create serializer \"" + serializerClass.getName() + "\" for class: " + superClass.getName(), ex);
+        }
+    }
+
+    public static
+    ArrayList<Class<?>> getHierarchy(Class<?> clazz) {
+        final ArrayList<Class<?>> allClasses = new ArrayList<Class<?>>();
+        LinkedList<Class<?>> parseClasses = new LinkedList<Class<?>>();
+        parseClasses.add(clazz);
+
+        Class<?> nextClass;
+        while (!parseClasses.isEmpty()) {
+            nextClass = parseClasses.removeFirst();
+            allClasses.add(nextClass);
+
+            // add all interfaces from our class (if any)
+            parseClasses.addAll(Arrays.asList(nextClass.getInterfaces()));
+
+            Class<?> superclass = nextClass.getSuperclass();
+            if (superclass != null) {
+                parseClasses.add(superclass);
+            }
+        }
+
+        // remove the first class, because we don't need it
+        allClasses.remove(clazz);
+
+        return allClasses;
+    }
 }
