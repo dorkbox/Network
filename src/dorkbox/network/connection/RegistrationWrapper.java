@@ -207,10 +207,13 @@ class RegistrationWrapper {
     }
 
     public
-    void abortRegistrationIfClient() {
-        if (this.endPoint instanceof EndPointClient) {
-            ((EndPointClient) this.endPoint).abortRegistration();
-        }
+    boolean verifyKryoRegistration(byte[] bytes) {
+        return this.endPoint.getSerialization().verifyKryoRegistration(bytes);
+    }
+
+    public
+    byte[] getKryoRegistrationDetails() {
+        return this.endPoint.getSerialization().getKryoRegistrationDetails();
     }
 
     public
@@ -341,4 +344,6 @@ class RegistrationWrapper {
             channel.close();
         }
     }
+
+
 }

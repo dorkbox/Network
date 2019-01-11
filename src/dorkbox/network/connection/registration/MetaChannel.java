@@ -48,10 +48,13 @@ class MetaChannel {
     public volatile byte[] aesKey;
     public volatile byte[] aesIV;
 
-
     // indicates if the remote ECC key has changed for an IP address. If the client detects this, it will not connect.
     // If the server detects this, it has the option for additional security (two-factor auth, perhaps?)
     public volatile boolean changedRemoteKey = false;
+
+    public volatile byte remainingFragments;
+    public volatile byte[] fragmentedRegistrationDetails;
+
 
     public
     MetaChannel(final int sessionId) {

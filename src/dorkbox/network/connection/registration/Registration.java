@@ -36,6 +36,7 @@ class Registration {
     public boolean hasMore;
 
     // true when we are ready to setup the connection (hasMore will always be false if this is true). False when we are ready to connect
+    // ALSO used if there are fragmented frames for registration data (since we have to split it up to fit inside a single UDP packet without fragmentation)
     public boolean upgrade;
 
     // true when we are fully upgraded

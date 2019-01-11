@@ -175,11 +175,11 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
             return;
         }
 
-        // ALWAYS upgrade the connection at this point.
-        // IN: upgraded=false if we haven't upgraded to encryption yet (this will always be the case right after encryption is setup)
-
         // NOTE: if we have more registrations, we will "bounce back" that status so the client knows what to do.
         // IN: hasMore=true if we have more registrations to do, false otherwise
+
+        // ALWAYS upgrade the connection at this point.
+        // IN: upgraded=false if we haven't upgraded to encryption yet (this will always be the case right after encryption is setup)
 
         if (!registration.upgraded) {
             // upgrade the connection to an encrypted connection
@@ -201,6 +201,50 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
 
             channel.flush();
             return;
+        }
+
+        // the client will send their class registration data
+        if (registration.upgrade) {
+            byte[] fragment = registration.payload;
+
+            // this means that the registrations are FRAGMENTED!
+            // max size of ALL fragments is 480 * 127
+            if (metaChannel.fragmentedRegistrationDetails == null) {
+                metaChannel.remainingFragments = fragment[1];
+                metaChannel.fragmentedRegistrationDetails = new byte[480 * fragment[1]];
+            }
+
+            System.arraycopy(fragment, 2, metaChannel.fragmentedRegistrationDetails, fragment[0] * 480, fragment.length - 2);
+            metaChannel.remainingFragments--;
+
+
+            if (fragment[0] + 1 == fragment[1]) {
+                // this is the last fragment in the in byte array (but NOT necessarily the last fragment to arrive)
+                int correctSize = (480 * (fragment[1] - 1)) + (fragment.length - 2);
+                byte[] correctlySized = new byte[correctSize];
+                System.arraycopy(metaChannel.fragmentedRegistrationDetails, 0, correctlySized, 0, correctSize);
+                metaChannel.fragmentedRegistrationDetails = correctlySized;
+            }
+
+            if (metaChannel.remainingFragments == 0) {
+                // there are no more fragments available
+                byte[] details = metaChannel.fragmentedRegistrationDetails;
+                metaChannel.fragmentedRegistrationDetails = null;
+
+                if (!registrationWrapper.verifyKryoRegistration(details)) {
+                    shutdown(channel, registration.sessionID);
+                    return;
+                }
+            } else {
+                // wait for more fragments
+                return;
+            }
+        }
+        else {
+            if (!registrationWrapper.verifyKryoRegistration(registration.payload)) {
+                shutdown(channel, registration.sessionID);
+                return;
+            }
         }
 
 

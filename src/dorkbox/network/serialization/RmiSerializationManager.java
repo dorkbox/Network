@@ -96,6 +96,17 @@ interface RmiSerializationManager extends SerializationManager {
     void returnKryo(KryoExtra kryo);
 
     /**
+     * @return true if the remote kryo registration are the same as our own
+     */
+    boolean verifyKryoRegistration(byte[] bytes);
+
+    /**
+     * @return the details of all registration IDs -> Class name used by kryo
+     */
+    byte[] getKryoRegistrationDetails();
+
+
+    /**
      * Gets the RMI implementation based on the specified interface
      *
      * @return the corresponding implementation
