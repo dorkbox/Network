@@ -16,9 +16,9 @@
 include("Utilities")
 
 for (project in rootProject.children) {
-    project.projectDir = file("../$project.name")
+    project.projectDir = file("../${project.name}")
     project.buildFileName = "utilities.gradle"
 
-    assert (project.projectDir.directory)
-    assert (project.buildFile.file)
+    assert (project.projectDir.isDirectory)
+    assert (project.buildFile.isFile)
 }
