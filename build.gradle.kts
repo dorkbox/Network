@@ -22,6 +22,10 @@ import kotlin.reflect.full.declaredMemberProperties
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
 import org.jetbrains.kotlin.backend.common.onlyIf
+import java.io.*
+import java.net.*
+import java.nio.charset.StandardCharsets.UTF_8
+import kotlin.reflect.KMutableProperty
 
 plugins {
     java
@@ -42,20 +46,7 @@ plugins {
 }
 
 
-println("Gradle ${project.gradle.gradleVersion}")
-
-
-// load properties from custom location
-val propsFile = File("$projectDir/../../gradle.properties").normalize()
-if (propsFile.canRead()) {
-    println("Loading custom property data from: [$propsFile]")
-
-    val props = Properties()
-    props.load(propsFile.inputStream())
-    props.forEach { (k, v) -> project.extra.set(k as String, v as String) }
-}
-
-
+println("\tGradle ${project.gradle.gradleVersion}")
 
 object Extras {
     // set for the project
@@ -72,10 +63,12 @@ object Extras {
 
     val JAVA_VERSION = JavaVersion.VERSION_1_6.toString()
 
-    val bcVersion = "1.60"
+    const val bcVersion = "1.60"
 
-    var sonatypeUsername = ""
+    var sonatypeUserName = ""
     var sonatypePassword = ""
+    var giteaUserName = ""
+    var giteaToken = ""
 }
 
 ///////////////////////////////
@@ -85,19 +78,29 @@ description = Extras.description
 group = Extras.group
 version = Extras.version
 
-Extras::class.declaredMemberProperties.forEach {
-    if (!project.hasProperty(it.name)) {
-        when {
-            it.isConst -> project.extra.set(it.name, it.getter.call())
-            else       -> project.extra.set(it.name, it.getter.call(Extras::class.objectInstance))
+
+// load properties from custom location
+val propsFile = File("$projectDir/../../gradle.properties").normalize()
+if (propsFile.canRead()) {
+    println("\tLoading custom property data from: [$propsFile]")
+
+    val props = Properties()
+    props.load(propsFile.inputStream())
+
+    val extraProperties = Extras::class.declaredMemberProperties.filterIsInstance<KMutableProperty<String>>()
+    props.forEach { (k, v) -> run {
+        val key = k as String
+        val value = v as String
+
+        val member = extraProperties.find { it.name == key }
+        if (member != null) {
+            member.setter.call(Extras::class.objectInstance, value)
         }
-    }
+        else {
+            project.extra.set(k, v)
+        }
+    } }
 }
-
-// assign sonatype info if present
-Extras.sonatypeUsername = project.extra["sonatypeUsername"] as String
-Extras.sonatypePassword = project.extra["sonatypePassword"] as String
-
 
 licensing {
     license(License.APACHE_2) {
@@ -393,11 +396,11 @@ task<JavaCompile>("compileUtilsJava8") {
     classpath = sourceSets["main"].compileClasspath
     destinationDir = file("$rootDir/build/classes_utilities")
 
-    println("Compiling $includes to Java $sourceCompatibility")
+    println("\tCompiling $includes to Java $sourceCompatibility")
 }
 
 tasks.compileJava.get().apply {
-    println("Compiling classes to Java $sourceCompatibility")
+    println("\tCompiling classes to Java $sourceCompatibility")
 }
 
 
@@ -517,7 +520,7 @@ publishing {
         maven {
             setUrl("https://oss.sonatype.org/service/local/staging/deploy/maven2")
             credentials {
-                username = Extras.sonatypeUsername
+                username = Extras.sonatypeUserName
                 password = Extras.sonatypePassword
             }
         }
@@ -548,7 +551,7 @@ publishing {
 }
 
 nexusStaging {
-    username = Extras.sonatypeUsername
+    username = Extras.sonatypeUserName
     password = Extras.sonatypePassword
 }
 
