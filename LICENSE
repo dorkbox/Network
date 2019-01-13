@@ -1,7 +1,7 @@
  - Network - 
    https://git.dorkbox.com/dorkbox/Network
-   Copyright 2018 - The Apache Software License, Version 2.0
-     dorkbox, llc
+   Copyright 2019 - The Apache Software License, Version 2.0
+     Dorkbox LLC
    Encrypted, high-performance, and event-driven/reactive network stack for Java 6+
 
 
@@ -20,8 +20,8 @@
 
  - Dorkbox Utils - 
    https://git.dorkbox.com/dorkbox/Utilities
-   Copyright 2018 - The Apache Software License, Version 2.0
-     dorkbox, llc
+   Copyright 2019 - The Apache Software License, Version 2.0
+     Dorkbox LLC
 
 
  - FastThreadLocal - 
@@ -91,7 +91,7 @@
 
  - ObjectPool - 
    https://git.dorkbox.com/dorkbox/ObjectPool
-   Copyright 2018 - The Apache Software License, Version 2.0
+   Copyright 2019 - The Apache Software License, Version 2.0
      dorkbox, llc
 
 
@@ -112,9 +112,3 @@
    Copyright 2017 - The Apache Software License, Version 2.0
      Jonathan Halterman
    Tools for resolving generic types
-
-
- - XBill DNS - 
-   http://www.xbill.org/dnsjava
-   Copyright 2005 - BSD 3-Clause License
-     Brian Wellington
