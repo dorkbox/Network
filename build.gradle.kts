@@ -80,7 +80,9 @@ if (propsFile.canRead()) {
     println("\tLoading custom property data from: [$propsFile]")
 
     val props = Properties()
-    props.load(propsFile.inputStream())
+    propsFile.inputStream().use {
+        props.load(it)
+    }
 
     val extraProperties = Extras::class.declaredMemberProperties.filterIsInstance<KMutableProperty<String>>()
     props.forEach { (k, v) -> run {
