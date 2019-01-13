@@ -69,14 +69,12 @@ object Extras {
 }
 
 ///////////////////////////////
-/////  assign 'Extras' to project or project.ext
+/////  assign 'Extras'
 ///////////////////////////////
 description = Extras.description
 group = Extras.group
 version = Extras.version
 
-
-// load properties from custom location
 val propsFile = File("$projectDir/../../gradle.properties").normalize()
 if (propsFile.canRead()) {
     println("\tLoading custom property data from: [$propsFile]")
@@ -96,7 +94,7 @@ if (propsFile.canRead()) {
         else {
             project.extra.set(k, v)
         }
-    } }
+    }}
 }
 
 licensing {
