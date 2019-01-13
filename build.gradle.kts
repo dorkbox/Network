@@ -27,6 +27,8 @@ import java.net.*
 import java.nio.charset.StandardCharsets.UTF_8
 import kotlin.reflect.KMutableProperty
 
+println("\tGradle ${project.gradle.gradleVersion}")
+
 plugins {
     java
     signing
@@ -44,9 +46,6 @@ plugins {
 
     kotlin("jvm") version "1.3.11"
 }
-
-
-println("\tGradle ${project.gradle.gradleVersion}")
 
 object Extras {
     // set for the project
