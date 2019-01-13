@@ -67,8 +67,6 @@ object Extras {
 
     var sonatypeUserName = ""
     var sonatypePassword = ""
-    var giteaUserName = ""
-    var giteaToken = ""
 }
 
 ///////////////////////////////
