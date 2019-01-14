@@ -21,6 +21,9 @@ import java.util.Properties
 import kotlin.reflect.full.declaredMemberProperties
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
+import org.gradle.plugins.ide.idea.model.*
+import org.gradle.plugins.ide.idea.model.Dependency
+import org.gradle.plugins.ide.idea.model.ModuleDependency
 import org.jetbrains.kotlin.backend.common.onlyIf
 import java.io.*
 import java.net.*
@@ -239,46 +242,6 @@ repositories {
     jcenter()
 }
 
-dependencies {
-    implementation(project("Utilities")) {
-        // don't include any of the project dependencies for anything
-        isTransitive = false
-    }
-
-    // our main dependencies are ALSO the same as the limited utilities (they are not automatically pulled in from other sourceSets)
-    // needed by the utilities (custom since we don't want to include everything). IntelliJ includes everything, but our builds do not
-
-    api("io.netty:netty-all:4.1.32.Final")
-    api("com.esotericsoftware:kryo:4.0.2")
-    api("net.jpountz.lz4:lz4:1.3.0")
-
-    api("org.bouncycastle:bcprov-jdk15on:$bcVersion")
-    api("org.bouncycastle:bcpg-jdk15on:$bcVersion")
-    api("org.bouncycastle:bcmail-jdk15on:$bcVersion")
-    api("org.bouncycastle:bctls-jdk15on:$bcVersion")
-
-
-    api("com.dorkbox:ObjectPool:2.11")
-
-    implementation ("org.slf4j:slf4j-api:1.7.25")
-
-    testCompile("junit:junit:4.12")
-    testCompile("ch.qos.logback:logback-classic:1.2.3")
-}
-
-project("Utilities") {
-    tasks.withType<Test> {
-        // want to remove utilities project from unit tests. It's unnecessary to run unit tests for the entire Utilities project
-        exclude("**/*")
-    }
-
-    tasks.withType<JavaCompile> {
-        options.encoding = "UTF-8"
-        options.isIncremental = true
-    }
-}
-
-
 ///////////////////////////////
 //////    Task defaults
 ///////////////////////////////
@@ -293,10 +256,17 @@ tasks.withType<Jar> {
     duplicatesStrategy = DuplicatesStrategy.FAIL
 }
 
+tasks.compileJava.get().apply {
+    println("\tCompiling classes to Java $sourceCompatibility")
+}
 
 ///////////////////////////////
 //////    UTILITIES COMPILE (for inclusion into jars)
 ///////////////////////////////
+
+// as long as the 'Utilities' project is ALSO imported into IntelliJ, class resolution will work
+val utils : Configuration by configurations.creating
+
 fun javaFile(vararg fileNames: String): Iterable<String> {
     val fileList = ArrayList<String>()
 
@@ -307,7 +277,29 @@ fun javaFile(vararg fileNames: String): Iterable<String> {
     return fileList
 }
 
+task<JavaCompile>("compileUtilsJava8") {
+    // we don't want the default include of **/*.java
+    includes.clear()
+
+    source = fileTree("../Utilities/src")
+
+    // this class must be compiled java 8+
+    include(javaFile("dorkbox.util.generics.DefaultMethodHelper"))
+
+    sourceCompatibility = JavaVersion.VERSION_1_8.toString()
+    targetCompatibility = JavaVersion.VERSION_1_8.toString()
+
+
+    classpath = files()
+    destinationDir = file("$rootDir/build/classes_utilities")
+
+    println("\tCompiling $includes to Java $sourceCompatibility")
+}
+
 task<JavaCompile>("compileUtils") {
+    val utilsJava8 = tasks["compileUtilsJava8"]
+    dependsOn(utilsJava8)
+
     // we don't want the default include of **/*.java
     includes.clear()
 
@@ -370,35 +362,36 @@ task<JavaCompile>("compileUtils") {
     include("dorkbox/util/entropy/**/*.java")
     include("dorkbox/util/storage/**/*.java")
 
-
-    classpath = sourceSets["main"].compileClasspath
+    classpath = files(utils, utilsJava8.outputs)
     destinationDir = file("$rootDir/build/classes_utilities")
 }
 
-/////////////////////////////////
-////////    Compile some of the files to java 8
-/////////////////////////////////
-task<JavaCompile>("compileUtilsJava8") {
-    // we don't want the default include of **/*.java
-    includes.clear()
 
-    source = fileTree("../Utilities/src")
+dependencies {
+    val netty = api("io.netty:netty-all:4.1.32.Final")
+    val kryo = api("com.esotericsoftware:kryo:4.0.2")
+    api("net.jpountz.lz4:lz4:1.3.0")
 
-    // this class must be compiled java 8+
-    include(javaFile("dorkbox.util.generics.DefaultMethodHelper"))
+    val bcProv = api("org.bouncycastle:bcprov-jdk15on:$bcVersion")
+    api("org.bouncycastle:bcpg-jdk15on:$bcVersion")
+    api("org.bouncycastle:bcmail-jdk15on:$bcVersion")
+    api("org.bouncycastle:bctls-jdk15on:$bcVersion")
 
-    sourceCompatibility = JavaVersion.VERSION_1_8.toString()
-    targetCompatibility = JavaVersion.VERSION_1_8.toString()
 
-    classpath = sourceSets["main"].compileClasspath
-    destinationDir = file("$rootDir/build/classes_utilities")
+    api("com.dorkbox:ObjectPool:2.11")
 
-    println("\tCompiling $includes to Java $sourceCompatibility")
+    val slf4j = implementation ("org.slf4j:slf4j-api:1.7.25")
+
+    testCompile("junit:junit:4.12")
+    testCompile("ch.qos.logback:logback-classic:1.2.3")
+
+    // add compile utils to dependencies
+    implementation(files((tasks["compileUtils"] as JavaCompile).outputs) {
+        builtBy(tasks["compileUtils"])
+    })
+    utils.dependencies += listOf(netty, kryo, slf4j, bcProv)
 }
 
-tasks.compileJava.get().apply {
-    println("\tCompiling classes to Java $sourceCompatibility")
-}
 
 
 ///////////////////////////////
@@ -408,7 +401,7 @@ tasks.jar.get().apply {
     dependsOn("compileUtils", "compileUtilsJava8")
 
     // include applicable class files from subset of Utilities project
-    from((tasks["compileUtils"] as JavaCompile).destinationDir)
+    from((tasks["compileUtils"] as JavaCompile).outputs)
 
     manifest {
         // https://docs.oracle.com/javase/tutorial/deployment/jar/packageman.html
