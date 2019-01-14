@@ -261,14 +261,14 @@ tasks.compileJava.get().apply {
 }
 
 ///////////////////////////////
-//////    UTILITIES COMPILE (for inclusion into jars)
+//////    UTILITIES COMPILE
 ///////////////////////////////
 
 // as long as the 'Utilities' project is ALSO imported into IntelliJ, class resolution will work
 val utils : Configuration by configurations.creating
 
 fun javaFile(vararg fileNames: String): Iterable<String> {
-    val fileList = ArrayList<String>()
+    val fileList = ArrayList<String>(fileNames.size)
 
     fileNames.forEach { name ->
         fileList.add(name.replace('.', '/') + ".java")
@@ -372,7 +372,7 @@ dependencies {
     val kryo = api("com.esotericsoftware:kryo:4.0.2")
     api("net.jpountz.lz4:lz4:1.3.0")
 
-    val bcProv = api("org.bouncycastle:bcprov-jdk15on:$bcVersion")
+    val bc = api("org.bouncycastle:bcprov-jdk15on:$bcVersion")
     api("org.bouncycastle:bcpg-jdk15on:$bcVersion")
     api("org.bouncycastle:bcmail-jdk15on:$bcVersion")
     api("org.bouncycastle:bctls-jdk15on:$bcVersion")
@@ -386,10 +386,8 @@ dependencies {
     testCompile("ch.qos.logback:logback-classic:1.2.3")
 
     // add compile utils to dependencies
-    implementation(files((tasks["compileUtils"] as JavaCompile).outputs) {
-        builtBy(tasks["compileUtils"])
-    })
-    utils.dependencies += listOf(netty, kryo, slf4j, bcProv)
+    implementation(files((tasks["compileUtils"] as JavaCompile).outputs))
+    utils.dependencies += listOf(netty, kryo, slf4j, bc)
 }
 
 
@@ -398,8 +396,6 @@ dependencies {
 //////    Jar Tasks
 ///////////////////////////////
 tasks.jar.get().apply {
-    dependsOn("compileUtils", "compileUtilsJava8")
-
     // include applicable class files from subset of Utilities project
     from((tasks["compileUtils"] as JavaCompile).outputs)
 
@@ -436,26 +432,6 @@ val javaDocJar = task<Jar>("javaDocJar") {
 
 
 ///////////////////////////////
-// functions to make changing the maven POM easier
-@Suppress("UNCHECKED_CAST")
-fun org.gradle.api.publish.maven.MavenPom.removeDependenciesByArtifactId(vararg names: String) {
-    withXml {
-        (asNode().get("dependencies") as List<groovy.util.Node>).forEach {deps ->
-            (deps.children() as List<groovy.util.Node>).filter { it ->
-                val text = (it.get("artifactId") as List<groovy.util.Node>).firstOrNull()?.text()
-                if (text == null) {
-                    false
-                } else {
-                names.contains(text)
-                }
-            }.forEach { node->
-                node.parent().remove(node)
-            }
-        }
-    }
-}
-
-///////////////////////////////
 //////    PUBLISH TO SONATYPE / MAVEN CENTRAL
 //////
 ////// TESTING : local maven repo <PUBLISHING - publishToMavenLocal>
@@ -478,8 +454,6 @@ publishing {
                 name.set(Extras.name)
                 description.set(Extras.description)
                 url.set(Extras.url)
-
-                removeDependenciesByArtifactId("Utilities")
 
                 issueManagement {
                     url.set("${Extras.url}/issues")
