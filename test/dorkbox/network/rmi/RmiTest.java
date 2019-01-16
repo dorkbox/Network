@@ -275,6 +275,7 @@ class RmiTest extends BaseTest {
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
 
+        // this is for testing the "screwed up registrations logic". It should screwup for both network AND local-JVM connections
         // configuration.serialization.register(ExtraClassTest1.class);
 
         // // for Server -> Client RMI
