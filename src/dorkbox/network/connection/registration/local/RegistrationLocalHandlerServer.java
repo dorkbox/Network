@@ -17,7 +17,9 @@ package dorkbox.network.connection.registration.local;
 
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.RegistrationWrapper;
+import dorkbox.network.connection.RegistrationWrapper.STATE;
 import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.network.connection.registration.Registration;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -25,6 +27,7 @@ import io.netty.util.ReferenceCountUtil;
 
 public
 class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
+
 
     public
     RegistrationLocalHandlerServer(String name, RegistrationWrapper registrationWrapper) {
@@ -53,25 +56,59 @@ class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
         Channel channel = context.channel();
         ChannelPipeline pipeline = channel.pipeline();
 
+        if (!(message instanceof Registration)) {
+            logger.error("Expected registration message was [{}] instead!", message.getClass());
+            shutdown(channel, 0);
+            ReferenceCountUtil.release(message);
+            return;
+        }
+
+        MetaChannel metaChannel = channel.attr(META_CHANNEL).get();
+
+
+        if (metaChannel == null) {
+            logger.error("Server MetaChannel was null. It shouldn't be.");
+            shutdown(channel, 0);
+            ReferenceCountUtil.release(message);
+            return;
+        }
+
+        Registration registration = (Registration) message;
+
+        // verify the class ID registration details.
+        // the client will send their class registration data. VERIFY IT IS CORRECT!
+        STATE state = registrationWrapper.verifyClassRegistration(metaChannel, registration);
+        if (state == STATE.ERROR) {
+            // abort! There was an error
+            shutdown(channel, 0);
+            return;
+        }
+        else if (state == STATE.WAIT) {
+            return;
+        }
+        // else, continue.
+
+
+
         // have to remove the pipeline FIRST, since if we don't, and we expect to receive a message --- when we REMOVE "this" from the pipeline,
         // we will ALSO REMOVE all it's messages, which we want to receive!
         pipeline.remove(this);
 
-        channel.writeAndFlush(message);
+        registration.payload = null;
 
-        ReferenceCountUtil.release(message);
+        // we no longer need the meta channel, so remove it
+        channel.attr(META_CHANNEL).set(null);
+        channel.writeAndFlush(registration);
+
+        ReferenceCountUtil.release(registration);
         logger.trace("Sent registration");
 
-        MetaChannel metaChannel = channel.attr(META_CHANNEL)
-                                         .getAndSet(null);
-        if (metaChannel != null) {
-            ConnectionImpl connection = registrationWrapper.connection0(metaChannel, null);
+        ConnectionImpl connection = registrationWrapper.connection0(metaChannel, null);
 
-            if (connection != null) {
-                // have to setup connection handler
-                pipeline.addLast(CONNECTION_HANDLER, connection);
-                registrationWrapper.connectionConnected0(connection);
-            }
+        if (connection != null) {
+            // have to setup connection handler
+            pipeline.addLast(CONNECTION_HANDLER, connection);
+            registrationWrapper.connectionConnected0(connection);
         }
     }
 }

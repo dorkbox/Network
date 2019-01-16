@@ -26,6 +26,7 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
 
 import dorkbox.network.connection.registration.MetaChannel;
+import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.pipeline.tcp.KryoEncoder;
 import dorkbox.network.pipeline.tcp.KryoEncoderCrypto;
 import dorkbox.network.pipeline.udp.KryoDecoderUdp;
@@ -47,6 +48,9 @@ import io.netty.channel.Channel;
  */
 public
 class RegistrationWrapper {
+    public
+    enum STATE { ERROR, WAIT, CONTINUE }
+
     private final org.slf4j.Logger logger;
 
     public final KryoEncoder kryoTcpEncoder;
@@ -206,24 +210,11 @@ class RegistrationWrapper {
         }
     }
 
-    public
-    boolean verifyKryoRegistration(byte[] bytes) {
-        return this.endPoint.getSerialization().verifyKryoRegistration(bytes);
-    }
-
-    public
-    byte[] getKryoRegistrationDetails() {
-        return this.endPoint.getSerialization().getKryoRegistrationDetails();
-    }
 
     public
     boolean isClient() {
         return (this.endPoint instanceof EndPointClient);
     }
-
-
-
-
 
 
 
@@ -346,4 +337,140 @@ class RegistrationWrapper {
     }
 
 
+    public
+    boolean initClassRegistration(final Channel channel, final Registration registration) {
+        byte[] details = this.endPoint.getSerialization().getKryoRegistrationDetails();
+
+        int length = details.length;
+        if (length > 480) {
+            // it is too large to send in a single packet
+
+            // child arrays have index 0 also as their 'index' and 1 is the total number of fragments
+            byte[][] fragments = divideArray(details, 480);
+            if (fragments == null) {
+                logger.error("Too many classes have been registered for Serialization. Please report this issue");
+
+                return false;
+            }
+
+            int allButLast = fragments.length - 1;
+
+            for (int i = 0; i < allButLast; i++) {
+                final byte[] fragment = fragments[i];
+                Registration fragmentedRegistration = new Registration(registration.sessionID);
+                fragmentedRegistration.payload = fragment;
+
+                // tell the server we are fragmented
+                fragmentedRegistration.upgrade = true;
+
+                // tell the server we are upgraded (it will bounce back telling us to connect)
+                fragmentedRegistration.upgraded = true;
+                channel.writeAndFlush(fragmentedRegistration);
+            }
+
+            // now tell the server we are done with the fragments
+            Registration fragmentedRegistration = new Registration(registration.sessionID);
+            fragmentedRegistration.payload = fragments[allButLast];
+
+            // tell the server we are fragmented
+            fragmentedRegistration.upgrade = true;
+
+            // tell the server we are upgraded (it will bounce back telling us to connect)
+            fragmentedRegistration.upgraded = true;
+            channel.writeAndFlush(fragmentedRegistration);
+        } else {
+            registration.payload = details;
+
+            // tell the server we are upgraded (it will bounce back telling us to connect)
+            registration.upgraded = true;
+            channel.writeAndFlush(registration);
+        }
+
+        return true;
+    }
+
+    public
+    STATE verifyClassRegistration(final MetaChannel metaChannel, final Registration registration) {
+        if (registration.upgrade) {
+            byte[] fragment = registration.payload;
+
+            // this means that the registrations are FRAGMENTED!
+            // max size of ALL fragments is 480 * 127
+            if (metaChannel.fragmentedRegistrationDetails == null) {
+                metaChannel.remainingFragments = fragment[1];
+                metaChannel.fragmentedRegistrationDetails = new byte[480 * fragment[1]];
+            }
+
+            System.arraycopy(fragment, 2, metaChannel.fragmentedRegistrationDetails, fragment[0] * 480, fragment.length - 2);
+            metaChannel.remainingFragments--;
+
+
+            if (fragment[0] + 1 == fragment[1]) {
+                // this is the last fragment in the in byte array (but NOT necessarily the last fragment to arrive)
+                int correctSize = (480 * (fragment[1] - 1)) + (fragment.length - 2);
+                byte[] correctlySized = new byte[correctSize];
+                System.arraycopy(metaChannel.fragmentedRegistrationDetails, 0, correctlySized, 0, correctSize);
+                metaChannel.fragmentedRegistrationDetails = correctlySized;
+            }
+
+            if (metaChannel.remainingFragments == 0) {
+                // there are no more fragments available
+                byte[] details = metaChannel.fragmentedRegistrationDetails;
+                metaChannel.fragmentedRegistrationDetails = null;
+
+                if (!this.endPoint.getSerialization().verifyKryoRegistration(details)) {
+                    // error
+                    return STATE.ERROR;
+                }
+            } else {
+                // wait for more fragments
+                return STATE.WAIT;
+            }
+        }
+        else {
+            if (!this.endPoint.getSerialization().verifyKryoRegistration(registration.payload)) {
+                return STATE.ERROR;
+            }
+        }
+
+        return STATE.CONTINUE;
+    }
+
+    /**
+     * Split array into chunks, max of 256 chunks.
+     * byte[0] = chunk ID
+     * byte[1] = total chunks (0-255) (where 0->1, 2->3, 127->127 because this is indexed by a byte)
+     */
+    private static
+    byte[][] divideArray(byte[] source, int chunksize) {
+
+        int fragments = (int) Math.ceil(source.length / ((double) chunksize + 2));
+        if (fragments > 127) {
+            // cannot allow more than 127
+            return null;
+        }
+
+        // pre-allocate the memory
+        byte[][] splitArray = new byte[fragments][chunksize + 2];
+        int start = 0;
+
+        for (int i = 0; i < splitArray.length; i++) {
+            int length;
+
+            if (start + chunksize > source.length) {
+                length = source.length - start;
+            }
+            else {
+                length = chunksize;
+            }
+            splitArray[i] = new byte[length+2];
+            splitArray[i][0] = (byte) i;
+            splitArray[i][1] = (byte) fragments;
+            System.arraycopy(source, start, splitArray[i], 2, length);
+
+            start += chunksize;
+        }
+
+        return splitArray;
+    }
 }

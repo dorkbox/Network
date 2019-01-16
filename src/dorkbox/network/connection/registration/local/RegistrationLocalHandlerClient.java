@@ -47,12 +47,22 @@ class RegistrationLocalHandlerClient extends RegistrationLocalHandler {
                     channel.remoteAddress());
 
         // client starts the registration process
-        channel.writeAndFlush(new Registration(0));
+        Registration registration = new Registration(0);
+
+        // ALSO make sure to verify registration details
+
+        // we don't verify anything on the CLIENT. We only verify on the server.
+        // we don't support registering NEW classes after the client starts.
+        if (!registrationWrapper.initClassRegistration(channel, registration)) {
+            // abort if something messed up!
+            shutdown(channel, registration.sessionID);
+        }
     }
 
     @Override
     public
     void channelRead(ChannelHandlerContext context, Object message) throws Exception {
+        // the "server" bounces back the registration message when it's valid.
         ReferenceCountUtil.release(message);
 
         Channel channel = context.channel();

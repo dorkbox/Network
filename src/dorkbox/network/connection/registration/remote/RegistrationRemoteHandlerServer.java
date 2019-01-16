@@ -34,6 +34,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
 import dorkbox.network.connection.RegistrationWrapper;
+import dorkbox.network.connection.RegistrationWrapper.STATE;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.util.crypto.CryptoECC;
@@ -203,49 +204,18 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
             return;
         }
 
-        // the client will send their class registration data
-        if (registration.upgrade) {
-            byte[] fragment = registration.payload;
-
-            // this means that the registrations are FRAGMENTED!
-            // max size of ALL fragments is 480 * 127
-            if (metaChannel.fragmentedRegistrationDetails == null) {
-                metaChannel.remainingFragments = fragment[1];
-                metaChannel.fragmentedRegistrationDetails = new byte[480 * fragment[1]];
-            }
-
-            System.arraycopy(fragment, 2, metaChannel.fragmentedRegistrationDetails, fragment[0] * 480, fragment.length - 2);
-            metaChannel.remainingFragments--;
-
-
-            if (fragment[0] + 1 == fragment[1]) {
-                // this is the last fragment in the in byte array (but NOT necessarily the last fragment to arrive)
-                int correctSize = (480 * (fragment[1] - 1)) + (fragment.length - 2);
-                byte[] correctlySized = new byte[correctSize];
-                System.arraycopy(metaChannel.fragmentedRegistrationDetails, 0, correctlySized, 0, correctSize);
-                metaChannel.fragmentedRegistrationDetails = correctlySized;
-            }
-
-            if (metaChannel.remainingFragments == 0) {
-                // there are no more fragments available
-                byte[] details = metaChannel.fragmentedRegistrationDetails;
-                metaChannel.fragmentedRegistrationDetails = null;
-
-                if (!registrationWrapper.verifyKryoRegistration(details)) {
-                    shutdown(channel, registration.sessionID);
-                    return;
-                }
-            } else {
-                // wait for more fragments
-                return;
-            }
+        // the client will send their class registration data. VERIFY IT IS CORRECT!
+        STATE state = registrationWrapper.verifyClassRegistration(metaChannel, registration);
+        if (state == STATE.ERROR) {
+            // abort! There was an error
+            shutdown(channel, registration.sessionID);
+            return;
         }
-        else {
-            if (!registrationWrapper.verifyKryoRegistration(registration.payload)) {
-                shutdown(channel, registration.sessionID);
-                return;
-            }
+        else if (state == STATE.WAIT) {
+            return;
         }
+        // else, continue.
+
 
 
         //

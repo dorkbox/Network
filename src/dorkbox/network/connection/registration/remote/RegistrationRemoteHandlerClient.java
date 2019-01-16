@@ -213,52 +213,9 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
             // we don't verify anything on the CLIENT. We only verify on the server.
             // we don't support registering NEW classes after the client starts.
-            byte[] details = registrationWrapper.getKryoRegistrationDetails();
-
-            int length = details.length;
-            if (length > 480) {
-                // it is too large to send in a single packet
-
-                // child arrays have index 0 also as their 'index' and 1 is the total number of fragments
-                byte[][] fragments = divideArray(details, 480);
-                if (fragments == null) {
-                    logger.error("Too many classes have been registered for Serialization. Please report this issue");
-                    // abort if something messed up!
-                    shutdown(channel, registration.sessionID);
-                    return;
-                }
-
-                int allButLast = fragments.length - 1;
-
-                for (int i = 0; i < allButLast; i++) {
-                    final byte[] fragment = fragments[i];
-                    Registration fragmentedRegistration = new Registration(registration.sessionID);
-                    fragmentedRegistration.payload = fragment;
-
-                    // tell the server we are fragmented
-                    fragmentedRegistration.upgrade = true;
-
-                    // tell the server we are upgraded (it will bounce back telling us to connect)
-                    fragmentedRegistration.upgraded = true;
-                    channel.write(fragmentedRegistration);
-                }
-
-                // now tell the server we are done with the fragments
-                Registration fragmentedRegistration = new Registration(registration.sessionID);
-                fragmentedRegistration.payload = fragments[allButLast];
-
-                // tell the server we are fragmented
-                fragmentedRegistration.upgrade = true;
-
-                // tell the server we are upgraded (it will bounce back telling us to connect)
-                fragmentedRegistration.upgraded = true;
-                channel.writeAndFlush(fragmentedRegistration);
-            } else {
-                registration.payload = details;
-
-                // tell the server we are upgraded (it will bounce back telling us to connect)
-                registration.upgraded = true;
-                channel.writeAndFlush(registration);
+            if (!registrationWrapper.initClassRegistration(channel, registration)) {
+                // abort if something messed up!
+                shutdown(channel, registration.sessionID);
             }
 
             return;
@@ -322,43 +279,5 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
                 }
             }
         });
-    }
-
-    /**
-     * Split array into chunks, max of 256 chunks.
-     * byte[0] = chunk ID
-     * byte[1] = total chunks (0-255) (where 0->1, 2->3, 127->127 because this is indexed by a byte)
-     */
-    private static
-    byte[][] divideArray(byte[] source, int chunksize) {
-
-        int fragments = (int) Math.ceil(source.length / ((double) chunksize + 2));
-        if (fragments > 127) {
-            // cannot allow more than 127
-            return null;
-        }
-
-        // pre-allocate the memory
-        byte[][] splitArray = new byte[fragments][chunksize + 2];
-        int start = 0;
-
-        for (int i = 0; i < splitArray.length; i++) {
-            int length;
-
-            if (start + chunksize > source.length) {
-                length = source.length - start;
-            }
-            else {
-                length = chunksize;
-            }
-            splitArray[i] = new byte[length+2];
-            splitArray[i][0] = (byte) i;
-            splitArray[i][1] = (byte) fragments;
-            System.arraycopy(source, start, splitArray[i], 2, length);
-
-            start += chunksize;
-        }
-
-        return splitArray;
     }
 }
