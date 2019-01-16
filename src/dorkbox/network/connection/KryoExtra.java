@@ -41,6 +41,7 @@ import net.jpountz.lz4.LZ4FastDecompressor;
 /**
  * Nothing in this class is thread safe
  */
+@SuppressWarnings("Duplicates")
 public
 class KryoExtra<C extends CryptoConnection> extends Kryo {
     // snappycomp   :       7.534 micros/op;  518.5 MB/s (output: 55.1%)
@@ -257,7 +258,7 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
             // we can use it...
             inputArray = inputBuf.array();
             inputArrayLength = -1; // this is so we don't REUSE this array accidentally!
-            inputOffset = inputBuf.arrayOffset();
+            inputOffset = inputBuf.arrayOffset() + lengthLength;
         }
         else {
             // we can NOT use it.
@@ -290,7 +291,7 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
         }
         inputBuf = decompressBuf;
 
-        // LZ4 decompress, requires the size of the ORIGINAL length (because we use the FAST decompressor
+        // LZ4 decompress, requires the size of the ORIGINAL length (because we use the FAST decompressor)
         decompressor.decompress(inputArray, inputOffset, decompressOutputArray, 0, uncompressedLength);
 
         inputBuf.setIndex(0, uncompressedLength);
@@ -450,10 +451,11 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
         ByteBuf inputBuf = buffer;
 
         final long gcmIVCounter = OptimizeUtilsByteBuf.readLong(buffer, true);
+        int lengthLength = OptimizeUtilsByteArray.longLength(gcmIVCounter, true);
 
 
         // have to adjust for the gcmIVCounter
-        length = length - OptimizeUtilsByteArray.longLength(gcmIVCounter, true);
+        length = length - lengthLength;
 
 
         /////////// decrypting data
@@ -476,7 +478,7 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
             // we can use it...
             inputArray = inputBuf.array();
             inputArrayLength = -1; // this is so we don't REUSE this array accidentally!
-            inputOffset = inputBuf.arrayOffset();
+            inputOffset = inputBuf.arrayOffset() + lengthLength;
         }
         else {
             // we can NOT use it.
