@@ -332,7 +332,6 @@ task<JavaCompile>("compileUtils") {
             "dorkbox.util.MathUtil",
             "dorkbox.util.MersenneTwisterFast",
             "dorkbox.util.NativeLoader",
-            "dorkbox.util.NetworkUtil",
 
             "dorkbox.util.generics.TypeResolver",
             // "dorkbox.util.generics.DefaultMethodHelper",  // this class must be compiled java 8+

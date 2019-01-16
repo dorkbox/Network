@@ -33,7 +33,6 @@ import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
 import dorkbox.network.serialization.CryptoSerializationManager;
-import dorkbox.util.NetworkUtil;
 import dorkbox.util.RandomUtil;
 import dorkbox.util.collections.IntMap.Values;
 import dorkbox.util.collections.LockFreeIntMap;
@@ -165,17 +164,15 @@ class RegistrationWrapper {
             else {
                 // COMPARE!
                 if (!CryptoECC.compare(publicKey, savedPublicKey)) {
-                    String byAddress = NetworkUtil.ipv4ToString(hostAddress);
-
                     if (this.endPoint.disableRemoteKeyValidation) {
-                        logger2.warn("Invalid or non-matching public key from remote connection, their public key has changed. Toggling extra flag in channel to indicate key change. To fix, remove entry for: {}", byAddress);
+                        logger2.warn("Invalid or non-matching public key from remote connection, their public key has changed. Toggling extra flag in channel to indicate key change. To fix, remove entry for: {}", address.getHostAddress());
 
                         metaChannel.changedRemoteKey = true;
                         return true;
                     }
                     else {
                         // keys do not match, abort!
-                        logger2.error("Invalid or non-matching public key from remote connection, their public key has changed. To fix, remove entry for: {}", byAddress);
+                        logger2.error("Invalid or non-matching public key from remote connection, their public key has changed. To fix, remove entry for: {}", address.getHostAddress());
                         return false;
                     }
                 }
