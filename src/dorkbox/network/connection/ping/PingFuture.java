@@ -54,7 +54,7 @@ class PingFuture implements Ping {
     }
 
     /**
-     * Wait for the ping to return, and returns the ping response time or -1 if it failed failed.
+     * Wait for the ping to return, and returns the ping response time in MS or -1 if it failed.
      */
     @Override
     public
