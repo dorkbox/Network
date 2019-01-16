@@ -78,12 +78,10 @@ class PingPongLocalTest extends BaseTest {
 
             // ----
 
-        Client client = new Client();
+        Client client = new Client(configuration);
         addEndPoint(client);
         final Listeners listeners1 = client.listeners();
         listeners1.add(new Listener.OnConnected<Connection>() {
-            AtomicInteger check = new AtomicInteger(0);
-
             @Override
             public
             void connected(Connection connection) {
@@ -95,8 +93,6 @@ class PingPongLocalTest extends BaseTest {
         });
 
         listeners1.add(new Listener.OnError<Connection>() {
-            AtomicInteger check = new AtomicInteger(0);
-
             @Override
             public
             void error(Connection connection, Throwable throwable) {
