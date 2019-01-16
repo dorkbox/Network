@@ -44,8 +44,6 @@ import com.esotericsoftware.kryo.util.Util;
 import dorkbox.network.connection.CryptoConnection;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.ping.PingMessage;
-import dorkbox.network.pipeline.ByteBufInput;
-import dorkbox.network.pipeline.ByteBufOutput;
 import dorkbox.network.rmi.CachedMethod;
 import dorkbox.network.rmi.InvocationHandlerSerializer;
 import dorkbox.network.rmi.InvocationResultSerializer;
@@ -473,7 +471,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
             // now all of the registrations are IN ORDER and MERGED
             this.mergedRegistrations = mergedRegistrations.toArray(new ClassRegistration[0]);
 
-            Object[][] registrationDetails = new Object[mergedRegistrations.size()][2];
+            Object[][] registrationDetails = new Object[mergedRegistrations.size()][3];
 
             for (int i = 0; i < mergedRegistrations.size(); i++) {
                 final ClassRegistration registration = mergedRegistrations.get(i);
@@ -500,9 +498,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
 
 
             // save this as a byte array (so registration is faster)
-            ByteBuf buffer = Unpooled.buffer();
-            ByteBufOutput writer = new ByteBufOutput();
-            writer.setBuffer(buffer);
+            ByteBuf buffer = Unpooled.buffer(480);
 
             kryo.setRegistrationRequired(false);
             try {
@@ -511,8 +507,10 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                 logger.error("Unable to write compressed data for registration details");
             }
 
-            savedRegistrationDetails = new byte[buffer.writerIndex()];
-            buffer.getBytes(0, savedRegistrationDetails);
+            int length = buffer.readableBytes();
+
+            savedRegistrationDetails = new byte[length];
+            buffer.getBytes(0, savedRegistrationDetails, 0, length);
 
             buffer.release();
         } finally {
@@ -525,6 +523,23 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     }
 
     /**
+     * NOTE: When this fails, the CLIENT will just time out. We DO NOT want to send an error message to the client
+     *   (it should check for updates or something else). We do not want to give "rogue" clients knowledge of the
+     *   server, thus preventing them from trying to probe the server data structures.
+     *
+     * @return a compressed byte array of the details of all registration IDs -> Class name -> Serialization type used by kryo
+     */
+    @Override
+    public
+    byte[] getKryoRegistrationDetails() {
+        return savedRegistrationDetails;
+    }
+
+    /**
+     * NOTE: When this fails, the CLIENT will just time out. We DO NOT want to send an error message to the client
+     *   (it should check for updates or something else). We do not want to give "rogue" clients knowledge of the
+     *   server, thus preventing them from trying to probe the server data structures.
+     *
      * @return true if kryo registration is required for all classes sent over the wire
      */
     @SuppressWarnings("Duplicates")
@@ -545,11 +560,9 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         ByteBuf byteBuf = Unpooled.wrappedBuffer(otherRegistrationData);
 
         try {
-            ByteBufInput reader = new ByteBufInput();
-            reader.setBuffer(byteBuf);
-
             kryo.setRegistrationRequired(false);
-            Object[][] classRegistrations = kryo.readObject(reader, Object[][].class);
+            @SuppressWarnings("unchecked")
+            Object[][] classRegistrations = (Object[][]) kryo.readCompressed(null, byteBuf, otherRegistrationData.length);
 
 
             int lengthOrg = mergedRegistrations.length;
@@ -574,8 +587,8 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                     String serializerOrg = classOrg.serializer.getClass().getName();
 
                     if (idNew != idOrg || !nameOrg.equals(nameNew) || !serializerNew.equalsIgnoreCase(serializerOrg)) {
-                        logger.error("Server registration : {} -> {} ({})", idOrg, nameOrg, serializerOrg);
-                        logger.error("Client registration : {} -> {} ({})", idNew, nameNew, serializerNew);
+                        logger.error("Registration {} Client -> {} ({})", idNew, nameNew, serializerNew);
+                        logger.error("Registration {} Server -> {} ({})", idOrg, nameOrg, serializerOrg);
                     }
                 }
             }
@@ -592,7 +605,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
                 }
             }
         } catch(Exception e) {
-            logger.error("{} during registration validation", e.getMessage());
+            logger.error("Error [{}] during registration validation", e.getMessage());
 
         } finally {
             if (registrationRequired) {
@@ -604,15 +617,6 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         }
 
         return false;
-    }
-
-    /**
-     * @return the details of all registration IDs -> Class name used by kryo
-     */
-    @Override
-    public
-    byte[] getKryoRegistrationDetails() {
-        return savedRegistrationDetails;
     }
 
     /**
