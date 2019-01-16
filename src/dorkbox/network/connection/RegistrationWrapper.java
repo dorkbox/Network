@@ -17,7 +17,6 @@ package dorkbox.network.connection;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
 import java.security.SecureRandom;
 import java.util.LinkedList;
 import java.util.List;
@@ -34,6 +33,7 @@ import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
 import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.util.NetworkUtil;
 import dorkbox.util.RandomUtil;
 import dorkbox.util.collections.IntMap.Values;
 import dorkbox.util.collections.LockFreeIntMap;
@@ -165,13 +165,7 @@ class RegistrationWrapper {
             else {
                 // COMPARE!
                 if (!CryptoECC.compare(publicKey, savedPublicKey)) {
-                    String byAddress;
-                    try {
-                        byAddress = InetAddress.getByAddress(hostAddress)
-                                               .getHostAddress();
-                    } catch (UnknownHostException e) {
-                        byAddress = "Unknown Address";
-                    }
+                    String byAddress = NetworkUtil.ipv4ToString(hostAddress);
 
                     if (this.endPoint.disableRemoteKeyValidation) {
                         logger2.warn("Invalid or non-matching public key from remote connection, their public key has changed. Toggling extra flag in channel to indicate key change. To fix, remove entry for: {}", byAddress);
