@@ -30,6 +30,14 @@ import java.net.*
 import java.nio.charset.StandardCharsets.UTF_8
 import kotlin.reflect.KMutableProperty
 
+///////////////////////////////
+//////    PUBLISH TO SONATYPE / MAVEN CENTRAL
+//////
+////// TESTING : local maven repo <PUBLISHING - publishToMavenLocal>
+//////
+////// RELEASE : sonatype / maven central, <PUBLISHING - publish> then <RELEASE - closeAndReleaseRepository>
+///////////////////////////////
+
 println("\tGradle ${project.gradle.gradleVersion}")
 
 plugins {
@@ -260,11 +268,12 @@ tasks.compileJava.get().apply {
     println("\tCompiling classes to Java $sourceCompatibility")
 }
 
+
 ///////////////////////////////
 //////    UTILITIES COMPILE
 ///////////////////////////////
 
-// as long as the 'Utilities' project is ALSO imported into IntelliJ, class resolution will work
+// as long as the 'Utilities' project is ALSO imported into IntelliJ, class resolution will work (add the sources in the intellij project)
 val utils : Configuration by configurations.creating
 
 fun javaFile(vararg fileNames: String): Iterable<String> {
@@ -391,7 +400,6 @@ dependencies {
 }
 
 
-
 ///////////////////////////////
 //////    Jar Tasks
 ///////////////////////////////
@@ -413,8 +421,13 @@ tasks.jar.get().apply {
     }
 }
 
+
 ///////////////////////////////
-//////    Maven Publishing + Release
+//////    PUBLISH TO SONATYPE / MAVEN CENTRAL
+//////
+////// TESTING : local maven repo <PUBLISHING - publishToMavenLocal>
+//////
+////// RELEASE : sonatype / maven central, <PUBLISHING - publish> then <RELEASE - closeAndReleaseRepository>
 ///////////////////////////////
 val sourceJar = task<Jar>("sourceJar") {
     description = "Creates a JAR that contains the source code."
@@ -430,14 +443,6 @@ val javaDocJar = task<Jar>("javaDocJar") {
     archiveClassifier.set("javadoc")
 }
 
-
-///////////////////////////////
-//////    PUBLISH TO SONATYPE / MAVEN CENTRAL
-//////
-////// TESTING : local maven repo <PUBLISHING - publishToMavenLocal>
-//////
-////// RELEASE : sonatype / maven central, <PUBLISHING - publish> then <RELEASE - CloseAndReleaseRepository>
-///////////////////////////////
 publishing {
     publications {
         create<MavenPublication>("maven") {
@@ -523,6 +528,8 @@ signing {
     sign(publishing.publications["maven"])
 }
 
+
+
 ///////////////////////////////
 /////   Prevent anything other than a release from showing version updates
 ////  https://github.com/ben-manes/gradle-versions-plugin/blob/master/README.md
@@ -545,6 +552,7 @@ tasks.named<DependencyUpdatesTask>("dependencyUpdates") {
     checkForGradleUpdate = true
 }
 
+
 ///////////////////////////////
 //////    Gradle Wrapper Configuration.
 /////  Run this task, then refresh the gradle project
@@ -553,5 +561,3 @@ val wrapperUpdate by tasks.creating(Wrapper::class) {
     gradleVersion = "5.1.1"
     distributionUrl = distributionUrl.replace("bin", "all")
 }
-
-
