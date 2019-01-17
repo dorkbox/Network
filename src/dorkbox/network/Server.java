@@ -186,7 +186,7 @@ class Server<C extends Connection> extends EndPointServer {
             // Beside the usual ChannelOptions the Native Transport allows to enable TCP_CORK which may come in handy if you implement a HTTP Server.
 
             tcpBootstrap.group(newEventLoop(1, threadName + "-TCP-BOSS"),
-                               newEventLoop(1, threadName + "-TCP-HAND"))
+                               newEventLoop(1, threadName + "-TCP-REGISTRATION"))
                         .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
                         .option(ChannelOption.SO_REUSEADDR, true)
                         .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
@@ -233,7 +233,7 @@ class Server<C extends Connection> extends EndPointServer {
             FixedRecvByteBufAllocator recvByteBufAllocator = new FixedRecvByteBufAllocator(EndPoint.udpMaxSize);
 
             udpBootstrap.group(newEventLoop(1, threadName + "-UDP-BOSS"),
-                               newEventLoop(1, threadName + "-UDP-HAND"))
+                               newEventLoop(1, threadName + "-UDP-REGISTRATION"))
                         .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .option(ChannelOption.RCVBUF_ALLOCATOR, recvByteBufAllocator)
                         .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
