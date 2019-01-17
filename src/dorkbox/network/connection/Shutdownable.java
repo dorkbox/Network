@@ -75,7 +75,7 @@ class Shutdownable {
      * The number of threads used for the worker threads.
      */
     @Property
-    public static int WORKER_THREAD_POOL_SIZE = Math.min(Runtime.getRuntime().availableProcessors() / 2, 1);
+    public static int WORKER_THREAD_POOL_SIZE = Math.max(Runtime.getRuntime().availableProcessors() / 2, 1);
 
     /**
      * The amount of time in milli-seconds to wait for this endpoint to close all {@link Channel}s and shutdown gracefully.
