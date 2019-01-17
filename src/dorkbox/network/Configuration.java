@@ -67,6 +67,11 @@ class Configuration {
      */
     public Executor rmiExecutor = null;
 
+    /**
+     * The number of threads used for the worker threads by the end point. By default, this is the CPU_COUNT/2 or 1, whichever is larger.
+     */
+    public int workerThreadPoolSize = Math.max(Runtime.getRuntime().availableProcessors() / 2, 1);
+
 
     public
     Configuration() {

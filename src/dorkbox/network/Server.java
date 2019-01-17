@@ -34,6 +34,7 @@ import io.netty.bootstrap.SessionBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.epoll.EpollDatagramChannel;
@@ -158,12 +159,11 @@ class Server<C extends Connection> extends EndPointServer {
                           .childHandler(new RegistrationLocalHandlerServer(threadName, registrationWrapper));
         }
 
-        // don't even bother with TCP/UDP if it's not enabled
-        if (tcpBootstrap == null && udpBootstrap == null) {
-            return;
+
+        EventLoopGroup workerEventLoop = null;
+        if (tcpBootstrap != null || udpBootstrap != null) {
+            workerEventLoop = newEventLoop(config.workerThreadPoolSize, threadName);
         }
-
-
 
         if (tcpBootstrap != null) {
             if (OS.isAndroid()) {
@@ -193,8 +193,7 @@ class Server<C extends Connection> extends EndPointServer {
 
                         .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .childOption(ChannelOption.SO_KEEPALIVE, true)
-                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName, registrationWrapper,
-                                                                             newEventLoop(WORKER_THREAD_POOL_SIZE, threadName)));
+                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName, registrationWrapper, workerEventLoop));
 
             // have to check options.host for "0.0.0.0". we don't bind to "0.0.0.0", we bind to "null" to get the "any" address!
             if (hostName.equals("0.0.0.0")) {
@@ -243,8 +242,7 @@ class Server<C extends Connection> extends EndPointServer {
                         // TODO: move broadcast to it's own handler, and have UDP server be able to be bound to a specific IP
                         // OF NOTE: At the end in my case I decided to bind to .255 broadcast address on Linux systems. (to receive broadcast packets)
                         .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets! see: http://developerweb.net/viewtopic.php?id=5722
-                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, registrationWrapper,
-                                                                             newEventLoop(WORKER_THREAD_POOL_SIZE, threadName)));
+                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, registrationWrapper, workerEventLoop));
 
             // // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
             // if (hostName.equals("0.0.0.0")) {
