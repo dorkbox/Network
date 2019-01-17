@@ -135,10 +135,10 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
         final Class<?> interfaceClass = registration.interfaceClass;
         final int callbackId = registration.callbackId;
         if (registration.isRequest) {
+            // THIS IS ON THE "SERVER" CONNECTION (where the object implementation will really exist)
+
             // Check if we are creating a new REMOTE object. This check is always first.
             if (registration.rmiId == RmiBridge.INVALID_RMI) {
-                // THIS IS ON THE REMOTE CONNECTION (where the object will really exist as an implementation)
-                //
                 // CREATE a new ID, and register the ID and new object (must create a new one) in the object maps
 
 
@@ -155,8 +155,6 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
 
             // Check if we are getting an already existing REMOTE object. This check is always AFTER the check to create a new object
             else {
-                // THIS IS ON THE REMOTE CONNECTION (where the object implementation will really exist)
-                //
                 // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
                 RmiRegistration registrationResult = connection.getExistingRmiObject(interfaceClass, registration.rmiId, callbackId);
                 connection.send(registrationResult);
@@ -165,7 +163,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
         }
         else {
             // this is the response.
-            // THIS IS ON THE LOCAL CONNECTION SIDE, which is the side that called 'getRemoteObject()'   This can be Server or Client.
+            // THIS IS ON THE "CLIENT" CONNECTION SIDE, which is the side that called 'getRemoteObject()'
 
 
             // on "local" connections (as opposed to "network" connections), the objects ARE NOT serialized, so we never
@@ -217,8 +215,6 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
         // maybe this object is supposed to switch to a proxy object?? (note: we cannot send proxy objects over local/network connections)
 
         IdentityMap<Object, Object> implToProxy = implToProxyREF.get(this);
-        IdentityMap<Object, Field[]> objectHasRemoteObjects = remoteObjectREF.get(this);
-
 
         Object proxy = implToProxy.get(message);
         if (proxy != null) {
@@ -228,7 +224,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
 
 
         // otherwise we MIGHT have to modify the fields in the object...
-
+        IdentityMap<Object, Field[]> objectHasRemoteObjects = remoteObjectREF.get(this);
 
         Class<?> messageClass = message.getClass();
 
