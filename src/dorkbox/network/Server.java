@@ -19,6 +19,7 @@ import static dorkbox.network.pipeline.ConnectionType.LOCAL;
 
 import java.io.IOException;
 import java.net.Socket;
+import java.util.List;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
@@ -26,6 +27,7 @@ import dorkbox.network.connection.EndPointServer;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerTCP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerUDP;
+import dorkbox.network.pipeline.discovery.BroadcastResponse;
 import dorkbox.util.OS;
 import dorkbox.util.Property;
 import dorkbox.util.exceptions.SecurityException;
@@ -363,10 +365,22 @@ class Server<C extends Connection> extends EndPointServer {
         }
     }
 
+    // called when we are stopped/shut down
     @Override
     protected
     void stopExtraActions() {
         isRunning = false;
+
+        // now WAIT until bind has released the socket
+        // wait a max of 10 tries
+        int tries = 10;
+        while (tries-- >= 0 && isRunning(this.config)) {
+            logger.warn("Server has requested shutdown, but the socket is still bound. Waiting {} more times", tries);
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ignored) {
+            }
+        }
     }
 
     /**
@@ -378,11 +392,11 @@ class Server<C extends Connection> extends EndPointServer {
     }
 
     /**
-     * Checks to see if different server (using the specified configuration) is already running. This will check across JVMs by checking the
+     * Checks to see if a server (using the specified configuration) is running. This will check across JVMs by checking the
      * network socket directly, and assumes that if the port is in use and answers, then the server is "running". This does not try to
      * authenticate or validate the connection.
      * <p>
-     * This does not check local-channels (which are intra-JVM only) or UDP connections.
+     * This does not check local-channels (which are intra-JVM only). Uses `Broadcast` to check for UDP servers
      * </p>
      *
      * @return true if the configuration matches and can connect (but not verify) to the TCP control socket.
@@ -396,24 +410,27 @@ class Server<C extends Connection> extends EndPointServer {
             host = "0.0.0.0";
         }
 
-        if (config.tcpPort == 0) {
-            return false;
-        }
-
-        Socket sock = null;
-
-        // since we check the socket, if we cannot connect to a socket, then we're done.
-        try {
-            sock = new Socket(host, config.tcpPort);
-            // if we can connect to the socket, it means that we are already running.
-            return sock.isConnected();
-        } catch (Exception ignored) {
-            if (sock != null) {
-                try {
-                    sock.close();
-                } catch (IOException ignored2) {
+        if (config.tcpPort > 0) {
+            Socket sock = null;
+            // since we check the socket, if we cannot connect to a socket, then we're done.
+            try {
+                sock = new Socket(host, config.tcpPort);
+                // if we can connect to the socket, it means that we are already running.
+                return sock.isConnected();
+            } catch (Exception ignored) {
+                if (sock != null) {
+                    try {
+                        sock.close();
+                    } catch (IOException ignored2) {
+                    }
                 }
             }
+        }
+
+        // use Broadcast to see if there is a UDP server connected
+        if (config.udpPort > 0) {
+            List<BroadcastResponse> broadcastResponses = Broadcast.discoverHosts(config.udpPort, 500);
+            return !broadcastResponses.isEmpty();
         }
 
         return false;
