@@ -26,17 +26,17 @@ interface RmiConnection {
     /**
      * Used by RMI for the LOCAL side, to get the proxy object as an interface
      *
-     * @param objectID this is the RMI object ID
+     * @param objectId this is the RMI object ID
      * @param iFace must be the interface the proxy will bind to
      */
-    RemoteObject getProxyObject(final int objectID, final Class<?> iFace);
+    RemoteObject getProxyObject(final int objectId, final Class<?> iFace);
 
     /**
      * This is used by RMI for the REMOTE side, to get the implementation
      *
-     * @param objectID this is the RMI object ID
+     * @param objectId this is the RMI object ID
      */
-    Object getImplementationObject(final int objectID);
+    Object getImplementationObject(final int objectId);
 
     /**
      * Used by RMI

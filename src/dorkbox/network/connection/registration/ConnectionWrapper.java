@@ -80,7 +80,7 @@ class ConnectionWrapper implements CryptoConnection, ChannelHandler {
 
     @Override
     public
-    Object getImplementationObject(final int objectID) {
+    Object getImplementationObject(final int objectId) {
         throw new IllegalArgumentException("not implemented");
     }
 
