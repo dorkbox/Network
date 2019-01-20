@@ -19,17 +19,23 @@
  */
 package dorkbox.network;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
-import org.slf4j.Logger;
 
-import dorkbox.network.connection.*;
-import dorkbox.network.rmi.RmiBridge;
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.EndPoint;
+import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.Listeners;
+import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.util.exceptions.InitializationException;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -57,8 +63,8 @@ class ListenerTest extends BaseTest {
     // quick and dirty test to also test connection sub-classing
     class TestConnectionA extends ConnectionImpl {
         public
-        TestConnectionA(final Logger logger, final EndPoint endPointConnection, final RmiBridge rmiBridge) {
-            super(logger, endPointConnection, rmiBridge);
+        TestConnectionA(final EndPoint endPointConnection, final ChannelWrapper wrapper) {
+            super(endPointConnection, wrapper);
         }
 
         public
@@ -70,8 +76,8 @@ class ListenerTest extends BaseTest {
 
     class TestConnectionB extends TestConnectionA {
         public
-        TestConnectionB(final Logger logger, final EndPoint endPointConnection, final RmiBridge rmiBridge) {
-            super(logger, endPointConnection, rmiBridge);
+        TestConnectionB(final EndPoint endPointConnection, final ChannelWrapper wrapper) {
+            super(endPointConnection, wrapper);
         }
 
         @Override
@@ -102,8 +108,8 @@ class ListenerTest extends BaseTest {
         Server server = new Server(configuration) {
             @Override
             public
-            TestConnectionA newConnection(final Logger logger, final EndPoint endPoint, final RmiBridge rmiBridge) {
-                return new TestConnectionA(logger, endPoint, rmiBridge);
+            TestConnectionA newConnection(final EndPoint endPoint, final ChannelWrapper wrapper) {
+                return new TestConnectionA(endPoint, wrapper);
             }
         };
 

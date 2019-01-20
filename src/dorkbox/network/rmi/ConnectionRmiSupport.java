@@ -1,0 +1,396 @@
+package dorkbox.network.rmi;
+
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Proxy;
+import java.util.AbstractMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import org.slf4j.Logger;
+
+import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.ConnectionImpl;
+import dorkbox.network.connection.KryoExtra;
+import dorkbox.network.connection.Listener;
+import dorkbox.network.connection.Listener.OnMessageReceived;
+import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.util.collections.LockFreeHashMap;
+import dorkbox.util.collections.LockFreeIntMap;
+import dorkbox.util.generics.ClassHelper;
+
+public
+class ConnectionRmiSupport extends ConnectionSupport {
+    private final RmiBridge rmiGlobalBridge;
+    private final RmiBridge rmiLocalBridge;
+    private final RmiObjectHandler rmiHandler;
+
+    private final Map<Integer, RemoteObject> proxyIdCache;
+    private final List<OnMessageReceived<Connection, InvokeMethodResult>> proxyListeners;
+
+    private final LockFreeIntMap<RemoteObjectCallback> rmiRegistrationCallbacks;
+    private final Logger logger;
+    private volatile int rmiCallbackId = 0;
+
+
+    public
+    ConnectionRmiSupport(final RmiBridge rmiGlobalBridge, final RmiObjectHandler rmiHandler) {
+        if (rmiGlobalBridge == null || rmiHandler == null) {
+            throw new NullPointerException("RMI cannot be null if using RMI support!");
+        }
+
+        this.rmiGlobalBridge = rmiGlobalBridge;
+        this.rmiHandler = rmiHandler;
+
+        logger = rmiGlobalBridge.logger;
+
+        //     * @param executor
+        //      *                 Sets the executor used to invoke methods when an invocation is received from a remote endpoint. By default, no
+        //      *                 executor is set and invocations occur on the network thread, which should not be blocked for long, May be null.
+
+        rmiLocalBridge = new RmiBridge(logger, false);
+
+
+        proxyIdCache = new LockFreeHashMap<Integer, RemoteObject>();
+        proxyListeners = new CopyOnWriteArrayList<OnMessageReceived<Connection, InvokeMethodResult>>();
+        rmiRegistrationCallbacks = new LockFreeIntMap<RemoteObjectCallback>();
+    }
+
+    public
+    void close() {
+        // proxy listeners are cleared in the removeAll() call (which happens BEFORE close)
+        proxyIdCache.clear();
+
+        rmiRegistrationCallbacks.clear();
+    }
+
+    public
+    void removeAllListeners() {
+        proxyListeners.clear();
+    }
+
+    public
+    <Iface> void createRemoteObject(final ConnectionImpl connection, final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) {
+        if (!interfaceClass.isInterface()) {
+            throw new IllegalArgumentException("Cannot create a proxy for RMI access. It must be an interface.");
+        }
+
+        // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
+        // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
+        //noinspection NonAtomicOperationOnVolatileField
+        int nextRmiCallbackId = rmiCallbackId++;
+        rmiRegistrationCallbacks.put(nextRmiCallbackId, callback);
+        RmiRegistration message = new RmiRegistration(interfaceClass, RmiBridge.INVALID_RMI, nextRmiCallbackId);
+
+        // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
+        // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
+
+        // this means we are creating a NEW object on the server, bound access to only this connection
+        connection.send(message).flush();
+    }
+
+    public
+    <Iface> void getRemoteObject(final ConnectionImpl connection, final int objectId, final RemoteObjectCallback<Iface> callback) {
+        if (objectId < 0) {
+            throw new IllegalStateException("Object ID cannot be < 0");
+        }
+        if (objectId >= RmiBridge.INVALID_RMI) {
+            throw new IllegalStateException("Object ID cannot be >= " + RmiBridge.INVALID_RMI);
+        }
+
+        Class<?> iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback.class, callback.getClass(), 0);
+
+        // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
+        // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
+        //noinspection NonAtomicOperationOnVolatileField
+        int nextRmiCallbackId = rmiCallbackId++;
+        rmiRegistrationCallbacks.put(nextRmiCallbackId, callback);
+        RmiRegistration message = new RmiRegistration(iFaceClass, objectId, nextRmiCallbackId);
+
+        // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
+        // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
+
+        // this means we are getting an EXISTING object on the server, bound access to only this connection
+        connection.send(message).flush();
+    }
+
+    /**
+     * Manages the RMI stuff for a connection.
+     */
+    public
+    boolean manage(final ConnectionImpl connection, final Object message) {
+        if (message instanceof InvokeMethod) {
+            CryptoSerializationManager serialization = connection.getEndPoint().getSerialization();
+
+            InvokeMethod invokeMethod = rmiHandler.getInvokeMethod(serialization, connection, (InvokeMethod) message);
+
+
+
+            int objectID = invokeMethod.objectID;
+
+            // have to make sure to get the correct object (global vs local)
+            // This is what is overridden when registering interfaces/classes for RMI.
+            // objectID is the interface ID, and this returns the implementation ID.
+            final Object target = getImplementationObject(objectID);
+
+            if (target == null) {
+                logger.warn("Ignoring remote invocation request for unknown object ID: {}", objectID);
+
+                return true; // maybe false?
+            }
+
+            // Executor executor2 = RmiBridge.this.executor;
+            // if (executor2 == null) {
+                try {
+                    RmiBridge.invoke(connection, target, invokeMethod, logger);
+                } catch (IOException e) {
+                    logger.error("Unable to invoke method.", e);
+                }
+            // }
+            // else {
+            //     executor2.execute(new Runnable() {
+            //         @Override
+            //         public
+            //         void run() {
+            //             try {
+            //                 RmiBridge.invoke(connection, target, invokeMethod, logger);
+            //             } catch (IOException e) {
+            //                 logger.error("Unable to invoke method.", e);
+            //             }
+            //         }
+            //     });
+            // }
+            return true;
+        }
+        else if (message instanceof InvokeMethodResult) {
+            for (Listener.OnMessageReceived<Connection, InvokeMethodResult> proxyListener : proxyListeners) {
+                proxyListener.received(connection, (InvokeMethodResult) message);
+            }
+            return true;
+        }
+        else if (message instanceof RmiRegistration) {
+            rmiHandler.registration(this, connection, (RmiRegistration) message);
+            return true;
+        }
+
+        // not the correct type
+        return false;
+    }
+
+    /**
+     * For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
+     * For local connections, we have to switch it appropriately in the LocalRmiProxy
+     */
+    public
+    RmiRegistration createNewRmiObject(final CryptoSerializationManager serialization,
+                            final Class<?> interfaceClass,
+                            final Class<?> implementationClass,
+                            final int callbackId,
+                            final Logger logger) {
+        KryoExtra kryo = null;
+        Object object = null;
+        int rmiId = 0;
+
+        try {
+            kryo = serialization.takeKryo();
+
+            // because the INTERFACE is what is registered with kryo (not the impl) we have to temporarily permit unregistered classes (which have an ID of -1)
+            // so we can cache the instantiator for this class.
+            boolean registrationRequired = kryo.isRegistrationRequired();
+
+            kryo.setRegistrationRequired(false);
+
+            // this is what creates a new instance of the impl class, and stores it as an ID.
+            object = kryo.newInstance(implementationClass);
+
+            if (registrationRequired) {
+                // only if it's different should we call this again.
+                kryo.setRegistrationRequired(true);
+            }
+
+
+            rmiId = rmiLocalBridge.register(object);
+
+            if (rmiId == RmiBridge.INVALID_RMI) {
+                // this means that there are too many RMI ids (either global or connection specific!)
+                object = null;
+            }
+            else {
+                // if we are invalid, skip going over fields that might also be RMI objects, BECAUSE our object will be NULL!
+
+                // the @Rmi annotation allows an RMI object to have fields with objects that are ALSO RMI objects
+                LinkedList<Entry<Class<?>, Object>> classesToCheck = new LinkedList<Map.Entry<Class<?>, Object>>();
+                classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(implementationClass, object));
+
+
+                Map.Entry<Class<?>, Object> remoteClassObject;
+                while (!classesToCheck.isEmpty()) {
+                    remoteClassObject = classesToCheck.removeFirst();
+
+                    // we have to check the IMPLEMENTATION for any additional fields that will have proxy information.
+                    // we use getDeclaredFields() + walking the object hierarchy, so we get ALL the fields possible (public + private).
+                    for (Field field : remoteClassObject.getKey()
+                                                        .getDeclaredFields()) {
+                        if (field.getAnnotation(Rmi.class) != null) {
+                            final Class<?> type = field.getType();
+
+                            if (!type.isInterface()) {
+                                // the type must be an interface, otherwise RMI cannot create a proxy object
+                                logger.error("Error checking RMI fields for: {}.{} -- It is not an interface!",
+                                             remoteClassObject.getKey(),
+                                             field.getName());
+                                continue;
+                            }
+
+
+                            boolean prev = field.isAccessible();
+                            field.setAccessible(true);
+                            final Object o;
+                            try {
+                                o = field.get(remoteClassObject.getValue());
+
+                                rmiLocalBridge.register(o);
+                                classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(type, o));
+                            } catch (IllegalAccessException e) {
+                                logger.error("Error checking RMI fields for: {}.{}", remoteClassObject.getKey(), field.getName(), e);
+                            } finally {
+                                field.setAccessible(prev);
+                            }
+                        }
+                    }
+
+
+                    // have to check the object hierarchy as well
+                    Class<?> superclass = remoteClassObject.getKey()
+                                                           .getSuperclass();
+                    if (superclass != null && superclass != Object.class) {
+                        classesToCheck.add(new AbstractMap.SimpleEntry<Class<?>, Object>(superclass, remoteClassObject.getValue()));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error registering RMI class " + implementationClass, e);
+        } finally {
+            if (kryo != null) {
+                // we use kryo to create a new instance - so only return it on error or when it's done creating a new instance
+                serialization.returnKryo(kryo);
+            }
+        }
+
+        return new RmiRegistration(interfaceClass, rmiId, callbackId, object);
+    }
+
+    public
+    void runCallback(final Class<?> interfaceClass, final int callbackId, final Object remoteObject, final Logger logger) {
+        RemoteObjectCallback callback = rmiRegistrationCallbacks.remove(callbackId);
+
+        try {
+            //noinspection unchecked
+            callback.created(remoteObject);
+        } catch (Exception e) {
+            logger.error("Error getting or creating the remote object " + interfaceClass, e);
+        }
+    }
+
+    public
+    <T> int getRegisteredId(final T object) {
+        // always check global before checking local, because less contention on the synchronization
+        int objectId = rmiGlobalBridge.getRegisteredId(object);
+        if (objectId != RmiBridge.INVALID_RMI) {
+            return objectId;
+        }
+        else {
+            // might return RmiBridge.INVALID_RMI;
+            return rmiLocalBridge.getRegisteredId(object);
+        }
+    }
+
+    public
+    Object getImplementationObject(final int objectID) {
+        if (RmiBridge.isGlobal(objectID)) {
+            return rmiGlobalBridge.getRegisteredObject(objectID);
+        } else {
+            return rmiLocalBridge.getRegisteredObject(objectID);
+        }
+    }
+
+    public
+    RemoteObject getProxyObject(final ConnectionImpl connection, final int rmiId, final Class<?> iFace) {
+        if (iFace == null) {
+            throw new IllegalArgumentException("iface cannot be null.");
+        }
+        if (!iFace.isInterface()) {
+            throw new IllegalArgumentException("iface must be an interface.");
+        }
+
+        // we want to have a connection specific cache of IDs
+        // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
+        // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
+        RemoteObject remoteObject = proxyIdCache.get(rmiId);
+
+        if (remoteObject == null) {
+            // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
+
+            // the ACTUAL proxy is created in the connection impl.
+            RmiProxyNetworkHandler proxyObject = new RmiProxyNetworkHandler(connection, rmiId, iFace);
+            proxyListeners.add(proxyObject.getListener());
+
+            // This is the interface inheritance by the proxy object
+            Class<?>[] temp = new Class<?>[2];
+            temp[0] = RemoteObject.class;
+            temp[1] = iFace;
+
+            remoteObject = (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(), temp, proxyObject);
+
+            proxyIdCache.put(rmiId, remoteObject);
+        }
+
+        return remoteObject;
+    }
+
+    public
+    RemoteObject getLocalProxyObject(final ConnectionImpl connection, final int rmiId, final Class<?> iFace, final Object object) {
+        if (iFace == null) {
+            throw new IllegalArgumentException("iface cannot be null.");
+        }
+        if (!iFace.isInterface()) {
+            throw new IllegalArgumentException("iface must be an interface.");
+        }
+        if (object == null) {
+            throw new IllegalArgumentException("object cannot be null.");
+        }
+
+
+        // we want to have a connection specific cache of IDs
+        // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
+        // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
+        RemoteObject remoteObject = proxyIdCache.get(rmiId);
+
+        if (remoteObject == null) {
+            // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
+
+            // the ACTUAL proxy is created in the connection impl.
+            RmiProxyLocalHandler proxyObject = new RmiProxyLocalHandler(connection, rmiId, iFace, object);
+            proxyListeners.add(proxyObject.getListener());
+
+            Class<?>[] temp = new Class<?>[2];
+            temp[0] = RemoteObject.class;
+            temp[1] = iFace;
+
+            remoteObject = (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(), temp, proxyObject);
+
+            proxyIdCache.put(rmiId, remoteObject);
+        }
+
+        return remoteObject;
+    }
+
+    public
+    Object fixupRmi(final ConnectionImpl connection, final Object message) {
+        // "local RMI" objects have to be modified, this part does that
+        return rmiHandler.normalMessages(this, message);
+    }
+}

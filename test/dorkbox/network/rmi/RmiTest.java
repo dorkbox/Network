@@ -330,7 +330,7 @@ class RmiTest extends BaseTest {
                   }
               });
 
-        client.connect(5000);
+        client.connect(0);
 
         waitForThreads();
     }

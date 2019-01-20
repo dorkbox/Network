@@ -20,7 +20,6 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.SecureRandom;
 import java.util.List;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
@@ -36,7 +35,6 @@ import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.rmi.RmiBridge;
-import dorkbox.network.rmi.RmiObjectHandler;
 import dorkbox.network.rmi.RmiObjectLocalHandler;
 import dorkbox.network.rmi.RmiObjectNetworkHandler;
 import dorkbox.network.serialization.Serialization;
@@ -157,6 +155,8 @@ class EndPoint extends Shutdownable {
     @Property
     public static int udpMaxSize = 508;
 
+    protected final Configuration config;
+
     protected final ConnectionManager connectionManager;
     protected final dorkbox.network.serialization.CryptoSerializationManager serializationManager;
     protected final RegistrationWrapper registrationWrapper;
@@ -166,14 +166,13 @@ class EndPoint extends Shutdownable {
 
     final SecureRandom secureRandom;
 
-    // we only want one instance of these created. These will be called appropriately
-    private final RmiObjectHandler rmiHandler;
-    private final RmiObjectLocalHandler localRmiHandler;
-    private final RmiObjectNetworkHandler networkRmiHandler;
-    final RmiBridge globalRmiBridge;
+    final boolean rmiEnabled;
 
-    private final Executor rmiExecutor;
-    private final boolean rmiEnabled;
+    // we only want one instance of these created. These will be called appropriately
+    final RmiObjectLocalHandler rmiLocalHandler;
+    final RmiObjectNetworkHandler rmiNetworkHandler;
+    final RmiBridge rmiGlobalBridge;
+
 
     SettingsStore propertyStore;
     boolean disableRemoteKeyValidation;
@@ -196,6 +195,7 @@ class EndPoint extends Shutdownable {
     public
     EndPoint(Class<? extends EndPoint> type, final Configuration config) throws SecurityException {
         super(type);
+        this.config = config;
 
         // make sure that 'localhost' is ALWAYS our specific loopback IP address
         if (config.host != null && (config.host.equals("localhost") || config.host.startsWith("127."))) {
@@ -212,7 +212,6 @@ class EndPoint extends Shutdownable {
 
         // setup our RMI serialization managers. Can only be called once
         rmiEnabled = serializationManager.initRmiSerialization();
-        rmiExecutor = config.rmiExecutor;
 
 
         // The registration wrapper permits the registration process to access protected/package fields/methods, that we don't want
@@ -283,16 +282,14 @@ class EndPoint extends Shutdownable {
         connectionManager = new ConnectionManager(type.getSimpleName(), connection0(null, null).getClass());
 
         if (rmiEnabled) {
-            rmiHandler = null;
-            localRmiHandler = new RmiObjectLocalHandler(logger);
-            networkRmiHandler = new RmiObjectNetworkHandler(logger);
-            globalRmiBridge = new RmiBridge(logger, config.rmiExecutor, true);
+            rmiLocalHandler = new RmiObjectLocalHandler(logger);
+            rmiNetworkHandler = new RmiObjectNetworkHandler(logger);
+            rmiGlobalBridge = new RmiBridge(logger, true);
         }
         else {
-            rmiHandler = new RmiObjectHandler();
-            localRmiHandler = null;
-            networkRmiHandler = null;
-            globalRmiBridge = null;
+            rmiLocalHandler = null;
+            rmiNetworkHandler = null;
+            rmiGlobalBridge = null;
         }
 
         Logger readLogger = LoggerFactory.getLogger(type.getSimpleName() + ".READ");
@@ -380,8 +377,8 @@ class EndPoint extends Shutdownable {
      * @return a new network connection
      */
     protected
-    <E extends EndPoint> ConnectionImpl newConnection(final Logger logger, final E endPoint, final RmiBridge rmiBridge) {
-        return new ConnectionImpl(logger, endPoint, rmiBridge);
+    <E extends EndPoint> ConnectionImpl newConnection(final E endPoint, final ChannelWrapper wrapper) {
+        return new ConnectionImpl(endPoint, wrapper);
     }
 
     /**
@@ -392,14 +389,9 @@ class EndPoint extends Shutdownable {
      * @param metaChannel can be NULL (when getting the baseClass)
      * @param remoteAddress be NULL (when getting the baseClass or when creating a local channel)
      */
-    protected final
+    final
     ConnectionImpl connection0(final MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
         ConnectionImpl connection;
-
-        RmiBridge rmiBridge = null;
-        if (metaChannel != null && rmiEnabled) {
-            rmiBridge = new RmiBridge(logger, rmiExecutor, false);
-        }
 
         // setup the extras needed by the network connection.
         // These properties are ASSIGNED in the same thread that CREATED the object. Only the AES info needs to be
@@ -407,27 +399,14 @@ class EndPoint extends Shutdownable {
         if (metaChannel != null) {
             ChannelWrapper wrapper;
 
-            connection = newConnection(logger, this, rmiBridge);
-
             if (metaChannel.localChannel != null) {
-                if (rmiEnabled) {
-                    wrapper = new ChannelLocalWrapper(metaChannel, localRmiHandler);
-                }
-                else {
-                    wrapper = new ChannelLocalWrapper(metaChannel, rmiHandler);
-                }
+                wrapper = new ChannelLocalWrapper(metaChannel);
             }
             else {
-                if (rmiEnabled) {
-                    wrapper = new ChannelNetworkWrapper(metaChannel, remoteAddress, networkRmiHandler);
-                }
-                else {
-                    wrapper = new ChannelNetworkWrapper(metaChannel, remoteAddress, rmiHandler);
-                }
+                wrapper = new ChannelNetworkWrapper(metaChannel, remoteAddress);
             }
 
-            // now initialize the connection channels with whatever extra info they might need.
-            connection.init(wrapper, connectionManager);
+            connection = newConnection(this, wrapper);
 
             isConnected.set(true);
             connectionManager.addConnection(connection);
@@ -436,7 +415,7 @@ class EndPoint extends Shutdownable {
             // getting the connection baseClass
 
             // have to add the networkAssociate to a map of "connected" computers
-            connection = newConnection(null, null, null);
+            connection = newConnection(null, null);
         }
 
         return connection;
@@ -568,7 +547,7 @@ class EndPoint extends Shutdownable {
      */
     public
     <T> int createGlobalObject(final T globalObject) {
-        return globalRmiBridge.register(globalObject);
+        return rmiGlobalBridge.register(globalObject);
     }
 
     /**
@@ -581,6 +560,6 @@ class EndPoint extends Shutdownable {
     @SuppressWarnings("unchecked")
     public
     <T> T getGlobalObject(final int objectRmiId) {
-        return (T) globalRmiBridge.getRegisteredObject(objectRmiId);
+        return (T) rmiGlobalBridge.getRegisteredObject(objectRmiId);
     }
 }

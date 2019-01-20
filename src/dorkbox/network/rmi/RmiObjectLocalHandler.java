@@ -29,7 +29,6 @@ import com.esotericsoftware.kryo.util.IdentityMap;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoExtra;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.CryptoSerializationManager;
 
 /**
@@ -40,7 +39,7 @@ import dorkbox.network.serialization.CryptoSerializationManager;
  * This is for a LOCAL connection (same-JVM)
  */
 public
-class RmiObjectLocalHandler extends RmiObjectHandler {
+class RmiObjectLocalHandler implements RmiObjectHandler {
     private static final boolean ENABLE_PROXY_OBJECTS = RmiBridge.ENABLE_PROXY_OBJECTS;
     private static final Field[] NO_REMOTE_FIELDS = new Field[0];
 
@@ -64,16 +63,11 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
         this.logger = logger;
     }
 
-    @Override
     public
-    void invoke(final ConnectionImpl connection, final InvokeMethod invokeMethod, final Listener.OnMessageReceived<ConnectionImpl, InvokeMethod> rmiInvokeListener) {
+    InvokeMethod getInvokeMethod(final CryptoSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod) {
         int methodClassID = invokeMethod.cachedMethod.methodClassID;
         int methodIndex = invokeMethod.cachedMethod.methodIndex;
         // have to replace the cached methods with the correct (remote) version, otherwise the wrong methods CAN BE invoked.
-
-        CryptoSerializationManager serialization = connection.getEndPoint()
-                                                             .getSerialization();
-
 
         CachedMethod cachedMethod;
         try {
@@ -122,13 +116,12 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
         invokeMethod.cachedMethod = cachedMethod;
         invokeMethod.args = args;
 
-        // default action, now that we have swapped out things
-        rmiInvokeListener.received(connection, invokeMethod);
+        return invokeMethod;
     }
 
     @Override
     public
-    void registration(final ConnectionImpl connection, final RmiRegistration registration) {
+    void registration(final ConnectionRmiSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration registration) {
         // manage creating/getting/notifying this RMI object
 
         // these fields are ALWAYS present!
@@ -148,7 +141,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
 
                 Class<?> rmiImpl = serialization.getRmiImpl(registration.interfaceClass);
 
-                RmiRegistration registrationResult = connection.createNewRmiObject(interfaceClass, rmiImpl, callbackId);
+                RmiRegistration registrationResult = rmiSupport.createNewRmiObject(serialization, interfaceClass, rmiImpl, callbackId, logger);
                 connection.send(registrationResult);
                 // connection transport is flushed in calling method (don't need to do it here)
             }
@@ -156,8 +149,8 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
             // Check if we are getting an already existing REMOTE object. This check is always AFTER the check to create a new object
             else {
                 // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
-                RmiRegistration registrationResult = connection.getExistingRmiObject(interfaceClass, registration.rmiId, callbackId);
-                connection.send(registrationResult);
+                Object implementationObject = rmiSupport.getImplementationObject(registration.rmiId);
+                connection.send(new RmiRegistration(interfaceClass, registration.rmiId, callbackId, implementationObject));
                 // connection transport is flushed in calling method (don't need to do it here)
             }
         }
@@ -182,7 +175,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
                 else {
                     // override the implementation object with the proxy. This is required because RMI must be the same between "network" and "local"
                     // connections -- even if this "slows down" the speed/performance of what "local" connections offer.
-                    proxyObject = connection.getProxyObject(registration.rmiId, interfaceClass);
+                    proxyObject = rmiSupport.getLocalProxyObject(connection, registration.rmiId, interfaceClass, registration.remoteObject);
 
                     if (proxyObject != null && registration.remoteObject != null) {
                         // have to save A and B so we can correctly switch as necessary
@@ -205,7 +198,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
     @SuppressWarnings("unchecked")
     @Override
     public
-    Object normalMessages(final ConnectionImpl connection, final Object message) {
+    Object normalMessages(final ConnectionRmiSupport rmiSupport, final Object message) {
         // else, this was "just a local message"
 
         // because we NORMALLY pass around just the object (there is no serialization going on...) we have to explicitly check to see
@@ -250,10 +243,10 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
                             o = field.get(message);
 
                             if (o instanceof RemoteObject) {
-                                RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(o);
+                                RmiProxyLocalHandler handler = (RmiProxyLocalHandler) Proxy.getInvocationHandler(o);
 
                                 int id = handler.rmiObjectId;
-                                field.set(message, connection.getImplementationObject(id));
+                                field.set(message, rmiSupport.getImplementationObject(id));
                                 fields.add(field);
                             }
                             else {
@@ -283,7 +276,7 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
                 array = NO_REMOTE_FIELDS;
             }
             else {
-                array = fields.toArray(new Field[fields.size()]);
+                array = fields.toArray(new Field[0]);
             }
 
             //noinspection SynchronizeOnNonFinalField
@@ -303,10 +296,10 @@ class RmiObjectLocalHandler extends RmiObjectHandler {
                     o = field.get(message);
 
                     if (o instanceof RemoteObject) {
-                        RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(o);
+                        RmiProxyNetworkHandler handler = (RmiProxyNetworkHandler) Proxy.getInvocationHandler(o);
 
                         int id = handler.rmiObjectId;
-                        field.set(message, connection.getImplementationObject(id));
+                        field.set(message, rmiSupport.getImplementationObject(id));
                     }
                     else {
                         // is a field supposed to be a proxy?

@@ -175,7 +175,7 @@ class RmiSendObjectTest extends BaseTest {
                   }
               });
 
-        client.connect(5000);
+        client.connect(0);
 
         waitForThreads();
     }

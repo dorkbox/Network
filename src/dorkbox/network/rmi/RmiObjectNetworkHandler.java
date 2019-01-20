@@ -18,10 +18,10 @@ package dorkbox.network.rmi;
 import org.slf4j.Logger;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.Listener;
+import dorkbox.network.serialization.CryptoSerializationManager;
 
 public
-class RmiObjectNetworkHandler extends RmiObjectHandler {
+class RmiObjectNetworkHandler implements RmiObjectHandler {
 
     private final Logger logger;
 
@@ -30,16 +30,15 @@ class RmiObjectNetworkHandler extends RmiObjectHandler {
         this.logger = logger;
     }
 
-    @Override
     public
-    void invoke(final ConnectionImpl connection, final InvokeMethod message, final Listener.OnMessageReceived<ConnectionImpl, InvokeMethod> rmiInvokeListener) {
-        // default, nothing fancy
-        rmiInvokeListener.received(connection, message);
+    InvokeMethod getInvokeMethod(final CryptoSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod) {
+        // everything is fine, there is nothing necessary to fix
+        return invokeMethod;
     }
 
     @Override
     public
-    void registration(final ConnectionImpl connection, final RmiRegistration registration) {
+    void registration(final ConnectionRmiSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration registration) {
         // manage creating/getting/notifying this RMI object
 
         // these fields are ALWAYS present!
@@ -55,11 +54,13 @@ class RmiObjectNetworkHandler extends RmiObjectHandler {
                 // CREATE a new ID, and register the ID and new object (must create a new one) in the object maps
 
                 // have to lookup the implementation class
-                Class<?> rmiImpl = connection.getEndPoint().getSerialization().getRmiImpl(interfaceClass);
+                CryptoSerializationManager serialization = connection.getEndPoint().getSerialization();
+
+                Class<?> rmiImpl = serialization.getRmiImpl(interfaceClass);
 
 
                 // For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
-                RmiRegistration registrationResult = connection.createNewRmiObject(interfaceClass, rmiImpl, callbackId);
+                RmiRegistration registrationResult = rmiSupport.createNewRmiObject(serialization, interfaceClass, rmiImpl, callbackId, logger);
                 connection.send(registrationResult);
                 // connection transport is flushed in calling method (don't need to do it here)
             }
@@ -69,8 +70,8 @@ class RmiObjectNetworkHandler extends RmiObjectHandler {
                 // THIS IS ON THE REMOTE CONNECTION (where the object implementation will really exist)
                 //
                 // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
-                RmiRegistration registrationResult = connection.getExistingRmiObject(interfaceClass, registration.rmiId, callbackId);
-                connection.send(registrationResult);
+                Object implementationObject = rmiSupport.getImplementationObject(registration.rmiId);
+                connection.send(new RmiRegistration(interfaceClass, registration.rmiId, callbackId, implementationObject));
                 // connection transport is flushed in calling method (don't need to do it here)
             }
         }
@@ -83,5 +84,11 @@ class RmiObjectNetworkHandler extends RmiObjectHandler {
             // THIS IS ON THE LOCAL CONNECTION SIDE, which is the side that called 'getRemoteObject()'   This can be Server or Client.
             connection.runRmiCallback(interfaceClass, callbackId, registration.remoteObject);
         }
+    }
+
+    @Override
+    public
+    Object normalMessages(final ConnectionRmiSupport connection, final Object message) {
+        return message;
     }
 }

@@ -25,7 +25,6 @@ import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.registration.MetaChannel;
-import dorkbox.network.rmi.RmiObjectHandler;
 import dorkbox.util.FastThreadLocal;
 import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.util.NetUtil;
@@ -49,16 +48,11 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     private final byte[] aesIV; // AES-GCM requires 12 bytes
 
     private final FastThreadLocal<ParametersWithIV> cryptoParameters;
-    private final RmiObjectHandler rmiObjectHandler;
 
-    /**
-     * @param rmiObjectHandler is a no-op handler if RMI is disabled, otherwise handles RMI object registration
-     */
     public
-    ChannelNetworkWrapper(final MetaChannel metaChannel, final InetSocketAddress remoteAddress, final RmiObjectHandler rmiObjectHandler) {
+    ChannelNetworkWrapper(final MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
 
         this.sessionId = metaChannel.sessionId;
-        this.rmiObjectHandler = rmiObjectHandler;
         this.isLoopback = remoteAddress.getAddress().equals(NetUtil.LOCALHOST);
 
         if (metaChannel.tcpChannel != null) {
@@ -138,12 +132,6 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     public
     boolean isLoopback() {
         return isLoopback;
-    }
-
-    @Override
-    public
-    RmiObjectHandler manageRmi() {
-        return rmiObjectHandler;
     }
 
     @Override

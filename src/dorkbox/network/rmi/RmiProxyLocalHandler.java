@@ -61,7 +61,7 @@ import dorkbox.network.serialization.RmiSerializationManager;
  * If there are no checked exceptions thrown, then we don't have to explicitly set 'transmitExceptions' to false
  */
 public
-class RmiProxyHandler implements InvocationHandler {
+class RmiProxyLocalHandler implements InvocationHandler {
     private final Logger logger;
 
     private final ReentrantLock lock = new ReentrantLock();
@@ -99,9 +99,10 @@ class RmiProxyHandler implements InvocationHandler {
      * @param connection this is really the network client -- there is ONLY ever 1 connection
      * @param rmiId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
      * @param iFace this is the RMI interface
+     * @param object
      */
     public
-    RmiProxyHandler(final ConnectionImpl connection, final int rmiId, final Class<?> iFace) {
+    RmiProxyLocalHandler(final ConnectionImpl connection, final int rmiId, final Class<?> iFace, final Object object) {
         super();
 
         this.connection = connection;
@@ -134,16 +135,16 @@ class RmiProxyHandler implements InvocationHandler {
                 }
 
                 synchronized (this) {
-                    if (RmiProxyHandler.this.pendingResponses[responseID]) {
-                        RmiProxyHandler.this.responseTable[responseID] = invokeMethodResult;
+                    if (RmiProxyLocalHandler.this.pendingResponses[responseID]) {
+                        RmiProxyLocalHandler.this.responseTable[responseID] = invokeMethodResult;
                     }
                 }
 
-                RmiProxyHandler.this.lock.lock();
+                RmiProxyLocalHandler.this.lock.lock();
                 try {
-                    RmiProxyHandler.this.responseCondition.signalAll();
+                    RmiProxyLocalHandler.this.responseCondition.signalAll();
                 } finally {
-                    RmiProxyHandler.this.lock.unlock();
+                    RmiProxyLocalHandler.this.lock.unlock();
                 }
             }
         };
@@ -434,7 +435,7 @@ class RmiProxyHandler implements InvocationHandler {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        RmiProxyHandler other = (RmiProxyHandler) obj;
+        RmiProxyLocalHandler other = (RmiProxyLocalHandler) obj;
         return this.rmiObjectId == other.rmiObjectId;
     }
 }

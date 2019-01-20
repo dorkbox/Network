@@ -38,7 +38,7 @@ class InvocationHandlerSerializer extends Serializer<Object> {
     @Override
     public
     void write(Kryo kryo, Output output, Object object) {
-        RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(object);
+        RmiProxyNetworkHandler handler = (RmiProxyNetworkHandler) Proxy.getInvocationHandler(object);
         output.writeInt(handler.rmiObjectId, true);
     }
 

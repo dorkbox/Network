@@ -36,11 +36,11 @@ import io.netty.channel.ChannelHandlerContext;
  * This is to prevent race conditions where onMessage() can happen BEFORE a "connection" is "connected"
  */
 public
-class ConnectionWrapper implements CryptoConnection, ChannelHandler {
+class ConnectionRegistrationImpl implements CryptoConnection, ChannelHandler {
     public final ConnectionImpl connection;
 
     public
-    ConnectionWrapper(final ConnectionImpl connection) {
+    ConnectionRegistrationImpl(final ConnectionImpl connection) {
         this.connection = connection;
     }
 
@@ -58,7 +58,6 @@ class ConnectionWrapper implements CryptoConnection, ChannelHandler {
     public
     void exceptionCaught(final ChannelHandlerContext ctx, final Throwable cause) throws Exception {
     }
-
 
     @Override
     public

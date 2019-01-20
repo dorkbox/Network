@@ -26,7 +26,7 @@ import org.bouncycastle.jce.spec.ECParameterSpec;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
-import dorkbox.network.connection.registration.ConnectionWrapper;
+import dorkbox.network.connection.registration.ConnectionRegistrationImpl;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.registration.RegistrationHandler;
@@ -285,7 +285,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             // add the "connected"/"normal" handler now that we have established a "new" connection.
             // This will have state, etc. for this connection. THIS MUST BE 100% TCP/UDP created, otherwise it will break connections!
             ConnectionImpl connection = this.registrationWrapper.connection0(metaChannel, remoteAddress);
-            metaChannel.connection = new ConnectionWrapper(connection);
+            metaChannel.connection = new ConnectionRegistrationImpl(connection);
 
             // Now setup our meta-channel to migrate to the correct connection handler for all regular data.
 
@@ -334,7 +334,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
 
         try {
             // REMOVE our channel wrapper (only used for encryption) with the actual connection
-            ChannelHandler handler = metaChannel.connection = ((ConnectionWrapper) metaChannel.connection).connection;
+            ChannelHandler handler = metaChannel.connection = ((ConnectionRegistrationImpl) metaChannel.connection).connection;
 
             Channel channel;
             if (metaChannel.tcpChannel != null) {
@@ -410,7 +410,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             }
         }
 
-        pipeline.remove(ConnectionWrapper.class);
+        pipeline.remove(ConnectionRegistrationImpl.class);
 
         if (idleTimeout > 0) {
             pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, idleTimeout, TimeUnit.MILLISECONDS));

@@ -126,6 +126,14 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
      * This is NOT ENCRYPTED (and is only done on the loopback connection!)
      */
     public synchronized
+    void writeCompressed(final ByteBuf buffer, final Object message) throws IOException {
+        writeCompressed(null, buffer, message);
+    }
+
+    /**
+     * This is NOT ENCRYPTED (and is only done on the loopback connection!)
+     */
+    public synchronized
     void writeCompressed(final C connection, final ByteBuf buffer, final Object message) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection;
@@ -213,6 +221,14 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
 
         // have to copy over the orig data, because we used the temp buffer. Also have to account for the length of the uncompressed size
         buffer.writeBytes(inputArray, inputOffset, compressedLength + lengthLength);
+    }
+
+    /**
+     * This is NOT ENCRYPTED (and is only done on the loopback connection!)
+     */
+    public
+    Object readCompressed(final ByteBuf buffer, int length) throws IOException {
+        return readCompressed(null, buffer, length);
     }
 
     /**

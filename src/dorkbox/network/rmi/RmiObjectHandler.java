@@ -16,25 +16,14 @@
 package dorkbox.network.rmi;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.Listener;
+import dorkbox.network.serialization.CryptoSerializationManager;
 
 public
-class RmiObjectHandler {
+interface RmiObjectHandler {
 
-    public
-    RmiObjectHandler() {
-    }
+    InvokeMethod getInvokeMethod(final CryptoSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod);
 
-    public
-    void invoke(final ConnectionImpl connection, final InvokeMethod message, final Listener.OnMessageReceived<ConnectionImpl, InvokeMethod> rmiInvokeListener) {
-    }
+    void registration(final ConnectionRmiSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration message);
 
-    public
-    void registration(final ConnectionImpl connection, final RmiRegistration message) {
-    }
-
-    public
-    Object normalMessages(final ConnectionImpl connection, final Object message) {
-        return message;
-    }
+    Object normalMessages(final ConnectionRmiSupport connection, final Object message);
 }

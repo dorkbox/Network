@@ -20,7 +20,6 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.ISessionManager;
-import dorkbox.network.rmi.RmiObjectHandler;
 
 public
 interface ChannelWrapper {
@@ -45,8 +44,6 @@ interface ChannelWrapper {
      * encryption (it's not required on loopback, it is required on all others)
      */
     boolean isLoopback();
-
-    RmiObjectHandler manageRmi();
 
     /**
      * @return the remote host (can be local, tcp, udp)

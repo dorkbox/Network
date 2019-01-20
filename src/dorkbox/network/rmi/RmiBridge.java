@@ -36,15 +36,12 @@ package dorkbox.network.rmi;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.connection.Listener;
 import dorkbox.network.serialization.RmiSerializationManager;
 import dorkbox.util.Property;
 import dorkbox.util.collections.LockFreeIntBiMap;
@@ -111,9 +108,7 @@ class RmiBridge {
     }
 
     // the name of who created this RmiBridge
-    private final org.slf4j.Logger logger;
-
-    private final Executor executor;
+    final org.slf4j.Logger logger;
 
 
     // we start at 1, because 0 (INVALID_RMI) means we access connection only objects
@@ -122,66 +117,17 @@ class RmiBridge {
     // this is the ID -> Object RMI map. The RMI ID is used (not the kryo ID)
     private final LockFreeIntBiMap<Object> objectMap = new LockFreeIntBiMap<Object>(INVALID_MAP_ID);
 
-    private final Listener.OnMessageReceived<ConnectionImpl, InvokeMethod> invokeListener = new Listener.OnMessageReceived<ConnectionImpl, InvokeMethod>() {
-        @SuppressWarnings("AutoBoxing")
-        @Override
-        public
-        void received(final ConnectionImpl connection, final InvokeMethod invokeMethod) {
-            int objectID = invokeMethod.objectID;
-
-            // have to make sure to get the correct object (global vs local)
-            // This is what is overridden when registering interfaces/classes for RMI.
-            // objectID is the interface ID, and this returns the implementation ID.
-            final Object target = connection.getImplementationObject(objectID);
-
-            if (target == null) {
-                Logger logger2 = RmiBridge.this.logger;
-                if (logger2.isWarnEnabled()) {
-                    logger2.warn("Ignoring remote invocation request for unknown object ID: {}", objectID);
-                }
-
-                return;
-            }
-
-            Executor executor2 = RmiBridge.this.executor;
-            if (executor2 == null) {
-                try {
-                    invoke(connection, target, invokeMethod);
-                } catch (IOException e) {
-                    logger.error("Unable to invoke method.", e);
-                }
-            }
-            else {
-                executor2.execute(new Runnable() {
-                    @Override
-                    public
-                    void run() {
-                        try {
-                            invoke(connection, target, invokeMethod);
-                        } catch (IOException e) {
-                            logger.error("Unable to invoke method.", e);
-                        }
-                    }
-                });
-            }
-        }
-    };
-
     /**
      * Creates an RmiBridge with no connections. Connections must be {@link RmiBridge#register(int, Object)} added to allow the remote end
      * of the connections to access objects in this ObjectSpace.
      *
-     * @param executor
-     *                 Sets the executor used to invoke methods when an invocation is received from a remote endpoint. By default, no
-     *                 executor is set and invocations occur on the network thread, which should not be blocked for long, May be null.
      * @param isGlobal
      *                 specify if this RmiBridge is a "global" bridge, meaning connections will prefer objects from this bridge instead of
      *                 the connection-local bridge.
      */
     public
-    RmiBridge(final org.slf4j.Logger logger, final Executor executor, final boolean isGlobal) {
+    RmiBridge(final org.slf4j.Logger logger, final boolean isGlobal) {
         this.logger = logger;
-        this.executor = executor;
 
         if (isGlobal) {
             rmiObjectIdCounter = new AtomicInteger(0);
@@ -189,15 +135,6 @@ class RmiBridge {
         else {
             rmiObjectIdCounter = new AtomicInteger(1);
         }
-    }
-
-    /**
-     * @return the invocation listener
-     */
-    @SuppressWarnings("rawtypes")
-    public
-    Listener.OnMessageReceived<ConnectionImpl, InvokeMethod> getListener() {
-        return this.invokeListener;
     }
 
     /**
@@ -210,12 +147,11 @@ class RmiBridge {
      *                 The remote side of this connection requested the invocation.
      */
     @SuppressWarnings("NumericCastThatLosesPrecision")
-    protected
-    void invoke(final Connection connection, final Object target, final InvokeMethod invokeMethod) throws IOException {
+    protected static
+    void invoke(final Connection connection, final Object target, final InvokeMethod invokeMethod, final Logger logger) throws IOException {
         CachedMethod cachedMethod = invokeMethod.cachedMethod;
 
-        Logger logger2 = this.logger;
-        if (logger2.isTraceEnabled()) {
+        if (logger.isTraceEnabled()) {
             String argString = "";
             if (invokeMethod.args != null) {
                 argString = Arrays.deepToString(invokeMethod.args);
@@ -240,7 +176,7 @@ class RmiBridge {
                 // did we override our cached method? This is not common.
                 stringBuilder.append(" [Connection method override]");
             }
-            logger2.trace(stringBuilder.toString());
+            logger.trace(stringBuilder.toString());
         }
 
         byte responseData = invokeMethod.responseData;

@@ -24,7 +24,6 @@ import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.registration.MetaChannel;
-import dorkbox.network.rmi.RmiObjectHandler;
 import io.netty.channel.Channel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.util.concurrent.Promise;
@@ -33,15 +32,13 @@ public
 class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
 
     private final Channel channel;
-    private final RmiObjectHandler rmiObjectHandler;
 
     private final AtomicBoolean shouldFlush = new AtomicBoolean(false);
     private String remoteAddress;
 
     public
-    ChannelLocalWrapper(MetaChannel metaChannel, final RmiObjectHandler rmiObjectHandler) {
+    ChannelLocalWrapper(MetaChannel metaChannel) {
         this.channel = metaChannel.localChannel;
-        this.rmiObjectHandler = rmiObjectHandler;
         this.remoteAddress = ((LocalAddress) this.channel.remoteAddress()).id();
     }
 
@@ -106,12 +103,6 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
     public
     boolean isLoopback() {
         return true;
-    }
-
-    @Override
-    public
-    RmiObjectHandler manageRmi() {
-        return rmiObjectHandler;
     }
 
     @Override
