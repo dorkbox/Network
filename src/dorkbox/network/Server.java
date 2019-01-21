@@ -374,10 +374,10 @@ class Server<C extends Connection> extends EndPointServer {
         // now WAIT until bind has released the socket
         // wait a max of 10 tries
         int tries = 10;
-        while (tries-- >= 0 && isRunning(this.config)) {
+        while (tries-- > 0 && isRunning(this.config)) {
             logger.warn("Server has requested shutdown, but the socket is still bound. Waiting {} more times", tries);
             try {
-                Thread.sleep(1000);
+                Thread.sleep(2000);
             } catch (InterruptedException ignored) {
             }
         }
