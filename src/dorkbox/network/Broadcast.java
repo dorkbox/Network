@@ -93,7 +93,7 @@ class Broadcast {
      */
     public static
     BroadcastResponse discoverHostAddress(int udpPort, int discoverTimeoutMillis) {
-        List<BroadcastResponse> servers = discoverHost0(udpPort, discoverTimeoutMillis, false);
+        List<BroadcastResponse> servers = discoverHosts0(logger, udpPort, discoverTimeoutMillis, false);
         if (servers.isEmpty()) {
             return null;
         }
@@ -114,25 +114,25 @@ class Broadcast {
      */
     public static
     List<BroadcastResponse> discoverHosts(int udpPort, int discoverTimeoutMillis) {
-        return discoverHost0(udpPort, discoverTimeoutMillis, true);
+        return discoverHosts0(logger, udpPort, discoverTimeoutMillis, true);
     }
 
 
-    private static
-    List<BroadcastResponse> discoverHost0(int udpPort, int discoverTimeoutMillis, boolean fetchAllServers) {
+    static
+    List<BroadcastResponse> discoverHosts0(Logger logger, int udpPort, int discoverTimeoutMillis, boolean fetchAllServers) {
         // fetch a buffer that contains the serialized object.
         ByteBuf buffer = Unpooled.buffer(1);
         buffer.writeByte(MagicBytes.broadcastID);
 
         List<BroadcastResponse> servers = new ArrayList<BroadcastResponse>();
 
-        Logger logger2 = logger;
-
         Enumeration<NetworkInterface> networkInterfaces;
         try {
             networkInterfaces = NetworkInterface.getNetworkInterfaces();
         } catch (SocketException e) {
-            logger2.error("Host discovery failed.", e);
+            if (logger != null) {
+                logger.error("Host discovery failed.", e);
+            }
             return new ArrayList<BroadcastResponse>(0);
         }
 
@@ -145,16 +145,20 @@ class Broadcast {
 
                 // don't use IPv6!
                 if (address instanceof Inet6Address) {
-                    if (logger2.isInfoEnabled()) {
-                        logger2.info("Not using IPv6 address: {}", address);
+                    if (logger != null) {
+                        if (logger.isInfoEnabled()) {
+                            logger.info("Not using IPv6 address: {}", address);
+                        }
                     }
                     continue;
                 }
 
 
                 try {
-                    if (logger2.isInfoEnabled()) {
-                        logger2.info("Searching for host on [{}:{}]", address.getHostAddress(), udpPort);
+                    if (logger != null) {
+                        if (logger.isInfoEnabled()) {
+                            logger.info("Searching for host on [{}:{}]", address.getHostAddress(), udpPort);
+                        }
                     }
 
                     EventLoopGroup group;
@@ -183,13 +187,17 @@ class Broadcast {
                         future = udpBootstrap.bind();
                         future.await();
                     } catch (InterruptedException e) {
-                        logger2.error("Could not bind to random UDP address on the server.", e.getCause());
-                        throw new IllegalArgumentException();
+                        if (logger != null) {
+                            logger.error("Could not bind to random UDP address on the server.", e.getCause());
+                        }
+                        throw new IllegalArgumentException("Could not bind to random UDP address on the server.");
                     }
 
                     if (!future.isSuccess()) {
-                        logger2.error("Could not bind to random UDP address on the server.", future.cause());
-                        throw new IllegalArgumentException();
+                        if (logger != null) {
+                            logger.error("Could not bind to random UDP address on the server.", future.cause());
+                        }
+                        throw new IllegalArgumentException("Could not bind to random UDP address on the server.");
                     }
 
                     Channel channel1 = future.channel();
@@ -199,10 +207,11 @@ class Broadcast {
                         channel1.writeAndFlush(new DatagramPacket(buffer, new InetSocketAddress(broadcast, udpPort)));
 
                         // response is received.  If the channel is not closed within 5 seconds, move to the next one.
-                        if (!channel1.closeFuture()
-                                     .awaitUninterruptibly(discoverTimeoutMillis)) {
-                            if (logger2.isInfoEnabled()) {
-                                logger2.info("Host discovery timed out.");
+                        if (!channel1.closeFuture().awaitUninterruptibly(discoverTimeoutMillis)) {
+                            if (logger != null) {
+                                if (logger.isInfoEnabled()) {
+                                    logger.info("Host discovery timed out.");
+                                }
                             }
                         }
                         else {
@@ -213,10 +222,8 @@ class Broadcast {
 
                         // keep going if we want to fetch all servers. Break if we found one.
                         if (!(fetchAllServers || servers.isEmpty())) {
-                            channel1.close()
-                                    .await();
-                            group.shutdownGracefully()
-                                 .await();
+                            channel1.close().await();
+                            group.shutdownGracefully().await();
                             break scan;
                         }
                     }
@@ -235,10 +242,11 @@ class Broadcast {
 
 
                             // response is received.  If the channel is not closed within 5 seconds, move to the next one.
-                            if (!channel1.closeFuture()
-                                         .awaitUninterruptibly(discoverTimeoutMillis)) {
-                                if (logger2.isInfoEnabled()) {
-                                    logger2.info("Host discovery timed out.");
+                            if (!channel1.closeFuture().awaitUninterruptibly(discoverTimeoutMillis)) {
+                                if (logger != null) {
+                                    if (logger.isInfoEnabled()) {
+                                        logger.info("Host discovery timed out.");
+                                    }
                                 }
                             }
                             else {
@@ -253,8 +261,7 @@ class Broadcast {
                         }
                     }
 
-                    channel1.close()
-                            .sync();
+                    channel1.close().sync();
                     group.shutdownGracefully(0, discoverTimeoutMillis, TimeUnit.MILLISECONDS);
 
                 } catch (Exception ignored) {
@@ -268,8 +275,7 @@ class Broadcast {
         }
 
 
-
-        if (logger2.isInfoEnabled() && !servers.isEmpty()) {
+        if (logger != null && logger.isInfoEnabled() && !servers.isEmpty()) {
             StringBuilder stringBuilder = new StringBuilder(256);
 
             if (fetchAllServers) {
@@ -293,7 +299,7 @@ class Broadcast {
                         stringBuilder.append(udpPort);
                     }
                 }
-                logger2.info(stringBuilder.toString());
+                logger.info(stringBuilder.toString());
             }
             else {
                 BroadcastResponse server = servers.get(0);
@@ -311,7 +317,7 @@ class Broadcast {
                     stringBuilder.append(udpPort);
                 }
 
-                logger2.info("Discovered server [{}]", stringBuilder.toString());
+                logger.info("Discovered server [{}]", stringBuilder.toString());
             }
         }
 
