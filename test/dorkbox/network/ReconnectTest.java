@@ -143,7 +143,11 @@ class ReconnectTest extends BaseTest {
         }
         for (int i = 1; i < count + 1; i++) {
             System.out.println(".....");
-            client.connect(5000);
+            try {
+                client.connect(5000);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
 
             int waitingRetryCount = 20;
