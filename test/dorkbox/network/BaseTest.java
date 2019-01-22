@@ -178,44 +178,44 @@ class BaseTest {
 
         this.fail_check = false;
 
-        synchronized (this.endPointConnections) {
-            Thread thread = null;
-            if (!this.endPointConnections.isEmpty()) {
-                // make sure to run this thread in the MAIN thread group..
-                ThreadGroup threadGroup = Thread.currentThread()
-                                                .getThreadGroup();
-                if (threadGroup.getName()
-                               .contains(THREADGROUP_NAME)) {
-                    threadGroup = threadGroup.getParent();
-                }
-
-                thread = new Thread(threadGroup, new Runnable() {
-                    @Override
-                    public
-                    void run() {
-                        // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
-                        // ARE NOT in the same thread group as netty!
-                        try {
-                            if (stopAfterMillis > 0L) {
-                                // if we specify a time, then we stop, otherwise we wait the timeout.
-                                Thread.sleep(stopAfterMillis);
-                            }
-                            else {
-                                Thread.sleep(120 * 1000L); // wait minimum of 2 minutes before we automatically fail the unit test.
-                            }
-
-                            System.err.println("Test did not complete in a timely manner...");
-                            BaseTest.this.fail_check = true;
-                            stopEndPoints();
-                        } catch (InterruptedException ignored) {
-                        }
-                    }
-                }, "UnitTest timeout fail condition");
-                thread.setDaemon(true);
-                thread.start();
+        Thread thread = null;
+        if (!this.endPointConnections.isEmpty()) {
+            // make sure to run this thread in the MAIN thread group..
+            ThreadGroup threadGroup = Thread.currentThread()
+                                            .getThreadGroup();
+            if (threadGroup.getName()
+                           .contains(THREADGROUP_NAME)) {
+                threadGroup = threadGroup.getParent();
             }
 
-            while (!this.endPointConnections.isEmpty()) {
+            thread = new Thread(threadGroup, new Runnable() {
+                @Override
+                public
+                void run() {
+                    // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
+                    // ARE NOT in the same thread group as netty!
+                    try {
+                        if (stopAfterMillis > 0L) {
+                            // if we specify a time, then we stop, otherwise we wait the timeout.
+                            Thread.sleep(stopAfterMillis);
+                        }
+                        else {
+                            Thread.sleep(120 * 1000L); // wait minimum of 2 minutes before we automatically fail the unit test.
+                        }
+
+                        System.err.println("Test did not complete in a timely manner...");
+                        BaseTest.this.fail_check = true;
+                        stopEndPoints();
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+            }, "UnitTest timeout fail condition");
+            thread.setDaemon(true);
+            thread.start();
+        }
+
+        while (!this.endPointConnections.isEmpty()) {
+            synchronized (this.endPointConnections) {
                 try {
                     this.endPointConnections.wait(stopAfterMillis);
                 } catch (InterruptedException e) {
