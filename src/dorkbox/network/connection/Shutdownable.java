@@ -217,7 +217,7 @@ class Shutdownable {
 
         for (EventLoopGroup loopGroup : loopGroups) {
             shutdownThreadList.add(loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds,
-                                                                maxShutdownWaitTimeInMilliSeconds * 10,
+                                                                maxShutdownWaitTimeInMilliSeconds * 2,
                                                                 TimeUnit.MILLISECONDS));
             Thread.yield();
         }
