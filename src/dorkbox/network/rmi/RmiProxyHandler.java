@@ -72,7 +72,7 @@ class RmiProxyHandler implements InvocationHandler {
     private final boolean[] pendingResponses = new boolean[64];
 
     private final ConnectionImpl connection;
-    private final ConnectionRmiSupport rmiSupport;
+    private final ConnectionRmiImplSupport rmiSupport;
     public final int rmiObjectId; // this is the RMI id
     public final int classId; // this is the KRYO class id
 
@@ -104,7 +104,7 @@ class RmiProxyHandler implements InvocationHandler {
      * @param iFace this is the RMI interface
      */
     public
-    RmiProxyHandler(final ConnectionImpl connection, final ConnectionRmiSupport rmiSupport, final int rmiId, final Class<?> iFace) {
+    RmiProxyHandler(final ConnectionImpl connection, final ConnectionRmiImplSupport rmiSupport, final int rmiId, final Class<?> iFace) {
         super();
 
         this.connection = connection;

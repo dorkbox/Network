@@ -28,7 +28,7 @@ import com.esotericsoftware.kryo.util.MapReferenceResolver;
 
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
-import dorkbox.network.rmi.ConnectionSupport;
+import dorkbox.network.rmi.ConnectionRmiSupport;
 import dorkbox.network.rmi.RmiNopConnection;
 import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.bytes.BigEndian;
@@ -59,7 +59,7 @@ class KryoExtra extends Kryo {
     private final ByteBufOutput writer = new ByteBufOutput();
 
     // volatile to provide object visibility for entire class. This is unique per connection
-    public volatile ConnectionSupport rmiSupport;
+    public volatile ConnectionRmiSupport rmiSupport;
 
     private final GCMBlockCipher aesEngine = new GCMBlockCipher(new AESFastEngine());
 

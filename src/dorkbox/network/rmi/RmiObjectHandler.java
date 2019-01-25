@@ -23,7 +23,7 @@ interface RmiObjectHandler {
 
     InvokeMethod getInvokeMethod(final NetworkSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod);
 
-    void registration(final ConnectionRmiSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration message);
+    void registration(final ConnectionRmiImplSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration message);
 
-    Object normalMessages(final ConnectionRmiSupport connection, final Object message);
+    Object normalMessages(final ConnectionRmiImplSupport connection, final Object message);
 }

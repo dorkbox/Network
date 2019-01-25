@@ -124,7 +124,7 @@ class RmiNopConnection implements Connection_ {
 
     @Override
     public
-    ConnectionSupport rmiSupport() {
+    ConnectionNoOpSupport rmiSupport() {
         return null;
     }
 

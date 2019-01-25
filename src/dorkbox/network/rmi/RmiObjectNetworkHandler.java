@@ -38,7 +38,7 @@ class RmiObjectNetworkHandler implements RmiObjectHandler {
 
     @Override
     public
-    void registration(final ConnectionRmiSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration registration) {
+    void registration(final ConnectionRmiImplSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration registration) {
         // manage creating/getting/notifying this RMI object
 
         // these fields are ALWAYS present!
@@ -88,7 +88,7 @@ class RmiObjectNetworkHandler implements RmiObjectHandler {
 
     @Override
     public
-    Object normalMessages(final ConnectionRmiSupport connection, final Object message) {
+    Object normalMessages(final ConnectionRmiImplSupport connection, final Object message) {
         return message;
     }
 }

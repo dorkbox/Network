@@ -42,12 +42,6 @@ interface Connection {
     boolean isLoopback();
 
     /**
-     * @return the endpoint associated with this connection
-     */
-    @SuppressWarnings("rawtypes")
-    EndPoint getEndPoint();
-
-    /**
      * @return the connection (TCP or LOCAL) id of this connection.
      */
     int id();

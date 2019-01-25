@@ -121,7 +121,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
 
     @Override
     public
-    void registration(final ConnectionRmiSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration registration) {
+    void registration(final ConnectionRmiImplSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration registration) {
         // manage creating/getting/notifying this RMI object
 
         // these fields are ALWAYS present!
@@ -198,7 +198,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
     @SuppressWarnings("unchecked")
     @Override
     public
-    Object normalMessages(final ConnectionRmiSupport rmiSupport, final Object message) {
+    Object normalMessages(final ConnectionRmiImplSupport rmiSupport, final Object message) {
         // else, this was "just a local message"
 
         // because we NORMALLY pass around just the object (there is no serialization going on...) we have to explicitly check to see

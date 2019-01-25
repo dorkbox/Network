@@ -25,7 +25,7 @@ import dorkbox.network.connection.Listeners;
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
-import dorkbox.network.rmi.ConnectionSupport;
+import dorkbox.network.rmi.ConnectionNoOpSupport;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -169,7 +169,7 @@ class ConnectionRegistrationImpl implements Connection_, ChannelHandler {
 
     @Override
     public
-    ConnectionSupport rmiSupport() {
+    ConnectionNoOpSupport rmiSupport() {
         return null;
     }
 }

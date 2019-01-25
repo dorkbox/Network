@@ -361,13 +361,6 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
         return connection.isLoopback();
     }
 
-    @SuppressWarnings("rawtypes")
-    @Override
-    public
-    EndPoint getEndPoint() {
-        return this;
-    }
-
     /**
      * @return the connection (TCP or LOCAL) id of this connection.
      */

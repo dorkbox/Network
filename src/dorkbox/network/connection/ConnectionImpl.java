@@ -34,8 +34,9 @@ import dorkbox.network.connection.ping.PingTuple;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
+import dorkbox.network.rmi.ConnectionNoOpSupport;
+import dorkbox.network.rmi.ConnectionRmiImplSupport;
 import dorkbox.network.rmi.ConnectionRmiSupport;
-import dorkbox.network.rmi.ConnectionSupport;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.RmiObjectHandler;
 import io.netty.bootstrap.DatagramSessionChannel;
@@ -128,7 +129,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
 
 
     // RMI support for this connection
-    final ConnectionSupport rmiSupport;
+    final ConnectionRmiSupport rmiSupport;
 
     /**
      * All of the parameters can be null, when metaChannel wants to get the base class type
@@ -145,7 +146,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
             boolean isNetworkChannel = this.channelWrapper instanceof ChannelNetworkWrapper;
 
             if (endPoint.rmiEnabled) {
-
                 RmiObjectHandler handler;
                 if (isNetworkChannel) {
                     handler = endPoint.rmiNetworkHandler;
@@ -156,11 +156,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
 
                 // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent access, but
                 // there WILL be issues with thread visibility because a different worker thread can be called for different connections
-                this.rmiSupport = new ConnectionRmiSupport(this, endPoint.rmiGlobalBridge, handler);
+                this.rmiSupport = new ConnectionRmiImplSupport(this, endPoint.rmiGlobalBridge, handler);
             } else {
-                this.rmiSupport = new ConnectionSupport();
+                this.rmiSupport = new ConnectionNoOpSupport();
             }
-
 
 
             if (isNetworkChannel) {
@@ -189,7 +188,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
             this.logger = null;
             this.sessionManager = null;
             this.channelWrapper = null;
-            this.rmiSupport = new ConnectionSupport();
+            this.rmiSupport = new ConnectionNoOpSupport();
         }
     }
 
@@ -1012,7 +1011,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
 
     @Override
     public
-    ConnectionSupport rmiSupport() {
+    ConnectionRmiSupport rmiSupport() {
         return rmiSupport;
     }
 

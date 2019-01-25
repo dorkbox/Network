@@ -17,10 +17,10 @@ package dorkbox.network.connection;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
-import dorkbox.network.rmi.ConnectionSupport;
+import dorkbox.network.rmi.ConnectionRmiSupport;
 
 /**
- * Supporting methods for encrypting data to a remote endpoint and RMI
+ * Supporting methods that are internal to the network stack
  */
 public
 interface Connection_ extends Connection {
@@ -28,7 +28,7 @@ interface Connection_ extends Connection {
     /**
      * @return the RMI support for this connection
      */
-    ConnectionSupport rmiSupport();
+    ConnectionRmiSupport rmiSupport();
 
     /**
      * This is the per-message sequence number.
@@ -46,4 +46,10 @@ interface Connection_ extends Connection {
      *          clobber each other
      */
     ParametersWithIV getCryptoParameters();
+
+    /**
+     * @return the endpoint associated with this connection
+     */
+    @SuppressWarnings("rawtypes")
+    EndPoint getEndPoint();
 }

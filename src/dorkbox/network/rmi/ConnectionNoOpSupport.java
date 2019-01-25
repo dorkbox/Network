@@ -18,11 +18,8 @@ import org.slf4j.Logger;
 
 import dorkbox.network.connection.ConnectionImpl;
 
-/**
- *
- */
 public
-class ConnectionSupport {
+class ConnectionNoOpSupport implements ConnectionRmiSupport {
     public
     void close() {
     }
