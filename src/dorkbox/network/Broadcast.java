@@ -15,6 +15,7 @@
  */
 package dorkbox.network;
 
+import java.io.IOException;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -73,7 +74,7 @@ class Broadcast {
      * @return the first server found, or null if no server responded.
      */
     public static
-    BroadcastResponse discoverHost(int udpPort, int discoverTimeoutMillis) {
+    BroadcastResponse discoverHost(int udpPort, int discoverTimeoutMillis) throws IOException {
         BroadcastResponse discoverHost = discoverHostAddress(udpPort, discoverTimeoutMillis);
         if (discoverHost != null) {
             return discoverHost;
@@ -92,7 +93,7 @@ class Broadcast {
      * @return the first server found, or null if no server responded.
      */
     public static
-    BroadcastResponse discoverHostAddress(int udpPort, int discoverTimeoutMillis) {
+    BroadcastResponse discoverHostAddress(int udpPort, int discoverTimeoutMillis) throws IOException {
         List<BroadcastResponse> servers = discoverHosts0(logger, udpPort, discoverTimeoutMillis, false);
         if (servers.isEmpty()) {
             return null;
@@ -113,13 +114,13 @@ class Broadcast {
      * @return the list of found servers (if they responded)
      */
     public static
-    List<BroadcastResponse> discoverHosts(int udpPort, int discoverTimeoutMillis) {
+    List<BroadcastResponse> discoverHosts(int udpPort, int discoverTimeoutMillis) throws IOException {
         return discoverHosts0(logger, udpPort, discoverTimeoutMillis, true);
     }
 
 
     static
-    List<BroadcastResponse> discoverHosts0(Logger logger, int udpPort, int discoverTimeoutMillis, boolean fetchAllServers) {
+    List<BroadcastResponse> discoverHosts0(Logger logger, int udpPort, int discoverTimeoutMillis, boolean fetchAllServers) throws IOException {
         // fetch a buffer that contains the serialized object.
         ByteBuf buffer = Unpooled.buffer(1);
         buffer.writeByte(MagicBytes.broadcastID);
@@ -133,7 +134,7 @@ class Broadcast {
             if (logger != null) {
                 logger.error("Host discovery failed.", e);
             }
-            return new ArrayList<BroadcastResponse>(0);
+            throw new IOException("Host discovery failed. No interfaces found.");
         }
 
 
@@ -190,14 +191,14 @@ class Broadcast {
                         if (logger != null) {
                             logger.error("Could not bind to random UDP address on the server.", e.getCause());
                         }
-                        throw new IllegalArgumentException("Could not bind to random UDP address on the server.");
+                        throw new IOException("Could not bind to random UDP address on the server.");
                     }
 
                     if (!future.isSuccess()) {
                         if (logger != null) {
                             logger.error("Could not bind to random UDP address on the server.", future.cause());
                         }
-                        throw new IllegalArgumentException("Could not bind to random UDP address on the server.");
+                        throw new IOException("Could not bind to random UDP address on the server.");
                     }
 
                     Channel channel1 = future.channel();
