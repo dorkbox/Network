@@ -256,8 +256,7 @@ class ListenerTest extends BaseTest {
                   @Override
                   public
                   void received(Connection connection, String string) {
-                      if (ListenerTest.this.count.get() < ListenerTest.this.limit) {
-                          ListenerTest.this.count.getAndIncrement();
+                      if (ListenerTest.this.count.getAndIncrement() < ListenerTest.this.limit) {
                           connection.send()
                                     .TCP(string);
                       }
@@ -276,7 +275,8 @@ class ListenerTest extends BaseTest {
 
         waitForThreads();
 
-        assertEquals(this.limit, this.count.get());
+        // -1 BECAUSE we are `getAndIncrement` for each check earlier
+        assertEquals(this.limit, this.count.get()-1);
 
         assertTrue(this.check1.get());
         assertTrue(this.check2.get());

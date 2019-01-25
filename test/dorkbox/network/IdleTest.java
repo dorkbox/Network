@@ -49,7 +49,7 @@ class IdleTest extends BaseTest {
 
     @Test
     public
-    void InputStreamSender() throws SecurityException, IOException {
+    void InputStreamSenderTCP() throws SecurityException, IOException {
         final int largeDataSize = 12345;
 
         System.err.println("-- TCP");
@@ -59,10 +59,15 @@ class IdleTest extends BaseTest {
         configuration.serialization = Serialization.DEFAULT(false, false, null);
 
         streamSpecificType(largeDataSize, configuration, ConnectionType.TCP);
+    }
 
+    @Test
+    public
+    void InputStreamSenderUDP() throws SecurityException, IOException {
+        final int largeDataSize = 12345;
 
         System.err.println("-- UDP");
-        configuration = new Configuration();
+        Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
@@ -76,7 +81,7 @@ class IdleTest extends BaseTest {
     // have to test sending objects
     @Test
     public
-    void ObjectSender() throws SecurityException, IOException {
+    void ObjectSenderTCP() throws SecurityException, IOException {
         final Data mainData = new Data();
         populateData(mainData);
 
@@ -89,10 +94,18 @@ class IdleTest extends BaseTest {
         register(configuration.serialization);
 
         sendObject(mainData, configuration, ConnectionType.TCP);
+    }
+
+    // have to test sending objects
+    @Test
+    public
+    void ObjectSenderUDP() throws SecurityException, IOException {
+        final Data mainData = new Data();
+        populateData(mainData);
 
 
         System.err.println("-- UDP");
-        configuration = new Configuration();
+        Configuration configuration = new Configuration();
         configuration.tcpPort = tcpPort;
         configuration.udpPort = udpPort;
         configuration.host = host;
@@ -101,8 +114,6 @@ class IdleTest extends BaseTest {
 
         sendObject(mainData, configuration, ConnectionType.TCP);
     }
-
-
 
     private
     void sendObject(final Data mainData, Configuration configuration, final ConnectionType type)
