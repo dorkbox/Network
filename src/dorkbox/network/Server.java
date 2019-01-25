@@ -429,8 +429,12 @@ class Server<C extends Connection> extends EndPointServer {
 
         // use Broadcast to see if there is a UDP server connected
         if (config.udpPort > 0) {
-            List<BroadcastResponse> broadcastResponses = Broadcast.discoverHosts0(null, config.udpPort, 500, true);
-            return !broadcastResponses.isEmpty();
+            List<BroadcastResponse> broadcastResponses = null;
+            try {
+                broadcastResponses = Broadcast.discoverHosts0(null, config.udpPort, 500, true);
+                return !broadcastResponses.isEmpty();
+            } catch (IOException ignored) {
+            }
         }
 
         return false;
