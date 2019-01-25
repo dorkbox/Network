@@ -23,8 +23,13 @@ package dorkbox.network;
 import static dorkbox.network.connection.EndPoint.THREADGROUP_NAME;
 import static org.junit.Assert.fail;
 
-import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
+import org.junit.After;
+import org.junit.Before;
 import org.slf4j.LoggerFactory;
 
 import ch.qos.logback.classic.Level;
@@ -47,6 +52,14 @@ class BaseTest {
     public static final int tcpPort = 54558;
     public static final int udpPort = 54779;
 
+    // wait minimum of 2 minutes before we automatically fail the unit test.
+    public static final long AUTO_FAIL_TIMEOUT = 120;
+
+    private final Object lock = new Object();
+    private CountDownLatch latch = new CountDownLatch(1);
+
+    private volatile Thread autoFailThread = null;
+
     static {
         // we want our entropy generation to be simple (ie, no user interaction to generate)
         try {
@@ -56,8 +69,8 @@ class BaseTest {
         }
     }
 
-    volatile boolean fail_check;
-    private final ArrayList<EndPoint> endPointConnections = new ArrayList<EndPoint>();
+    private final List<EndPoint> endPointConnections = new CopyOnWriteArrayList<EndPoint>();
+    private volatile boolean isStopping = false;
 
     public
     BaseTest() {
@@ -110,6 +123,9 @@ class BaseTest {
     public
     void addEndPoint(final EndPoint endPointConnection) {
         this.endPointConnections.add(endPointConnection);
+        synchronized (lock) {
+            latch = new CountDownLatch(endPointConnections.size() + 1);
+        }
     }
 
     /**
@@ -121,42 +137,57 @@ class BaseTest {
     }
 
     public
-    void stopEndPoints(final int stopAfterMillis) {
+    void stopEndPoints(final long stopAfterMillis) {
         ThreadGroup threadGroup = Thread.currentThread()
                                         .getThreadGroup();
         final String name = threadGroup.getName();
 
         if (name.contains(THREADGROUP_NAME)) {
-            // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will
-            // DEADLOCK
+            // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will DEADLOCK
             final Thread thread = new Thread(threadGroup.getParent(), new Runnable() {
                 @Override
                 public
                 void run() {
-                    try {
-                        // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
-                        // ARE NOT in the same thread group as netty!
-                        Thread.sleep(stopAfterMillis);
-
-                        stopEndPoints(stopAfterMillis);
-                    } catch (InterruptedException ignored) {
-                    }
+                    stopEndPoints_(stopAfterMillis);
                 }
-            }, "UnitTest shutdown");
+            }, "UnitTest shutdown"); // a different name for the thread
 
             thread.setDaemon(true);
             thread.start();
         } else {
-            synchronized (this.endPointConnections) {
-                for (EndPoint endPointConnection : this.endPointConnections) {
-                    endPointConnection.stop();
-                    endPointConnection.waitForShutdown();
-                }
-
-                this.endPointConnections.clear();
-                this.endPointConnections.notifyAll();
-            }
+            stopEndPoints_(stopAfterMillis);
         }
+    }
+
+    private
+    void stopEndPoints_(final long stopAfterMillis) {
+        if (isStopping) {
+            return;
+        }
+
+        isStopping = true;
+
+        // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
+        // ARE NOT in the same thread group as netty!
+        try {
+            Thread.sleep(stopAfterMillis);
+        } catch (InterruptedException ignored) {
+        }
+
+        synchronized (lock) {
+        }
+
+        for (EndPoint endPointConnection : this.endPointConnections) {
+
+            endPointConnection.stop();
+            endPointConnection.waitForShutdown();
+
+            latch.countDown();
+        }
+
+        // we start with "1", so make sure to end it
+        latch.countDown();
+        this.endPointConnections.clear();
     }
 
     /**
@@ -164,7 +195,7 @@ class BaseTest {
      */
     public
     void waitForThreads() {
-        waitForThreads(0);
+        waitForThreads(AUTO_FAIL_TIMEOUT/2);
     }
 
     /**
@@ -173,63 +204,48 @@ class BaseTest {
      * @param stopAfterSeconds how many seconds to wait
      */
     public
-    void waitForThreads(int stopAfterSeconds) {
-        final int stopAfterMillis = stopAfterSeconds * 1000; // this must be in milliseconds
-
-        this.fail_check = false;
-
-        Thread thread = null;
-        if (!this.endPointConnections.isEmpty()) {
-            // make sure to run this thread in the MAIN thread group..
-            ThreadGroup threadGroup = Thread.currentThread()
-                                            .getThreadGroup();
-            if (threadGroup.getName()
-                           .contains(THREADGROUP_NAME)) {
-                threadGroup = threadGroup.getParent();
-            }
-
-            thread = new Thread(threadGroup, new Runnable() {
-                @Override
-                public
-                void run() {
-                    // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
-                    // ARE NOT in the same thread group as netty!
-                    try {
-                        if (stopAfterMillis > 0L) {
-                            // if we specify a time, then we stop, otherwise we wait the timeout.
-                            Thread.sleep(stopAfterMillis);
-                        }
-                        else {
-                            Thread.sleep(120 * 1000L); // wait minimum of 2 minutes before we automatically fail the unit test.
-                        }
-
-                        System.err.println("Test did not complete in a timely manner...");
-                        BaseTest.this.fail_check = true;
-                        stopEndPoints();
-                    } catch (InterruptedException ignored) {
-                    }
-                }
-            }, "UnitTest timeout fail condition");
-            thread.setDaemon(true);
-            thread.start();
+    void waitForThreads(long stopAfterSeconds) {
+        synchronized (lock) {
         }
 
-        while (!this.endPointConnections.isEmpty()) {
-            synchronized (this.endPointConnections) {
+        try {
+            latch.await(stopAfterSeconds, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Before
+    public
+    void setupFailureCheck() {
+        autoFailThread = new Thread(new Runnable() {
+            @Override
+            public
+            void run() {
+                // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
+                // ARE NOT in the same thread group as netty!
                 try {
-                    this.endPointConnections.wait(stopAfterMillis);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    Thread.sleep(AUTO_FAIL_TIMEOUT * 1000L);
+
+                    // if the thread is interrupted, then it means we finished the test.
+                    System.err.println("Test did not complete in a timely manner...");
+
+                    stopEndPoints(0L);
+                    fail("Test did not complete in a timely manner.");
+                } catch (InterruptedException ignored) {
                 }
             }
+        }, "UnitTest timeout fail condition");
+        autoFailThread.setDaemon(true);
+        // autoFailThread.start();
+    }
 
-            if (thread != null) {
-                thread.interrupt();
-            }
-
-            if (this.fail_check) {
-                fail("Test did not complete in a timely manner.");
-            }
+    @After
+    public
+    void cancelFailureCheck() {
+        if (autoFailThread != null) {
+            autoFailThread.interrupt();
+            autoFailThread = null;
         }
 
         // Give sockets a chance to close before starting the next test.
