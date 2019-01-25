@@ -1044,6 +1044,4 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
         // "local RMI" objects have to be modified, this part does that
         return rmiSupport.fixupRmi(this, message);
     }
-
-
 }
