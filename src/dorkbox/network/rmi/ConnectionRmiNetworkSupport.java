@@ -1,33 +1,31 @@
 /*
- * Copyright 2018 dorkbox, llc.
+ * Copyright 2019 dorkbox, llc.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package dorkbox.network.rmi;
-
-import org.slf4j.Logger;
 
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.serialization.NetworkSerializationManager;
 
+/**
+ *
+ */
 public
-class RmiObjectNetworkHandler implements RmiObjectHandler {
-
-    private final Logger logger;
+class ConnectionRmiNetworkSupport extends ConnectionRmiImplSupport {
 
     public
-    RmiObjectNetworkHandler(final Logger logger) {
-        this.logger = logger;
+    ConnectionRmiNetworkSupport(final ConnectionImpl connection, final RmiBridge rmiGlobalBridge) {
+        super(connection, rmiGlobalBridge);
     }
 
     public
@@ -38,7 +36,7 @@ class RmiObjectNetworkHandler implements RmiObjectHandler {
 
     @Override
     public
-    void registration(final ConnectionRmiImplSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration registration) {
+    void registration(final ConnectionImpl connection, final RmiRegistration registration) {
         // manage creating/getting/notifying this RMI object
 
         // these fields are ALWAYS present!
@@ -60,7 +58,7 @@ class RmiObjectNetworkHandler implements RmiObjectHandler {
 
 
                 // For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
-                RmiRegistration registrationResult = rmiSupport.createNewRmiObject(serialization, interfaceClass, rmiImpl, callbackId, logger);
+                RmiRegistration registrationResult = createNewRmiObject(serialization, interfaceClass, rmiImpl, callbackId);
                 connection.send(registrationResult);
                 // connection transport is flushed in calling method (don't need to do it here)
             }
@@ -70,7 +68,7 @@ class RmiObjectNetworkHandler implements RmiObjectHandler {
                 // THIS IS ON THE REMOTE CONNECTION (where the object implementation will really exist)
                 //
                 // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
-                Object implementationObject = rmiSupport.getImplementationObject(registration.rmiId);
+                Object implementationObject = getImplementationObject(registration.rmiId);
                 connection.send(new RmiRegistration(interfaceClass, registration.rmiId, callbackId, implementationObject));
                 // connection transport is flushed in calling method (don't need to do it here)
             }
@@ -82,13 +80,13 @@ class RmiObjectNetworkHandler implements RmiObjectHandler {
 
             // this is the response.
             // THIS IS ON THE LOCAL CONNECTION SIDE, which is the side that called 'getRemoteObject()'   This can be Server or Client.
-            rmiSupport.runCallback(interfaceClass, callbackId, registration.remoteObject, logger);
+            runCallback(interfaceClass, callbackId, registration.remoteObject);
         }
     }
 
     @Override
     public
-    Object normalMessages(final ConnectionRmiImplSupport connection, final Object message) {
+    Object normalMessages(final Object message) {
         return message;
     }
 }

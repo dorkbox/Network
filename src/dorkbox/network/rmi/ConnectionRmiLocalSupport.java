@@ -1,17 +1,16 @@
 /*
- * Copyright 2018 dorkbox, llc.
+ * Copyright 2019 dorkbox, llc.
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package dorkbox.network.rmi;
 
@@ -19,8 +18,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
-
-import org.slf4j.Logger;
 
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Serializer;
@@ -39,30 +36,30 @@ import dorkbox.network.serialization.NetworkSerializationManager;
  * This is for a LOCAL connection (same-JVM)
  */
 public
-class RmiObjectLocalHandler implements RmiObjectHandler {
+class ConnectionRmiLocalSupport extends ConnectionRmiImplSupport {
     private static final boolean ENABLE_PROXY_OBJECTS = RmiBridge.ENABLE_PROXY_OBJECTS;
     private static final Field[] NO_REMOTE_FIELDS = new Field[0];
 
-    private static final AtomicReferenceFieldUpdater<RmiObjectLocalHandler, IdentityMap> implToProxyREF = AtomicReferenceFieldUpdater.newUpdater(
-            RmiObjectLocalHandler.class,
+    private static final AtomicReferenceFieldUpdater<ConnectionRmiLocalSupport, IdentityMap> implToProxyREF = AtomicReferenceFieldUpdater.newUpdater(
+            ConnectionRmiLocalSupport.class,
             IdentityMap.class,
             "implToProxy");
 
-    private static final AtomicReferenceFieldUpdater<RmiObjectLocalHandler, IdentityMap> remoteObjectREF = AtomicReferenceFieldUpdater.newUpdater(
-            RmiObjectLocalHandler.class,
+    private static final AtomicReferenceFieldUpdater<ConnectionRmiLocalSupport, IdentityMap> remoteObjectREF = AtomicReferenceFieldUpdater.newUpdater(
+            ConnectionRmiLocalSupport.class,
             IdentityMap.class,
             "objectHasRemoteObjects");
 
     private volatile IdentityMap<Object, Object> implToProxy = new IdentityMap<Object, Object>();
     private volatile IdentityMap<Object, Field[]> objectHasRemoteObjects = new IdentityMap<Object, Field[]>();
-    private final Logger logger;
-
 
     public
-    RmiObjectLocalHandler(final Logger logger) {
-        this.logger = logger;
+    ConnectionRmiLocalSupport(final ConnectionImpl connection, final RmiBridge rmiGlobalBridge) {
+        super(connection, rmiGlobalBridge);
     }
 
+
+    @Override
     public
     InvokeMethod getInvokeMethod(final NetworkSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod) {
         int methodClassID = invokeMethod.cachedMethod.methodClassID;
@@ -121,7 +118,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
 
     @Override
     public
-    void registration(final ConnectionRmiImplSupport rmiSupport, final ConnectionImpl connection, final RmiRegistration registration) {
+    void registration(final ConnectionImpl connection, final RmiRegistration registration) {
         // manage creating/getting/notifying this RMI object
 
         // these fields are ALWAYS present!
@@ -141,7 +138,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
 
                 Class<?> rmiImpl = serialization.getRmiImpl(registration.interfaceClass);
 
-                RmiRegistration registrationResult = rmiSupport.createNewRmiObject(serialization, interfaceClass, rmiImpl, callbackId, logger);
+                RmiRegistration registrationResult = createNewRmiObject(serialization, interfaceClass, rmiImpl, callbackId);
                 connection.send(registrationResult);
                 // connection transport is flushed in calling method (don't need to do it here)
             }
@@ -149,7 +146,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
             // Check if we are getting an already existing REMOTE object. This check is always AFTER the check to create a new object
             else {
                 // GET a LOCAL rmi object, if none get a specific, GLOBAL rmi object (objects that are not bound to a single connection).
-                Object implementationObject = rmiSupport.getImplementationObject(registration.rmiId);
+                Object implementationObject = getImplementationObject(registration.rmiId);
                 connection.send(new RmiRegistration(interfaceClass, registration.rmiId, callbackId, implementationObject));
                 // connection transport is flushed in calling method (don't need to do it here)
             }
@@ -175,7 +172,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
                 else {
                     // override the implementation object with the proxy. This is required because RMI must be the same between "network" and "local"
                     // connections -- even if this "slows down" the speed/performance of what "local" connections offer.
-                    proxyObject = rmiSupport.getProxyObject(registration.rmiId, interfaceClass);
+                    proxyObject = getProxyObject(registration.rmiId, interfaceClass);
 
                     if (proxyObject != null && registration.remoteObject != null) {
                         // have to save A and B so we can correctly switch as necessary
@@ -187,10 +184,10 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
                     }
                 }
 
-                rmiSupport.runCallback(interfaceClass, callbackId, proxyObject, logger);
+                runCallback(interfaceClass, callbackId, proxyObject);
             }
             else {
-                rmiSupport.runCallback(interfaceClass, callbackId, registration.remoteObject, logger);
+                runCallback(interfaceClass, callbackId, registration.remoteObject);
             }
         }
     }
@@ -198,7 +195,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
     @SuppressWarnings("unchecked")
     @Override
     public
-    Object normalMessages(final ConnectionRmiImplSupport rmiSupport, final Object message) {
+    Object normalMessages(final Object message) {
         // else, this was "just a local message"
 
         // because we NORMALLY pass around just the object (there is no serialization going on...) we have to explicitly check to see
@@ -246,7 +243,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
                                 RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(o);
 
                                 int id = handler.rmiObjectId;
-                                field.set(message, rmiSupport.getImplementationObject(id));
+                                field.set(message, getImplementationObject(id));
                                 fields.add(field);
                             }
                             else {
@@ -299,7 +296,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
                         RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(o);
 
                         int id = handler.rmiObjectId;
-                        field.set(message, rmiSupport.getImplementationObject(id));
+                        field.set(message, getImplementationObject(id));
                     }
                     else {
                         // is a field supposed to be a proxy?

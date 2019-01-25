@@ -35,8 +35,6 @@ import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.rmi.RmiBridge;
-import dorkbox.network.rmi.RmiObjectLocalHandler;
-import dorkbox.network.rmi.RmiObjectNetworkHandler;
 import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.network.store.NullSettingsStore;
@@ -170,8 +168,6 @@ class EndPoint extends Shutdownable {
     final boolean rmiEnabled;
 
     // we only want one instance of these created. These will be called appropriately
-    final RmiObjectLocalHandler rmiLocalHandler;
-    final RmiObjectNetworkHandler rmiNetworkHandler;
     final RmiBridge rmiGlobalBridge;
 
 
@@ -283,13 +279,9 @@ class EndPoint extends Shutdownable {
         connectionManager = new ConnectionManager(type.getSimpleName(), connection0(null, null).getClass());
 
         if (rmiEnabled) {
-            rmiLocalHandler = new RmiObjectLocalHandler(logger);
-            rmiNetworkHandler = new RmiObjectNetworkHandler(logger);
             rmiGlobalBridge = new RmiBridge(logger, true);
         }
         else {
-            rmiLocalHandler = null;
-            rmiNetworkHandler = null;
             rmiGlobalBridge = null;
         }
 

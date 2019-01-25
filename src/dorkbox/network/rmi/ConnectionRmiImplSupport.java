@@ -36,32 +36,32 @@ import dorkbox.util.collections.LockFreeHashMap;
 import dorkbox.util.collections.LockFreeIntMap;
 import dorkbox.util.generics.ClassHelper;
 
-public
+public abstract
 class ConnectionRmiImplSupport implements ConnectionRmiSupport {
     private final RmiBridge rmiGlobalBridge;
     private final RmiBridge rmiLocalBridge;
-    private final RmiObjectHandler rmiHandler;
 
     private final Map<Integer, RemoteObject> proxyIdCache;
     private final List<OnMessageReceived<Connection, InvokeMethodResult>> proxyListeners;
 
-    final ConnectionImpl connection;
 
     private final LockFreeIntMap<RemoteObjectCallback> rmiRegistrationCallbacks;
-    private final Logger logger;
     private volatile int rmiCallbackId = 0;
 
 
-    public
-    ConnectionRmiImplSupport(final ConnectionImpl connection, final RmiBridge rmiGlobalBridge, final RmiObjectHandler rmiHandler) {
+    final ConnectionImpl connection;
+    protected final Logger logger;
+
+
+    protected
+    ConnectionRmiImplSupport(final ConnectionImpl connection, final RmiBridge rmiGlobalBridge) {
         this.connection = connection;
 
-        if (rmiGlobalBridge == null || rmiHandler == null) {
+        if (rmiGlobalBridge == null ) {
             throw new NullPointerException("RMI cannot be null if using RMI support!");
         }
 
         this.rmiGlobalBridge = rmiGlobalBridge;
-        this.rmiHandler = rmiHandler;
 
         logger = rmiGlobalBridge.logger;
 
@@ -77,6 +77,12 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
         proxyListeners = new CopyOnWriteArrayList<OnMessageReceived<Connection, InvokeMethodResult>>();
         rmiRegistrationCallbacks = new LockFreeIntMap<RemoteObjectCallback>();
     }
+
+    abstract InvokeMethod getInvokeMethod(final NetworkSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod);
+
+    abstract void registration(final ConnectionImpl connection, final RmiRegistration message);
+
+    abstract Object normalMessages(final Object message);
 
     public
     void close() {
@@ -147,7 +153,7 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
         if (message instanceof InvokeMethod) {
             NetworkSerializationManager serialization = connection.getEndPoint().getSerialization();
 
-            InvokeMethod invokeMethod = rmiHandler.getInvokeMethod(serialization, connection, (InvokeMethod) message);
+            InvokeMethod invokeMethod = getInvokeMethod(serialization, connection, (InvokeMethod) message);
 
             int objectID = invokeMethod.objectID;
 
@@ -182,7 +188,7 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
             return true;
         }
         else if (message instanceof RmiRegistration) {
-            rmiHandler.registration(this, connection, (RmiRegistration) message);
+            registration(connection, (RmiRegistration) message);
             return true;
         }
 
@@ -195,7 +201,7 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
      * For local connections, we have to switch it appropriately in the LocalRmiProxy
      */
     public
-    RmiRegistration createNewRmiObject(final NetworkSerializationManager serialization, final Class<?> interfaceClass, final Class<?> implementationClass, final int callbackId, final Logger logger) {
+    RmiRegistration createNewRmiObject(final NetworkSerializationManager serialization, final Class<?> interfaceClass, final Class<?> implementationClass, final int callbackId) {
         KryoExtra kryo = null;
         Object object = null;
         int rmiId = 0;
@@ -290,7 +296,7 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
     }
 
     public
-    void runCallback(final Class<?> interfaceClass, final int callbackId, final Object remoteObject, final Logger logger) {
+    void runCallback(final Class<?> interfaceClass, final int callbackId, final Object remoteObject) {
         RemoteObjectCallback callback = rmiRegistrationCallbacks.remove(callbackId);
 
         try {
@@ -391,6 +397,6 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
     public
     Object fixupRmi(final ConnectionImpl connection, final Object message) {
         // "local RMI" objects have to be modified, this part does that
-        return rmiHandler.normalMessages(this, message);
+        return normalMessages(message);
     }
 }

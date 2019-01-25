@@ -14,8 +14,6 @@
  */
 package dorkbox.network.rmi;
 
-import org.slf4j.Logger;
-
 import dorkbox.network.connection.ConnectionImpl;
 
 public
@@ -33,8 +31,6 @@ interface ConnectionRmiSupport {
     Object fixupRmi(final ConnectionImpl connection, final Object message);
 
     <T> int getRegisteredId(final T object);
-
-    void runCallback(final Class<?> interfaceClass, final int callbackId, final Object remoteObject, final Logger logger);
 
     RemoteObject getProxyObject(final int rmiId, final Class<?> iFace);
 

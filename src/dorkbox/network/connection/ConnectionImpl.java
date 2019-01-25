@@ -35,10 +35,10 @@ import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
 import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.rmi.ConnectionNoOpSupport;
-import dorkbox.network.rmi.ConnectionRmiImplSupport;
+import dorkbox.network.rmi.ConnectionRmiLocalSupport;
+import dorkbox.network.rmi.ConnectionRmiNetworkSupport;
 import dorkbox.network.rmi.ConnectionRmiSupport;
 import dorkbox.network.rmi.RemoteObjectCallback;
-import dorkbox.network.rmi.RmiObjectHandler;
 import io.netty.bootstrap.DatagramSessionChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -146,17 +146,16 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
             boolean isNetworkChannel = this.channelWrapper instanceof ChannelNetworkWrapper;
 
             if (endPoint.rmiEnabled) {
-                RmiObjectHandler handler;
                 if (isNetworkChannel) {
-                    handler = endPoint.rmiNetworkHandler;
+                    // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent access, but
+                    // there WILL be issues with thread visibility because a different worker thread can be called for different connections
+                    this.rmiSupport = new ConnectionRmiNetworkSupport(this, endPoint.rmiGlobalBridge);
                 }
                 else {
-                    handler = endPoint.rmiLocalHandler;
+                    // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent access, but
+                    // there WILL be issues with thread visibility because a different worker thread can be called for different connections
+                    this.rmiSupport = new ConnectionRmiLocalSupport(this, endPoint.rmiGlobalBridge);
                 }
-
-                // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent access, but
-                // there WILL be issues with thread visibility because a different worker thread can be called for different connections
-                this.rmiSupport = new ConnectionRmiImplSupport(this, endPoint.rmiGlobalBridge, handler);
             } else {
                 this.rmiSupport = new ConnectionNoOpSupport();
             }
