@@ -141,51 +141,60 @@ class ReconnectTest extends BaseTest {
         if (useTCP && useUDP) {
             initialCount += 2;
         }
-        for (int i = 1; i < count + 1; i++) {
-            System.out.println(".....");
-            try {
-                client.connect(5000);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        try {
+            for (int i = 1; i < count + 1; i++) {
+                System.out.println(".....");
+                try {
+                    client.connect(5000);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
 
+                int waitingRetryCount = 20;
+                int target = i * initialCount;
+                boolean failed = false;
 
-            int waitingRetryCount = 20;
-            int target = i * initialCount;
+                synchronized (receivedCount) {
+                    while (this.receivedCount.get() != target) {
+                        if (waitingRetryCount-- < 0) {
+                            System.err.println("Aborting unit test... wrong count!");
+                            if (useUDP) {
+                                // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
+                                // it results in severe UDP packet loss and contention.
+                                //
+                                // http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM
+                                // also, a google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
+                                // Usually it's with ISPs.
 
-            synchronized (receivedCount) {
-                while (this.receivedCount.get() != target) {
-                    if (waitingRetryCount-- < 0) {
-                        System.err.println("Aborting unit test... wrong count!");
-                        if (useUDP) {
-                            // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
-                            // it results in severe UDP packet loss and contention.
-                            //
-                            // http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM
-                            // also, a google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
-                            // Usually it's with ISPs.
-
-                            System.err.println("NOTE: UDP can fail, even on loopback! See: http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM");
+                                System.err.println("NOTE: UDP can fail, even on loopback! See: http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM");
+                            }
+                            if (target != this.receivedCount.get()) {
+                                failed = true;
+                                break;
+                            }
                         }
-                        stopEndPoints();
-                        assertEquals(target, this.receivedCount.get());
+                        try {
+                            receivedCount.wait(1000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                     }
-                    try {
-                        receivedCount.wait(1000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+                }
+
+                client.close();
+                System.out.println(".....");
+
+                if (failed) {
+
+                    break;
                 }
             }
 
-            client.close();
-            System.out.println(".....");
+            assertEquals(count * initialCount, this.receivedCount.get());
+        } finally {
+            stopEndPoints();
+            waitForThreads(10);
         }
-
-        assertEquals(count * initialCount, this.receivedCount.get());
-
-        stopEndPoints();
-        waitForThreads(10);
     }
 
     @Test
