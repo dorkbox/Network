@@ -32,7 +32,7 @@ import dorkbox.network.pipeline.udp.KryoDecoderUdp;
 import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.RandomUtil;
 import dorkbox.util.collections.IntMap.Values;
 import dorkbox.util.collections.LockFreeIntMap;
@@ -83,7 +83,7 @@ class RegistrationWrapper {
     }
 
     public
-    CryptoSerializationManager getSerialization() {
+    NetworkSerializationManager getSerialization() {
         return endPoint.getSerialization();
     }
 

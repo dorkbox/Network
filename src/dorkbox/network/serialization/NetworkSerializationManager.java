@@ -15,16 +15,39 @@
  */
 package dorkbox.network.serialization;
 
+import java.io.IOException;
+
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.Serializer;
 
+import dorkbox.network.connection.Connection_;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.rmi.CachedMethod;
 import dorkbox.util.serialization.SerializationManager;
+import io.netty.buffer.ByteBuf;
 
 public
-interface RmiSerializationManager extends SerializationManager {
+interface NetworkSerializationManager extends SerializationManager {
+
+    /**
+     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
+     * <p/>
+     * There is a small speed penalty if there were no kryo's available to use.
+     */
+    void writeWithCrypto(Connection_ connection, ByteBuf buffer, Object message) throws IOException;
+
+    /**
+     * Reads an object from the buffer.
+     * <p/>
+     * Crypto + sequence number
+     *
+     * @param connection
+     *                 can be NULL
+     * @param length
+     *                 should ALWAYS be the length of the expected object!
+     */
+    Object readWithCrypto(Connection_ connection, ByteBuf buffer, int length) throws IOException;
 
     /**
      * Registers the class using the lowest, next available integer ID and the {@link Kryo#getDefaultSerializer(Class) default serializer}.
@@ -36,7 +59,7 @@ interface RmiSerializationManager extends SerializationManager {
      * method. The order must be the same at deserialization as it was for serialization.
      */
     @Override
-    RmiSerializationManager register(Class<?> clazz);
+    NetworkSerializationManager register(Class<?> clazz);
 
     /**
      * Registers the class using the specified ID. If the ID is already in use by the same type, the old entry is overwritten. If the ID
@@ -50,7 +73,7 @@ interface RmiSerializationManager extends SerializationManager {
      *           these IDs can be repurposed.
      */
     @Override
-    RmiSerializationManager register(Class<?> clazz, int id);
+    NetworkSerializationManager register(Class<?> clazz, int id);
 
     /**
      * Registers the class using the lowest, next available integer ID and the specified serializer. If the class is already registered,
@@ -62,7 +85,7 @@ interface RmiSerializationManager extends SerializationManager {
      * method. The order must be the same at deserialization as it was for serialization.
      */
     @Override
-    RmiSerializationManager register(Class<?> clazz, Serializer<?> serializer);
+    NetworkSerializationManager register(Class<?> clazz, Serializer<?> serializer);
 
     /**
      * Registers the class using the specified ID and serializer. If the ID is already in use by the same type, the old entry is
@@ -76,7 +99,7 @@ interface RmiSerializationManager extends SerializationManager {
      *           these IDs can be repurposed.
      */
     @Override
-    RmiSerializationManager register(Class<?> clazz, Serializer<?> serializer, int id);
+    NetworkSerializationManager register(Class<?> clazz, Serializer<?> serializer, int id);
 
     /**
      * Necessary to register classes for RMI, only called once when the RMI bridge is created.
@@ -117,7 +140,7 @@ interface RmiSerializationManager extends SerializationManager {
      * Enable a "remote client" to access methods and create objects (RMI) for this endpoint. This is NOT bi-directional, and this endpoint cannot access or \
      * create remote objects on the "remote client".
      * <p>
-     * Calling this method with a null parameter for the implementation class is the same as calling {@link RmiSerializationManager#registerRmi(Class)}
+     * Calling this method with a null parameter for the implementation class is the same as calling {@link NetworkSerializationManager#registerRmi(Class)}
      * <p>
      * There is additional overhead to using RMI.
      * <p>
@@ -129,7 +152,7 @@ interface RmiSerializationManager extends SerializationManager {
      *
      * @throws IllegalArgumentException if the iface/impl have previously been overridden
      */
-    <Iface, Impl extends Iface> RmiSerializationManager registerRmi(Class<Iface> ifaceClass, Class<Impl> implClass);
+    <Iface, Impl extends Iface> NetworkSerializationManager registerRmi(Class<Iface> ifaceClass, Class<Impl> implClass);
 
     /**
      * Gets the cached methods for the specified class ID

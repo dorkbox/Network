@@ -28,7 +28,9 @@ import com.esotericsoftware.kryo.util.MapReferenceResolver;
 
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.rmi.ConnectionSupport;
+import dorkbox.network.rmi.RmiNopConnection;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.bytes.BigEndian;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
@@ -43,7 +45,9 @@ import net.jpountz.lz4.LZ4FastDecompressor;
  */
 @SuppressWarnings("Duplicates")
 public
-class KryoExtra<C extends CryptoConnection> extends Kryo {
+class KryoExtra extends Kryo {
+    private static final Connection_ NOP_CONNECTION = new RmiNopConnection();
+
     // snappycomp   :       7.534 micros/op;  518.5 MB/s (output: 55.1%)
     // snappyuncomp :       1.391 micros/op; 2808.1 MB/s
     // lz4comp      :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
@@ -54,8 +58,8 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
     private final ByteBufInput reader = new ByteBufInput();
     private final ByteBufOutput writer = new ByteBufOutput();
 
-    // volatile to provide object visibility for entire class
-    public volatile RmiConnection connection;
+    // volatile to provide object visibility for entire class. This is unique per connection
+    public volatile ConnectionSupport rmiSupport;
 
     private final GCMBlockCipher aesEngine = new GCMBlockCipher(new AESFastEngine());
 
@@ -85,10 +89,10 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
     private byte[] decompressOutput;
     private ByteBuf decompressBuf;
 
-    private CryptoSerializationManager serializationManager;
+    private NetworkSerializationManager serializationManager;
 
     public
-    KryoExtra(final CryptoSerializationManager serializationManager) {
+    KryoExtra(final NetworkSerializationManager serializationManager) {
         super(new DefaultClassResolver(), new MapReferenceResolver(), new DefaultStreamFactory());
 
         this.serializationManager = serializationManager;
@@ -96,8 +100,8 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
 
     public synchronized
     void write(final ByteBuf buffer, final Object message) throws IOException {
-        // connection will always be NULL during connection initialization
-        this.connection = null;
+        // these will always be NULL during connection initialization
+        this.rmiSupport = null;
 
         // write the object to the NORMAL output buffer!
         writer.setBuffer(buffer);
@@ -107,8 +111,8 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
 
     public synchronized
     Object read(final ByteBuf buffer) throws IOException {
-        // connection will always be NULL during connection initialization
-        this.connection = null;
+        // these will always be NULL during connection initialization
+        this.rmiSupport = null;
 
         ////////////////
         // Note: we CANNOT write BACK to the buffer as "temp" storage, since there could be additional data on it!
@@ -127,16 +131,16 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
      */
     public synchronized
     void writeCompressed(final ByteBuf buffer, final Object message) throws IOException {
-        writeCompressed(null, buffer, message);
+        writeCompressed(NOP_CONNECTION, buffer, message);
     }
 
     /**
      * This is NOT ENCRYPTED (and is only done on the loopback connection!)
      */
     public synchronized
-    void writeCompressed(final C connection, final ByteBuf buffer, final Object message) throws IOException {
+    void writeCompressed(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
-        this.connection = connection;
+        this.rmiSupport = connection.rmiSupport();
 
         ByteBuf objectOutputBuffer = this.tempBuffer;
         objectOutputBuffer.clear(); // always have to reset everything
@@ -228,16 +232,16 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
      */
     public
     Object readCompressed(final ByteBuf buffer, int length) throws IOException {
-        return readCompressed(null, buffer, length);
+        return readCompressed(NOP_CONNECTION, buffer, length);
     }
 
     /**
      * This is NOT ENCRYPTED (and is only done on the loopback connection!)
      */
     public
-    Object readCompressed(final C connection, final ByteBuf buffer, int length) throws IOException {
+    Object readCompressed(final Connection_ connection, final ByteBuf buffer, int length) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
-        this.connection = connection;
+        this.rmiSupport = connection.rmiSupport();
 
 
         ////////////////
@@ -320,9 +324,9 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
     }
 
     public synchronized
-    void writeCrypto(final C connection, final ByteBuf buffer, final Object message) throws IOException {
+    void writeCrypto(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
-        this.connection = connection;
+        this.rmiSupport = connection.rmiSupport();
 
         ByteBuf objectOutputBuffer = this.tempBuffer;
         objectOutputBuffer.clear(); // always have to reset everything
@@ -455,10 +459,9 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
     }
 
     public
-    Object readCrypto(final C connection, final ByteBuf buffer, int length) throws IOException {
+    Object readCrypto(final Connection_ connection, final ByteBuf buffer, int length) throws IOException {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
-        this.connection = connection;
-
+        this.rmiSupport = connection.rmiSupport();
 
         ////////////////
         // Note: we CANNOT write BACK to the buffer as "temp" storage, since there could be additional data on it!
@@ -591,7 +594,8 @@ class KryoExtra<C extends CryptoConnection> extends Kryo {
     }
 
     public
-    CryptoSerializationManager getSerializationManager() {
+    NetworkSerializationManager getSerializationManager() {
         return serializationManager;
     }
+
 }

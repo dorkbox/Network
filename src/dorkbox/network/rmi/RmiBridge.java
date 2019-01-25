@@ -42,7 +42,7 @@ import org.slf4j.Logger;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.serialization.RmiSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.Property;
 import dorkbox.util.collections.LockFreeIntBiMap;
 
@@ -51,7 +51,7 @@ import dorkbox.util.collections.LockFreeIntBiMap;
  * object transformation (because there is no serialization occurring) using a series of weak hashmaps.
  * <p/>
  * <p/>
- * Objects are {@link RmiSerializationManager#registerRmi(Class, Class)}, and endpoint connections can then {@link
+ * Objects are {@link NetworkSerializationManager#registerRmi(Class, Class)}, and endpoint connections can then {@link
  * Connection#createRemoteObject(Class, RemoteObjectCallback)} for the registered objects.
  * <p/>
  * It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a return value which
@@ -148,7 +148,7 @@ class RmiBridge {
      */
     @SuppressWarnings("NumericCastThatLosesPrecision")
     protected static
-    void invoke(final Connection connection, final Object target, final InvokeMethod invokeMethod, final Logger logger) throws IOException {
+    InvokeMethodResult invoke(final Connection connection, final Object target, final InvokeMethod invokeMethod, final Logger logger) throws IOException {
         CachedMethod cachedMethod = invokeMethod.cachedMethod;
 
         if (logger.isTraceEnabled()) {
@@ -211,7 +211,7 @@ class RmiBridge {
         }
 
         if (responseID == 0) {
-            return;
+            return null;
         }
 
         InvokeMethodResult invokeMethodResult = new InvokeMethodResult();
@@ -228,10 +228,8 @@ class RmiBridge {
             invokeMethodResult.result = result;
         }
 
-        // System.err.println("Sending: " + invokeMethod.responseID);
-        connection.send(invokeMethodResult).flush();
-
         // logger.error("{} sent data: {}  with id ({})", connection, result, invokeMethod.responseID);
+        return invokeMethodResult;
     }
 
     private

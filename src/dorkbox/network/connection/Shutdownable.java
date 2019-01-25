@@ -193,8 +193,8 @@ class Shutdownable {
             for (ChannelFuture f : shutdownChannelList) {
                 Channel channel = f.channel();
                 if (channel.isOpen()) {
-                    channel.close()
-                           .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+                    // from the git example on how to shutdown a channel
+                    channel.close().syncUninterruptibly();
                     Thread.yield();
                 }
             }
@@ -216,16 +216,18 @@ class Shutdownable {
         }
 
         for (EventLoopGroup loopGroup : loopGroups) {
-            shutdownThreadList.add(loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds,
-                                                                maxShutdownWaitTimeInMilliSeconds * 2,
-                                                                TimeUnit.MILLISECONDS));
+            Future<?> future = loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds / 2, maxShutdownWaitTimeInMilliSeconds, TimeUnit.MILLISECONDS);
+            shutdownThreadList.add(future);
             Thread.yield();
         }
 
         // now wait for them to finish!
         // It can take a few seconds to shut down the executor. This will affect unit testing, where connections are quickly created/stopped
         for (Future<?> f : shutdownThreadList) {
-            f.syncUninterruptibly();
+            try {
+                f.await(maxShutdownWaitTimeInMilliSeconds);
+            } catch (InterruptedException ignored) {
+            }
             Thread.yield();
         }
     }

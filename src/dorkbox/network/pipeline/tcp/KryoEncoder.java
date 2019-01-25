@@ -17,7 +17,7 @@ package dorkbox.network.pipeline.tcp;
 
 import java.io.IOException;
 
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -29,11 +29,11 @@ public
 class KryoEncoder extends MessageToByteEncoder<Object> {
     // maximum size of length field. Un-optimized will always be 4, but optimized version can take from 1 - 4 (for 0-Integer.MAX_VALUE).
     private static final int reservedLengthIndex = 4;
-    private final CryptoSerializationManager serializationManager;
+    private final NetworkSerializationManager serializationManager;
 
     // When this is a UDP encode, there are ALREADY size limits placed on the buffer, so any extra checks are unnecessary
     public
-    KryoEncoder(final CryptoSerializationManager serializationManager) {
+    KryoEncoder(final NetworkSerializationManager serializationManager) {
         super(true); // just use direct buffers anyways. When using Heap buffers, they because chunked and the backing array is invalid.
         this.serializationManager = serializationManager;
     }
@@ -41,7 +41,7 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
     // the crypto writer will override this
     @SuppressWarnings("unused")
     protected
-    void writeObject(final CryptoSerializationManager kryoWrapper,
+    void writeObject(final NetworkSerializationManager kryoWrapper,
                      final ChannelHandlerContext context,
                      final Object msg,
                      final ByteBuf buffer) throws IOException {

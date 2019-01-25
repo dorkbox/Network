@@ -63,7 +63,7 @@ class RemoteObjectSerializer extends Serializer<Object> {
     public
     void write(Kryo kryo, Output output, Object object) {
         KryoExtra kryoExtra = (KryoExtra) kryo;
-        int id = kryoExtra.connection.getRegisteredId(object);
+        int id = kryoExtra.rmiSupport.getRegisteredId(object); //
         output.writeInt(id, true);
     }
 
@@ -76,6 +76,6 @@ class RemoteObjectSerializer extends Serializer<Object> {
         // We have to lookup the iface, since the proxy object requires it
         Class<?> iface = rmiImplToIface.get(implementationType);
 
-        return kryoExtra.connection.getProxyObject(objectID, iface);
+        return kryoExtra.rmiSupport.getProxyObject(objectID, iface);
     }
 }

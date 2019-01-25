@@ -32,7 +32,7 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.registration.RegistrationHandler;
 import dorkbox.network.pipeline.tcp.KryoDecoder;
 import dorkbox.network.pipeline.tcp.KryoDecoderCrypto;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.crypto.CryptoECC;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -72,7 +72,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
 
     private static final String IDLE_HANDLER = "idleHandler";
 
-    protected final CryptoSerializationManager serializationManager;
+    protected final NetworkSerializationManager serializationManager;
 
     RegistrationRemoteHandler(final String name, final RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
         super(name, registrationWrapper, workerEventLoop);

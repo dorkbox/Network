@@ -51,7 +51,7 @@ import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.Listener;
-import dorkbox.network.serialization.RmiSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 
 /**
  * Handles network communication when methods are invoked on a proxy.
@@ -60,8 +60,9 @@ import dorkbox.network.serialization.RmiSerializationManager;
  * <p>
  * If there are no checked exceptions thrown, then we don't have to explicitly set 'transmitExceptions' to false
  */
+@SuppressWarnings("Duplicates")
 public
-class RmiProxyLocalHandler implements InvocationHandler {
+class RmiProxyHandler implements InvocationHandler {
     private final Logger logger;
 
     private final ReentrantLock lock = new ReentrantLock();
@@ -71,8 +72,9 @@ class RmiProxyLocalHandler implements InvocationHandler {
     private final boolean[] pendingResponses = new boolean[64];
 
     private final ConnectionImpl connection;
+    private final ConnectionRmiSupport rmiSupport;
     public final int rmiObjectId; // this is the RMI id
-    public final int ID; // this is the KRYO id
+    public final int classId; // this is the KRYO class id
 
 
     private final String proxyString;
@@ -97,25 +99,26 @@ class RmiProxyLocalHandler implements InvocationHandler {
 
     /**
      * @param connection this is really the network client -- there is ONLY ever 1 connection
+     * @param rmiSupport is used to provide RMI support
      * @param rmiId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
      * @param iFace this is the RMI interface
-     * @param object
      */
     public
-    RmiProxyLocalHandler(final ConnectionImpl connection, final int rmiId, final Class<?> iFace, final Object object) {
+    RmiProxyHandler(final ConnectionImpl connection, final ConnectionRmiSupport rmiSupport, final int rmiId, final Class<?> iFace) {
         super();
 
         this.connection = connection;
+        this.rmiSupport = rmiSupport;
         this.rmiObjectId = rmiId;
         this.proxyString = "<proxy #" + rmiId + ">";
 
-        EndPoint endPointConnection = this.connection.getEndPoint();
-        final RmiSerializationManager serializationManager = endPointConnection.getSerialization();
+        EndPoint endPoint = this.connection.getEndPoint();
+        final NetworkSerializationManager serializationManager = endPoint.getSerialization();
 
         KryoExtra kryoExtra = null;
         try {
             kryoExtra = serializationManager.takeKryo();
-            this.ID = kryoExtra.getRegistration(iFace).getId();
+            this.classId = kryoExtra.getRegistration(iFace).getId();
         } finally {
             if (kryoExtra != null) {
                 serializationManager.returnKryo(kryoExtra);
@@ -135,16 +138,16 @@ class RmiProxyLocalHandler implements InvocationHandler {
                 }
 
                 synchronized (this) {
-                    if (RmiProxyLocalHandler.this.pendingResponses[responseID]) {
-                        RmiProxyLocalHandler.this.responseTable[responseID] = invokeMethodResult;
+                    if (RmiProxyHandler.this.pendingResponses[responseID]) {
+                        RmiProxyHandler.this.responseTable[responseID] = invokeMethodResult;
                     }
                 }
 
-                RmiProxyLocalHandler.this.lock.lock();
+                RmiProxyHandler.this.lock.lock();
                 try {
-                    RmiProxyLocalHandler.this.responseCondition.signalAll();
+                    RmiProxyHandler.this.responseCondition.signalAll();
                 } finally {
-                    RmiProxyLocalHandler.this.lock.unlock();
+                    RmiProxyHandler.this.lock.unlock();
                 }
             }
         };
@@ -165,7 +168,7 @@ class RmiProxyLocalHandler implements InvocationHandler {
 
             String name = method.getName();
             if (name.equals("close")) {
-                connection.removeRmiListeners(rmiObjectId, getListener());
+                rmiSupport.removeAllListeners();
                 return null;
             }
             else if (name.equals("setResponseTimeout")) {
@@ -233,7 +236,7 @@ class RmiProxyLocalHandler implements InvocationHandler {
         // which method do we access? We always want to access the IMPLEMENTATION (if available!)
         CachedMethod[] cachedMethods = connection.getEndPoint()
                                                  .getSerialization()
-                                                 .getMethods(ID);
+                                                 .getMethods(classId);
 
         for (int i = 0, n = cachedMethods.length; i < n; i++) {
             CachedMethod cachedMethod = cachedMethods[i];
@@ -435,7 +438,7 @@ class RmiProxyLocalHandler implements InvocationHandler {
         if (getClass() != obj.getClass()) {
             return false;
         }
-        RmiProxyLocalHandler other = (RmiProxyLocalHandler) obj;
+        RmiProxyHandler other = (RmiProxyHandler) obj;
         return this.rmiObjectId == other.rmiObjectId;
     }
 }

@@ -314,9 +314,7 @@ class EndPointClient extends EndPoint {
 
             closeConnections(true);
             shutdownAllChannels();
-            // shutdownEventLoops();
-
-
+            // shutdownEventLoops();  we don't do this here!
 
             connection = null;
             isConnected.set(false);
@@ -329,5 +327,14 @@ class EndPointClient extends EndPoint {
     void abortRegistration() {
         // make sure we're not waiting on registration
         stopRegistration();
+    }
+
+    @Override
+    protected
+    void shutdownChannelsPre() {
+        closeConnection();
+
+        // this calls connectionManager.stop()
+        super.shutdownChannelsPre();
     }
 }

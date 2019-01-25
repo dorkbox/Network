@@ -15,10 +15,8 @@
  */
 package dorkbox.network;
 
-import java.util.concurrent.Executor;
-
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.network.store.SettingsStore;
 
 public
@@ -59,13 +57,7 @@ class Configuration {
     /**
      * Specify the serialization manager to use. If null, it uses the default.
      */
-    public CryptoSerializationManager serialization = null;
-
-    /**
-     * Sets the executor used to invoke methods when an invocation is received from a remote endpoint. By default, no executor is set and
-     * invocations occur on the network thread, which should not be blocked for long.
-     */
-    public Executor rmiExecutor = null;
+    public NetworkSerializationManager serialization = null;
 
     /**
      * The number of threads used for the worker threads by the end point. By default, this is the CPU_COUNT/2 or 1, whichever is larger.

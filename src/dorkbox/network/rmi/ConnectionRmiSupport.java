@@ -17,7 +17,7 @@ import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listener.OnMessageReceived;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.collections.LockFreeHashMap;
 import dorkbox.util.collections.LockFreeIntMap;
 import dorkbox.util.generics.ClassHelper;
@@ -31,13 +31,17 @@ class ConnectionRmiSupport extends ConnectionSupport {
     private final Map<Integer, RemoteObject> proxyIdCache;
     private final List<OnMessageReceived<Connection, InvokeMethodResult>> proxyListeners;
 
+    final ConnectionImpl connection;
+
     private final LockFreeIntMap<RemoteObjectCallback> rmiRegistrationCallbacks;
     private final Logger logger;
     private volatile int rmiCallbackId = 0;
 
 
     public
-    ConnectionRmiSupport(final RmiBridge rmiGlobalBridge, final RmiObjectHandler rmiHandler) {
+    ConnectionRmiSupport(final ConnectionImpl connection, final RmiBridge rmiGlobalBridge, final RmiObjectHandler rmiHandler) {
+        this.connection = connection;
+
         if (rmiGlobalBridge == null || rmiHandler == null) {
             throw new NullPointerException("RMI cannot be null if using RMI support!");
         }
@@ -67,6 +71,9 @@ class ConnectionRmiSupport extends ConnectionSupport {
         rmiRegistrationCallbacks.clear();
     }
 
+    /**
+     * This will remove the invoke and invoke response listeners for this remote object
+     */
     public
     void removeAllListeners() {
         proxyListeners.clear();
@@ -123,11 +130,9 @@ class ConnectionRmiSupport extends ConnectionSupport {
     public
     boolean manage(final ConnectionImpl connection, final Object message) {
         if (message instanceof InvokeMethod) {
-            CryptoSerializationManager serialization = connection.getEndPoint().getSerialization();
+            NetworkSerializationManager serialization = connection.getEndPoint().getSerialization();
 
             InvokeMethod invokeMethod = rmiHandler.getInvokeMethod(serialization, connection, (InvokeMethod) message);
-
-
 
             int objectID = invokeMethod.objectID;
 
@@ -142,27 +147,17 @@ class ConnectionRmiSupport extends ConnectionSupport {
                 return true; // maybe false?
             }
 
-            // Executor executor2 = RmiBridge.this.executor;
-            // if (executor2 == null) {
-                try {
-                    RmiBridge.invoke(connection, target, invokeMethod, logger);
-                } catch (IOException e) {
-                    logger.error("Unable to invoke method.", e);
+            try {
+                InvokeMethodResult result = RmiBridge.invoke(connection, target, invokeMethod, logger);
+                if (result != null) {
+                    // System.err.println("Sending: " + invokeMethod.responseID);
+                    connection.send(result).flush();
                 }
-            // }
-            // else {
-            //     executor2.execute(new Runnable() {
-            //         @Override
-            //         public
-            //         void run() {
-            //             try {
-            //                 RmiBridge.invoke(connection, target, invokeMethod, logger);
-            //             } catch (IOException e) {
-            //                 logger.error("Unable to invoke method.", e);
-            //             }
-            //         }
-            //     });
-            // }
+
+            } catch (IOException e) {
+                logger.error("Unable to invoke method.", e);
+            }
+
             return true;
         }
         else if (message instanceof InvokeMethodResult) {
@@ -185,11 +180,7 @@ class ConnectionRmiSupport extends ConnectionSupport {
      * For local connections, we have to switch it appropriately in the LocalRmiProxy
      */
     public
-    RmiRegistration createNewRmiObject(final CryptoSerializationManager serialization,
-                            final Class<?> interfaceClass,
-                            final Class<?> implementationClass,
-                            final int callbackId,
-                            final Logger logger) {
+    RmiRegistration createNewRmiObject(final NetworkSerializationManager serialization, final Class<?> interfaceClass, final Class<?> implementationClass, final int callbackId, final Logger logger) {
         KryoExtra kryo = null;
         Object object = null;
         int rmiId = 0;
@@ -295,6 +286,11 @@ class ConnectionRmiSupport extends ConnectionSupport {
         }
     }
 
+    /**
+     * Used by RMI by the LOCAL side when setting up the to fetch an object for the REMOTE side
+     *
+     * @return the registered ID for a specific object, or RmiBridge.INVALID_RMI if there was no ID.
+     */
     public
     <T> int getRegisteredId(final T object) {
         // always check global before checking local, because less contention on the synchronization
@@ -308,17 +304,43 @@ class ConnectionRmiSupport extends ConnectionSupport {
         }
     }
 
+    /**
+     * This is used by RMI for the REMOTE side, to get the implementation
+     *
+     * @param objectId this is the RMI object ID
+     */
     public
-    Object getImplementationObject(final int objectID) {
-        if (RmiBridge.isGlobal(objectID)) {
-            return rmiGlobalBridge.getRegisteredObject(objectID);
+    Object getImplementationObject(final int objectId) {
+        if (RmiBridge.isGlobal(objectId)) {
+            return rmiGlobalBridge.getRegisteredObject(objectId);
         } else {
-            return rmiLocalBridge.getRegisteredObject(objectID);
+            return rmiLocalBridge.getRegisteredObject(objectId);
         }
     }
 
+    /**
+     * Warning. This is an advanced method. You should probably be using {@link Connection#createRemoteObject(Class, RemoteObjectCallback)}
+     * <p>
+     * <p>
+     * Returns a proxy object that implements the specified interface, and the methods invoked on the proxy object will be invoked
+     * remotely.
+     * <p>
+     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
+     * RemoteObject#setResponseTimeout(int) response timeout}.
+     * <p/>
+     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must not be
+     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
+     * called on the update thread.
+     * <p/>
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
+     * have the proxy object replaced with the registered object.
+     *
+     * @see RemoteObject
+     * @param rmiId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
+     * @param iFace this is the RMI interface
+     */
     public
-    RemoteObject getProxyObject(final ConnectionImpl connection, final int rmiId, final Class<?> iFace) {
+    RemoteObject getProxyObject(final int rmiId, final Class<?> iFace) {
         if (iFace == null) {
             throw new IllegalArgumentException("iface cannot be null.");
         }
@@ -335,47 +357,10 @@ class ConnectionRmiSupport extends ConnectionSupport {
             // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
 
             // the ACTUAL proxy is created in the connection impl.
-            RmiProxyNetworkHandler proxyObject = new RmiProxyNetworkHandler(connection, rmiId, iFace);
+            RmiProxyHandler proxyObject = new RmiProxyHandler(this.connection, this, rmiId, iFace);
             proxyListeners.add(proxyObject.getListener());
 
             // This is the interface inheritance by the proxy object
-            Class<?>[] temp = new Class<?>[2];
-            temp[0] = RemoteObject.class;
-            temp[1] = iFace;
-
-            remoteObject = (RemoteObject) Proxy.newProxyInstance(RmiBridge.class.getClassLoader(), temp, proxyObject);
-
-            proxyIdCache.put(rmiId, remoteObject);
-        }
-
-        return remoteObject;
-    }
-
-    public
-    RemoteObject getLocalProxyObject(final ConnectionImpl connection, final int rmiId, final Class<?> iFace, final Object object) {
-        if (iFace == null) {
-            throw new IllegalArgumentException("iface cannot be null.");
-        }
-        if (!iFace.isInterface()) {
-            throw new IllegalArgumentException("iface must be an interface.");
-        }
-        if (object == null) {
-            throw new IllegalArgumentException("object cannot be null.");
-        }
-
-
-        // we want to have a connection specific cache of IDs
-        // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent
-        // access, but there WILL be issues with thread visibility because a different worker thread can be called for different connections
-        RemoteObject remoteObject = proxyIdCache.get(rmiId);
-
-        if (remoteObject == null) {
-            // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
-
-            // the ACTUAL proxy is created in the connection impl.
-            RmiProxyLocalHandler proxyObject = new RmiProxyLocalHandler(connection, rmiId, iFace, object);
-            proxyListeners.add(proxyObject.getListener());
-
             Class<?>[] temp = new Class<?>[2];
             temp[0] = RemoteObject.class;
             temp[1] = iFace;

@@ -29,7 +29,7 @@ import com.esotericsoftware.kryo.util.IdentityMap;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.KryoExtra;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 
 /**
  * This is for a local-connection (same-JVM) RMI method invocation
@@ -64,7 +64,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
     }
 
     public
-    InvokeMethod getInvokeMethod(final CryptoSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod) {
+    InvokeMethod getInvokeMethod(final NetworkSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod) {
         int methodClassID = invokeMethod.cachedMethod.methodClassID;
         int methodIndex = invokeMethod.cachedMethod.methodIndex;
         // have to replace the cached methods with the correct (remote) version, otherwise the wrong methods CAN BE invoked.
@@ -137,7 +137,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
 
                 // have to convert the iFace -> Impl
                 EndPoint endPoint = connection.getEndPoint();
-                CryptoSerializationManager serialization = endPoint.getSerialization();
+                NetworkSerializationManager serialization = endPoint.getSerialization();
 
                 Class<?> rmiImpl = serialization.getRmiImpl(registration.interfaceClass);
 
@@ -175,7 +175,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
                 else {
                     // override the implementation object with the proxy. This is required because RMI must be the same between "network" and "local"
                     // connections -- even if this "slows down" the speed/performance of what "local" connections offer.
-                    proxyObject = rmiSupport.getLocalProxyObject(connection, registration.rmiId, interfaceClass, registration.remoteObject);
+                    proxyObject = rmiSupport.getProxyObject(registration.rmiId, interfaceClass);
 
                     if (proxyObject != null && registration.remoteObject != null) {
                         // have to save A and B so we can correctly switch as necessary
@@ -187,10 +187,10 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
                     }
                 }
 
-                connection.runRmiCallback(interfaceClass, callbackId, proxyObject);
+                rmiSupport.runCallback(interfaceClass, callbackId, proxyObject, logger);
             }
             else {
-                connection.runRmiCallback(interfaceClass, callbackId, registration.remoteObject);
+                rmiSupport.runCallback(interfaceClass, callbackId, registration.remoteObject, logger);
             }
         }
     }
@@ -243,7 +243,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
                             o = field.get(message);
 
                             if (o instanceof RemoteObject) {
-                                RmiProxyLocalHandler handler = (RmiProxyLocalHandler) Proxy.getInvocationHandler(o);
+                                RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(o);
 
                                 int id = handler.rmiObjectId;
                                 field.set(message, rmiSupport.getImplementationObject(id));
@@ -296,7 +296,7 @@ class RmiObjectLocalHandler implements RmiObjectHandler {
                     o = field.get(message);
 
                     if (o instanceof RemoteObject) {
-                        RmiProxyNetworkHandler handler = (RmiProxyNetworkHandler) Proxy.getInvocationHandler(o);
+                        RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(o);
 
                         int id = handler.rmiObjectId;
                         field.set(message, rmiSupport.getImplementationObject(id));

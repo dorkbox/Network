@@ -37,11 +37,10 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.util.IdentityMap;
-import com.esotericsoftware.kryo.util.IntMap;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
 import com.esotericsoftware.kryo.util.Util;
 
-import dorkbox.network.connection.CryptoConnection;
+import dorkbox.network.connection.Connection_;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.rmi.CachedMethod;
@@ -57,6 +56,7 @@ import dorkbox.network.rmi.RmiUtils;
 import dorkbox.objectPool.ObjectPool;
 import dorkbox.objectPool.PoolableObject;
 import dorkbox.util.Property;
+import dorkbox.util.collections.IntMap;
 import dorkbox.util.serialization.ArraysAsListSerializer;
 import dorkbox.util.serialization.EccPrivateKeySerializer;
 import dorkbox.util.serialization.EccPublicKeySerializer;
@@ -77,7 +77,7 @@ import io.netty.buffer.Unpooled;
  */
 @SuppressWarnings({"StaticNonFinalField"})
 public
-class Serialization<C extends CryptoConnection> implements CryptoSerializationManager<C> {
+class Serialization implements NetworkSerializationManager {
 
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(Serialization.class.getSimpleName());
 
@@ -115,9 +115,9 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      *         Kryo#newDefaultSerializer(Class)
      */
     public static
-    <C extends CryptoConnection> Serialization<C> DEFAULT(final boolean references, final boolean registrationRequired, final SerializerFactory factory) {
+    <C extends Connection_> Serialization DEFAULT(final boolean references, final boolean registrationRequired, final SerializerFactory factory) {
 
-        final Serialization<C> serialization = new Serialization<C>(references,
+        final Serialization serialization = new Serialization(references,
                                                               registrationRequired,
                                                               factory);
 
@@ -147,7 +147,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     }
 
     private boolean initialized = false;
-    private final ObjectPool<KryoExtra<C>> kryoPool;
+    private final ObjectPool<KryoExtra> kryoPool;
 
     private final boolean registrationRequired;
 
@@ -207,13 +207,13 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
 
         this.registrationRequired = registrationRequired;
 
-        this.kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra<C>>() {
+        this.kryoPool = ObjectPool.NonBlockingSoftReference(new PoolableObject<KryoExtra>() {
             @Override
             public
-            KryoExtra<C> create() {
+            KryoExtra create() {
                 synchronized (Serialization.this) {
                     // we HAVE to pre-allocate the KRYOs
-                    KryoExtra<C> kryo = new KryoExtra<C>(Serialization.this);
+                    KryoExtra kryo = new KryoExtra(Serialization.this);
 
                     kryo.getFieldSerializerConfig().setUseAsm(useAsm);
                     kryo.setRegistrationRequired(registrationRequired);
@@ -261,7 +261,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      */
     @Override
     public synchronized
-    RmiSerializationManager register(Class<?> clazz) {
+    NetworkSerializationManager register(Class<?> clazz) {
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class) call.");
         }
@@ -290,7 +290,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      */
     @Override
     public synchronized
-    RmiSerializationManager register(Class<?> clazz, int id) {
+    NetworkSerializationManager register(Class<?> clazz, int id) {
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, int) call.");
         }
@@ -315,7 +315,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      */
     @Override
     public synchronized
-    RmiSerializationManager register(Class<?> clazz, Serializer<?> serializer) {
+    NetworkSerializationManager register(Class<?> clazz, Serializer<?> serializer) {
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer) call.");
         }
@@ -342,7 +342,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      */
     @Override
     public synchronized
-    RmiSerializationManager register(Class<?> clazz, Serializer<?> serializer, int id) {
+    NetworkSerializationManager register(Class<?> clazz, Serializer<?> serializer, int id) {
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer, int) call.");
         }
@@ -372,7 +372,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      */
     @Override
     public synchronized
-    <Iface, Impl extends Iface> RmiSerializationManager registerRmi(Class<Iface> ifaceClass, Class<Impl> implClass) {
+    <Iface, Impl extends Iface> NetworkSerializationManager registerRmi(Class<Iface> ifaceClass, Class<Impl> implClass) {
         if (initialized) {
             logger.warn("Serialization manager already initialized. Ignoring duplicate registerRmiImplementation(Class, Class) call.");
             return this;
@@ -442,7 +442,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
 
         // initialize the kryo pool with at least 1 kryo instance. This ALSO makes sure that all of our class registration is done
         // correctly and (if not) we are are notified on the initial thread (instead of on the network update thread)
-        KryoExtra<C> kryo = kryoPool.take();
+        KryoExtra kryo = kryoPool.take();
         try {
 
             // now MERGE all of the registrations (since we can have registrations overwrite newer/specific registrations
@@ -502,7 +502,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
 
             kryo.setRegistrationRequired(false);
             try {
-                kryo.writeCompressed(null, buffer, registrationDetails);
+                kryo.writeCompressed(buffer, registrationDetails);
             } catch (Exception e) {
                 logger.error("Unable to write compressed data for registration details");
             }
@@ -562,7 +562,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
         try {
             kryo.setRegistrationRequired(false);
             @SuppressWarnings("unchecked")
-            Object[][] classRegistrations = (Object[][]) kryo.readCompressed(null, byteBuf, otherRegistrationData.length);
+            Object[][] classRegistrations = (Object[][]) kryo.readCompressed(byteBuf, otherRegistrationData.length);
 
 
             int lengthOrg = mergedRegistrations.length;
@@ -671,7 +671,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     @Override
     public final
     void write(final ByteBuf buffer, final Object message) throws IOException {
-        final KryoExtra<C> kryo = kryoPool.take();
+        final KryoExtra kryo = kryoPool.take();
         try {
             if (wireWriteLogger.isTraceEnabled()) {
                 int start = buffer.writerIndex();
@@ -698,7 +698,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     @Override
     public final
     Object read(final ByteBuf buffer, final int length) throws IOException {
-        final KryoExtra<C> kryo = kryoPool.take();
+        final KryoExtra kryo = kryoPool.take();
         try {
             if (wireReadLogger.isTraceEnabled()) {
                 int start = buffer.readerIndex();
@@ -723,7 +723,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     @Override
     public
     void writeFullClassAndObject(final Output output, final Object value) throws IOException {
-        KryoExtra<C> kryo = kryoPool.take();
+        KryoExtra kryo = kryoPool.take();
         boolean prev = false;
 
         try {
@@ -748,7 +748,7 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     @Override
     public
     Object readFullClassAndObject(final Input input) throws IOException {
-        KryoExtra<C> kryo = kryoPool.take();
+        KryoExtra kryo = kryoPool.take();
         boolean prev = false;
 
         try {
@@ -774,8 +774,8 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
      */
     @Override
     public final
-    void writeWithCrypto(final C connection, final ByteBuf buffer, final Object message) throws IOException {
-        final KryoExtra<C> kryo = kryoPool.take();
+    void writeWithCrypto(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
+        final KryoExtra kryo = kryoPool.take();
         try {
             // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
             if (connection.isLoopback()) {
@@ -818,8 +818,8 @@ class Serialization<C extends CryptoConnection> implements CryptoSerializationMa
     @SuppressWarnings("Duplicates")
     @Override
     public final
-    Object readWithCrypto(final C connection, final ByteBuf buffer, final int length) throws IOException {
-        final KryoExtra<C> kryo = kryoPool.take();
+    Object readWithCrypto(final Connection_ connection, final ByteBuf buffer, final int length) throws IOException {
+        final KryoExtra kryo = kryoPool.take();
         try {
             // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
             if (connection.isLoopback()) {

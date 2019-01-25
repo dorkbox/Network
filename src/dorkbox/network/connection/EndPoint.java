@@ -37,6 +37,7 @@ import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.rmi.RmiBridge;
 import dorkbox.network.rmi.RmiObjectLocalHandler;
 import dorkbox.network.rmi.RmiObjectNetworkHandler;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.network.store.NullSettingsStore;
 import dorkbox.network.store.SettingsStore;
@@ -158,7 +159,7 @@ class EndPoint extends Shutdownable {
     protected final Configuration config;
 
     protected final ConnectionManager connectionManager;
-    protected final dorkbox.network.serialization.CryptoSerializationManager serializationManager;
+    protected final NetworkSerializationManager serializationManager;
     protected final RegistrationWrapper registrationWrapper;
 
     final ECPrivateKeyParameters privateKey;
@@ -363,7 +364,7 @@ class EndPoint extends Shutdownable {
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
      */
     public
-    dorkbox.network.serialization.CryptoSerializationManager getSerialization() {
+    NetworkSerializationManager getSerialization() {
         return serializationManager;
     }
 

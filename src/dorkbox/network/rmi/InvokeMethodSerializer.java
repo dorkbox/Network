@@ -127,7 +127,7 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
             argStartIndex = 1;
 
             args = new Object[serializers.length + 1];
-            args[0] = ((KryoExtra) kryo).connection;
+            args[0] = ((ConnectionRmiSupport) ((KryoExtra) kryo).rmiSupport).connection;
         }
         else {
             method = cachedMethod.method;

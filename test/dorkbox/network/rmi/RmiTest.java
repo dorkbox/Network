@@ -50,6 +50,7 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listener;
 import dorkbox.network.connection.Listeners;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.util.exceptions.SecurityException;
 
@@ -169,7 +170,7 @@ class RmiTest extends BaseTest {
     }
 
     public static
-    void register(dorkbox.network.serialization.CryptoSerializationManager manager) {
+    void register(NetworkSerializationManager manager) {
         manager.register(Object.class); // Needed for Object#toString, hashCode, etc.
         manager.register(TestCow.class);
         manager.register(MessageWithTestCow.class);

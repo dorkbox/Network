@@ -45,7 +45,7 @@ class RmiRegistrationSerializer extends Serializer<RmiRegistration> {
 
         if (object.remoteObject != null) {
             KryoExtra kryoExtra = (KryoExtra) kryo;
-            id = kryoExtra.connection.getRegisteredId(object.remoteObject);
+            id = kryoExtra.rmiSupport.getRegisteredId(object.remoteObject);
         } else {
             // can be < 0 or >= RmiBridge.INVALID_RMI (Integer.MAX_VALUE)
             id = -1;
@@ -72,7 +72,7 @@ class RmiRegistrationSerializer extends Serializer<RmiRegistration> {
         Object remoteObject = null;
         if (remoteObjectId >= 0 && remoteObjectId < RmiBridge.INVALID_RMI) {
             KryoExtra kryoExtra = (KryoExtra) kryo;
-            remoteObject = kryoExtra.connection.getProxyObject(remoteObjectId, iface);
+            remoteObject = kryoExtra.rmiSupport.getProxyObject(remoteObjectId, iface);
         }
 
         RmiRegistration rmiRegistration = new RmiRegistration(iface, rmiId, callbackId, remoteObject);

@@ -17,7 +17,6 @@ package dorkbox.network.serialization;
 
 import org.slf4j.Logger;
 
-import dorkbox.network.connection.CryptoConnection;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.rmi.RemoteObjectSerializer;
 
@@ -29,7 +28,7 @@ class ClassSerializerRmi extends ClassRegistration {
         this.implClass = implClass;
     }
 
-    <C extends CryptoConnection> void register(final KryoExtra<C> kryo, final RemoteObjectSerializer remoteObjectSerializer) {
+    void register(final KryoExtra kryo, final RemoteObjectSerializer remoteObjectSerializer) {
         this.id = kryo.register(clazz, remoteObjectSerializer).getId();
         this.serializer = remoteObjectSerializer;
     }

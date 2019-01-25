@@ -36,10 +36,8 @@ import dorkbox.network.connection.wrapper.ChannelNull;
 import dorkbox.network.connection.wrapper.ChannelWrapper;
 import dorkbox.network.rmi.ConnectionRmiSupport;
 import dorkbox.network.rmi.ConnectionSupport;
-import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.RmiObjectHandler;
-import dorkbox.network.rmi.TimeoutException;
 import io.netty.bootstrap.DatagramSessionChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -66,7 +64,7 @@ import io.netty.util.concurrent.Promise;
 @SuppressWarnings("unused")
 @Sharable
 public
-class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConnection, Connection, Listeners, ConnectionBridge {
+class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_, Listeners, ConnectionBridge {
     public static
     boolean isTcpChannel(Class<? extends Channel> channelClass) {
         return channelClass == OioSocketChannel.class ||
@@ -130,7 +128,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
 
 
     // RMI support for this connection
-    private final ConnectionSupport rmiSupport;
+    final ConnectionSupport rmiSupport;
 
     /**
      * All of the parameters can be null, when metaChannel wants to get the base class type
@@ -158,7 +156,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
 
                 // because this is PER CONNECTION, there is no need for synchronize(), since there will not be any issues with concurrent access, but
                 // there WILL be issues with thread visibility because a different worker thread can be called for different connections
-                this.rmiSupport = new ConnectionRmiSupport(endPoint.rmiGlobalBridge, handler);
+                this.rmiSupport = new ConnectionRmiSupport(this, endPoint.rmiGlobalBridge, handler);
             } else {
                 this.rmiSupport = new ConnectionSupport();
             }
@@ -1012,7 +1010,11 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
     //
     //
 
-
+    @Override
+    public
+    ConnectionSupport rmiSupport() {
+        return rmiSupport;
+    }
 
     @Override
     public final
@@ -1025,7 +1027,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
     <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) {
         rmiSupport.getRemoteObject(this, objectId, callback);
     }
-
 
     /**
      * Manages the RMI stuff for a connection.
@@ -1044,66 +1045,5 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements CryptoConne
         return rmiSupport.fixupRmi(this, message);
     }
 
-    /**
-     * This will remove the invoke and invoke response listeners for this remote object
-     */
-    public
-    void removeRmiListeners(final int objectID, final Listener listener) {
-        rmiSupport.removeAllListeners(); //?  this is called from close(), when the "RMI" object is closed. TODO: REMOVE THIS?
-    }
 
-    public final
-    void runRmiCallback(final Class<?> interfaceClass, final int callbackId, final Object remoteObject) {
-        rmiSupport.runCallback(interfaceClass, callbackId, remoteObject, logger);
-    }
-
-    /**
-     * Used by RMI by the LOCAL side when setting up the to fetch an object for the REMOTE side
-     *
-     * @return the registered ID for a specific object, or RmiBridge.INVALID_RMI if there was no ID.
-     */
-    @Override
-    public
-    <T> int getRegisteredId(final T object) {
-        return rmiSupport.getRegisteredId(object);
-    }
-
-    /**
-     * Warning. This is an advanced method. You should probably be using {@link Connection#createRemoteObject(Class, RemoteObjectCallback)}
-     * <p>
-     * <p>
-     * Returns a proxy object that implements the specified interface, and the methods invoked on the proxy object will be invoked
-     * remotely.
-     * <p>
-     * Methods that return a value will throw {@link TimeoutException} if the response is not received with the {@link
-     * RemoteObject#setResponseTimeout(int) response timeout}.
-     * <p/>
-     * If {@link RemoteObject#setAsync(boolean) non-blocking} is false (the default), then methods that return a value must not be
-     * called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a void return value can be
-     * called on the update thread.
-     * <p/>
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side will
-     * have the proxy object replaced with the registered object.
-     *
-     * @see RemoteObject
-     *
-     * @param rmiId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
-     * @param iFace this is the RMI interface
-     */
-    @Override
-    public
-    RemoteObject getProxyObject(final int rmiId, final Class<?> iFace) {
-        return rmiSupport.getProxyObject(this, rmiId, iFace);
-    }
-
-    /**
-     * This is used by RMI for the REMOTE side, to get the implementation
-     *
-     * @param objectId this is the RMI object ID
-     */
-    @Override
-    public
-    Object getImplementationObject(final int objectId) {
-        return rmiSupport.getImplementationObject(objectId);
-    }
 }

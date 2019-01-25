@@ -18,7 +18,7 @@ package dorkbox.network.rmi;
 import org.slf4j.Logger;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 
 public
 class RmiObjectNetworkHandler implements RmiObjectHandler {
@@ -31,7 +31,7 @@ class RmiObjectNetworkHandler implements RmiObjectHandler {
     }
 
     public
-    InvokeMethod getInvokeMethod(final CryptoSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod) {
+    InvokeMethod getInvokeMethod(final NetworkSerializationManager serialization, final ConnectionImpl connection, final InvokeMethod invokeMethod) {
         // everything is fine, there is nothing necessary to fix
         return invokeMethod;
     }
@@ -54,7 +54,7 @@ class RmiObjectNetworkHandler implements RmiObjectHandler {
                 // CREATE a new ID, and register the ID and new object (must create a new one) in the object maps
 
                 // have to lookup the implementation class
-                CryptoSerializationManager serialization = connection.getEndPoint().getSerialization();
+                NetworkSerializationManager serialization = connection.getEndPoint().getSerialization();
 
                 Class<?> rmiImpl = serialization.getRmiImpl(interfaceClass);
 
@@ -82,7 +82,7 @@ class RmiObjectNetworkHandler implements RmiObjectHandler {
 
             // this is the response.
             // THIS IS ON THE LOCAL CONNECTION SIDE, which is the side that called 'getRemoteObject()'   This can be Server or Client.
-            connection.runRmiCallback(interfaceClass, callbackId, registration.remoteObject);
+            rmiSupport.runCallback(interfaceClass, callbackId, registration.remoteObject, logger);
         }
     }
 

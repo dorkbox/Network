@@ -22,7 +22,7 @@ import java.util.List;
 import org.slf4j.LoggerFactory;
 
 import dorkbox.network.connection.EndPoint;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -35,11 +35,11 @@ class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
 
     private static final int maxSize = EndPoint.udpMaxSize;
 
-    private final CryptoSerializationManager serializationManager;
+    private final NetworkSerializationManager serializationManager;
 
 
     public
-    KryoEncoderUdp(final CryptoSerializationManager serializationManager) {
+    KryoEncoderUdp(final NetworkSerializationManager serializationManager) {
         super();
         this.serializationManager = serializationManager;
     }
@@ -80,8 +80,7 @@ class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
     }
 
     // the crypto writer will override this
-    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, Object msg, ByteBuf buffer)
-            throws IOException {
+    void writeObject(NetworkSerializationManager serializationManager, ChannelHandlerContext context, Object msg, ByteBuf buffer) throws IOException {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         serializationManager.write(buffer, msg);
     }

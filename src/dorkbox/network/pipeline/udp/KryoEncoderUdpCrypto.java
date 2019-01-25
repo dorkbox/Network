@@ -17,8 +17,8 @@ package dorkbox.network.pipeline.udp;
 
 import java.io.IOException;
 
-import dorkbox.network.connection.CryptoConnection;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.connection.Connection_;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
@@ -28,16 +28,15 @@ public
 class KryoEncoderUdpCrypto extends KryoEncoderUdp {
 
     public
-    KryoEncoderUdpCrypto(CryptoSerializationManager serializationManager) {
+    KryoEncoderUdpCrypto(NetworkSerializationManager serializationManager) {
         super(serializationManager);
     }
 
     @Override
-    void writeObject(CryptoSerializationManager serializationManager, ChannelHandlerContext ctx, Object msg, ByteBuf buffer)
-            throws IOException {
+    void writeObject(NetworkSerializationManager serializationManager, ChannelHandlerContext ctx, Object msg, ByteBuf buffer) throws IOException {
 
-        CryptoConnection last = (CryptoConnection) ctx.pipeline()
-                                                      .last();
+        Connection_ last = (Connection_) ctx.pipeline()
+                                            .last();
         serializationManager.writeWithCrypto(last, buffer, msg);
     }
 }

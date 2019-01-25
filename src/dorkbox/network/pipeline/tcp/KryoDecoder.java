@@ -18,7 +18,7 @@ package dorkbox.network.pipeline.tcp;
 import java.io.IOException;
 import java.util.List;
 
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -26,17 +26,17 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 
 public
 class KryoDecoder extends ByteToMessageDecoder {
-    private final CryptoSerializationManager serializationManager;
+    private final NetworkSerializationManager serializationManager;
 
     public
-    KryoDecoder(final CryptoSerializationManager serializationManager) {
+    KryoDecoder(final NetworkSerializationManager serializationManager) {
         super();
         this.serializationManager = serializationManager;
     }
 
     @SuppressWarnings("unused")
     protected
-    Object readObject(CryptoSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) throws Exception {
+    Object readObject(NetworkSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) throws Exception {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
         return serializationManager.read(in, length);
     }
@@ -81,7 +81,7 @@ class KryoDecoder extends ByteToMessageDecoder {
         // we can't test against a single "max size", since objects can back-up on the buffer.
         // we must ABSOLUTELY follow a "max size" rule when encoding objects, however.
 
-        final CryptoSerializationManager serializationManager = this.serializationManager;
+        final NetworkSerializationManager serializationManager = this.serializationManager;
 
         // Make sure if there's enough bytes in the buffer.
         if (length > readableBytes) {

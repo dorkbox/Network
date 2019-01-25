@@ -15,8 +15,8 @@
  */
 package dorkbox.network.pipeline.tcp;
 
-import dorkbox.network.connection.CryptoConnection;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.connection.Connection_;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 
@@ -26,20 +26,20 @@ public
 class KryoDecoderCrypto extends KryoDecoder {
 
     public
-    KryoDecoderCrypto(final CryptoSerializationManager serializationManager) {
+    KryoDecoderCrypto(final NetworkSerializationManager serializationManager) {
         super(serializationManager);
     }
 
     @Override
     protected
-    Object readObject(final CryptoSerializationManager serializationManager,
+    Object readObject(final NetworkSerializationManager serializationManager,
                       final ChannelHandlerContext context,
                       final ByteBuf in,
                       final int length) throws Exception {
 
         try {
-            CryptoConnection connection = (CryptoConnection) context.pipeline()
-                                                                    .last();
+            Connection_ connection = (Connection_) context.pipeline()
+                                                          .last();
             return serializationManager.readWithCrypto(connection, in, length);
         } catch (Exception e) {
            throw e;

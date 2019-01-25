@@ -19,13 +19,13 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPoint;
-import dorkbox.network.connection.CryptoConnection;
+import dorkbox.network.connection.Connection_;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listeners;
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
-import dorkbox.network.rmi.RemoteObject;
+import dorkbox.network.rmi.ConnectionSupport;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -36,7 +36,7 @@ import io.netty.channel.ChannelHandlerContext;
  * This is to prevent race conditions where onMessage() can happen BEFORE a "connection" is "connected"
  */
 public
-class ConnectionRegistrationImpl implements CryptoConnection, ChannelHandler {
+class ConnectionRegistrationImpl implements Connection_, ChannelHandler {
     public final ConnectionImpl connection;
 
     public
@@ -69,24 +69,6 @@ class ConnectionRegistrationImpl implements CryptoConnection, ChannelHandler {
     public
     ParametersWithIV getCryptoParameters() {
         return connection.getCryptoParameters();
-    }
-
-    @Override
-    public
-    RemoteObject getProxyObject(final int objectID, final Class<?> iFace) {
-        throw new IllegalArgumentException("not implemented");
-    }
-
-    @Override
-    public
-    Object getImplementationObject(final int objectId) {
-        throw new IllegalArgumentException("not implemented");
-    }
-
-    @Override
-    public
-    <T> int getRegisteredId(final T object) {
-        return 0;
     }
 
     @Override
@@ -183,5 +165,11 @@ class ConnectionRegistrationImpl implements CryptoConnection, ChannelHandler {
     public
     <Iface> void getRemoteObject(final int objectId, final RemoteObjectCallback<Iface> callback) {
         throw new IllegalArgumentException("not implemented");
+    }
+
+    @Override
+    public
+    ConnectionSupport rmiSupport() {
+        return null;
     }
 }

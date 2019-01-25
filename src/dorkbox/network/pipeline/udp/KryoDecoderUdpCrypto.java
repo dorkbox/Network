@@ -20,8 +20,8 @@ import java.util.List;
 
 import org.slf4j.LoggerFactory;
 
-import dorkbox.network.connection.CryptoConnection;
-import dorkbox.network.serialization.CryptoSerializationManager;
+import dorkbox.network.connection.Connection_;
+import dorkbox.network.serialization.NetworkSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -35,10 +35,10 @@ import io.netty.handler.timeout.IdleStateEvent;
 public
 class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
 
-    private final CryptoSerializationManager serializationManager;
+    private final NetworkSerializationManager serializationManager;
 
     public
-    KryoDecoderUdpCrypto(CryptoSerializationManager serializationManager) {
+    KryoDecoderUdpCrypto(NetworkSerializationManager serializationManager) {
         this.serializationManager = serializationManager;
     }
 
@@ -70,8 +70,8 @@ class KryoDecoderUdpCrypto extends MessageToMessageDecoder<DatagramPacket> {
     public
     void decode(ChannelHandlerContext context, DatagramPacket in, List<Object> out) throws Exception {
         try {
-            CryptoConnection last = (CryptoConnection) context.pipeline()
-                                                              .last();
+            Connection_ last = (Connection_) context.pipeline()
+                                                    .last();
             ByteBuf data = in.content();
             Object object = serializationManager.readWithCrypto(last, data, data.readableBytes());
             out.add(object);

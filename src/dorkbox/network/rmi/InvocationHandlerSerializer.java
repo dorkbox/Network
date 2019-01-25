@@ -38,7 +38,7 @@ class InvocationHandlerSerializer extends Serializer<Object> {
     @Override
     public
     void write(Kryo kryo, Output output, Object object) {
-        RmiProxyNetworkHandler handler = (RmiProxyNetworkHandler) Proxy.getInvocationHandler(object);
+        RmiProxyHandler handler = (RmiProxyHandler) Proxy.getInvocationHandler(object);
         output.writeInt(handler.rmiObjectId, true);
     }
 
@@ -49,7 +49,7 @@ class InvocationHandlerSerializer extends Serializer<Object> {
         int objectID = input.readInt(true);
 
         KryoExtra kryoExtra = (KryoExtra) kryo;
-        Object object = kryoExtra.connection.getImplementationObject(objectID);
+        Object object = kryoExtra.rmiSupport.getImplementationObject(objectID);
 
         if (object == null) {
             logger.error("Unknown object ID in RMI ObjectSpace: {}", objectID);

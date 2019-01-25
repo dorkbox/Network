@@ -20,7 +20,6 @@ import org.slf4j.Logger;
 import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
 
-import dorkbox.network.connection.CryptoConnection;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.rmi.RemoteObjectSerializer;
 
@@ -33,7 +32,7 @@ class ClassRegistration {
         this.clazz = clazz;
     }
 
-    <C extends CryptoConnection> void register(final KryoExtra<C> kryo, final RemoteObjectSerializer remoteObjectSerializer) {
+    void register(final KryoExtra kryo, final RemoteObjectSerializer remoteObjectSerializer) {
         Registration registration;
 
         if (clazz.isInterface()) {

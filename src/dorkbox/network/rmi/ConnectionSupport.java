@@ -45,12 +45,7 @@ class ConnectionSupport {
     }
 
     public
-    RemoteObject getProxyObject(final ConnectionImpl connection, final int rmiId, final Class<?> iFace) {
-        return null;
-    }
-
-    public
-    RemoteObject getLocalProxyObject(final ConnectionImpl connection, final int rmiId, final Class<?> iFace, final Object object) {
+    RemoteObject getProxyObject(final int rmiId, final Class<?> iFace) {
         return null;
     }
 

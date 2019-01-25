@@ -17,11 +17,18 @@ package dorkbox.network.connection;
 
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
+import dorkbox.network.rmi.ConnectionSupport;
+
 /**
- * Supporting methods for encrypting data to a remote endpoint
+ * Supporting methods for encrypting data to a remote endpoint and RMI
  */
 public
-interface CryptoConnection extends RmiConnection, Connection {
+interface Connection_ extends Connection {
+
+    /**
+     * @return the RMI support for this connection
+     */
+    ConnectionSupport rmiSupport();
 
     /**
      * This is the per-message sequence number.
