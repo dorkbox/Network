@@ -195,7 +195,7 @@ class ConnectionRmiLocalSupport extends ConnectionRmiImplSupport {
     @SuppressWarnings("unchecked")
     @Override
     public
-    Object normalMessages(final Object message) {
+    Object fixupRmi(final Object message) {
         // else, this was "just a local message"
 
         // because we NORMALLY pass around just the object (there is no serialization going on...) we have to explicitly check to see

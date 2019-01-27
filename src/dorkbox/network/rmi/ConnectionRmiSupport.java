@@ -28,7 +28,10 @@ interface ConnectionRmiSupport {
 
     boolean manage(final ConnectionImpl connection, final Object message);
 
-    Object fixupRmi(final ConnectionImpl connection, final Object message);
+    /**
+     * "local RMI" objects have to be modified, this part does that
+     */
+    Object fixupRmi(final Object message);
 
     <T> int getRegisteredId(final T object);
 

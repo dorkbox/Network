@@ -84,9 +84,8 @@ class ConnectionRmiNetworkSupport extends ConnectionRmiImplSupport {
         }
     }
 
-    @Override
     public
-    Object normalMessages(final Object message) {
+    Object fixupRmi(final Object message) {
         return message;
     }
 }

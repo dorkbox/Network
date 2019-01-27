@@ -42,7 +42,7 @@ class ConnectionNoOpSupport implements ConnectionRmiSupport {
     }
 
     public
-    Object fixupRmi(final ConnectionImpl connection, final Object message) {
+    Object fixupRmi(final Object message) {
         return message;
     }
 

@@ -82,8 +82,6 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
 
     abstract void registration(final ConnectionImpl connection, final RmiRegistration message);
 
-    abstract Object normalMessages(final Object message);
-
     public
     void close() {
         // proxy listeners are cleared in the removeAll() call (which happens BEFORE close)
@@ -392,11 +390,5 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
         }
 
         return remoteObject;
-    }
-
-    public
-    Object fixupRmi(final ConnectionImpl connection, final Object message) {
-        // "local RMI" objects have to be modified, this part does that
-        return normalMessages(message);
     }
 }
