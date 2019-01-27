@@ -230,7 +230,7 @@ class Shutdownable {
         }
 
         for (EventLoopGroup loopGroup : loopGroups) {
-            Future<?> future = loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds / 2, maxShutdownWaitTimeInMilliSeconds, TimeUnit.MILLISECONDS);
+            Future<?> future = loopGroup.shutdownGracefully(maxShutdownWaitTimeInMilliSeconds / 10, maxShutdownWaitTimeInMilliSeconds, TimeUnit.MILLISECONDS);
             shutdownThreadList.add(future);
             Thread.yield();
         }
