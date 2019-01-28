@@ -48,12 +48,9 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
     private final LockFreeIntMap<RemoteObjectCallback> rmiRegistrationCallbacks;
     private volatile int rmiCallbackId = 0;
 
-
     final ConnectionImpl connection;
     protected final Logger logger;
 
-
-    protected
     ConnectionRmiImplSupport(final ConnectionImpl connection, final RmiBridge rmiGlobalBridge) {
         this.connection = connection;
 
@@ -194,15 +191,67 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
         return false;
     }
 
+    void runCallback(final Class<?> interfaceClass, final int callbackId, final Object remoteObject) {
+        RemoteObjectCallback callback = rmiRegistrationCallbacks.remove(callbackId);
+
+        try {
+            //noinspection unchecked
+            callback.created(remoteObject);
+        } catch (Exception e) {
+            logger.error("Error getting or creating the remote object " + interfaceClass, e);
+        }
+    }
+
+    /**
+     * Used by RMI by the LOCAL side when setting up the to fetch an object for the REMOTE side
+     *
+     * @return the registered ID for a specific object, or RmiBridge.INVALID_RMI if there was no ID.
+     */
+    public
+    <T> int getRegisteredId(final T object) {
+        // always check global before checking local, because less contention on the synchronization
+        int objectId = rmiGlobalBridge.getRegisteredId(object);
+        if (objectId != RmiBridge.INVALID_RMI) {
+            return objectId;
+        }
+        else {
+            // might return RmiBridge.INVALID_RMI;
+            return rmiLocalBridge.getRegisteredId(object);
+        }
+    }
+
+    /**
+     * This is used by RMI for the REMOTE side, to get the implementation
+     *
+     * @param objectId this is the RMI object ID
+     */
+    public
+    Object getImplementationObject(final int objectId) {
+        if (RmiBridge.isGlobal(objectId)) {
+            return rmiGlobalBridge.getRegisteredObject(objectId);
+        } else {
+            return rmiLocalBridge.getRegisteredObject(objectId);
+        }
+    }
+
+    /**
+     * Removes a proxy object from the system
+     */
+    void removeProxyObject(final RmiProxyHandler rmiProxyHandler) {
+        proxyListeners.remove(rmiProxyHandler.getListener());
+        proxyIdCache.remove(rmiProxyHandler.rmiObjectId);
+    }
+
     /**
      * For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
      * For local connections, we have to switch it appropriately in the LocalRmiProxy
      */
-    public
-    RmiRegistration createNewRmiObject(final NetworkSerializationManager serialization, final Class<?> interfaceClass, final Class<?> implementationClass, final int callbackId) {
+    RmiRegistration createNewRmiObject(final NetworkSerializationManager serialization, final Class<?> interfaceClass, final int callbackId) {
         KryoExtra kryo = null;
         Object object = null;
         int rmiId = 0;
+
+        Class<?> implementationClass = serialization.getRmiImpl(interfaceClass);
 
         try {
             kryo = serialization.takeKryo();
@@ -291,50 +340,6 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
         }
 
         return new RmiRegistration(interfaceClass, rmiId, callbackId, object);
-    }
-
-    public
-    void runCallback(final Class<?> interfaceClass, final int callbackId, final Object remoteObject) {
-        RemoteObjectCallback callback = rmiRegistrationCallbacks.remove(callbackId);
-
-        try {
-            //noinspection unchecked
-            callback.created(remoteObject);
-        } catch (Exception e) {
-            logger.error("Error getting or creating the remote object " + interfaceClass, e);
-        }
-    }
-
-    /**
-     * Used by RMI by the LOCAL side when setting up the to fetch an object for the REMOTE side
-     *
-     * @return the registered ID for a specific object, or RmiBridge.INVALID_RMI if there was no ID.
-     */
-    public
-    <T> int getRegisteredId(final T object) {
-        // always check global before checking local, because less contention on the synchronization
-        int objectId = rmiGlobalBridge.getRegisteredId(object);
-        if (objectId != RmiBridge.INVALID_RMI) {
-            return objectId;
-        }
-        else {
-            // might return RmiBridge.INVALID_RMI;
-            return rmiLocalBridge.getRegisteredId(object);
-        }
-    }
-
-    /**
-     * This is used by RMI for the REMOTE side, to get the implementation
-     *
-     * @param objectId this is the RMI object ID
-     */
-    public
-    Object getImplementationObject(final int objectId) {
-        if (RmiBridge.isGlobal(objectId)) {
-            return rmiGlobalBridge.getRegisteredObject(objectId);
-        } else {
-            return rmiLocalBridge.getRegisteredObject(objectId);
-        }
     }
 
     /**

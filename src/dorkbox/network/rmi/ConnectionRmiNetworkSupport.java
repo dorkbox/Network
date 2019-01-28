@@ -54,11 +54,8 @@ class ConnectionRmiNetworkSupport extends ConnectionRmiImplSupport {
                 // have to lookup the implementation class
                 NetworkSerializationManager serialization = connection.getEndPoint().getSerialization();
 
-                Class<?> rmiImpl = serialization.getRmiImpl(interfaceClass);
-
-
                 // For network connections, the interface class kryo ID == implementation class kryo ID, so they switch automatically.
-                RmiRegistration registrationResult = createNewRmiObject(serialization, interfaceClass, rmiImpl, callbackId);
+                RmiRegistration registrationResult = createNewRmiObject(serialization, interfaceClass, callbackId);
                 connection.send(registrationResult);
                 // connection transport is flushed in calling method (don't need to do it here)
             }

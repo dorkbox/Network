@@ -168,7 +168,7 @@ class RmiProxyHandler implements InvocationHandler {
 
             String name = method.getName();
             if (name.equals("close")) {
-                rmiSupport.removeAllListeners();
+                rmiSupport.removeProxyObject(this);
                 return null;
             }
             else if (name.equals("setResponseTimeout")) {

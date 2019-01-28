@@ -136,9 +136,7 @@ class ConnectionRmiLocalSupport extends ConnectionRmiImplSupport {
                 EndPoint endPoint = connection.getEndPoint();
                 NetworkSerializationManager serialization = endPoint.getSerialization();
 
-                Class<?> rmiImpl = serialization.getRmiImpl(registration.interfaceClass);
-
-                RmiRegistration registrationResult = createNewRmiObject(serialization, interfaceClass, rmiImpl, callbackId);
+                RmiRegistration registrationResult = createNewRmiObject(serialization, interfaceClass, callbackId);
                 connection.send(registrationResult);
                 // connection transport is flushed in calling method (don't need to do it here)
             }
