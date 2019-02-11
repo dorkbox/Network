@@ -60,7 +60,7 @@ plugins {
 
 object Extras {
     // set for the project
-    const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 6+"
+    const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 8+"
     const val group = "com.dorkbox"
     const val version = "2.17"
 
