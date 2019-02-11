@@ -20,7 +20,6 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import dorkbox.util.OS;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.SerializationManager;
 import dorkbox.util.storage.Storage;
@@ -42,29 +41,17 @@ class SettingsStore {
 
 
     private static String getCallingClass() {
-        // java < 8, it is SIGNIFICANTLY faster to call sun.reflect.Reflection.getCallerClass
-        // java >= 8, Thread.stackTrace was fixed, so it is the now preferred method
-        if (OS.javaVersion < 8) {
-            Class<?> callerClass = sun.reflect.Reflection.getCallerClass(4);
-
-            if (callerClass == null) {
-                return null;
-
-            }
-            return callerClass.getName();
-        } else {
-            StackTraceElement[] cause = Thread.currentThread().getStackTrace();
-            if (cause == null || cause.length < 4) {
-                return null;
-            }
-
-            StackTraceElement stackTraceElement = cause[4];
-            if (stackTraceElement == null) {
-                return null;
-            }
-
-            return stackTraceElement.getClassName();
+        StackTraceElement[] cause = Thread.currentThread().getStackTrace();
+        if (cause == null || cause.length < 4) {
+            return null;
         }
+
+        StackTraceElement stackTraceElement = cause[4];
+        if (stackTraceElement == null) {
+            return null;
+        }
+
+        return stackTraceElement.getClassName();
     }
 
 
