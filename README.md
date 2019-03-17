@@ -1,6 +1,9 @@
 Network
 =======
 
+###### [![Dorkbox](https://badge.dorkbox.com/dorkbox.svg "Dorkbox")](https://git.dorkbox.com/dorkbox/Network) [![Github](https://badge.dorkbox.com/github.svg "Github")](https://github.com/dorkbox/Network) [![Gitlab](https://badge.dorkbox.com/gitlab.svg "Gitlab")](https://gitlab.com/dorkbox/Network) [![Bitbucket](https://badge.dorkbox.com/bitbucket.svg "Bitbucket")](https://bitbucket.org/dorkbox/Network)
+
+
 The Network project is an encrypted, high-performance, event-driven/reactive Network stack with DNS and RMI, using Netty, Kryo, KryoNet RMI, and LZ4 via TCP/UDP. 
 
 These are the main features:
