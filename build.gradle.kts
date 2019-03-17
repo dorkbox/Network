@@ -15,20 +15,15 @@
  */
 
 import Build_gradle.Extras.bcVersion
-import java.nio.file.Paths
+import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
 import java.time.Instant
 import java.util.Properties
-import kotlin.reflect.full.declaredMemberProperties
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
-import org.gradle.plugins.ide.idea.model.*
-import org.gradle.plugins.ide.idea.model.Dependency
-import org.gradle.plugins.ide.idea.model.ModuleDependency
-import org.jetbrains.kotlin.backend.common.onlyIf
-import java.io.*
-import java.net.*
-import java.nio.charset.StandardCharsets.UTF_8
+import kotlin.collections.ArrayList
+import kotlin.collections.component1
+import kotlin.collections.component2
+import kotlin.collections.set
 import kotlin.reflect.KMutableProperty
+import kotlin.reflect.full.declaredMemberProperties
 
 ///////////////////////////////
 //////    PUBLISH TO SONATYPE / MAVEN CENTRAL
@@ -48,7 +43,6 @@ plugins {
     // close and release on sonatype
     id("io.codearte.nexus-staging") version "0.20.0"
 
-    id("com.dorkbox.CrossCompile") version "1.0.1"
     id("com.dorkbox.Licensing") version "1.4"
     id("com.dorkbox.VersionUpdate") version "1.4.1"
 
@@ -71,7 +65,7 @@ object Extras {
     const val url = "https://git.dorkbox.com/dorkbox/Network"
     val buildDate = Instant.now().toString()
 
-    val JAVA_VERSION = JavaVersion.VERSION_1_6.toString()
+    val JAVA_VERSION = JavaVersion.VERSION_1_8.toString()
 
     const val bcVersion = "1.60"
 
@@ -247,27 +241,9 @@ sourceSets {
 }
 
 repositories {
+    mavenLocal() // this must be first!
     jcenter()
 }
-
-///////////////////////////////
-//////    Task defaults
-///////////////////////////////
-tasks.withType<JavaCompile> {
-    options.encoding = "UTF-8"
-
-    sourceCompatibility = Extras.JAVA_VERSION
-    targetCompatibility = Extras.JAVA_VERSION
-}
-
-tasks.withType<Jar> {
-    duplicatesStrategy = DuplicatesStrategy.FAIL
-}
-
-tasks.compileJava.get().apply {
-    println("\tCompiling classes to Java $sourceCompatibility")
-}
-
 
 ///////////////////////////////
 //////    UTILITIES COMPILE
@@ -286,92 +262,108 @@ fun javaFile(vararg fileNames: String): Iterable<String> {
     return fileList
 }
 
-task<JavaCompile>("compileUtilsJava8") {
-    // we don't want the default include of **/*.java
-    includes.clear()
-
-    source = fileTree("../Utilities/src")
-
-    // this class must be compiled java 8+
-    include(javaFile("dorkbox.util.generics.DefaultMethodHelper"))
-
-    sourceCompatibility = JavaVersion.VERSION_1_8.toString()
-    targetCompatibility = JavaVersion.VERSION_1_8.toString()
-
-
-    classpath = files()
-    destinationDir = file("$rootDir/build/classes_utilities")
-
-    println("\tCompiling $includes to Java $sourceCompatibility")
-}
 
 task<JavaCompile>("compileUtils") {
-    val utilsJava8 = tasks["compileUtilsJava8"]
-    dependsOn(utilsJava8)
-
     // we don't want the default include of **/*.java
     includes.clear()
 
     source = fileTree("../Utilities/src")
     include(javaFile(
-            "dorkbox.util.OS",
-            "dorkbox.util.OSType",
-            "dorkbox.util.Property",
-            "dorkbox.util.NamedThreadFactory",
-            "dorkbox.util.DelayTimer",
-            "dorkbox.util.IO",
-            "dorkbox.util.FileUtil",
-            "dorkbox.util.Base64Fast",
-            "dorkbox.util.RandomUtil",
-            "dorkbox.util.Sys",
-            "dorkbox.util.HashUtil",
-            "dorkbox.util.NativeLoader",
+        "dorkbox.util.OS",
+        "dorkbox.util.OSType",
+        "dorkbox.util.Property",
+        "dorkbox.util.NamedThreadFactory",
+        "dorkbox.util.DelayTimer",
+        "dorkbox.util.IO",
+        "dorkbox.util.FileUtil",
+        "dorkbox.util.Base64Fast",
+        "dorkbox.util.RandomUtil",
+        "dorkbox.util.Sys",
+        "dorkbox.util.HashUtil",
+        "dorkbox.util.NativeLoader",
 
-            "dorkbox.util.FastThreadLocal",
-            "dorkbox.util.LocationResolver",
-            "dorkbox.util.MathUtil",
-            "dorkbox.util.MersenneTwisterFast",
-            "dorkbox.util.NativeLoader",
+        "dorkbox.util.FastThreadLocal",
+        "dorkbox.util.LocationResolver",
+        "dorkbox.util.MathUtil",
+        "dorkbox.util.MersenneTwisterFast",
+        "dorkbox.util.NativeLoader",
 
-            "dorkbox.util.generics.TypeResolver",
-            // "dorkbox.util.generics.DefaultMethodHelper",  // this class must be compiled java 8+
-            "dorkbox.util.generics.ClassHelper",
+        "dorkbox.util.generics.TypeResolver",
+        "dorkbox.util.generics.DefaultMethodHelper",
+        "dorkbox.util.generics.ClassHelper",
 
-            "dorkbox.util.bytes.BigEndian",
-            "dorkbox.util.bytes.UByte",
-            "dorkbox.util.bytes.UInteger",
-            "dorkbox.util.bytes.ULong",
-            "dorkbox.util.bytes.Unsigned",
-            "dorkbox.util.bytes.UNumber",
-            "dorkbox.util.bytes.UShort",
-            "dorkbox.util.bytes.ByteArrayWrapper",
-            "dorkbox.util.bytes.OptimizeUtilsByteArray",
-            "dorkbox.util.bytes.OptimizeUtilsByteBuf",
+        "dorkbox.util.bytes.BigEndian",
+        "dorkbox.util.bytes.UByte",
+        "dorkbox.util.bytes.UInteger",
+        "dorkbox.util.bytes.ULong",
+        "dorkbox.util.bytes.Unsigned",
+        "dorkbox.util.bytes.UNumber",
+        "dorkbox.util.bytes.UShort",
+        "dorkbox.util.bytes.ByteArrayWrapper",
+        "dorkbox.util.bytes.OptimizeUtilsByteArray",
+        "dorkbox.util.bytes.OptimizeUtilsByteBuf",
 
-            "dorkbox.util.exceptions.SecurityException",
-            "dorkbox.util.exceptions.InitializationException",
+        "dorkbox.util.exceptions.SecurityException",
+        "dorkbox.util.exceptions.InitializationException",
 
 
-            "dorkbox.util.collections.ObjectIntMap",
-            "dorkbox.util.collections.IntMap",
-            "dorkbox.util.collections.IntArray",
-            "dorkbox.util.collections.ConcurrentIterator",
-            "dorkbox.util.collections.ConcurrentEntry",
-            "dorkbox.util.collections.LockFreeHashMap",
-            "dorkbox.util.collections.LockFreeIntMap",
-            "dorkbox.util.collections.LockFreeIntBiMap",
-            "dorkbox.util.collections.LockFreeObjectIntBiMap",
+        "dorkbox.util.collections.ObjectIntMap",
+        "dorkbox.util.collections.IntMap",
+        "dorkbox.util.collections.IntArray",
+        "dorkbox.util.collections.ConcurrentIterator",
+        "dorkbox.util.collections.ConcurrentEntry",
+        "dorkbox.util.collections.LockFreeHashMap",
+        "dorkbox.util.collections.LockFreeIntMap",
+        "dorkbox.util.collections.LockFreeIntBiMap",
+        "dorkbox.util.collections.LockFreeObjectIntBiMap",
 
-            "dorkbox.util.crypto.CryptoECC",
-            "dorkbox.util.crypto.CryptoAES"))
+        "dorkbox.util.crypto.CryptoECC",
+        "dorkbox.util.crypto.CryptoAES"
+                    ))
 
     // entire packages/directories
     include("dorkbox/util/serialization/**/*.java")
     include("dorkbox/util/entropy/**/*.java")
     include("dorkbox/util/storage/**/*.java")
 
-    classpath = files(utils, utilsJava8.outputs)
+    classpath = files(utils)
     destinationDir = file("$rootDir/build/classes_utilities")
+}
+
+///////////////////////////////
+//////    Task defaults
+///////////////////////////////
+tasks.withType<JavaCompile> {
+    options.encoding = "UTF-8"
+
+    sourceCompatibility = Extras.JAVA_VERSION
+    targetCompatibility = Extras.JAVA_VERSION
+}
+
+tasks.withType<Jar> {
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+}
+
+tasks.jar.get().apply {
+    // include applicable class files from subset of Utilities project
+    from((tasks["compileUtils"] as JavaCompile).outputs)
+
+    manifest {
+        // https://docs.oracle.com/javase/tutorial/deployment/jar/packageman.html
+        attributes["Name"] = Extras.name
+
+        attributes["Specification-Title"] = Extras.name
+        attributes["Specification-Version"] = Extras.version
+        attributes["Specification-Vendor"] = Extras.vendor
+
+        attributes["Implementation-Title"] = "${Extras.group}.${Extras.id}"
+        attributes["Implementation-Version"] = Extras.buildDate
+        attributes["Implementation-Vendor"] = Extras.vendor
+    }
+}
+
+tasks.compileJava.get().apply {
+    println("\tCompiling classes to Java $sourceCompatibility")
 }
 
 
@@ -397,29 +389,6 @@ dependencies {
     implementation(files((tasks["compileUtils"] as JavaCompile).outputs))
     utils.dependencies += listOf(netty, kryo, slf4j, bc)
 }
-
-
-///////////////////////////////
-//////    Jar Tasks
-///////////////////////////////
-tasks.jar.get().apply {
-    // include applicable class files from subset of Utilities project
-    from((tasks["compileUtils"] as JavaCompile).outputs)
-
-    manifest {
-        // https://docs.oracle.com/javase/tutorial/deployment/jar/packageman.html
-        attributes["Name"] = Extras.name
-
-        attributes["Specification-Title"] = Extras.name
-        attributes["Specification-Version"] = Extras.version
-        attributes["Specification-Vendor"] = Extras.vendor
-
-        attributes["Implementation-Title"] = "${Extras.group}.${Extras.id}"
-        attributes["Implementation-Version"] = Extras.buildDate
-        attributes["Implementation-Vendor"] = Extras.vendor
-    }
-}
-
 
 ///////////////////////////////
 //////    PUBLISH TO SONATYPE / MAVEN CENTRAL
