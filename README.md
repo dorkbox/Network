@@ -29,9 +29,8 @@ These are the main features:
 
 - Note: There is a maximum packet size for UDP, 508 bytes *to guarantee it's unfragmented*
 
-- This is for cross-platform use, specifically - linux 32/64, mac 32/64, and windows 32/64. Java 8+
-    - Please note that Java6 runtimes have issues with their classloader loading classes recursively (you will get a StackOverflow exception). We have taken precautions to mitigate this, but be aware that it is a very real possibility. We recommend using Java7+ to prevent this issue.
-
+- This is for cross-platform use, specifically - linux 32/64, mac 64, and windows 32/64. Java 8+
+    
 ``` java
 public static
 class AMessage {
