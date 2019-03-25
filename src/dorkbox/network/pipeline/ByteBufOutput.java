@@ -34,12 +34,16 @@
  */
 package dorkbox.network.pipeline;
 
+import java.io.DataOutput;
+import java.io.IOException;
+import java.io.OutputStream;
+
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Output;
-import io.netty.buffer.ByteBuf;
+import com.esotericsoftware.kryo.util.Util;
 
-import java.io.DataOutput;
-import java.io.OutputStream;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 /**
  * An {@link OutputStream} which writes data to a {@link ByteBuf}.
@@ -58,622 +62,752 @@ import java.io.OutputStream;
  * Modified from KRYO to use ByteBuf.
  */
 public class ByteBufOutput extends Output {
-
     private ByteBuf byteBuf;
-	private int startIndex;
+    private int initialReaderIndex = 0;
+    private int initialWriterIndex = 0;
 
 
-    /** Creates an uninitialized Output. {@link #setBuffer(ByteBuf)} must be called before the Output is used. */
-	public ByteBufOutput () {
-	}
-
-	public ByteBufOutput(ByteBuf buffer) {
-	    setBuffer(buffer);
-	}
-
-    public final void setBuffer(ByteBuf byteBuf) {
-        this.byteBuf = byteBuf;
-
-        if (byteBuf != null) {
-            this.byteBuf.readerIndex(0);
-            startIndex = byteBuf.writerIndex();
-        } else {
-            startIndex = 0;
-        }
+    /** Creates an uninitialized Output, {@link #setBuffer(ByteBuf)} must be called before the Output is used. */
+    public ByteBufOutput () {
     }
 
-    public ByteBuf getByteBuf() {
+    /** Creates a new Output for writing to a direct {@link ByteBuf}.
+     * @param bufferSize The size of the buffer. An exception is thrown if more bytes than this are written and {@link #flush()}
+     *           does not empty the buffer. */
+    public ByteBufOutput (int bufferSize) {
+        this(bufferSize, bufferSize);
+    }
+
+    /** Creates a new Output for writing to a direct ByteBuffer.
+     * @param bufferSize The initial size of the buffer.
+     * @param maxBufferSize If {@link #flush()} does not empty the buffer, the buffer is doubled as needed until it exceeds
+     *           maxBufferSize and an exception is thrown. Can be -1 for no maximum. */
+    public ByteBufOutput (int bufferSize, int maxBufferSize) {
+        if (maxBufferSize < -1) throw new IllegalArgumentException("maxBufferSize cannot be < -1: " + maxBufferSize);
+        this.capacity = bufferSize;
+        this.maxCapacity = maxBufferSize == -1 ? Util.maxArraySize : maxBufferSize;
+        byteBuf = Unpooled.buffer(bufferSize);
+    }
+
+    /** Creates a new Output for writing to a ByteBuffer. */
+    public ByteBufOutput (ByteBuf buffer) {
+        setBuffer(buffer);
+    }
+
+    /** Creates a new Output for writing to a ByteBuffer.
+     * @param maxBufferSize If {@link #flush()} does not empty the buffer, the buffer is doubled as needed until it exceeds
+     *           maxBufferSize and an exception is thrown. Can be -1 for no maximum. */
+    public ByteBufOutput (ByteBuf buffer, int maxBufferSize) {
+        setBuffer(buffer, maxBufferSize);
+    }
+
+    /** @see Output#Output(OutputStream) */
+    public ByteBufOutput (OutputStream outputStream) {
+        this(4096, 4096);
+        if (outputStream == null) throw new IllegalArgumentException("outputStream cannot be null.");
+        this.outputStream = outputStream;
+    }
+
+    /** @see Output#Output(OutputStream, int) */
+    public ByteBufOutput (OutputStream outputStream, int bufferSize) {
+        this(bufferSize, bufferSize);
+        if (outputStream == null) throw new IllegalArgumentException("outputStream cannot be null.");
+        this.outputStream = outputStream;
+    }
+
+    public OutputStream getOutputStream () {
+        return outputStream;
+    }
+
+    /** Throws {@link UnsupportedOperationException} because this output uses a ByteBuffer, not a byte[].
+     * @deprecated
+     * @see #getByteBuf() */
+    public byte[] getBuffer () {
+        throw new UnsupportedOperationException("This buffer does not used a byte[], see #getByteBuffer().");
+    }
+
+    /** Throws {@link UnsupportedOperationException} because this output uses a ByteBuffer, not a byte[].
+     * @deprecated
+     * @see #getByteBuf() */
+    public void setBuffer (byte[] buffer) {
+        throw new UnsupportedOperationException("This buffer does not used a byte[], see #setByteBuffer(ByteBuffer).");
+    }
+
+    /** Throws {@link UnsupportedOperationException} because this output uses a ByteBuffer, not a byte[].
+     * @deprecated
+     * @see #getByteBuf() */
+    public void setBuffer (byte[] buffer, int maxBufferSize) {
+        throw new UnsupportedOperationException("This buffer does not used a byte[], see #setByteBuffer(ByteBuffer).");
+    }
+
+    /** Allocates a new direct ByteBuffer with the specified bytes and sets it as the new buffer.
+     * @see #setBuffer(ByteBuf) */
+    public void setBuffer (byte[] bytes, int offset, int count) {
+        setBuffer(Unpooled.wrappedBuffer(bytes, offset, count));
+    }
+
+    /** Sets a new buffer to write to. The max size is the buffer's length.
+     * @see #setBuffer(ByteBuf, int) */
+    public void setBuffer (ByteBuf buffer) {
+        setBuffer(buffer, buffer.capacity());
+    }
+
+    /** Sets a new buffer to write to. The bytes are not copied, the old buffer is discarded and the new buffer used in its place.
+     * The position and capacity are set to match the specified buffer. The total is reset. The
+     * {@link #setOutputStream(OutputStream) OutputStream} is set to null.
+     * @param maxBufferSize If {@link #flush()} does not empty the buffer, the buffer is doubled as needed until it exceeds
+     *           maxBufferSize and an exception is thrown. Can be -1 for no maximum. */
+    public void setBuffer (ByteBuf buffer, int maxBufferSize) {
+        if (buffer == null) throw new IllegalArgumentException("buffer cannot be null.");
+        if (maxBufferSize < -1) throw new IllegalArgumentException("maxBufferSize cannot be < -1: " + maxBufferSize);
+
+        initialReaderIndex = buffer.readerIndex();
+        initialWriterIndex = buffer.writerIndex();
+
+        this.byteBuf = buffer;
+        this.maxCapacity = maxBufferSize == -1 ? Util.maxArraySize : maxBufferSize;
+        capacity = buffer.capacity();
+        position = initialWriterIndex;
+        total = 0;
+        outputStream = null;
+    }
+
+    /** Returns the buffer. The bytes between zero and {@link #position()} are the data that has been written. */
+    public ByteBuf getByteBuf () {
         return byteBuf;
     }
 
-
-    @Override
-    @Deprecated
-    public OutputStream getOutputStream () {
-	    throw new RuntimeException("Cannot access this method!");
-	}
-
-	/** Sets a new OutputStream. The position and total are reset, discarding any buffered bytes.
-	 * @param outputStream May be null. */
-	@Override
-	@Deprecated
-    public void setOutputStream (OutputStream outputStream) {
-	    throw new RuntimeException("Cannot access this method!");
-	}
-
-	/** Sets the buffer that will be written to. {@link #setBuffer(byte[], int)} is called with the specified buffer's length as the
-	 * maxBufferSize. */
-	@Override
-    @Deprecated
-    public void setBuffer (byte[] buffer) {
-	    throw new RuntimeException("Cannot access this method!");
-	}
-
-	/** Sets the buffer that will be written to. The position and total are reset, discarding any buffered bytes. The
-	 * {@link #setOutputStream(OutputStream) OutputStream} is set to null.
-	 * @param maxBufferSize The buffer is doubled as needed until it exceeds maxBufferSize and an exception is thrown. */
-	@Override
-    @Deprecated
-    public void setBuffer (byte[] buffer, int maxBufferSize) {
-	    throw new RuntimeException("Cannot access this method!");
-	}
-
-	/** Returns the buffer. The bytes between zero and {@link #position()} are the data that has been written. */
-	@Override
-    @Deprecated
-    public byte[] getBuffer () {
-	    throw new RuntimeException("Cannot access this method!");
-	}
-
-	/** Returns a new byte array containing the bytes currently in the buffer between zero and {@link #position()}. */
-	@Override
-    @Deprecated
     public byte[] toBytes () {
-	    throw new RuntimeException("Cannot access this method!");
-	}
+        byte[] newBuffer = new byte[position];
+        byteBuf.readerIndex(initialReaderIndex);
+        byteBuf.getBytes(initialReaderIndex, newBuffer, 0, position);
+        return newBuffer;
+    }
 
-	/** Returns the current position in the buffer. This is the number of bytes that have not been flushed. */
-	@Override
-    public int position () {
-		return byteBuf.writerIndex();
-	}
-
-	/** Sets the current position in the buffer. */
-	@Override
-    @Deprecated
     public void setPosition (int position) {
-	    throw new RuntimeException("Cannot access this method!");
-	}
+        this.position = position;
+        this.byteBuf.writerIndex(position);
+    }
 
-	/** Returns the total number of bytes written. This may include bytes that have not been flushed. */
-	@Override
-    public long total () {
-	    return byteBuf.writerIndex() - startIndex;
-	}
+    public void reset () {
+        super.reset();
+        byteBuf.setIndex(initialReaderIndex, initialWriterIndex);
+    }
 
-	/** Sets the position and total to zero. */
-	@Override
-    public void clear () {
-	    byteBuf.readerIndex(0);
-	    byteBuf.writerIndex(startIndex);
-	}
+    protected boolean require (int required) throws KryoException {
+        int origCode = byteBuf.ensureWritable(1, true);
 
+        if (origCode == 0) {
+            // 0 if the buffer has enough writable bytes, and its capacity is unchanged.
+            return false;
+        }
+        else if (origCode == 2) {
+            // 2 if the buffer has enough writable bytes, and its capacity has been increased.
+            capacity = byteBuf.capacity();
+            return true;
+        }
+        else if (origCode == 3) {
+            // 3 if the buffer does not have enough bytes, but its capacity has been increased to its maximum.
+            capacity = byteBuf.capacity();
+            return true;
+        }
+        else {
+            // flush and try again.
+            flush();
+        }
 
-	// OutputStream
+        // only got here because we were unable to resize the buffer!
+        origCode = byteBuf.ensureWritable(1, true);
 
-	/** Writes the buffered bytes to the underlying OutputStream, if any. */
-	@Override
-	@Deprecated
+        if (origCode == 0) {
+            // 0 if the buffer has enough writable bytes, and its capacity is unchanged.
+            return false;
+        } else if (origCode == 1) {
+            // 1 if the buffer does not have enough bytes, and its capacity is unchanged.
+            throw new KryoException("Buffer overflow. Max capacity: " + maxCapacity + ", required: " + required);
+        }
+        else if (origCode == 2) {
+            // 2 if the buffer has enough writable bytes, and its capacity has been increased.
+            capacity = byteBuf.capacity();
+            return true;
+        }
+        else if (origCode == 3) {
+            // 3 if the buffer does not have enough bytes, but its capacity has been increased to its maximum.
+            capacity = byteBuf.capacity();
+            return true;
+        }
+        else {
+            throw new KryoException("Unknown buffer resize code: " + origCode);
+        }
+    }
+
+    // OutputStream:
+
     public void flush () throws KryoException {
-	    // do nothing...
-	}
+        if (outputStream == null) return;
+        try {
+            byte[] tmp = new byte[position];
+            byteBuf.getBytes(initialReaderIndex, tmp);
+            byteBuf.readerIndex(initialReaderIndex);
+            outputStream.write(tmp, 0, position);
+        } catch (IOException ex) {
+            throw new KryoException(ex);
+        }
+        total += position;
+        position = 0;
+    }
 
-	/** Flushes any buffered bytes and closes the underlying OutputStream, if any. */
-	@Override
-    @Deprecated
     public void close () throws KryoException {
-	 // do nothing...
-	}
+        flush();
+        if (outputStream != null) {
+            try {
+                outputStream.close();
+            } catch (IOException ignored) {
+            }
+        }
+    }
 
-	/** Writes a byte. */
-	@Override
     public void write (int value) throws KryoException {
-		byteBuf.writeByte(value);
-	}
+        if (position == capacity) require(1);
+        byteBuf.writeByte((byte)value);
+        position++;
+    }
 
-	/** Writes the bytes. Note the byte[] length is not written. */
-	@Override
     public void write (byte[] bytes) throws KryoException {
-		if (bytes == null) {
-            throw new IllegalArgumentException("bytes cannot be null.");
-        }
-		writeBytes(bytes, 0, bytes.length);
-	}
+        if (bytes == null) throw new IllegalArgumentException("bytes cannot be null.");
+        writeBytes(bytes, 0, bytes.length);
+    }
 
-	/** Writes the bytes. Note the byte[] length is not written. */
-	@Override
     public void write (byte[] bytes, int offset, int length) throws KryoException {
-		writeBytes(bytes, offset, length);
-	}
+        writeBytes(bytes, offset, length);
+    }
 
-	// byte
+    // byte:
 
-	@Override
     public void writeByte (byte value) throws KryoException {
-	    byteBuf.writeByte(value);
-	}
+        if (position == capacity) require(1);
+        byteBuf.writeByte(value);
+        position++;
+    }
 
-	@Override
     public void writeByte (int value) throws KryoException {
-	    byteBuf.writeByte((byte)value);
-	}
+        if (position == capacity) require(1);
+        byteBuf.writeByte((byte)value);
+        position++;
+    }
 
-	/** Writes the bytes. Note the byte[] length is not written. */
-	@Override
     public void writeBytes (byte[] bytes) throws KryoException {
-		if (bytes == null) {
-            throw new IllegalArgumentException("bytes cannot be null.");
-        }
-		writeBytes(bytes, 0, bytes.length);
-	}
+        if (bytes == null) throw new IllegalArgumentException("bytes cannot be null.");
+        writeBytes(bytes, 0, bytes.length);
+    }
 
-	/** Writes the bytes. Note the byte[] length is not written. */
-	@Override
     public void writeBytes (byte[] bytes, int offset, int count) throws KryoException {
-	    if (bytes == null) {
-            throw new IllegalArgumentException("bytes cannot be null.");
+        if (bytes == null) throw new IllegalArgumentException("bytes cannot be null.");
+        int copyCount = Math.min(capacity - position, count);
+        while (true) {
+            byteBuf.writeBytes(bytes, offset, copyCount);
+            position += copyCount;
+            count -= copyCount;
+            if (count == 0) return;
+            offset += copyCount;
+            copyCount = Math.min(capacity, count);
+            require(copyCount);
         }
-		byteBuf.writeBytes(bytes, offset, count);
-	}
+    }
 
-	// int
+    // int:
 
-	/** Writes a 4 byte int. */
-	@Override
     public void writeInt (int value) throws KryoException {
-	    byteBuf.writeInt(value);
-	}
+        require(4);
+        position += 4;
+        ByteBuf byteBuf = this.byteBuf;
+        byteBuf.writeByte((byte)value);
+        byteBuf.writeByte((byte)(value >> 8));
+        byteBuf.writeByte((byte)(value >> 16));
+        byteBuf.writeByte((byte)(value >> 24));
+    }
 
-	/** Writes a 1-5 byte int. This stream may consider such a variable length encoding request as a hint. It is not guaranteed that
-     * a variable length encoding will be really used. The stream may decide to use native-sized integer representation for
-     * efficiency reasons.
-     *
-     * @param optimizePositive If true, small positive numbers will be more efficient (1 byte) and small negative numbers will be
-     *           inefficient (5 bytes). */
-	@Override
-    public int writeInt (int value, boolean optimizePositive) throws KryoException {
-	    return writeVarInt(value, optimizePositive);
-	}
-
-	/** Writes a 1-5 byte int. It is guaranteed that a varible length encoding will be used.
-	 *
-     * @param optimizePositive If true, small positive numbers will be more efficient (1 byte) and small negative numbers will be
-     *           inefficient (5 bytes). */
-    @Override
     public int writeVarInt (int value, boolean optimizePositive) throws KryoException {
-	    ByteBuf buffer = byteBuf;
-
-	    if (!optimizePositive) {
-            value = value << 1 ^ value >> 31;
-        }
+        if (!optimizePositive) value = (value << 1) ^ (value >> 31);
         if (value >>> 7 == 0) {
-            buffer.writeByte((byte)value);
-            return 1;
-        }
-        if (value >>> 14 == 0) {
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7));
-            return 2;
-        }
-        if (value >>> 21 == 0) {
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7 | 0x80));
-            buffer.writeByte((byte)(value >>> 14));
-            return 3;
-        }
-        if (value >>> 28 == 0) {
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7 | 0x80));
-            buffer.writeByte((byte)(value >>> 14 | 0x80));
-            buffer.writeByte((byte)(value >>> 21));
-            return 4;
-        }
-        buffer.writeByte((byte)(value & 0x7F | 0x80));
-        buffer.writeByte((byte)(value >>> 7 | 0x80));
-        buffer.writeByte((byte)(value >>> 14 | 0x80));
-        buffer.writeByte((byte)(value >>> 21 | 0x80));
-        buffer.writeByte((byte)(value >>> 28));
-        return 5;
-	}
-
-	// string
-
-	/** Writes the length and string, or null. Short strings are checked and if ASCII they are written more efficiently, else they
-	 * are written as UTF8. If a string is known to be ASCII, {@link #writeAscii(String)} may be used. The string can be read using
-	 * {@link ByteBufInput#readString()} or {@link ByteBufInput#readStringBuilder()}.
-	 * @param value May be null. */
-    @Override
-    public void writeString (String value) throws KryoException {
-		if (value == null) {
-			writeByte(0x80); // 0 means null, bit 8 means UTF8.
-			return;
-		}
-		int charCount = value.length();
-		if (charCount == 0) {
-			writeByte(1 | 0x80); // 1 means empty string, bit 8 means UTF8.
-			return;
-		}
-		// Detect ASCII.
-		boolean ascii = false;
-		if (charCount > 1 && charCount < 64) { // only snoop 64 chars in
-			ascii = true;
-			for (int i = 0; i < charCount; i++) {
-				int c = value.charAt(i);
-				if (c > 127) {
-					ascii = false;
-					break;
-				}
-			}
-		}
-
-		ByteBuf buffer = byteBuf;
-		if (buffer.writableBytes() < charCount) {
-            buffer.capacity(buffer.capacity() + charCount + 1);
-        }
-
-		if (!ascii) {
-		    writeUtf8Length(charCount + 1);
-		}
-
-		int charIndex = 0;
-        // Try to write 8 bit chars.
-        for (; charIndex < charCount; charIndex++) {
-            int c = value.charAt(charIndex);
-            if (c > 127)
-             {
-                break; // whoops! detect ascii. have to continue with a slower method!
-            }
-            buffer.writeByte((byte)c);
-        }
-        if (charIndex < charCount) {
-            writeString_slow(value, charCount, charIndex);
-        }
-        else if (ascii) {
-            // specify it's ASCII
-            int i = buffer.writerIndex() - 1;
-            buffer.setByte(i, buffer.getByte(i) | 0x80); // Bit 8 means end of ASCII.
-        }
-	}
-
-	/** Writes the length and CharSequence as UTF8, or null. The string can be read using {@link ByteBufInput#readString()} or
-	 * {@link ByteBufInput#readStringBuilder()}.
-	 * @param value May be null. */
-	@Override
-    public void writeString (CharSequence value) throws KryoException {
-		if (value == null) {
-			writeByte(0x80); // 0 means null, bit 8 means UTF8.
-			return;
-		}
-		int charCount = value.length();
-		if (charCount == 0) {
-			writeByte(1 | 0x80); // 1 means empty string, bit 8 means UTF8.
-			return;
-		}
-		writeUtf8Length(charCount + 1);
-
-		ByteBuf buffer = byteBuf;
-		if (buffer.writableBytes() < charCount) {
-            buffer.capacity(buffer.capacity() + charCount + 1);
-        }
-		int charIndex = 0;
-        // Try to write 8 bit chars.
-        for (; charIndex < charCount; charIndex++) {
-            int c = value.charAt(charIndex);
-            if (c > 127)
-             {
-                break;  // whoops! have to continue with a slower method!
-            }
-            buffer.writeByte((byte)c);
-        }
-        if (charIndex < charCount) {
-            writeString_slow(value, charCount, charIndex);
-        }
-	}
-
-	/** Writes a string that is known to contain only ASCII characters. Non-ASCII strings passed to this method will be corrupted.
-	 * Each byte is a 7 bit character with the remaining byte denoting if another character is available. This is slightly more
-	 * efficient than {@link #writeString(String)}. The string can be read using {@link ByteBufInput#readString()} or
-	 * {@link ByteBufInput#readStringBuilder()}.
-	 * @param value May be null. */
-    @Override
-    public void writeAscii (String value) throws KryoException {
-		if (value == null) {
-			writeByte(0x80); // 0 means null, bit 8 means UTF8.
-			return;
-		}
-		int charCount = value.length();
-		if (charCount == 0) {
-			writeByte(1 | 0x80); // 1 means empty string, bit 8 means UTF8.
-			return;
-		}
-
-		ByteBuf buffer = byteBuf;
-		if (buffer.writableBytes() < charCount) {
-		    buffer.capacity(buffer.capacity() + charCount + 1);
-		}
-
-
-		int charIndex = 0;
-        // Try to write 8 bit chars.
-        for (; charIndex < charCount; charIndex++) {
-            int c = value.charAt(charIndex);
-            buffer.writeByte((byte)c);
-        }
-        // specify it's ASCII
-        int i = buffer.writerIndex() - 1;
-        buffer.setByte(i, buffer.getByte(i) | 0x80); // Bit 8 means end of ASCII.
-	}
-
-	/** Writes the length of a string, which is a variable length encoded int except the first byte uses bit 8 to denote UTF8 and
-	 * bit 7 to denote if another byte is present. */
-	private void writeUtf8Length (int value) {
-	    if (value >>> 6 == 0) {
-	        byteBuf.writeByte((byte)(value | 0x80)); // Set bit 8.
-        } else if (value >>> 13 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value | 0x40 | 0x80)); // Set bit 7 and 8.
-            buffer.writeByte((byte)(value >>> 6));
-        } else if (value >>> 20 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value | 0x40 | 0x80)); // Set bit 7 and 8.
-            buffer.writeByte((byte)(value >>> 6 | 0x80)); // Set bit 8.
-            buffer.writeByte((byte)(value >>> 13));
-        } else if (value >>> 27 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value | 0x40 | 0x80)); // Set bit 7 and 8.
-            buffer.writeByte((byte)(value >>> 6 | 0x80)); // Set bit 8.
-            buffer.writeByte((byte)(value >>> 13 | 0x80)); // Set bit 8.
-            buffer.writeByte((byte)(value >>> 20));
-        } else {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value | 0x40 | 0x80)); // Set bit 7 and 8.
-            buffer.writeByte((byte)(value >>> 6 | 0x80)); // Set bit 8.
-            buffer.writeByte((byte)(value >>> 13 | 0x80)); // Set bit 8.
-            buffer.writeByte((byte)(value >>> 20 | 0x80)); // Set bit 8.
-            buffer.writeByte((byte)(value >>> 27));
-        }
-	}
-
-	private void writeString_slow (CharSequence value, int charCount, int charIndex) {
-	    ByteBuf buffer = byteBuf;
-
-	    for (; charIndex < charCount; charIndex++) {
-            int c = value.charAt(charIndex);
-            if (c <= 0x007F) {
-                buffer.writeByte((byte)c);
-            } else if (c > 0x07FF) {
-                buffer.writeByte((byte)(0xE0 | c >> 12 & 0x0F));
-                buffer.writeByte((byte)(0x80 | c >> 6 & 0x3F));
-                buffer.writeByte((byte)(0x80 | c & 0x3F));
-            } else {
-                buffer.writeByte((byte)(0xC0 | c >> 6 & 0x1F));
-                buffer.writeByte((byte)(0x80 | c & 0x3F));
-            }
-        }
-    }
-
-	// float
-
-	/** Writes a 4 byte float. */
-	@Override
-    public void writeFloat (float value) throws KryoException {
-		writeInt(Float.floatToIntBits(value));
-	}
-
-	/** Writes a 1-5 byte float with reduced precision.
-	 * @param optimizePositive If true, small positive numbers will be more efficient (1 byte) and small negative numbers will be
-	 *           inefficient (5 bytes). */
-	@Override
-    public int writeFloat (float value, float precision, boolean optimizePositive) throws KryoException {
-		return writeInt((int)(value * precision), optimizePositive);
-	}
-
-	// short
-
-	/** Writes a 2 byte short. */
-	@Override
-    public void writeShort (int value) throws KryoException {
-	    byteBuf.writeShort(value);
-	}
-
-	// long
-
-	/** Writes an 8 byte long. */
-	@Override
-    public void writeLong (long value) throws KryoException {
-	    byteBuf.writeLong(value);
-	}
-
-	/** Writes a 1-9 byte long. This stream may consider such a variable length encoding request as a hint. It is not guaranteed
-     * that a variable length encoding will be really used. The stream may decide to use native-sized integer representation for
-     * efficiency reasons.
-     *
-     * @param optimizePositive If true, small positive numbers will be more efficient (1 byte) and small negative numbers will be
-     *           inefficient (9 bytes). */
-    @Override
-    public int writeLong (long value, boolean optimizePositive) throws KryoException {
-        return writeVarLong(value, optimizePositive);
-    }
-
-    /** Writes a 1-9 byte long. It is guaranteed that a varible length encoding will be used.
-     * @param optimizePositive If true, small positive numbers will be more efficient (1 byte) and small negative numbers will be
-     *           inefficient (9 bytes). */
-    @Override
-    public int writeVarLong (long value, boolean optimizePositive) throws KryoException {
-	    if (!optimizePositive) {
-            value = value << 1 ^ value >> 63;
-        }
-        if (value >>> 7 == 0) {
+            if (position == capacity) require(1);
+            position++;
             byteBuf.writeByte((byte)value);
             return 1;
         }
         if (value >>> 14 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7));
+            require(2);
+            position += 2;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7));
             return 2;
         }
         if (value >>> 21 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7 | 0x80));
-            buffer.writeByte((byte)(value >>> 14));
+            require(3);
+            position += 3;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 14));
             return 3;
         }
         if (value >>> 28 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7 | 0x80));
-            buffer.writeByte((byte)(value >>> 14 | 0x80));
-            buffer.writeByte((byte)(value >>> 21));
+            require(4);
+            position += 4;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 14 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 21));
+            return 4;
+        }
+        require(5);
+        position += 5;
+        ByteBuf byteBuf = this.byteBuf;
+        byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+        byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 14 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 21 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 28));
+        return 5;
+    }
+
+    public int writeVarIntFlag (boolean flag, int value, boolean optimizePositive) throws KryoException {
+        if (!optimizePositive) value = (value << 1) ^ (value >> 31);
+        int first = (value & 0x3F) | (flag ? 0x80 : 0); // Mask first 6 bits, bit 8 is the flag.
+        if (value >>> 6 == 0) {
+            if (position == capacity) require(1);
+            byteBuf.writeByte((byte)first);
+            position++;
+            return 1;
+        }
+        if (value >>> 13 == 0) {
+            require(2);
+            position += 2;
+            byteBuf.writeByte((byte)(first | 0x40)); // Set bit 7.
+            byteBuf.writeByte((byte)(value >>> 6));
+            return 2;
+        }
+        if (value >>> 20 == 0) {
+            require(3);
+            position += 3;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)(first | 0x40)); // Set bit 7.
+            byteBuf.writeByte((byte)((value >>> 6) | 0x80)); // Set bit 8.
+            byteBuf.writeByte((byte)(value >>> 13));
+            return 3;
+        }
+        if (value >>> 27 == 0) {
+            require(4);
+            position += 4;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)(first | 0x40)); // Set bit 7.
+            byteBuf.writeByte((byte)((value >>> 6) | 0x80)); // Set bit 8.
+            byteBuf.writeByte((byte)((value >>> 13) | 0x80)); // Set bit 8.
+            byteBuf.writeByte((byte)(value >>> 20));
+            return 4;
+        }
+        require(5);
+        position += 5;
+        ByteBuf byteBuf = this.byteBuf;
+        byteBuf.writeByte((byte)(first | 0x40)); // Set bit 7.
+        byteBuf.writeByte((byte)((value >>> 6) | 0x80)); // Set bit 8.
+        byteBuf.writeByte((byte)((value >>> 13) | 0x80)); // Set bit 8.
+        byteBuf.writeByte((byte)((value >>> 20) | 0x80)); // Set bit 8.
+        byteBuf.writeByte((byte)(value >>> 27));
+        return 5;
+    }
+
+    // long:
+
+    public void writeLong (long value) throws KryoException {
+        require(8);
+        position += 8;
+        ByteBuf byteBuf = this.byteBuf;
+        byteBuf.writeByte((byte)value);
+        byteBuf.writeByte((byte)(value >>> 8));
+        byteBuf.writeByte((byte)(value >>> 16));
+        byteBuf.writeByte((byte)(value >>> 24));
+        byteBuf.writeByte((byte)(value >>> 32));
+        byteBuf.writeByte((byte)(value >>> 40));
+        byteBuf.writeByte((byte)(value >>> 48));
+        byteBuf.writeByte((byte)(value >>> 56));
+    }
+
+    public int writeVarLong (long value, boolean optimizePositive) throws KryoException {
+        if (!optimizePositive) value = (value << 1) ^ (value >> 63);
+        if (value >>> 7 == 0) {
+            if (position == capacity) require(1);
+            position++;
+            byteBuf.writeByte((byte)value);
+            return 1;
+        }
+        if (value >>> 14 == 0) {
+            require(2);
+            position += 2;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7));
+            return 2;
+        }
+        if (value >>> 21 == 0) {
+            require(3);
+            position += 3;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 14));
+            return 3;
+        }
+        if (value >>> 28 == 0) {
+            require(4);
+            position += 4;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 14 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 21));
             return 4;
         }
         if (value >>> 35 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7 | 0x80));
-            buffer.writeByte((byte)(value >>> 14 | 0x80));
-            buffer.writeByte((byte)(value >>> 21 | 0x80));
-            buffer.writeByte((byte)(value >>> 28));
+            require(5);
+            position += 5;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 14 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 21 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 28));
             return 5;
         }
         if (value >>> 42 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7 | 0x80));
-            buffer.writeByte((byte)(value >>> 14 | 0x80));
-            buffer.writeByte((byte)(value >>> 21 | 0x80));
-            buffer.writeByte((byte)(value >>> 28 | 0x80));
-            buffer.writeByte((byte)(value >>> 35));
+            require(6);
+            position += 6;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 14 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 21 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 28 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 35));
             return 6;
         }
         if (value >>> 49 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7 | 0x80));
-            buffer.writeByte((byte)(value >>> 14 | 0x80));
-            buffer.writeByte((byte)(value >>> 21 | 0x80));
-            buffer.writeByte((byte)(value >>> 28 | 0x80));
-            buffer.writeByte((byte)(value >>> 35 | 0x80));
-            buffer.writeByte((byte)(value >>> 42));
+            require(7);
+            position += 7;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 14 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 21 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 28 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 35 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 42));
             return 7;
         }
         if (value >>> 56 == 0) {
-            ByteBuf buffer = byteBuf;
-            buffer.writeByte((byte)(value & 0x7F | 0x80));
-            buffer.writeByte((byte)(value >>> 7 | 0x80));
-            buffer.writeByte((byte)(value >>> 14 | 0x80));
-            buffer.writeByte((byte)(value >>> 21 | 0x80));
-            buffer.writeByte((byte)(value >>> 28 | 0x80));
-            buffer.writeByte((byte)(value >>> 35 | 0x80));
-            buffer.writeByte((byte)(value >>> 42 | 0x80));
-            buffer.writeByte((byte)(value >>> 49));
+            require(8);
+            position += 8;
+            ByteBuf byteBuf = this.byteBuf;
+            byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+            byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 14 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 21 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 28 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 35 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 42 | 0x80));
+            byteBuf.writeByte((byte)(value >>> 49));
             return 8;
         }
-        ByteBuf buffer = byteBuf;
-        buffer.writeByte((byte)(value & 0x7F | 0x80));
-        buffer.writeByte((byte)(value >>> 7 | 0x80));
-        buffer.writeByte((byte)(value >>> 14 | 0x80));
-        buffer.writeByte((byte)(value >>> 21 | 0x80));
-        buffer.writeByte((byte)(value >>> 28 | 0x80));
-        buffer.writeByte((byte)(value >>> 35 | 0x80));
-        buffer.writeByte((byte)(value >>> 42 | 0x80));
-        buffer.writeByte((byte)(value >>> 49 | 0x80));
-        buffer.writeByte((byte)(value >>> 56));
+        require(9);
+        position += 9;
+        ByteBuf byteBuf = this.byteBuf;
+        byteBuf.writeByte((byte)((value & 0x7F) | 0x80));
+        byteBuf.writeByte((byte)(value >>> 7 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 14 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 21 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 28 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 35 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 42 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 49 | 0x80));
+        byteBuf.writeByte((byte)(value >>> 56));
         return 9;
-	}
+    }
 
-	// boolean
+    // float:
 
-	/** Writes a 1 byte boolean. */
-	@Override
-    public void writeBoolean (boolean value) throws KryoException {
-	    byteBuf.writeBoolean(value);
-	}
+    public void writeFloat (float value) throws KryoException {
+        require(4);
+        ByteBuf byteBuf = this.byteBuf;
+        position += 4;
+        int intValue = Float.floatToIntBits(value);
+        byteBuf.writeByte((byte)intValue);
+        byteBuf.writeByte((byte)(intValue >> 8));
+        byteBuf.writeByte((byte)(intValue >> 16));
+        byteBuf.writeByte((byte)(intValue >> 24));
+    }
 
-	// char
+    // double:
 
-	/** Writes a 2 byte char. */
-	@Override
-    public void writeChar (char value) throws KryoException {
-	    byteBuf.writeChar(value);
-	}
-
-	// double
-
-	/** Writes an 8 byte double. */
-	@Override
     public void writeDouble (double value) throws KryoException {
-		writeLong(Double.doubleToLongBits(value));
-	}
+        require(8);
+        position += 8;
+        ByteBuf byteBuf = this.byteBuf;
+        long longValue = Double.doubleToLongBits(value);
+        byteBuf.writeByte((byte)longValue);
+        byteBuf.writeByte((byte)(longValue >>> 8));
+        byteBuf.writeByte((byte)(longValue >>> 16));
+        byteBuf.writeByte((byte)(longValue >>> 24));
+        byteBuf.writeByte((byte)(longValue >>> 32));
+        byteBuf.writeByte((byte)(longValue >>> 40));
+        byteBuf.writeByte((byte)(longValue >>> 48));
+        byteBuf.writeByte((byte)(longValue >>> 56));
+    }
 
-	/** Writes a 1-9 byte double with reduced precision.
-	 * @param optimizePositive If true, small positive numbers will be more efficient (1 byte) and small negative numbers will be
-	 *           inefficient (9 bytes). */
-	@Override
-    public int writeDouble (double value, double precision, boolean optimizePositive) throws KryoException {
-		return writeLong((long)(value * precision), optimizePositive);
-	}
+    // short:
 
-	/** Returns the number of bytes that would be written with {@link #writeInt(int, boolean)}. */
-	static public int intLength (int value, boolean optimizePositive) {
-		if (!optimizePositive) {
-            value = value << 1 ^ value >> 31;
-        }
-		if (value >>> 7 == 0) {
-            return 1;
-        }
-		if (value >>> 14 == 0) {
-            return 2;
-        }
-		if (value >>> 21 == 0) {
-            return 3;
-        }
-		if (value >>> 28 == 0) {
-            return 4;
-        }
-		return 5;
-	}
+    public void writeShort (int value) throws KryoException {
+        require(2);
+        position += 2;
+        byteBuf.writeByte((byte)value);
+        byteBuf.writeByte((byte)(value >>> 8));
+    }
 
-	/** Returns the number of bytes that would be written with {@link #writeLong(long, boolean)}. */
-	static public int longLength (long value, boolean optimizePositive) {
-		if (!optimizePositive) {
-            value = value << 1 ^ value >> 63;
+    // char:
+
+    public void writeChar (char value) throws KryoException {
+        require(2);
+        position += 2;
+        byteBuf.writeByte((byte)value);
+        byteBuf.writeByte((byte)(value >>> 8));
+    }
+
+    // boolean:
+
+    public void writeBoolean (boolean value) throws KryoException {
+        if (position == capacity) require(1);
+        byteBuf.writeByte((byte)(value ? 1 : 0));
+        position++;
+    }
+
+    // String:
+
+    public void writeString (String value) throws KryoException {
+        if (value == null) {
+            writeByte(0x80); // 0 means null, bit 8 means UTF8.
+            return;
         }
-		if (value >>> 7 == 0) {
-            return 1;
+        int charCount = value.length();
+        if (charCount == 0) {
+            writeByte(1 | 0x80); // 1 means empty string, bit 8 means UTF8.
+            return;
         }
-		if (value >>> 14 == 0) {
-            return 2;
+        // Detect ASCII.
+        outer:
+        if (charCount > 1 && charCount <= 32) {
+            for (int i = 0; i < charCount; i++)
+                if (value.charAt(i) > 127) break outer;
+            if (capacity - position < charCount)
+                writeAscii_slow(value, charCount);
+            else {
+                for (int i = 0, n = value.length(); i < n; ++i)
+                    byteBuf.writeByte((byte)value.charAt(i));
+                position += charCount;
+            }
+            byteBuf.setByte(position - 1, (byte)(byteBuf.getByte(position - 1) | 0x80));
+            return;
         }
-		if (value >>> 21 == 0) {
-            return 3;
+        writeVarIntFlag(true, charCount + 1, true);
+        int charIndex = 0;
+        if (capacity - position >= charCount) {
+            // Try to write 7 bit chars.
+            ByteBuf byteBuf = this.byteBuf;
+            while (true) {
+                int c = value.charAt(charIndex);
+                if (c > 127) break;
+                byteBuf.writeByte((byte)c);
+                charIndex++;
+                if (charIndex == charCount) {
+                    position = byteBuf.writerIndex();
+                    return;
+                }
+            }
+            position = byteBuf.writerIndex();
         }
-		if (value >>> 28 == 0) {
-            return 4;
+        if (charIndex < charCount) writeUtf8_slow(value, charCount, charIndex);
+    }
+
+    public void writeAscii (String value) throws KryoException {
+        if (value == null) {
+            writeByte(0x80); // 0 means null, bit 8 means UTF8.
+            return;
         }
-		if (value >>> 35 == 0) {
-            return 5;
+        int charCount = value.length();
+        if (charCount == 0) {
+            writeByte(1 | 0x80); // 1 means empty string, bit 8 means UTF8.
+            return;
         }
-		if (value >>> 42 == 0) {
-            return 6;
+        if (capacity - position < charCount)
+            writeAscii_slow(value, charCount);
+        else {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int i = 0, n = value.length(); i < n; ++i)
+                byteBuf.writeByte((byte)value.charAt(i));
+            position += charCount;
         }
-		if (value >>> 49 == 0) {
-            return 7;
+        byteBuf.setByte(position - 1, (byte)(byteBuf.getByte(position - 1) | 0x80)); // Bit 8 means end of ASCII.
+    }
+
+    private void writeUtf8_slow (String value, int charCount, int charIndex) {
+        for (; charIndex < charCount; charIndex++) {
+            if (position == capacity) require(Math.min(capacity, charCount - charIndex));
+            position++;
+            int c = value.charAt(charIndex);
+            if (c <= 0x007F)
+                byteBuf.writeByte((byte)c);
+            else if (c > 0x07FF) {
+                byteBuf.writeByte((byte)(0xE0 | c >> 12 & 0x0F));
+                require(2);
+                position += 2;
+                byteBuf.writeByte((byte)(0x80 | c >> 6 & 0x3F));
+                byteBuf.writeByte((byte)(0x80 | c & 0x3F));
+            } else {
+                byteBuf.writeByte((byte)(0xC0 | c >> 6 & 0x1F));
+                if (position == capacity) require(1);
+                position++;
+                byteBuf.writeByte((byte)(0x80 | c & 0x3F));
+            }
         }
-		if (value >>> 56 == 0) {
-            return 8;
+    }
+
+    private void writeAscii_slow (String value, int charCount) throws KryoException {
+        ByteBuf buffer = this.byteBuf;
+        int charIndex = 0;
+        int charsToWrite = Math.min(charCount, capacity - position);
+        while (charIndex < charCount) {
+            byte[] tmp = new byte[charCount];
+            value.getBytes(charIndex, charIndex + charsToWrite, tmp, 0);
+            buffer.writeBytes(tmp, 0, charsToWrite);
+            charIndex += charsToWrite;
+            position += charsToWrite;
+            charsToWrite = Math.min(charCount - charIndex, capacity);
+            if (require(charsToWrite)) buffer = this.byteBuf;
         }
-		return 9;
-	}
+    }
+
+    // Primitive arrays:
+
+    public void writeInts (int[] array, int offset, int count) throws KryoException {
+        if (capacity >= count << 2 && require(count << 2)) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int n = offset + count; offset < n; offset++) {
+                int value = array[offset];
+                byteBuf.writeByte((byte)value);
+                byteBuf.writeByte((byte)(value >> 8));
+                byteBuf.writeByte((byte)(value >> 16));
+                byteBuf.writeByte((byte)(value >> 24));
+            }
+            position = byteBuf.writerIndex();
+        } else {
+            for (int n = offset + count; offset < n; offset++)
+                writeInt(array[offset]);
+        }
+    }
+
+    public void writeLongs (long[] array, int offset, int count) throws KryoException {
+        if (capacity >= count << 3 && require(count << 3)) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int n = offset + count; offset < n; offset++) {
+                long value = array[offset];
+                byteBuf.writeByte((byte)value);
+                byteBuf.writeByte((byte)(value >>> 8));
+                byteBuf.writeByte((byte)(value >>> 16));
+                byteBuf.writeByte((byte)(value >>> 24));
+                byteBuf.writeByte((byte)(value >>> 32));
+                byteBuf.writeByte((byte)(value >>> 40));
+                byteBuf.writeByte((byte)(value >>> 48));
+                byteBuf.writeByte((byte)(value >>> 56));
+            }
+            position = byteBuf.writerIndex();
+        } else {
+            for (int n = offset + count; offset < n; offset++)
+                writeLong(array[offset]);
+        }
+    }
+
+    public void writeFloats (float[] array, int offset, int count) throws KryoException {
+        if (capacity >= count << 2 && require(count << 2)) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int n = offset + count; offset < n; offset++) {
+                int value = Float.floatToIntBits(array[offset]);
+                byteBuf.writeByte((byte)value);
+                byteBuf.writeByte((byte)(value >> 8));
+                byteBuf.writeByte((byte)(value >> 16));
+                byteBuf.writeByte((byte)(value >> 24));
+            }
+            position = byteBuf.writerIndex();
+        } else {
+            for (int n = offset + count; offset < n; offset++)
+                writeFloat(array[offset]);
+        }
+    }
+
+    public void writeDoubles (double[] array, int offset, int count) throws KryoException {
+        if (capacity >= count << 3 && require(count << 3)) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int n = offset + count; offset < n; offset++) {
+                long value = Double.doubleToLongBits(array[offset]);
+                byteBuf.writeByte((byte)value);
+                byteBuf.writeByte((byte)(value >>> 8));
+                byteBuf.writeByte((byte)(value >>> 16));
+                byteBuf.writeByte((byte)(value >>> 24));
+                byteBuf.writeByte((byte)(value >>> 32));
+                byteBuf.writeByte((byte)(value >>> 40));
+                byteBuf.writeByte((byte)(value >>> 48));
+                byteBuf.writeByte((byte)(value >>> 56));
+            }
+            position = byteBuf.writerIndex();
+        } else {
+            for (int n = offset + count; offset < n; offset++)
+                writeDouble(array[offset]);
+        }
+    }
+
+    public void writeShorts (short[] array, int offset, int count) throws KryoException {
+        if (capacity >= count << 1 && require(count << 1)) {
+            for (int n = offset + count; offset < n; offset++) {
+                int value = array[offset];
+                byteBuf.writeByte((byte)value);
+                byteBuf.writeByte((byte)(value >>> 8));
+            }
+            position = byteBuf.writerIndex();
+        } else {
+            for (int n = offset + count; offset < n; offset++)
+                writeShort(array[offset]);
+        }
+    }
+
+    public void writeChars (char[] array, int offset, int count) throws KryoException {
+        if (capacity >= count << 1 && require(count << 1)) {
+            for (int n = offset + count; offset < n; offset++) {
+                int value = array[offset];
+                byteBuf.writeByte((byte)value);
+                byteBuf.writeByte((byte)(value >>> 8));
+            }
+            position = byteBuf.writerIndex();
+        } else {
+            for (int n = offset + count; offset < n; offset++)
+                writeChar(array[offset]);
+        }
+    }
+
+    public void writeBooleans (boolean[] array, int offset, int count) throws KryoException {
+        if (capacity >= count && require(count)) {
+            for (int n = offset + count; offset < n; offset++)
+                byteBuf.writeByte(array[offset] ? (byte)1 : 0);
+            position = byteBuf.writerIndex();
+        } else {
+            for (int n = offset + count; offset < n; offset++)
+                writeBoolean(array[offset]);
+        }
+    }
 }

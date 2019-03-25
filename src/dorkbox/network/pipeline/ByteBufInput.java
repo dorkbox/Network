@@ -35,13 +35,15 @@
 package dorkbox.network.pipeline;
 
 import java.io.DataInput;
+import java.io.IOException;
 import java.io.InputStream;
 
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.util.Util;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 /**
  * An {@link InputStream} which reads data from a {@link ByteBuf}.
@@ -56,461 +58,674 @@ import io.netty.buffer.ByteBuf;
  * <p/>
  * Utility methods are provided for efficiently reading primitive types and strings.
  * <p/>
- * Modified from KRYO to use ByteBuf.
+ * <p/>
+ * <p/>
+ * <p/>
+ * Modified from KRYO ByteBufferInput to use ByteBuf instead of ByteBuffer.
  */
 
 public
 class ByteBufInput extends Input {
-    private char[] inputChars = new char[32];
     private ByteBuf byteBuf;
-    private int startIndex;
+    private int initialReaderIndex = 0;
+    private int initialWriterIndex = 0;
 
-    /**
-     * Creates an uninitialized Input. {@link #setBuffer(ByteBuf)} must be called before the Input is used.
-     */
-    public
-    ByteBufInput() {
+    private byte[] tempBuffer;
+
+    /** Creates an uninitialized Input, {@link #setBuffer(ByteBuf)} must be called before the Input is used. */
+    public ByteBufInput () {
     }
 
-    public
-    ByteBufInput(ByteBuf buffer) {
+    /** Creates a new Input for reading from a direct {@link ByteBuf}.
+     * @param bufferSize The size of the buffer. An exception is thrown if more bytes than this are read and
+     *           {@link #fill(ByteBuf, int, int)} does not supply more bytes. */
+    public ByteBufInput (int bufferSize) {
+        this.capacity = bufferSize;
+        byteBuf = Unpooled.buffer(bufferSize);
+    }
+
+    /** Creates a new Input for reading from a {@link ByteBuf} which is filled with the specified bytes. */
+    public ByteBufInput (byte[] bytes) {
+        this(bytes, 0, bytes.length);
+    }
+
+    /** Creates a new Input for reading from a {@link ByteBuf} which is filled with the specified bytes.
+     * @see #setBuffer(byte[], int, int) */
+    public ByteBufInput (byte[] bytes, int offset, int count) {
+        if (bytes == null) throw new IllegalArgumentException("bytes cannot be null.");
+
+        setBuffer(Unpooled.wrappedBuffer(bytes, offset, count));
+    }
+
+    /** Creates a new Input for reading from a ByteBuffer. */
+    public ByteBufInput (ByteBuf buffer) {
         setBuffer(buffer);
     }
 
-    public final
-    void setBuffer(ByteBuf byteBuf) {
-        this.byteBuf = byteBuf;
-
-        if (byteBuf != null) {
-            startIndex = byteBuf.readerIndex(); // where the object starts...
-        }
-        else {
-            startIndex = 0;
-        }
+    /** @see Input#Input(InputStream) */
+    public ByteBufInput (InputStream inputStream) {
+        this(4096);
+        if (inputStream == null) throw new IllegalArgumentException("inputStream cannot be null.");
+        this.inputStream = inputStream;
     }
 
-    public
-    ByteBuf getByteBuf() {
+    /** @see Input#Input(InputStream, int) */
+    public ByteBufInput (InputStream inputStream, int bufferSize) {
+        this(bufferSize);
+        if (inputStream == null) throw new IllegalArgumentException("inputStream cannot be null.");
+        this.inputStream = inputStream;
+    }
+
+    /** Throws {@link UnsupportedOperationException} because this input uses a ByteBuffer, not a byte[].
+     * @deprecated
+     * @see #getByteBuf() */
+    public byte[] getBuffer () {
+        throw new UnsupportedOperationException("This input does not used a byte[], see #getByteBuf().");
+    }
+
+    /** Throws {@link UnsupportedOperationException} because this input uses a ByteBuffer, not a byte[].
+     * @deprecated
+     * @see #setBuffer(ByteBuf) */
+    public void setBuffer (byte[] bytes) {
+        throw new UnsupportedOperationException("This input does not used a byte[], see #setByteBuf(ByteBuf).");
+    }
+
+    /** Throws {@link UnsupportedOperationException} because this input uses a ByteBuffer, not a byte[].
+     * @deprecated
+     * @see #setBuffer(ByteBuf) */
+    public void setBuffer (byte[] bytes, int offset, int count) {
+        throw new UnsupportedOperationException("This input does not used a byte[], see #setByteBuf().");
+    }
+
+    /** Sets a new buffer to read from. The bytes are not copied, the old buffer is discarded and the new buffer used in its place.
+     * The position, limit, and capacity are set to match the specified buffer. The total is reset. The
+     * {@link #setInputStream(InputStream) InputStream} is set to null. */
+    public void setBuffer(ByteBuf buffer) {
+        if (buffer == null) throw new IllegalArgumentException("buffer cannot be null.");
+        byteBuf = buffer;
+
+        initialReaderIndex = byteBuf.readerIndex(); // where the object starts...
+        initialWriterIndex = byteBuf.writerIndex(); // where the object ends...
+
+        position = initialReaderIndex;
+        limit = initialWriterIndex;
+        capacity = buffer.capacity();
+        total = 0;
+        inputStream = null;
+    }
+
+    public ByteBuf getByteBuf () {
         return byteBuf;
     }
 
-    /**
-     * Sets a new buffer. The position and total are reset, discarding any buffered bytes.
-     */
-    @Override
-    @Deprecated
-    public
-    void setBuffer(byte[] bytes) {
-        throw new RuntimeException("Cannot access this method!");
+    public void setInputStream (InputStream inputStream) {
+        this.inputStream = inputStream;
+        limit = 0;
+        reset();
     }
 
-    /**
-     * Sets a new buffer. The position and total are reset, discarding any buffered bytes.
-     */
-    @Override
-    @Deprecated
-    public
-    void setBuffer(byte[] bytes, int offset, int count) {
-        throw new RuntimeException("Cannot access this method!");
+    public void reset () {
+        super.reset();
+
+        byteBuf.setIndex(initialReaderIndex, initialWriterIndex);
     }
 
-    @Override
-    @Deprecated
-    public
-    byte[] getBuffer() {
-        throw new RuntimeException("Cannot access this method!");
+    /** Fills the buffer with more bytes. The default implementation reads from the {@link #getInputStream() InputStream}, if set.
+     * Can be overridden to fill the bytes from another source. */
+    protected int fill (ByteBuf buffer, int offset, int count) throws KryoException {
+        if (inputStream == null) return -1;
+        try {
+            if (tempBuffer == null) tempBuffer = new byte[2048];
+            buffer.readerIndex(offset);
+            int total = 0;
+            while (count > 0) {
+                int read = inputStream.read(tempBuffer, 0, Math.min(tempBuffer.length, count));
+                if (read == -1) {
+                    if (total == 0) return -1;
+                    break;
+                }
+                buffer.writeBytes(tempBuffer, 0, read);
+                count -= read;
+                total += read;
+            }
+            buffer.readerIndex(offset);
+            return total;
+        } catch (IOException ex) {
+            throw new KryoException(ex);
+        }
     }
 
-    @Override
-    @Deprecated
-    public
-    InputStream getInputStream() {
-        throw new RuntimeException("Cannot access this method!");
+    protected int require (int required) throws KryoException {
+        int remaining = limit - position;
+        if (remaining >= required) return remaining;
+        if (required > capacity) throw new KryoException("Buffer too small: capacity: " + capacity + ", required: " + required);
+
+        int count;
+        // Try to fill the buffer.
+        if (remaining > 0) {
+            count = fill(byteBuf, limit, capacity - limit);
+            if (count == -1) throw new KryoException("Buffer underflow.");
+            remaining += count;
+            if (remaining >= required) {
+                limit += count;
+                return remaining;
+            }
+        }
+
+        // Compact. Position after compaction can be non-zero.
+        // CANNOT COMPACT A BYTEBUF
+        // byteBuffer.position(position);
+        // byteBuffer.compact();
+        // total += position;
+        // position = 0;
+        //
+        // while (true) {
+        //     count = fill(byteBuffer, remaining, capacity - remaining);
+        //     if (count == -1) {
+        //         if (remaining >= required) break;
+        //         throw new KryoException("Buffer underflow.");
+        //     }
+        //     remaining += count;
+        //     if (remaining >= required) break; // Enough has been read.
+        // }
+        // limit = remaining;
+        // byteBuffer.position(0);
+        return remaining;
     }
 
-    /**
-     * Sets a new InputStream. The position and total are reset, discarding any buffered bytes.
-     *
-     * @param inputStream May be null.
-     */
-    @Override
-    @Deprecated
-    public
-    void setInputStream(InputStream inputStream) {
-        throw new RuntimeException("Cannot access this method!");
+    /** Fills the buffer with at least the number of bytes specified, if possible.
+     * @param optional Must be > 0.
+     * @return the number of bytes remaining, but not more than optional, or -1 if {@link #fill(ByteBuf, int, int)} is unable to
+     *         provide more bytes. */
+    protected int optional (int optional) throws KryoException {
+        int remaining = limit - position;
+        if (remaining >= optional) return optional;
+        optional = Math.min(optional, capacity);
+
+        // Try to fill the buffer.
+        int count = fill(byteBuf, limit, capacity - limit);
+        if (count == -1) return remaining == 0 ? -1 : Math.min(remaining, optional);
+        remaining += count;
+        if (remaining >= optional) {
+            limit += count;
+            return optional;
+        }
+
+        // Compact.
+        // CANNOT COMPACT A BYTEBUF
+        // byteBuffer.compact();
+        // total += position;
+        // position = 0;
+        //
+        // while (true) {
+        //     count = fill(byteBuffer, remaining, capacity - remaining);
+        //     if (count == -1) break;
+        //     remaining += count;
+        //     if (remaining >= optional) break; // Enough has been read.
+        // }
+        // limit = remaining;
+        // byteBuffer.position(position);
+        return remaining == 0 ? -1 : Math.min(remaining, optional);
     }
 
-    /**
-     * Returns the number of bytes read.
-     */
-    @Override
-    public
-    long total() {
-        return byteBuf.readerIndex() - startIndex;
-    }
+    // InputStream:
 
-    /**
-     * Returns the current position in the buffer.
-     */
-    @Override
-    public
-    int position() {
-        return byteBuf.readerIndex();
-    }
-
-    /**
-     * Sets the current position in the buffer.
-     */
-    @Override
-    @Deprecated
-    public
-    void setPosition(int position) {
-        throw new RuntimeException("Cannot access this method!");
-    }
-
-    /**
-     * Returns the limit for the buffer.
-     */
-    @Override
-    public
-    int limit() {
-        return byteBuf.writerIndex();
-    }
-
-    /**
-     * Sets the limit in the buffer.
-     */
-    @Override
-    @Deprecated
-    public
-    void setLimit(int limit) {
-        throw new RuntimeException("Cannot access this method!");
-    }
-
-    /**
-     * Sets the position and total to zero.
-     */
-    @Override
-    public
-    void rewind() {
-        byteBuf.readerIndex(startIndex);
-    }
-
-    /**
-     * Discards the specified number of bytes.
-     */
-    @Override
-    public
-    void skip(int count) throws KryoException {
-        byteBuf.skipBytes(count);
-    }
-
-    /**
-     * Fills the buffer with more bytes. Can be overridden to fill the bytes from a source other than the InputStream.
-     */
-    @Override
-    @Deprecated
-    protected
-    int fill(byte[] buffer, int offset, int count) throws KryoException {
-        throw new RuntimeException("Cannot access this method!");
-    }
-
-
-    // InputStream
-
-    /**
-     * Reads a single byte as an int from 0 to 255, or -1 if there are no more bytes are available.
-     */
-    @Override
-    public
-    int read() throws KryoException {
+    public int read () throws KryoException {
+        if (optional(1) <= 0) return -1;
+        position++;
         return byteBuf.readByte() & 0xFF;
     }
 
-    /**
-     * Reads bytes.length bytes or less and writes them to the specified byte[], starting at 0, and returns the number of bytes
-     * read.
-     */
-    @Override
-    public
-    int read(byte[] bytes) throws KryoException {
-        int start = byteBuf.readerIndex();
-        byteBuf.readBytes(bytes);
-        int end = byteBuf.readerIndex();
-        return end - start; // return how many bytes were actually read.
+    public int read (byte[] bytes) throws KryoException {
+        return read(bytes, 0, bytes.length);
     }
 
-    /**
-     * Reads count bytes or less and writes them to the specified byte[], starting at offset, and returns the number of bytes read
-     * or -1 if no more bytes are available.
-     */
-    @Override
-    public
-    int read(byte[] bytes, int offset, int count) throws KryoException {
-        if (bytes == null) {
-            throw new IllegalArgumentException("bytes cannot be null.");
+    public int read (byte[] bytes, int offset, int count) throws KryoException {
+        if (bytes == null) throw new IllegalArgumentException("bytes cannot be null.");
+        int startingCount = count;
+        int copyCount = Math.min(limit - position, count);
+        while (true) {
+            byteBuf.getBytes(offset, bytes, 0, copyCount);
+            position += copyCount;
+            count -= copyCount;
+            if (count == 0) break;
+            offset += copyCount;
+            copyCount = optional(count);
+            if (copyCount == -1) {
+                // End of data.
+                if (startingCount == count) return -1;
+                break;
+            }
+            if (position == limit) break;
         }
-
-        int start = byteBuf.readerIndex();
-        byteBuf.readBytes(bytes, offset, count);
-        int end = byteBuf.readerIndex();
-        return end - start; // return how many bytes were actually read.
+        return startingCount - count;
     }
 
-    /**
-     * Discards the specified number of bytes.
-     */
-    @Override
-    public
-    long skip(long count) throws KryoException {
+    public void setPosition (int position) {
+        this.position = position;
+        byteBuf.readerIndex(position);
+    }
+
+    public void setLimit (int limit) {
+        this.limit = limit;
+        byteBuf.writerIndex(limit);
+    }
+
+    public void skip (int count) throws KryoException {
+        super.skip(count);
+        byteBuf.readerIndex(position);
+    }
+
+    public long skip (long count) throws KryoException {
         long remaining = count;
         while (remaining > 0) {
-            int skip = Math.max(Integer.MAX_VALUE, (int) remaining);
+            int skip = (int)Math.min(Util.maxArraySize, remaining);
             skip(skip);
             remaining -= skip;
         }
         return count;
     }
 
-    /**
-     * Closes the underlying InputStream, if any.
-     */
-    @Override
-    @Deprecated
-    public
-    void close() throws KryoException {
-        // does nothing.
+    public void close () throws KryoException {
+        if (inputStream != null) {
+            try {
+                inputStream.close();
+            } catch (IOException ignored) {
+            }
+        }
     }
 
-    // byte
+    // byte:
 
-    /**
-     * Reads a single byte.
-     */
-    @Override
-    public
-    byte readByte() throws KryoException {
+    public byte readByte () throws KryoException {
+        if (position == limit) require(1);
+        position++;
         return byteBuf.readByte();
     }
 
-    /**
-     * Reads a byte as an int from 0 to 255.
-     */
-    @Override
-    public
-    int readByteUnsigned() throws KryoException {
-        return byteBuf.readUnsignedByte();
+    public int readByteUnsigned () throws KryoException {
+        if (position == limit) require(1);
+        position++;
+        return byteBuf.readByte() & 0xFF;
     }
 
-    /**
-     * Reads the specified number of bytes into a new byte[].
-     */
-    @Override
-    public
-    byte[] readBytes(int length) throws KryoException {
+    public byte[] readBytes (int length) throws KryoException {
         byte[] bytes = new byte[length];
         readBytes(bytes, 0, length);
         return bytes;
     }
 
-    /**
-     * Reads bytes.length bytes and writes them to the specified byte[], starting at index 0.
-     */
-    @Override
-    public
-    void readBytes(byte[] bytes) throws KryoException {
-        readBytes(bytes, 0, bytes.length);
-    }
-
-    /**
-     * Reads count bytes and writes them to the specified byte[], starting at offset.
-     */
-    @Override
-    public
-    void readBytes(byte[] bytes, int offset, int count) throws KryoException {
-        if (bytes == null) {
-            throw new IllegalArgumentException("bytes cannot be null.");
+    public void readBytes (byte[] bytes, int offset, int count) throws KryoException {
+        if (bytes == null) throw new IllegalArgumentException("bytes cannot be null.");
+        int copyCount = Math.min(limit - position, count);
+        while (true) {
+            byteBuf.readBytes(bytes, offset, copyCount);
+            position += copyCount;
+            count -= copyCount;
+            if (count == 0) break;
+            offset += copyCount;
+            copyCount = Math.min(count, capacity);
+            require(copyCount);
         }
-
-        byteBuf.readBytes(bytes, offset, count);
     }
 
-    // int
+    // int:
 
-    /**
-     * Reads a 4 byte int.
-     */
-    @Override
-    public
-    int readInt() throws KryoException {
-        return byteBuf.readInt();
+    public int readInt () throws KryoException {
+        require(4);
+        position += 4;
+        ByteBuf byteBuf = this.byteBuf;
+        return byteBuf.readByte() & 0xFF //
+               | (byteBuf.readByte() & 0xFF) << 8 //
+               | (byteBuf.readByte() & 0xFF) << 16 //
+               | (byteBuf.readByte() & 0xFF) << 24;
     }
 
-
-    /**
-     * Reads a 1-5 byte int. This stream may consider such a variable length encoding request as a hint. It is not guaranteed that
-     * a variable length encoding will be really used. The stream may decide to use native-sized integer representation for
-     * efficiency reasons.
-     **/
-    @Override
-    public
-    int readInt(boolean optimizePositive) throws KryoException {
-        return readVarInt(optimizePositive);
-    }
-
-    /**
-     * Reads a 1-5 byte int. It is guaranteed that a variable length encoding will be used.
-     */
-    @Override
-    public
-    int readVarInt(boolean optimizePositive) throws KryoException {
-        ByteBuf buffer = byteBuf;
-
-        int b = buffer.readByte();
+    public int readVarInt (boolean optimizePositive) throws KryoException {
+        if (require(1) < 5) return readVarInt_slow(optimizePositive);
+        int b = byteBuf.readByte();
         int result = b & 0x7F;
         if ((b & 0x80) != 0) {
-            b = buffer.readByte();
+            ByteBuf byteBuf = this.byteBuf;
+            b = byteBuf.readByte();
             result |= (b & 0x7F) << 7;
             if ((b & 0x80) != 0) {
-                b = buffer.readByte();
+                b = byteBuf.readByte();
                 result |= (b & 0x7F) << 14;
                 if ((b & 0x80) != 0) {
-                    b = buffer.readByte();
+                    b = byteBuf.readByte();
                     result |= (b & 0x7F) << 21;
                     if ((b & 0x80) != 0) {
-                        b = buffer.readByte();
+                        b = byteBuf.readByte();
                         result |= (b & 0x7F) << 28;
                     }
                 }
             }
         }
-        return optimizePositive ? result : result >>> 1 ^ -(result & 1);
+        position = byteBuf.readerIndex();
+        return optimizePositive ? result : ((result >>> 1) ^ -(result & 1));
     }
 
+    private int readVarInt_slow (boolean optimizePositive) {
+        // The buffer is guaranteed to have at least 1 byte.
+        position++;
+        int b = byteBuf.readByte();
+        int result = b & 0x7F;
+        if ((b & 0x80) != 0) {
+            if (position == limit) require(1);
+            ByteBuf byteBuf = this.byteBuf;
+            position++;
+            b = byteBuf.readByte();
+            result |= (b & 0x7F) << 7;
+            if ((b & 0x80) != 0) {
+                if (position == limit) require(1);
+                position++;
+                b = byteBuf.readByte();
+                result |= (b & 0x7F) << 14;
+                if ((b & 0x80) != 0) {
+                    if (position == limit) require(1);
+                    position++;
+                    b = byteBuf.readByte();
+                    result |= (b & 0x7F) << 21;
+                    if ((b & 0x80) != 0) {
+                        if (position == limit) require(1);
+                        position++;
+                        b = byteBuf.readByte();
+                        result |= (b & 0x7F) << 28;
+                    }
+                }
+            }
+        }
+        return optimizePositive ? result : ((result >>> 1) ^ -(result & 1));
+    }
 
-    /**
-     * Returns true if enough bytes are available to read an int with {@link #readInt(boolean)}.
-     */
-    @Override
-    public
-    boolean canReadInt() throws KryoException {
-        ByteBuf buffer = byteBuf;
-        int limit = buffer.writerIndex();
-
-        if (limit - buffer.readerIndex() >= 5) {
-            return true;
-        }
-
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
+    public boolean canReadVarInt () throws KryoException {
+        if (limit - position >= 5) return true;
+        if (optional(5) <= 0) return false;
+        int p = position, limit = this.limit;
+        ByteBuf byteBuf = this.byteBuf;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
         return true;
     }
 
-    /**
-     * Returns true if enough bytes are available to read a long with {@link #readLong(boolean)}.
-     */
-    @Override
-    public
-    boolean canReadLong() throws KryoException {
-        ByteBuf buffer = byteBuf;
-        int limit = buffer.writerIndex();
+    /** Reads the boolean part of a varint flag. The position is not advanced, {@link #readVarIntFlag(boolean)} should be used to
+     * advance the position. */
+    public boolean readVarIntFlag () {
+        if (position == limit) require(1);
+        return (byteBuf.getByte(position) & 0x80) != 0;
+    }
 
-        if (limit - buffer.readerIndex() >= 9) {
-            return true;
+    /** Reads the 1-5 byte int part of a varint flag. The position is advanced so if the boolean part is needed it should be read
+     * first with {@link #readVarIntFlag()}. */
+    public int readVarIntFlag (boolean optimizePositive) {
+        if (require(1) < 5) return readVarIntFlag_slow(optimizePositive);
+        int b = byteBuf.readByte();
+        int result = b & 0x3F; // Mask first 6 bits.
+        if ((b & 0x40) != 0) { // Bit 7 means another byte, bit 8 means UTF8.
+            ByteBuf byteBuf = this.byteBuf;
+            b = byteBuf.readByte();
+            result |= (b & 0x7F) << 6;
+            if ((b & 0x80) != 0) {
+                b = byteBuf.readByte();
+                result |= (b & 0x7F) << 13;
+                if ((b & 0x80) != 0) {
+                    b = byteBuf.readByte();
+                    result |= (b & 0x7F) << 20;
+                    if ((b & 0x80) != 0) {
+                        b = byteBuf.readByte();
+                        result |= (b & 0x7F) << 27;
+                    }
+                }
+            }
         }
+        position = byteBuf.readerIndex();
+        return optimizePositive ? result : ((result >>> 1) ^ -(result & 1));
+    }
 
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
+    private int readVarIntFlag_slow (boolean optimizePositive) {
+        // The buffer is guaranteed to have at least 1 byte.
+        position++;
+        int b = byteBuf.readByte();
+        int result = b & 0x3F;
+        if ((b & 0x40) != 0) {
+            if (position == limit) require(1);
+            position++;
+            ByteBuf byteBuf = this.byteBuf;
+            b = byteBuf.readByte();
+            result |= (b & 0x7F) << 6;
+            if ((b & 0x80) != 0) {
+                if (position == limit) require(1);
+                position++;
+                b = byteBuf.readByte();
+                result |= (b & 0x7F) << 13;
+                if ((b & 0x80) != 0) {
+                    if (position == limit) require(1);
+                    position++;
+                    b = byteBuf.readByte();
+                    result |= (b & 0x7F) << 20;
+                    if ((b & 0x80) != 0) {
+                        if (position == limit) require(1);
+                        position++;
+                        b = byteBuf.readByte();
+                        result |= (b & 0x7F) << 27;
+                    }
+                }
+            }
         }
-        if (buffer.readerIndex() == limit) {
-            return false;
+        return optimizePositive ? result : ((result >>> 1) ^ -(result & 1));
+    }
+
+    // long:
+
+    public long readLong () throws KryoException {
+        require(8);
+        position += 8;
+        ByteBuf byteBuf = this.byteBuf;
+        return byteBuf.readByte() & 0xFF //
+               | (byteBuf.readByte() & 0xFF) << 8 //
+               | (byteBuf.readByte() & 0xFF) << 16 //
+               | (long)(byteBuf.readByte() & 0xFF) << 24 //
+               | (long)(byteBuf.readByte() & 0xFF) << 32 //
+               | (long)(byteBuf.readByte() & 0xFF) << 40 //
+               | (long)(byteBuf.readByte() & 0xFF) << 48 //
+               | (long)byteBuf.readByte() << 56;
+    }
+
+    public long readVarLong (boolean optimizePositive) throws KryoException {
+        if (require(1) < 9) return readVarLong_slow(optimizePositive);
+        int b = byteBuf.readByte();
+        long result = b & 0x7F;
+        if ((b & 0x80) != 0) {
+            ByteBuf byteBuf = this.byteBuf;
+            b = byteBuf.readByte();
+            result |= (b & 0x7F) << 7;
+            if ((b & 0x80) != 0) {
+                b = byteBuf.readByte();
+                result |= (b & 0x7F) << 14;
+                if ((b & 0x80) != 0) {
+                    b = byteBuf.readByte();
+                    result |= (b & 0x7F) << 21;
+                    if ((b & 0x80) != 0) {
+                        b = byteBuf.readByte();
+                        result |= (long)(b & 0x7F) << 28;
+                        if ((b & 0x80) != 0) {
+                            b = byteBuf.readByte();
+                            result |= (long)(b & 0x7F) << 35;
+                            if ((b & 0x80) != 0) {
+                                b = byteBuf.readByte();
+                                result |= (long)(b & 0x7F) << 42;
+                                if ((b & 0x80) != 0) {
+                                    b = byteBuf.readByte();
+                                    result |= (long)(b & 0x7F) << 49;
+                                    if ((b & 0x80) != 0) {
+                                        b = byteBuf.readByte();
+                                        result |= (long)b << 56;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
+        position = byteBuf.readerIndex();
+        return optimizePositive ? result : ((result >>> 1) ^ -(result & 1));
+    }
+
+    private long readVarLong_slow (boolean optimizePositive) {
+        // The buffer is guaranteed to have at least 1 byte.
+        position++;
+        int b = byteBuf.readByte();
+        long result = b & 0x7F;
+        if ((b & 0x80) != 0) {
+            if (position == limit) require(1);
+            ByteBuf byteBuf = this.byteBuf;
+            position++;
+            b = byteBuf.readByte();
+            result |= (b & 0x7F) << 7;
+            if ((b & 0x80) != 0) {
+                if (position == limit) require(1);
+                position++;
+                b = byteBuf.readByte();
+                result |= (b & 0x7F) << 14;
+                if ((b & 0x80) != 0) {
+                    if (position == limit) require(1);
+                    position++;
+                    b = byteBuf.readByte();
+                    result |= (b & 0x7F) << 21;
+                    if ((b & 0x80) != 0) {
+                        if (position == limit) require(1);
+                        position++;
+                        b = byteBuf.readByte();
+                        result |= (long)(b & 0x7F) << 28;
+                        if ((b & 0x80) != 0) {
+                            if (position == limit) require(1);
+                            position++;
+                            b = byteBuf.readByte();
+                            result |= (long)(b & 0x7F) << 35;
+                            if ((b & 0x80) != 0) {
+                                if (position == limit) require(1);
+                                position++;
+                                b = byteBuf.readByte();
+                                result |= (long)(b & 0x7F) << 42;
+                                if ((b & 0x80) != 0) {
+                                    if (position == limit) require(1);
+                                    position++;
+                                    b = byteBuf.readByte();
+                                    result |= (long)(b & 0x7F) << 49;
+                                    if ((b & 0x80) != 0) {
+                                        if (position == limit) require(1);
+                                        position++;
+                                        b = byteBuf.readByte();
+                                        result |= (long)b << 56;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
-        if ((buffer.readByte() & 0x80) == 0) {
-            return true;
-        }
-        if (buffer.readerIndex() == limit) {
-            return false;
-        }
+        return optimizePositive ? result : ((result >>> 1) ^ -(result & 1));
+    }
+
+    public boolean canReadVarLong () throws KryoException {
+        if (limit - position >= 9) return true;
+        if (optional(5) <= 0) return false;
+        int p = position, limit = this.limit;
+        ByteBuf byteBuf = this.byteBuf;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
+        if ((byteBuf.getByte(p++) & 0x80) == 0) return true;
+        if (p == limit) return false;
         return true;
     }
 
-    // string
+    // float:
 
-    /**
-     * Reads the length and string of UTF8 characters, or null. This can read strings written by {@link Output#writeString(String)}
-     * , {@link Output#writeString(CharSequence)}, and {@link Output#writeAscii(String)}.
-     *
-     * @return May be null.
-     */
-    @Override
-    public
-    String readString() {
-        ByteBuf buffer = byteBuf;
+    public float readFloat () throws KryoException {
+        require(4);
+        ByteBuf byteBuf = this.byteBuf;
+        int p = this.position;
+        this.position = p + 4;
+        return Float.intBitsToFloat(byteBuf.readByte() & 0xFF //
+                                    | (byteBuf.readByte() & 0xFF) << 8 //
+                                    | (byteBuf.readByte() & 0xFF) << 16 //
+                                    | (byteBuf.readByte() & 0xFF) << 24);
+    }
 
-        int b = buffer.readByte();
-        if ((b & 0x80) == 0) {
-            return readAscii(); // ASCII.
-        }
+    // double:
+
+    public double readDouble () throws KryoException {
+        require(8);
+        ByteBuf byteBuf = this.byteBuf;
+        int p = position;
+        position = p + 8;
+        return Double.longBitsToDouble(byteBuf.readByte() & 0xFF //
+                                       | (byteBuf.readByte() & 0xFF) << 8 //
+                                       | (byteBuf.readByte() & 0xFF) << 16 //
+                                       | (long)(byteBuf.readByte() & 0xFF) << 24 //
+                                       | (long)(byteBuf.readByte() & 0xFF) << 32 //
+                                       | (long)(byteBuf.readByte() & 0xFF) << 40 //
+                                       | (long)(byteBuf.readByte() & 0xFF) << 48 //
+                                       | (long)byteBuf.readByte() << 56);
+    }
+
+    // boolean:
+
+    public boolean readBoolean () throws KryoException {
+        if (position == limit) require(1);
+        position++;
+        return byteBuf.readByte() == 1 ? true : false;
+    }
+
+    // short:
+
+    public short readShort () throws KryoException {
+        require(2);
+        position += 2;
+        return (short)((byteBuf.readByte() & 0xFF) | ((byteBuf.readByte() & 0xFF) << 8));
+    }
+
+    public int readShortUnsigned () throws KryoException {
+        require(2);
+        position += 2;
+        return (byteBuf.readByte() & 0xFF) | ((byteBuf.readByte() & 0xFF) << 8);
+    }
+
+    // char:
+
+    public char readChar () throws KryoException {
+        require(2);
+        position += 2;
+        return (char)((byteBuf.readByte() & 0xFF) | ((byteBuf.readByte() & 0xFF) << 8));
+    }
+
+    // String:
+
+    public String readString () {
+        if (!readVarIntFlag()) return readAsciiString(); // ASCII.
         // Null, empty, or UTF8.
-        int charCount = readUtf8Length(b);
+        int charCount = readVarIntFlag(true);
         switch (charCount) {
             case 0:
                 return null;
@@ -518,64 +733,54 @@ class ByteBufInput extends Input {
                 return "";
         }
         charCount--;
-        if (inputChars.length < charCount) {
-            inputChars = new char[charCount];
-        }
-        readUtf8(charCount);
-        return new String(inputChars, 0, charCount);
+        readUtf8Chars(charCount);
+        return new String(chars, 0, charCount);
     }
 
-    private
-    int readUtf8Length(int b) {
-        int result = b & 0x3F; // Mask all but first 6 bits.
-        if ((b & 0x40) != 0) { // Bit 7 means another byte, bit 8 means UTF8.
-            ByteBuf buffer = byteBuf;
-            b = buffer.readByte();
-            result |= (b & 0x7F) << 6;
-            if ((b & 0x80) != 0) {
-                b = buffer.readByte();
-                result |= (b & 0x7F) << 13;
-                if ((b & 0x80) != 0) {
-                    b = buffer.readByte();
-                    result |= (b & 0x7F) << 20;
-                    if ((b & 0x80) != 0) {
-                        b = buffer.readByte();
-                        result |= (b & 0x7F) << 27;
-                    }
-                }
-            }
+    public StringBuilder readStringBuilder () {
+        if (!readVarIntFlag()) return new StringBuilder(readAsciiString()); // ASCII.
+        // Null, empty, or UTF8.
+        int charCount = readVarIntFlag(true);
+        switch (charCount) {
+            case 0:
+                return null;
+            case 1:
+                return new StringBuilder("");
         }
-        return result;
+        charCount--;
+        readUtf8Chars(charCount);
+        StringBuilder builder = new StringBuilder(charCount);
+        builder.append(chars, 0, charCount);
+        return builder;
     }
 
-    private
-    void readUtf8(int charCount) {
-        ByteBuf buffer = byteBuf;
-        char[] chars = this.inputChars; // will be the correct size.
+    private void readUtf8Chars (int charCount) {
+        if (chars.length < charCount) chars = new char[charCount];
+        char[] chars = this.chars;
         // Try to read 7 bit ASCII chars.
+        ByteBuf byteBuf = this.byteBuf;
         int charIndex = 0;
-        int count = charCount;
-        int b;
+        int count = Math.min(require(1), charCount);
         while (charIndex < count) {
-            b = buffer.readByte();
-            if (b < 0) {
-                buffer.readerIndex(buffer.readerIndex() - 1);
-                break;
-            }
-            chars[charIndex++] = (char) b;
+            int b = byteBuf.readByte();
+            if (b < 0) break;
+            chars[charIndex++] = (char)b;
         }
+        position += charIndex;
         // If buffer didn't hold all chars or any were not ASCII, use slow path for remainder.
         if (charIndex < charCount) {
-            readUtf8_slow(charCount, charIndex);
+            byteBuf.readerIndex(position);
+            readUtf8Chars_slow(charCount, charIndex);
         }
     }
 
-    private
-    void readUtf8_slow(int charCount, int charIndex) {
-        ByteBuf buffer = byteBuf;
-        char[] chars = this.inputChars;
+    private void readUtf8Chars_slow (int charCount, int charIndex) {
+        ByteBuf byteBuf = this.byteBuf;
+        char[] chars = this.chars;
         while (charIndex < charCount) {
-            int b = buffer.readByte() & 0xFF;
+            if (position == limit) require(1);
+            position++;
+            int b = byteBuf.readByte() & 0xFF;
             switch (b >> 4) {
                 case 0:
                 case 1:
@@ -585,217 +790,185 @@ class ByteBufInput extends Input {
                 case 5:
                 case 6:
                 case 7:
-                    chars[charIndex] = (char) b;
+                    chars[charIndex] = (char)b;
                     break;
                 case 12:
                 case 13:
-                    chars[charIndex] = (char) ((b & 0x1F) << 6 | buffer.readByte() & 0x3F);
+                    if (position == limit) require(1);
+                    position++;
+                    chars[charIndex] = (char)((b & 0x1F) << 6 | byteBuf.readByte() & 0x3F);
                     break;
                 case 14:
-                    chars[charIndex] = (char) ((b & 0x0F) << 12 | (buffer.readByte() & 0x3F) << 6 | buffer.readByte() & 0x3F);
+                    require(2);
+                    position += 2;
+                    int b2 = byteBuf.readByte();
+                    int b3 = byteBuf.readByte();
+                    chars[charIndex] = (char)((b & 0x0F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F);
                     break;
             }
             charIndex++;
         }
     }
 
-    private
-    String readAscii() {
-        ByteBuf buffer = byteBuf;
-
-        int start = buffer.readerIndex() - 1;
-        int b;
-        do {
-            b = buffer.readByte();
-        } while ((b & 0x80) == 0);
-        int i = buffer.readerIndex() - 1;
-        buffer.setByte(i, buffer.getByte(i) & 0x7F);  // Mask end of ascii bit.
-
-        int capp = buffer.readerIndex() - start;
-
-        byte[] ba = new byte[capp];
-        buffer.getBytes(start, ba);
-
-        @SuppressWarnings("deprecation")
-        String value = new String(ba, 0, 0, capp);
-
-        buffer.setByte(i, buffer.getByte(i) | 0x80);
-        return value;
-    }
-
-
-    /**
-     * Reads the length and string of UTF8 characters, or null. This can read strings written by {@link Output#writeString(String)}
-     * , {@link Output#writeString(CharSequence)}, and {@link Output#writeAscii(String)}.
-     *
-     * @return May be null.
-     */
-    @Override
-    public
-    StringBuilder readStringBuilder() {
-        ByteBuf buffer = byteBuf;
-
-        int b = buffer.readByte();
-        if ((b & 0x80) == 0) {
-            return new StringBuilder(readAscii()); // ASCII.
-        }
-        // Null, empty, or UTF8.
-        int charCount = readUtf8Length(b);
-        switch (charCount) {
-            case 0:
-                return null;
-            case 1:
-                return new StringBuilder("");
-        }
-        charCount--;
-        if (inputChars.length < charCount) {
-            inputChars = new char[charCount];
-        }
-        readUtf8(charCount);
-
-        StringBuilder builder = new StringBuilder(charCount);
-        builder.append(inputChars, 0, charCount);
-        return builder;
-    }
-
-    // float
-
-    /**
-     * Reads a 4 byte float.
-     */
-    @Override
-    public
-    float readFloat() throws KryoException {
-        return Float.intBitsToFloat(readInt());
-    }
-
-    /**
-     * Reads a 1-5 byte float with reduced precision.
-     */
-    @Override
-    public
-    float readFloat(float precision, boolean optimizePositive) throws KryoException {
-        return readInt(optimizePositive) / precision;
-    }
-
-    // short
-
-    /**
-     * Reads a 2 byte short.
-     */
-    @Override
-    public
-    short readShort() throws KryoException {
-        return byteBuf.readShort();
-    }
-
-    /**
-     * Reads a 2 byte short as an int from 0 to 65535.
-     */
-    @Override
-    public
-    int readShortUnsigned() throws KryoException {
-        return byteBuf.readUnsignedShort();
-    }
-
-    // long
-
-    /**
-     * Reads an 8 byte long.
-     */
-    @Override
-    public
-    long readLong() throws KryoException {
-        return byteBuf.readLong();
-    }
-
-    /**
-     * Reads a 1-9 byte long.
-     */
-    @Override
-    public
-    long readLong(boolean optimizePositive) throws KryoException {
-        ByteBuf buffer = byteBuf;
-        int b = buffer.readByte();
-        long result = b & 0x7F;
-        if ((b & 0x80) != 0) {
-            b = buffer.readByte();
-            result |= (b & 0x7F) << 7;
-            if ((b & 0x80) != 0) {
-                b = buffer.readByte();
-                result |= (b & 0x7F) << 14;
-                if ((b & 0x80) != 0) {
-                    b = buffer.readByte();
-                    result |= (b & 0x7F) << 21;
-                    if ((b & 0x80) != 0) {
-                        b = buffer.readByte();
-                        result |= (long) (b & 0x7F) << 28;
-                        if ((b & 0x80) != 0) {
-                            b = buffer.readByte();
-                            result |= (long) (b & 0x7F) << 35;
-                            if ((b & 0x80) != 0) {
-                                b = buffer.readByte();
-                                result |= (long) (b & 0x7F) << 42;
-                                if ((b & 0x80) != 0) {
-                                    b = buffer.readByte();
-                                    result |= (long) (b & 0x7F) << 49;
-                                    if ((b & 0x80) != 0) {
-                                        b = buffer.readByte();
-                                        result |= (long) b << 56;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+    private String readAsciiString () {
+        char[] chars = this.chars;
+        ByteBuf byteBuf = this.byteBuf;
+        int charCount = 0;
+        for (int n = Math.min(chars.length, limit - position); charCount < n; charCount++) {
+            int b = byteBuf.readByte();
+            if ((b & 0x80) == 0x80) {
+                position = byteBuf.readerIndex();
+                chars[charCount] = (char)(b & 0x7F);
+                return new String(chars, 0, charCount + 1);
             }
+            chars[charCount] = (char)b;
         }
-        if (!optimizePositive) {
-            result = result >>> 1 ^ -(result & 1);
+        position = byteBuf.readerIndex();
+        return readAscii_slow(charCount);
+    }
+
+    private String readAscii_slow (int charCount) {
+        char[] chars = this.chars;
+        ByteBuf byteBuf = this.byteBuf;
+        while (true) {
+            if (position == limit) require(1);
+            position++;
+            int b = byteBuf.readByte();
+            if (charCount == chars.length) {
+                char[] newChars = new char[charCount * 2];
+                System.arraycopy(chars, 0, newChars, 0, charCount);
+                chars = newChars;
+                this.chars = newChars;
+            }
+            if ((b & 0x80) == 0x80) {
+                chars[charCount] = (char)(b & 0x7F);
+                return new String(chars, 0, charCount + 1);
+            }
+            chars[charCount++] = (char)b;
         }
-        return result;
     }
 
+    // Primitive arrays:
 
-    // boolean
-
-    /**
-     * Reads a 1 byte boolean.
-     */
-    @Override
-    public
-    boolean readBoolean() throws KryoException {
-        return byteBuf.readBoolean();
+    public int[] readInts (int length) throws KryoException {
+        int[] array = new int[length];
+        if (optional(length << 2) == length << 2) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int i = 0; i < length; i++) {
+                array[i] = byteBuf.readByte() & 0xFF //
+                           | (byteBuf.readByte() & 0xFF) << 8 //
+                           | (byteBuf.readByte() & 0xFF) << 16 //
+                           | (byteBuf.readByte() & 0xFF) << 24;
+            }
+            position = byteBuf.readerIndex();
+        } else {
+            for (int i = 0; i < length; i++)
+                array[i] = readInt();
+        }
+        return array;
     }
 
-    // char
-
-    /**
-     * Reads a 2 byte char.
-     */
-    @Override
-    public
-    char readChar() throws KryoException {
-        return byteBuf.readChar();
+    public long[] readLongs (int length) throws KryoException {
+        long[] array = new long[length];
+        if (optional(length << 3) == length << 3) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int i = 0; i < length; i++) {
+                array[i] = byteBuf.readByte() & 0xFF//
+                           | (byteBuf.readByte() & 0xFF) << 8 //
+                           | (byteBuf.readByte() & 0xFF) << 16 //
+                           | (long)(byteBuf.readByte() & 0xFF) << 24 //
+                           | (long)(byteBuf.readByte() & 0xFF) << 32 //
+                           | (long)(byteBuf.readByte() & 0xFF) << 40 //
+                           | (long)(byteBuf.readByte() & 0xFF) << 48 //
+                           | (long)byteBuf.readByte() << 56;
+            }
+            position = byteBuf.readerIndex();
+        } else {
+            for (int i = 0; i < length; i++)
+                array[i] = readLong();
+        }
+        return array;
     }
 
-    // double
-
-    /**
-     * Reads an 8 bytes double.
-     */
-    @Override
-    public
-    double readDouble() throws KryoException {
-        return Double.longBitsToDouble(readLong());
+    public float[] readFloats (int length) throws KryoException {
+        float[] array = new float[length];
+        if (optional(length << 2) == length << 2) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int i = 0; i < length; i++) {
+                array[i] = Float.intBitsToFloat(byteBuf.readByte() & 0xFF //
+                                                | (byteBuf.readByte() & 0xFF) << 8 //
+                                                | (byteBuf.readByte() & 0xFF) << 16 //
+                                                | (byteBuf.readByte() & 0xFF) << 24);
+            }
+            position = byteBuf.readerIndex();
+        } else {
+            for (int i = 0; i < length; i++)
+                array[i] = readFloat();
+        }
+        return array;
     }
 
-    /**
-     * Reads a 1-9 byte double with reduced precision.
-     */
-    @Override
-    public
-    double readDouble(double precision, boolean optimizePositive) throws KryoException {
-        return readLong(optimizePositive) / precision;
+    public double[] readDoubles (int length) throws KryoException {
+        double[] array = new double[length];
+        if (optional(length << 3) == length << 3) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int i = 0; i < length; i++) {
+                array[i] = Double.longBitsToDouble(byteBuf.readByte() & 0xFF //
+                                                   | (byteBuf.readByte() & 0xFF) << 8 //
+                                                   | (byteBuf.readByte() & 0xFF) << 16 //
+                                                   | (long)(byteBuf.readByte() & 0xFF) << 24 //
+                                                   | (long)(byteBuf.readByte() & 0xFF) << 32 //
+                                                   | (long)(byteBuf.readByte() & 0xFF) << 40 //
+                                                   | (long)(byteBuf.readByte() & 0xFF) << 48 //
+                                                   | (long)byteBuf.readByte() << 56);
+            }
+            position = byteBuf.readerIndex();
+        } else {
+            for (int i = 0; i < length; i++)
+                array[i] = readDouble();
+        }
+        return array;
+    }
+
+    public short[] readShorts (int length) throws KryoException {
+        short[] array = new short[length];
+        if (optional(length << 1) == length << 1) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int i = 0; i < length; i++)
+                array[i] = (short)((byteBuf.readByte() & 0xFF) | ((byteBuf.readByte() & 0xFF) << 8));
+            position = byteBuf.readerIndex();
+        } else {
+            for (int i = 0; i < length; i++)
+                array[i] = readShort();
+        }
+        return array;
+    }
+
+    public char[] readChars (int length) throws KryoException {
+        char[] array = new char[length];
+        if (optional(length << 1) == length << 1) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int i = 0; i < length; i++)
+                array[i] = (char)((byteBuf.readByte() & 0xFF) | ((byteBuf.readByte() & 0xFF) << 8));
+            position = byteBuf.readerIndex();
+        } else {
+            for (int i = 0; i < length; i++)
+                array[i] = readChar();
+        }
+        return array;
+    }
+
+    public boolean[] readBooleans (int length) throws KryoException {
+        boolean[] array = new boolean[length];
+        if (optional(length) == length) {
+            ByteBuf byteBuf = this.byteBuf;
+            for (int i = 0; i < length; i++)
+                array[i] = byteBuf.readByte() != 0;
+            position = byteBuf.readerIndex();
+        } else {
+            for (int i = 0; i < length; i++)
+                array[i] = readBoolean();
+        }
+        return array;
     }
 }

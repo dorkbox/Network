@@ -35,10 +35,10 @@ import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.util.Property;
 import dorkbox.util.collections.ConcurrentEntry;
 import dorkbox.util.generics.ClassHelper;
-import dorkbox.util.generics.TypeResolver;
 import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.util.concurrent.ImmediateEventExecutor;
 import io.netty.util.concurrent.Promise;
+import net.jodah.typetools.TypeResolver;
 
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
 @SuppressWarnings("unchecked")

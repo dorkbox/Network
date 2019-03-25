@@ -16,11 +16,8 @@
 
 import Build_gradle.Extras.bcVersion
 import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
-import org.gradle.internal.impldep.org.junit.experimental.categories.Categories.CategoryFilter.include
-import org.jetbrains.kotlin.js.translate.context.Namer.kotlin
 import java.time.Instant
-import java.util.Properties
-import kotlin.collections.ArrayList
+import java.util.*
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.set
@@ -49,9 +46,9 @@ plugins {
     id("com.dorkbox.VersionUpdate") version "1.4.1"
 
     // setup checking for the latest version of a plugin or dependency
-    id("com.github.ben-manes.versions") version "0.20.0"
+    id("com.github.ben-manes.versions") version "0.21.0"
 
-    kotlin("jvm") version "1.3.11"
+    kotlin("jvm") version "1.3.21"
 }
 
 object Extras {
@@ -248,91 +245,6 @@ repositories {
 }
 
 ///////////////////////////////
-//////    UTILITIES COMPILE
-///////////////////////////////
-
-// as long as the 'Utilities' project is ALSO imported into IntelliJ, class resolution will work (add the sources in the intellij project)
-val utils : Configuration by configurations.creating
-
-fun javaFile(vararg fileNames: String): Iterable<String> {
-    val fileList = ArrayList<String>(fileNames.size)
-
-    fileNames.forEach { name ->
-        fileList.add(name.replace('.', '/') + ".java")
-    }
-
-    return fileList
-}
-
-
-task<JavaCompile>("compileUtils") {
-    // we don't want the default include of **/*.java
-    includes.clear()
-
-    source = fileTree("../Utilities/src")
-    include(javaFile(
-        "dorkbox.util.OS",
-        "dorkbox.util.OSType",
-        "dorkbox.util.Property",
-        "dorkbox.util.NamedThreadFactory",
-        "dorkbox.util.DelayTimer",
-        "dorkbox.util.IO",
-        "dorkbox.util.FileUtil",
-        "dorkbox.util.Base64Fast",
-        "dorkbox.util.RandomUtil",
-        "dorkbox.util.Sys",
-        "dorkbox.util.HashUtil",
-        "dorkbox.util.NativeLoader",
-
-        "dorkbox.util.FastThreadLocal",
-        "dorkbox.util.LocationResolver",
-        "dorkbox.util.MathUtil",
-        "dorkbox.util.MersenneTwisterFast",
-        "dorkbox.util.NativeLoader",
-
-        "dorkbox.util.generics.TypeResolver",
-        "dorkbox.util.generics.DefaultMethodHelper",
-        "dorkbox.util.generics.ClassHelper",
-
-        "dorkbox.util.bytes.BigEndian",
-        "dorkbox.util.bytes.UByte",
-        "dorkbox.util.bytes.UInteger",
-        "dorkbox.util.bytes.ULong",
-        "dorkbox.util.bytes.Unsigned",
-        "dorkbox.util.bytes.UNumber",
-        "dorkbox.util.bytes.UShort",
-        "dorkbox.util.bytes.ByteArrayWrapper",
-        "dorkbox.util.bytes.OptimizeUtilsByteArray",
-        "dorkbox.util.bytes.OptimizeUtilsByteBuf",
-
-        "dorkbox.util.exceptions.SecurityException",
-        "dorkbox.util.exceptions.InitializationException",
-
-
-        "dorkbox.util.collections.ObjectIntMap",
-        "dorkbox.util.collections.IntMap",
-        "dorkbox.util.collections.IntArray",
-        "dorkbox.util.collections.ConcurrentIterator",
-        "dorkbox.util.collections.ConcurrentEntry",
-        "dorkbox.util.collections.LockFreeHashMap",
-        "dorkbox.util.collections.LockFreeIntMap",
-        "dorkbox.util.collections.LockFreeIntBiMap",
-        "dorkbox.util.collections.LockFreeObjectIntBiMap",
-
-        "dorkbox.util.crypto.CryptoECC",
-        "dorkbox.util.crypto.CryptoAES"
-                    ))
-
-    // entire packages/directories
-    include("dorkbox/util/serialization/**/*.java")
-    include("dorkbox/util/entropy/**/*.java")
-    include("dorkbox/util/storage/**/*.java")
-
-    classpath = files(utils)
-    destinationDir = file("$rootDir/build/classes_utilities")
-}
-
-///////////////////////////////
 //////    Task defaults
 ///////////////////////////////
 tasks.withType<JavaCompile> {
@@ -347,9 +259,6 @@ tasks.withType<Jar> {
 }
 
 tasks.jar.get().apply {
-    // include applicable class files from subset of Utilities project
-    from((tasks["compileUtils"] as JavaCompile).outputs)
-
     manifest {
         // https://docs.oracle.com/javase/tutorial/deployment/jar/packageman.html
         attributes["Name"] = Extras.name
@@ -372,26 +281,25 @@ tasks.compileJava.get().apply {
 
 
 dependencies {
-    val netty = api("io.netty:netty-all:4.1.32.Final")
-    val kryo = api("com.esotericsoftware:kryo:4.0.2")
-    api("net.jpountz.lz4:lz4:1.3.0")
+    implementation("io.netty:netty-all:4.1.34.Final")
+    implementation("com.esotericsoftware:kryo:5.0.0-RC2")
+    implementation("net.jpountz.lz4:lz4:1.3.0")
 
-    val bc = api("org.bouncycastle:bcprov-jdk15on:$bcVersion")
-    api("org.bouncycastle:bcpg-jdk15on:$bcVersion")
-    api("org.bouncycastle:bcmail-jdk15on:$bcVersion")
-    api("org.bouncycastle:bctls-jdk15on:$bcVersion")
+    implementation("org.bouncycastle:bcprov-jdk15on:$bcVersion")
+    implementation("org.bouncycastle:bcpg-jdk15on:$bcVersion")
+    implementation("org.bouncycastle:bcmail-jdk15on:$bcVersion")
+    implementation("org.bouncycastle:bctls-jdk15on:$bcVersion")
 
+    implementation("net.jodah:typetools:0.6.1")
+    implementation("de.javakaffee:kryo-serializers:0.45")
 
-    api("com.dorkbox:ObjectPool:2.11")
+    implementation("com.dorkbox:ObjectPool:2.11")
+    implementation("com.dorkbox:Utilities:1.1")
 
-    val slf4j = implementation ("org.slf4j:slf4j-api:1.7.25")
+    implementation("org.slf4j:slf4j-api:1.7.25")
 
     testCompile("junit:junit:4.12")
     testCompile("ch.qos.logback:logback-classic:1.2.3")
-
-    // add compile utils to dependencies
-    implementation(files((tasks["compileUtils"] as JavaCompile).outputs))
-    utils.dependencies += listOf(netty, kryo, slf4j, bc)
 }
 
 ///////////////////////////////
@@ -529,7 +437,7 @@ tasks.named<DependencyUpdatesTask>("dependencyUpdates") {
 //////    Gradle Wrapper Configuration.
 /////  Run this task, then refresh the gradle project
 ///////////////////////////////
-val wrapperUpdate by tasks.creating(Wrapper::class) {
+task<Wrapper>("wrapperUpdate") {
     gradleVersion = "5.3"
     distributionUrl = distributionUrl.replace("bin", "all")
 }

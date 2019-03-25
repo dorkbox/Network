@@ -91,7 +91,7 @@ class InvokeMethodSerializer extends Serializer<InvokeMethod> {
 
     @Override
     public
-    InvokeMethod read(final Kryo kryo, final Input input, final Class<InvokeMethod> type) {
+    InvokeMethod read(final Kryo kryo, final Input input, final Class<? extends InvokeMethod> type) {
         int objectID = input.readInt(true);
         int methodClassID = input.readInt(true);
         byte methodIndex = input.readByte();

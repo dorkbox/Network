@@ -25,21 +25,24 @@ import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.crypto.params.IESParameters;
 import org.bouncycastle.crypto.params.IESWithCipherParameters;
+import org.objenesis.strategy.StdInstantiatorStrategy;
 import org.slf4j.Logger;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;
+import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.Serializer;
-import com.esotericsoftware.kryo.factories.ReflectionSerializerFactory;
-import com.esotericsoftware.kryo.factories.SerializerFactory;
+import com.esotericsoftware.kryo.SerializerFactory;
+import com.esotericsoftware.kryo.SerializerFactory.ReflectionSerializerFactory;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.CollectionSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
+import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import com.esotericsoftware.kryo.util.IdentityMap;
 import com.esotericsoftware.kryo.util.MapReferenceResolver;
-import com.esotericsoftware.kryo.util.Util;
 
+import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
 import dorkbox.network.connection.Connection_;
 import dorkbox.network.connection.KryoExtra;
 import dorkbox.network.connection.ping.PingMessage;
@@ -55,14 +58,12 @@ import dorkbox.network.rmi.RmiRegistrationSerializer;
 import dorkbox.network.rmi.RmiUtils;
 import dorkbox.objectPool.ObjectPool;
 import dorkbox.objectPool.PoolableObject;
-import dorkbox.util.Property;
+import dorkbox.util.OS;
 import dorkbox.util.collections.IntMap;
-import dorkbox.util.serialization.ArraysAsListSerializer;
 import dorkbox.util.serialization.EccPrivateKeySerializer;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import dorkbox.util.serialization.IesParametersSerializer;
 import dorkbox.util.serialization.IesWithCipherParametersSerializer;
-import dorkbox.util.serialization.UnmodifiableCollectionsSerializer;
 import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
@@ -80,13 +81,6 @@ public
 class Serialization implements NetworkSerializationManager {
 
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(Serialization.class.getSimpleName());
-
-    /**
-     * Specify if we want KRYO to use unsafe memory for serialization, or to use the ASM backend. Unsafe memory use is WAY faster, but is
-     * limited to the "same endianess" on all endpoints, and unsafe DOES NOT work on android.
-     */
-    @Property
-    public static boolean useUnsafeMemory = false;
 
     public static
     Serialization DEFAULT() {
@@ -115,7 +109,7 @@ class Serialization implements NetworkSerializationManager {
      *         Kryo#newDefaultSerializer(Class)
      */
     public static
-    <C extends Connection_> Serialization DEFAULT(final boolean references, final boolean registrationRequired, final SerializerFactory factory) {
+    Serialization DEFAULT(final boolean references, final boolean registrationRequired, final SerializerFactory factory) {
 
         final Serialization serialization = new Serialization(references,
                                                               registrationRequired,
@@ -137,11 +131,19 @@ class Serialization implements NetworkSerializationManager {
         serialization.register(StackTraceElement.class);
         serialization.register(StackTraceElement[].class);
 
-        // extra serializers
-        //noinspection ArraysAsListWithZeroOrOneArgument
-        serialization.register(Arrays.asList("").getClass(), new ArraysAsListSerializer());
+        serialization.register(Arrays.asList().getClass());
 
-        UnmodifiableCollectionsSerializer.registerSerializers(serialization);
+        // hacky way to register unmodifiable serializers
+        Kryo kryo = new Kryo() {
+            @Override
+            public
+            Registration register(final Class type, final Serializer serializer) {
+                serialization.register(type, serializer);
+                return null;
+            }
+        };
+
+        UnmodifiableCollectionsSerializer.registerSerializers(kryo);
 
         return serialization;
     }
@@ -173,7 +175,7 @@ class Serialization implements NetworkSerializationManager {
 
 
     // reflectASM doesn't work on android
-    private final boolean useAsm = !useUnsafeMemory && !Util.IS_ANDROID;
+    private final boolean useAsm = !OS.isAndroid();
     private Logger wireReadLogger;
     private Logger wireWriteLogger;
 
@@ -215,7 +217,11 @@ class Serialization implements NetworkSerializationManager {
                     // we HAVE to pre-allocate the KRYOs
                     KryoExtra kryo = new KryoExtra(Serialization.this);
 
-                    kryo.getFieldSerializerConfig().setUseAsm(useAsm);
+
+                    // BY DEFAULT, DefaultInstantiatorStrategy() will use ReflectASM
+                    // StdInstantiatorStrategy will create classes bypasses the constructor (which can be useful in some cases) THIS IS A FALLBACK!
+                    kryo.setInstantiatorStrategy(new DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
+
                     kryo.setRegistrationRequired(registrationRequired);
 
                     kryo.setReferences(references);

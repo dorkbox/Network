@@ -43,9 +43,8 @@ class InvocationHandlerSerializer extends Serializer<Object> {
     }
 
     @Override
-    @SuppressWarnings({"unchecked", "AutoBoxing"})
     public
-    Object read(Kryo kryo, Input input, Class<Object> type) {
+    Object read(final Kryo kryo, final Input input, final Class<?> type) {
         int objectID = input.readInt(true);
 
         KryoExtra kryoExtra = (KryoExtra) kryo;

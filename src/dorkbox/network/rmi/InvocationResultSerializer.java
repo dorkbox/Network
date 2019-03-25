@@ -19,6 +19,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
+
 import dorkbox.network.connection.KryoExtra;
 
 public
@@ -37,7 +38,7 @@ class InvocationResultSerializer extends FieldSerializer<InvokeMethodResult> {
 
     @Override
     public
-    InvokeMethodResult read(Kryo kryo, Input input, Class<InvokeMethodResult> type) {
+    InvokeMethodResult read(final Kryo kryo, final Input input, final Class<? extends InvokeMethodResult> type) {
         InvokeMethodResult result = super.read(kryo, input, type);
         result.rmiObjectId = input.readInt(true);
         return result;

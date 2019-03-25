@@ -22,9 +22,6 @@ import org.bouncycastle.crypto.modes.GCMBlockCipher;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.util.DefaultClassResolver;
-import com.esotericsoftware.kryo.util.DefaultStreamFactory;
-import com.esotericsoftware.kryo.util.MapReferenceResolver;
 
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
@@ -93,7 +90,7 @@ class KryoExtra extends Kryo {
 
     public
     KryoExtra(final NetworkSerializationManager serializationManager) {
-        super(new DefaultClassResolver(), new MapReferenceResolver(), new DefaultStreamFactory());
+        super();
 
         this.serializationManager = serializationManager;
     }
