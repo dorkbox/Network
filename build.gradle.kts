@@ -16,6 +16,8 @@
 
 import Build_gradle.Extras.bcVersion
 import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
+import net.sf.json.JSONObject
+import java.net.URL
 import java.time.Instant
 import java.util.*
 import kotlin.collections.component1
@@ -435,9 +437,35 @@ tasks.named<DependencyUpdatesTask>("dependencyUpdates") {
 
 ///////////////////////////////
 //////    Gradle Wrapper Configuration.
-/////  Run this task, then refresh the gradle project
+/////  Run this task (GRADLE -> autoUpdateGradleWrapper), then refresh the gradle project
 ///////////////////////////////
-task<Wrapper>("wrapperUpdate") {
-    gradleVersion = "5.3"
-    distributionUrl = distributionUrl.replace("bin", "all")
+task<Task>("autoUpdateGradleWrapper") {
+    group = "gradle"
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+
+    // always make sure this task when specified. ALWAYS skip for other tasks, Never skip for us.
+    // This is a little bit of a PITA, because of how gradle configures, then runs tasks...
+    if (gradle.startParameter.taskNames.contains("autoUpdateGradleWrapper")) {
+        finalizedBy(task<Task>("autoUpdateGradleWrapperDownloader") {
+            group = "gradle"
+            outputs.upToDateWhen { false }
+            outputs.cacheIf { false }
+
+            val releaseText = URL("https://services.gradle.org/versions/current").readText()
+            val foundGradleVersion = JSONObject.fromObject(releaseText)["version"] as String?
+
+            if (foundGradleVersion.isNullOrEmpty()) {
+                println("\tUnable to detect Newest Gradle Version. Output json: $releaseText")
+            }
+            else {
+                println("\tDetected Newest Gradle Version: '$foundGradleVersion'")
+
+                finalizedBy(task<Wrapper>("wrapperUpdate") {
+                    gradleVersion = foundGradleVersion
+                    distributionUrl = distributionUrl.replace("bin", "all")
+                })
+            }
+        })
+    }
 }
