@@ -58,7 +58,7 @@ class Broadcast {
      */
     public static
     String getVersion() {
-        return "2.17";
+        return "3.0";
     }
 
     /**
