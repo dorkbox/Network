@@ -29,9 +29,9 @@ import kotlin.reflect.full.declaredMemberProperties
 ///////////////////////////////
 //////    PUBLISH TO SONATYPE / MAVEN CENTRAL
 //////
-////// TESTING : local maven repo <PUBLISHING - publishToMavenLocal>
+////// TESTING (local maven repo) -> PUBLISHING -> publishToMavenLocal
 //////
-////// RELEASE : sonatype / maven central, <PUBLISHING - publish> then <RELEASE - closeAndReleaseRepository>
+////// RELEASE (sonatype / maven central) -> "PUBLISH AND RELEASE" -> publishAndRelease
 ///////////////////////////////
 
 println("\tGradle ${project.gradle.gradleVersion} on Java ${JavaVersion.current()}")
@@ -41,6 +41,8 @@ plugins {
     signing
     `maven-publish`
 
+    // publish on sonatype
+    id("de.marcphilipp.nexus-publish") version "0.2.0"
     // close and release on sonatype
     id("io.codearte.nexus-staging") version "0.20.0"
 
@@ -249,6 +251,10 @@ repositories {
 ///////////////////////////////
 //////    Task defaults
 ///////////////////////////////
+tasks.compileJava.get().apply {
+    println("\tCompiling classes to Java $sourceCompatibility")
+}
+
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 
@@ -277,11 +283,6 @@ tasks.jar.get().apply {
     }
 }
 
-tasks.compileJava.get().apply {
-    println("\tCompiling classes to Java $sourceCompatibility")
-}
-
-
 dependencies {
     implementation("io.netty:netty-all:4.1.34.Final")
     implementation("com.esotericsoftware:kryo:5.0.0-RC2")
@@ -307,24 +308,10 @@ dependencies {
 ///////////////////////////////
 //////    PUBLISH TO SONATYPE / MAVEN CENTRAL
 //////
-////// TESTING : local maven repo <PUBLISHING - publishToMavenLocal>
+////// TESTING (local maven repo) -> PUBLISHING -> publishToMavenLocal
 //////
-////// RELEASE : sonatype / maven central, <PUBLISHING - publish> then <RELEASE - closeAndReleaseRepository>
+////// RELEASE (sonatype / maven central) -> "PUBLISH AND RELEASE" -> publishAndRelease
 ///////////////////////////////
-val sourceJar = task<Jar>("sourceJar") {
-    description = "Creates a JAR that contains the source code."
-
-    from(sourceSets["main"].java)
-
-    archiveClassifier.set("sources")
-}
-
-val javaDocJar = task<Jar>("javaDocJar") {
-    description = "Creates a JAR that contains the javadocs."
-
-    archiveClassifier.set("javadoc")
-}
-
 publishing {
     publications {
         create<MavenPublication>("maven") {
@@ -334,8 +321,18 @@ publishing {
 
             from(components["java"])
 
-            artifact(sourceJar)
-            artifact(javaDocJar)
+            artifact(task<Jar>("sourceJar") {
+                description = "Creates a JAR that contains the source code."
+
+                from(sourceSets["main"].java)
+                archiveClassifier.set("sources")
+            })
+
+            artifact(task<Jar>("javaDocJar") {
+                description = "Creates a JAR that contains the javadocs."
+
+                archiveClassifier.set("javadoc")
+            })
 
             pom {
                 name.set(Extras.name)
@@ -366,19 +363,11 @@ publishing {
         }
     }
 
-
-    repositories {
-        maven {
-            setUrl("https://oss.sonatype.org/service/local/staging/deploy/maven2")
-            credentials {
-                username = Extras.sonatypeUserName
-                password = Extras.sonatypePassword
-            }
-        }
-    }
-
-
     tasks.withType<PublishToMavenRepository> {
+        doFirst {
+            println("\tPublishing '${publication.groupId}:${publication.artifactId}:${publication.version}' to ${repository.url}")
+        }
+
         onlyIf {
             publication == publishing.publications["maven"] && repository == publishing.repositories["maven"]
         }
@@ -399,17 +388,31 @@ publishing {
 
         println("Maven URL: $url$projectName/$name/$version/")
     }
-}
 
-nexusStaging {
-    username = Extras.sonatypeUserName
-    password = Extras.sonatypePassword
-}
+    nexusStaging {
+        username = Extras.sonatypeUserName
+        password = Extras.sonatypePassword
+    }
 
-signing {
-    sign(publishing.publications["maven"])
-}
+    nexusPublishing {
+        packageGroup.set(Extras.group)
+        repositoryName.set("maven")
+        username.set(Extras.sonatypeUserName)
+        password.set(Extras.sonatypePassword)
+    }
 
+    signing {
+        sign(publishing.publications["maven"])
+    }
+
+    task<Task>("publishAndRelease") {
+        group = "publish and release"
+
+        // required to make sure the tasks run in the correct order
+        tasks["closeAndReleaseRepository"].mustRunAfter(tasks["publishToNexus"])
+        dependsOn("publishToNexus", "closeAndReleaseRepository")
+    }
+}
 
 
 ///////////////////////////////
