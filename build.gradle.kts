@@ -419,13 +419,17 @@ publishing {
 /////   Prevent anything other than a release from showing version updates
 ////  https://github.com/ben-manes/gradle-versions-plugin/blob/master/README.md
 ///////////////////////////////
-tasks.named<DependencyUpdatesTask>("dependencyUpdates") {
+tasks.withType<DependencyUpdatesTask> {
+    group = "gradle"
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+
     resolutionStrategy {
         componentSelection {
             all {
                 val rejected = listOf("alpha", "beta", "rc", "cr", "m", "preview")
-                    .map { qualifier -> Regex("(?i).*[.-]$qualifier[.\\d-]*") }
-                    .any { it.matches(candidate.version) }
+                        .map { qualifier -> Regex("(?i).*[.-]$qualifier[.\\d-]*") }
+                        .any { it.matches(candidate.version) }
                 if (rejected) {
                     reject("Release candidate")
                 }
@@ -465,6 +469,10 @@ task<Task>("autoUpdateGradleWrapper") {
                 println("\tDetected Newest Gradle Version: '$foundGradleVersion'")
 
                 finalizedBy(task<Wrapper>("wrapperUpdate") {
+                    group = "gradle"
+                    outputs.upToDateWhen { false }
+                    outputs.cacheIf { false }
+
                     gradleVersion = foundGradleVersion
                     distributionUrl = distributionUrl.replace("bin", "all")
                 })
