@@ -15,9 +15,6 @@
  */
 
 import Build_gradle.Extras.bcVersion
-import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
-import net.sf.json.JSONObject
-import java.net.URL
 import java.time.Instant
 import java.util.*
 import kotlin.collections.component1
@@ -48,11 +45,9 @@ plugins {
 
     id("com.dorkbox.Licensing") version "1.4"
     id("com.dorkbox.VersionUpdate") version "1.4.1"
+    id("com.dorkbox.GradleUtils") version "1.0"
 
-    // setup checking for the latest version of a plugin or dependency
-    id("com.github.ben-manes.versions") version "0.21.0"
-
-    kotlin("jvm") version "1.3.21"
+    kotlin("jvm") version "1.3.31"
 }
 
 object Extras {
@@ -411,72 +406,5 @@ publishing {
         // required to make sure the tasks run in the correct order
         tasks["closeAndReleaseRepository"].mustRunAfter(tasks["publishToNexus"])
         dependsOn("publishToNexus", "closeAndReleaseRepository")
-    }
-}
-
-
-///////////////////////////////
-/////   Prevent anything other than a release from showing version updates
-////  https://github.com/ben-manes/gradle-versions-plugin/blob/master/README.md
-///////////////////////////////
-tasks.withType<DependencyUpdatesTask> {
-    group = "gradle"
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-
-    resolutionStrategy {
-        componentSelection {
-            all {
-                val rejected = listOf("alpha", "beta", "rc", "cr", "m", "preview")
-                        .map { qualifier -> Regex("(?i).*[.-]$qualifier[.\\d-]*") }
-                        .any { it.matches(candidate.version) }
-                if (rejected) {
-                    reject("Release candidate")
-                }
-            }
-        }
-    }
-
-    // optional parameters
-    checkForGradleUpdate = true
-}
-
-
-///////////////////////////////
-//////    Gradle Wrapper Configuration.
-/////  Run this task (GRADLE -> autoUpdateGradleWrapper), then refresh the gradle project
-///////////////////////////////
-task<Task>("autoUpdateGradleWrapper") {
-    group = "gradle"
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-
-    // always make sure this task when specified. ALWAYS skip for other tasks, Never skip for us.
-    // This is a little bit of a PITA, because of how gradle configures, then runs tasks...
-    if (gradle.startParameter.taskNames.contains("autoUpdateGradleWrapper")) {
-        finalizedBy(task<Task>("autoUpdateGradleWrapperDownloader") {
-            group = "gradle"
-            outputs.upToDateWhen { false }
-            outputs.cacheIf { false }
-
-            val releaseText = URL("https://services.gradle.org/versions/current").readText()
-            val foundGradleVersion = JSONObject.fromObject(releaseText)["version"] as String?
-
-            if (foundGradleVersion.isNullOrEmpty()) {
-                println("\tUnable to detect Newest Gradle Version. Output json: $releaseText")
-            }
-            else {
-                println("\tDetected Newest Gradle Version: '$foundGradleVersion'")
-
-                finalizedBy(task<Wrapper>("wrapperUpdate") {
-                    group = "gradle"
-                    outputs.upToDateWhen { false }
-                    outputs.cacheIf { false }
-
-                    gradleVersion = foundGradleVersion
-                    distributionUrl = distributionUrl.replace("bin", "all")
-                })
-            }
-        })
     }
 }
