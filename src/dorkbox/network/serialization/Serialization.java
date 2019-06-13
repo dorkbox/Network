@@ -775,38 +775,23 @@ class Serialization implements NetworkSerializationManager {
 
     /**
      * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
-     * <p>
+     * <p/>
      * There is a small speed penalty if there were no kryo's available to use.
      */
     @Override
     public final
-    void writeWithCrypto(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
+    void writeWithCompression(Connection_ connection, ByteBuf buffer, Object message) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
-            if (connection.isLoopback()) {
-                if (wireWriteLogger.isTraceEnabled()) {
-                    int start = buffer.writerIndex();
-                    kryo.writeCompressed(connection, buffer, message);
-                    int end = buffer.writerIndex();
+            if (wireWriteLogger.isTraceEnabled()) {
+                int start = buffer.writerIndex();
+                kryo.writeCompressed(connection, buffer, message);
+                int end = buffer.writerIndex();
 
-                    wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
-                }
-                else {
-                    kryo.writeCompressed(connection, buffer, message);
-                }
+                wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
             }
             else {
-                if (wireWriteLogger.isTraceEnabled()) {
-                    int start = buffer.writerIndex();
-                    kryo.writeCrypto(connection, buffer, message);
-                    int end = buffer.writerIndex();
-
-                    wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
-                }
-                else {
-                    kryo.writeCrypto(connection, buffer, message);
-                }
+                kryo.writeCompressed(connection, buffer, message);
             }
         } finally {
             kryoPool.put(kryo);
@@ -815,8 +800,111 @@ class Serialization implements NetworkSerializationManager {
 
     /**
      * Reads an object from the buffer.
+     *
+     * @param length should ALWAYS be the length of the expected object!
+     */
+    @Override
+    public final
+    Object read(Connection_ connection, ByteBuf buffer, int length) throws IOException {
+        final KryoExtra kryo = kryoPool.take();
+        try {
+            if (wireReadLogger.isTraceEnabled()) {
+                int start = buffer.readerIndex();
+                Object object = kryo.read(connection, buffer);
+                int end = buffer.readerIndex();
+
+                wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+
+                return object;
+            }
+            else {
+                return kryo.read(connection, buffer);
+            }
+        } finally {
+            kryoPool.put(kryo);
+        }
+    }
+
+    /**
+     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
+     * <p/>
+     * There is a small speed penalty if there were no kryo's available to use.
+     */
+    @Override
+    public final
+    void write(Connection_ connection, ByteBuf buffer, Object message) throws IOException {
+        final KryoExtra kryo = kryoPool.take();
+        try {
+            if (wireWriteLogger.isTraceEnabled()) {
+                int start = buffer.writerIndex();
+                kryo.write(connection, buffer, message);
+                int end = buffer.writerIndex();
+
+                wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+            }
+            else {
+                kryo.write(connection, buffer, message);
+            }
+        } finally {
+            kryoPool.put(kryo);
+        }
+    }
+
+    /**
+     * Reads an object from the buffer.
+     *
+     * @param connection can be NULL
+     * @param length should ALWAYS be the length of the expected object!
+     */
+    @Override
+    public final
+    Object readWithCompression(Connection_ connection, ByteBuf buffer, int length) throws IOException {
+        final KryoExtra kryo = kryoPool.take();
+        try {
+            if (wireReadLogger.isTraceEnabled()) {
+                int start = buffer.readerIndex();
+                Object object = kryo.readCompressed(connection, buffer, length);
+                int end = buffer.readerIndex();
+
+                wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+
+                return object;
+            }
+            else {
+                return kryo.readCompressed(connection, buffer, length);
+            }
+        } finally {
+            kryoPool.put(kryo);
+        }
+    }
+
+    /**
+     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
      * <p>
-     * Crypto + sequence number
+     * There is a small speed penalty if there were no kryo's available to use.
+     */
+    @Override
+    public final
+    void writeWithCrypto(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
+        final KryoExtra kryo = kryoPool.take();
+        try {
+            if (wireWriteLogger.isTraceEnabled()) {
+                int start = buffer.writerIndex();
+                kryo.writeCrypto(connection, buffer, message);
+                int end = buffer.writerIndex();
+
+                wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+            }
+            else {
+                kryo.writeCrypto(connection, buffer, message);
+            }
+        } finally {
+            kryoPool.put(kryo);
+        }
+    }
+
+    /**
+     * Reads an object from the buffer.
      *
      * @param connection can be NULL
      * @param length should ALWAYS be the length of the expected object!
@@ -827,34 +915,17 @@ class Serialization implements NetworkSerializationManager {
     Object readWithCrypto(final Connection_ connection, final ByteBuf buffer, final int length) throws IOException {
         final KryoExtra kryo = kryoPool.take();
         try {
-            // we only need to encrypt when NOT on loopback, since encrypting on loopback is a waste of CPU
-            if (connection.isLoopback()) {
-                if (wireReadLogger.isTraceEnabled()) {
-                    int start = buffer.readerIndex();
-                    Object object = kryo.readCompressed(connection, buffer, length);
-                    int end = buffer.readerIndex();
+            if (wireReadLogger.isTraceEnabled()) {
+                int start = buffer.readerIndex();
+                Object object = kryo.readCrypto(connection, buffer, length);
+                int end = buffer.readerIndex();
 
-                    wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
+                wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
 
-                    return object;
-                }
-                else {
-                    return kryo.readCompressed(connection, buffer, length);
-                }
+                return object;
             }
             else {
-                if (wireReadLogger.isTraceEnabled()) {
-                    int start = buffer.readerIndex();
-                    Object object = kryo.readCrypto(connection, buffer, length);
-                    int end = buffer.readerIndex();
-
-                    wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
-
-                    return object;
-                }
-                else {
-                    return kryo.readCrypto(connection, buffer, length);
-                }
+                return kryo.readCrypto(connection, buffer, length);
             }
         } finally {
             kryoPool.put(kryo);

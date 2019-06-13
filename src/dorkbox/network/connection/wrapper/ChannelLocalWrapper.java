@@ -17,7 +17,8 @@ package dorkbox.network.connection.wrapper;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.bouncycastle.crypto.params.ParametersWithIV;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPoint;
@@ -30,11 +31,13 @@ import io.netty.util.concurrent.Promise;
 
 public
 class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
+    private static final SecretKey dummyCryptoKey = new SecretKeySpec(new byte[32], "AES");
 
     private final Channel channel;
 
     private final AtomicBoolean shouldFlush = new AtomicBoolean(false);
     private String remoteAddress;
+
 
     public
     ChannelLocalWrapper(MetaChannel metaChannel) {
@@ -95,8 +98,8 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
 
     @Override
     public
-    ParametersWithIV cryptoParameters() {
-        return null;
+    SecretKey cryptoKey() {
+        return dummyCryptoKey;
     }
 
     @Override

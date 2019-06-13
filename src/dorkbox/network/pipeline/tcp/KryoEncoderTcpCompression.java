@@ -15,34 +15,28 @@
  */
 package dorkbox.network.pipeline.tcp;
 
+import java.io.IOException;
+
 import dorkbox.network.connection.Connection_;
 import dorkbox.network.serialization.NetworkSerializationManager;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 
-// on client this is MessageToMessage (because of the UdpDecoder in the pipeline!)
-
+@Sharable
 public
-class KryoDecoderCrypto extends KryoDecoder {
+class KryoEncoderTcpCompression extends KryoEncoderTcp {
 
     public
-    KryoDecoderCrypto(final NetworkSerializationManager serializationManager) {
+    KryoEncoderTcpCompression(final NetworkSerializationManager serializationManager) {
         super(serializationManager);
     }
 
     @Override
     protected
-    Object readObject(final NetworkSerializationManager serializationManager,
-                      final ChannelHandlerContext context,
-                      final ByteBuf in,
-                      final int length) throws Exception {
-
-        try {
-            Connection_ connection = (Connection_) context.pipeline()
-                                                          .last();
-            return serializationManager.readWithCrypto(connection, in, length);
-        } catch (Exception e) {
-           throw e;
-        }
+    void writeObject(final NetworkSerializationManager serializationManager,
+                     final ChannelHandlerContext context, final Object msg, final ByteBuf buffer) throws IOException {
+        Connection_ connection = (Connection_) context.pipeline().last();
+        serializationManager.writeWithCompression(connection, buffer, msg);
     }
 }

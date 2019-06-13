@@ -21,6 +21,8 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
+import javax.crypto.spec.SecretKeySpec;
+
 import org.bouncycastle.crypto.BasicAgreement;
 import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
 import org.bouncycastle.crypto.digests.SHA384Digest;
@@ -99,7 +101,7 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
         //  IN: session ID + public key + ecc parameters (which are a nonce. the SERVER defines what these are)
         // OUT: remote ECDH shared payload
-        if (metaChannel.aesKey == null && registration.publicKey != null) {
+        if (metaChannel.secretKey == null && registration.publicKey != null) {
             // whoa! Didn't send valid public key info!
             if (invalidPublicKey(registration, type)) {
                 shutdown(channel, registration.sessionID);
@@ -133,7 +135,7 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
         //  IN: remote ECDH shared payload
         // OUT: hasMore=true if we have more registrations to do, false otherwise
-        if (metaChannel.aesKey == null) {
+        if (metaChannel.secretKey == null) {
             /*
              * Diffie-Hellman-Merkle key exchange for the AES key
              * http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
@@ -161,14 +163,8 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
             sha384.update(keySeed, 0, keySeed.length);
             sha384.doFinal(digest, 0);
 
-            metaChannel.aesKey = Arrays.copyOfRange(digest, 0, 32); // 256bit keysize (32 bytes)
-            metaChannel.aesIV = Arrays.copyOfRange(digest, 32, 44); // 96bit blocksize (12 bytes) required by AES-GCM
-
-            if (invalidAES(metaChannel)) {
-                // abort if something messed up!
-                shutdown(channel, registration.sessionID);
-                return;
-            }
+            byte[] key = org.bouncycastle.util.Arrays.copyOfRange(digest, 0, 32); // 256bit keysize (32 bytes)
+            metaChannel.secretKey = new SecretKeySpec(key, "AES");
 
             Registration outboundRegister = new Registration(metaChannel.sessionId);
 

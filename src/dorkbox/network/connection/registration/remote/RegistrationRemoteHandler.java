@@ -201,25 +201,6 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     String getConnectionDirection();
 
     /**
-     * @return true if validation was successful
-     */
-    final
-    boolean invalidAES(final MetaChannel metaChannel) {
-        if (metaChannel.aesKey.length != 32) {
-            logger.error("Fatal error trying to use AES key (wrong key length).");
-            return true;
-        }
-        // IV length must == 12 because we are using GCM!
-        else if (metaChannel.aesIV.length != 12) {
-            logger.error("Fatal error trying to use AES IV (wrong IV length).");
-            return true;
-        }
-
-        return false;
-    }
-
-
-    /**
      * upgrades a channel ONE channel at a time
      */
     final

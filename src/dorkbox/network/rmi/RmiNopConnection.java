@@ -14,7 +14,7 @@
  */
 package dorkbox.network.rmi;
 
-import org.bouncycastle.crypto.params.ParametersWithIV;
+import javax.crypto.SecretKey;
 
 import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.Connection_;
@@ -130,13 +130,13 @@ class RmiNopConnection implements Connection_ {
 
     @Override
     public
-    long getNextGcmSequence() {
+    long nextGcmSequence() {
         return 0;
     }
 
     @Override
     public
-    ParametersWithIV getCryptoParameters() {
+    SecretKey cryptoKey() {
         return null;
     }
 }

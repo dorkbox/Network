@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.bouncycastle.crypto.params.ParametersWithIV;
+import javax.crypto.SecretKey;
 
 import dorkbox.network.Client;
 import dorkbox.network.connection.bridge.ConnectionBridge;
@@ -192,26 +192,24 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
     }
 
     /**
-     * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal
-     *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
-     *          clobber each other
+     * @return the AES key. key=32 byte, iv=12 bytes (AES-GCM implementation).
      */
     @Override
     public final
-    ParametersWithIV getCryptoParameters() {
-        return this.channelWrapper.cryptoParameters();
+    SecretKey cryptoKey() {
+        return this.channelWrapper.cryptoKey();
     }
 
     /**
      * This is the per-message sequence number.
      *
-     *  The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
+     *  The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 4 (external counter) + 4 (GCM counter)
      *  The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
      *  counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
      */
     @Override
     public final
-    long getNextGcmSequence() {
+    long nextGcmSequence() {
         return aes_gcm_iv.getAndIncrement();
     }
 

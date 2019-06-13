@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection;
 
-import org.bouncycastle.crypto.params.ParametersWithIV;
+import javax.crypto.SecretKey;
 
 import dorkbox.network.rmi.ConnectionRmiSupport;
 
@@ -33,19 +33,17 @@ interface Connection_ extends Connection {
     /**
      * This is the per-message sequence number.
      *
-     *  The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
+     *  The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 4 (external counter) + 4 (GCM counter)
      *  The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
      *  counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
      */
-    long getNextGcmSequence();
+    long nextGcmSequence();
 
 
     /**
-     * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal
-     *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
-     *          clobber each other
+     * @return the AES key.
      */
-    ParametersWithIV getCryptoParameters();
+    SecretKey cryptoKey();
 
     /**
      * @return the endpoint associated with this connection

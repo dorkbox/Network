@@ -17,15 +17,13 @@ package dorkbox.network.connection.wrapper;
 
 import java.net.InetSocketAddress;
 
-import org.bouncycastle.crypto.params.KeyParameter;
-import org.bouncycastle.crypto.params.ParametersWithIV;
+import javax.crypto.SecretKey;
 
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.registration.MetaChannel;
-import dorkbox.util.FastThreadLocal;
 import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.util.NetUtil;
 
@@ -43,11 +41,7 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     private final String remoteAddress;
     private final boolean isLoopback;
 
-    // GCM IV. hacky way to prevent tons of GC and to not clobber the original parameters
-    private final byte[] aesKey; // AES-256 requires 32 bytes
-    private final byte[] aesIV; // AES-GCM requires 12 bytes
-
-    private final FastThreadLocal<ParametersWithIV> cryptoParameters;
+    private final SecretKey secretKey;
 
     public
     ChannelNetworkWrapper(final MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
@@ -72,17 +66,8 @@ class ChannelNetworkWrapper implements ChannelWrapper {
         this.remoteAddress = remoteAddress.getAddress().getHostAddress();
         this.remotePublicKeyChanged = metaChannel.changedRemoteKey;
 
-        // AES key & IV (only for networked connections)
-        aesKey = metaChannel.aesKey;
-        aesIV = metaChannel.aesIV;
-
-        cryptoParameters = new FastThreadLocal<ParametersWithIV>() {
-            @Override
-            public
-            ParametersWithIV initialValue() {
-                return new ParametersWithIV(new KeyParameter(aesKey), aesIV);
-            }
-        };
+        // AES key (only for networked connections)
+        secretKey = metaChannel.secretKey;
     }
 
     public final
@@ -118,14 +103,12 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     }
 
     /**
-     * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal
-     *          because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
-     *          clobber each other
+     * @return the AES key.
      */
     @Override
     public
-    ParametersWithIV cryptoParameters() {
-        return this.cryptoParameters.get();
+    SecretKey cryptoKey() {
+        return this.secretKey;
     }
 
     @Override

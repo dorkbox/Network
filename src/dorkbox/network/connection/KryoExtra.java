@@ -16,23 +16,26 @@
 package dorkbox.network.connection;
 
 import java.io.IOException;
+import java.security.SecureRandom;
 
-import org.bouncycastle.crypto.engines.AESFastEngine;
-import org.bouncycastle.crypto.modes.GCMBlockCipher;
-import org.bouncycastle.crypto.params.ParametersWithIV;
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 
 import dorkbox.network.pipeline.ByteBufInput;
 import dorkbox.network.pipeline.ByteBufOutput;
 import dorkbox.network.rmi.ConnectionRmiSupport;
 import dorkbox.network.rmi.RmiNopConnection;
 import dorkbox.network.serialization.NetworkSerializationManager;
-import dorkbox.util.bytes.BigEndian;
+import dorkbox.util.OS;
 import dorkbox.util.bytes.OptimizeUtilsByteArray;
 import dorkbox.util.bytes.OptimizeUtilsByteBuf;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import io.netty.buffer.ByteBufUtil;
 import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
@@ -43,6 +46,9 @@ import net.jpountz.lz4.LZ4FastDecompressor;
 @SuppressWarnings("Duplicates")
 public
 class KryoExtra extends Kryo {
+    private static final int ABSOLUTE_MAX_SIZE_OBJECT = EndPoint.udpMaxSize * 1000; // by default, this is about 500k
+    private static final boolean DEBUG = false;
+
     private static final Connection_ NOP_CONNECTION = new RmiNopConnection();
 
     // snappycomp   :       7.534 micros/op;  518.5 MB/s (output: 55.1%)
@@ -52,39 +58,31 @@ class KryoExtra extends Kryo {
     private static final LZ4Factory factory = LZ4Factory.fastestInstance();
 
     // for kryo serialization
-    private final ByteBufInput reader = new ByteBufInput();
-    private final ByteBufOutput writer = new ByteBufOutput();
+    private final ByteBufInput readerBuff = new ByteBufInput();
+    private final ByteBufOutput writerBuff = new ByteBufOutput();
+
+    // crypto + compression have to work with native byte arrays, so here we go...
+    private final Input reader = new Input(ABSOLUTE_MAX_SIZE_OBJECT);
+    private final Output writer = new Output(ABSOLUTE_MAX_SIZE_OBJECT);
+
+    private final byte[] temp = new byte[ABSOLUTE_MAX_SIZE_OBJECT];
+
 
     // volatile to provide object visibility for entire class. This is unique per connection
     public volatile ConnectionRmiSupport rmiSupport;
 
-    private final GCMBlockCipher aesEngine = new GCMBlockCipher(new AESFastEngine());
+    private static final String ALGORITHM = "AES/GCM/NoPadding";
+    private static final int TAG_LENGTH_BIT = 128;
+    private static final int IV_LENGTH_BYTE = 12;
 
+    private final SecureRandom secureRandom = new SecureRandom();
+    private final Cipher cipher;
 
-    // writing data
-    private final ByteBuf tempBuffer = Unpooled.buffer(EndPoint.udpMaxSize);
     private LZ4Compressor compressor = factory.fastCompressor();
-
-    private int inputArrayLength = -1;
-    private byte[] inputArray;
-
-    private int compressOutputLength = -1;
-    private byte[] compressOutput;
-
-    private int cryptoOutputLength = -1;
-    private byte[] cryptoOutput;
-
-
-    // reading data
     private LZ4FastDecompressor decompressor = factory.fastDecompressor();
 
-    private int decryptOutputLength = -1;
-    private byte[] decryptOutput;
-    private ByteBuf decryptBuf;
 
-    private int decompressOutputLength = -1;
-    private byte[] decompressOutput;
-    private ByteBuf decompressBuf;
+
 
     private NetworkSerializationManager serializationManager;
 
@@ -93,499 +91,393 @@ class KryoExtra extends Kryo {
         super();
 
         this.serializationManager = serializationManager;
+
+        try {
+            cipher = Cipher.getInstance(ALGORITHM);
+        } catch (Exception e) {
+            throw new IllegalStateException("could not get cipher instance", e);
+        }
     }
 
+    /**
+     * This is NOT ENCRYPTED
+     */
     public synchronized
     void write(final ByteBuf buffer, final Object message) throws IOException {
-        // these will always be NULL during connection initialization
-        this.rmiSupport = null;
+        write(NOP_CONNECTION, buffer, message);
+    }
+
+    /**
+     * This is NOT ENCRYPTED
+     */
+    public synchronized
+    void write(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
+        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
+        this.rmiSupport = connection.rmiSupport();
 
         // write the object to the NORMAL output buffer!
-        writer.setBuffer(buffer);
+        writerBuff.setBuffer(buffer);
+
+        writeClassAndObject(writerBuff, message);
+    }
+
+    /**
+     * This is NOT ENCRYPTED
+     *
+     *  ++++++++++++++++++++++++++
+     *  + class and object bytes +
+     *  ++++++++++++++++++++++++++
+     */
+    public synchronized
+    Object read(final ByteBuf buffer) throws IOException {
+        return read(NOP_CONNECTION, buffer);
+    }
+
+    /**
+     * This is NOT ENCRYPTED
+     *
+     *  ++++++++++++++++++++++++++
+     *  + class and object bytes +
+     *  ++++++++++++++++++++++++++
+     *
+     */
+    public synchronized
+    Object read(final Connection_ connection, final ByteBuf buffer) throws IOException {
+        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
+        this.rmiSupport = connection.rmiSupport();
+
+        // read the object from the buffer.
+        readerBuff.setBuffer(buffer);
+
+        return readClassAndObject(readerBuff); // this properly sets the readerIndex, but only if it's the correct buffer
+    }
+
+    ////////////////
+    ////////////////
+    ////////////////
+    // for more complicated writes, sadly, we have to deal DIRECTLY with byte arrays
+    ////////////////
+    ////////////////
+    ////////////////
+
+    /**
+     * OUTPUT:
+     *  ++++++++++++++++++++++++++
+     *  + class and object bytes +
+     *  ++++++++++++++++++++++++++
+     */
+    private
+    void write(final Connection_ connection, final Output writer, final Object message) {
+        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
+        this.rmiSupport = connection.rmiSupport();
+
+        // write the object to the NORMAL output buffer!
+        writer.reset();
 
         writeClassAndObject(writer, message);
     }
 
-    public synchronized
-    Object read(final ByteBuf buffer) throws IOException {
-        // these will always be NULL during connection initialization
-        this.rmiSupport = null;
+    /**
+     * INPUT:
+     *  ++++++++++++++++++++++++++
+     *  + class and object bytes +
+     *  ++++++++++++++++++++++++++
+     */
+    private
+    Object read(final Connection_ connection, final Input reader) {
+        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
+        this.rmiSupport = connection.rmiSupport();
 
-        ////////////////
-        // Note: we CANNOT write BACK to the buffer as "temp" storage, since there could be additional data on it!
-        ////////////////
-
-        ByteBuf inputBuf = buffer;
-
-        // read the object from the buffer.
-        reader.setBuffer(inputBuf);
-
-        return readClassAndObject(reader); // this properly sets the readerIndex, but only if it's the correct buffer
+        return readClassAndObject(reader);
     }
 
-    /**
-     * This is NOT ENCRYPTED (and is only done on the loopback connection!)
-     */
+
     public synchronized
     void writeCompressed(final ByteBuf buffer, final Object message) throws IOException {
         writeCompressed(NOP_CONNECTION, buffer, message);
     }
 
     /**
-     * This is NOT ENCRYPTED (and is only done on the loopback connection!)
+     * BUFFER:
+     *  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *  +  uncompressed length (1-4 bytes)  +  compressed data   +
+     *  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *
+     * COMPRESSED DATA:
+     *  ++++++++++++++++++++++++++
+     *  + class and object bytes +
+     *  ++++++++++++++++++++++++++
      */
     public synchronized
     void writeCompressed(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
-        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
-        this.rmiSupport = connection.rmiSupport();
+        // write the object to a TEMP buffer! this will be compressed later
+        write(connection, writer, message);
 
-        ByteBuf objectOutputBuffer = this.tempBuffer;
-        objectOutputBuffer.clear(); // always have to reset everything
-
-        // write the object to a TEMP buffer! this will be compressed
-        writer.setBuffer(objectOutputBuffer);
-
-        writeClassAndObject(writer, message);
-
-        // save off how much data the object took + magic byte
-        int length = objectOutputBuffer.writerIndex();
-
-        // NOTE: compression and encryption MUST work with byte[] because they use JNI!
-        // Realistically, it is impossible to get the backing arrays out of a Heap Buffer once they are resized and begin to use
-        // sliced. It's lame that there is a "double copy" of bytes here, but I don't know how to avoid it...
-        // see:   https://stackoverflow.com/questions/19296386/netty-java-getting-data-from-bytebuf
-
-        byte[] inputArray;
-        int inputOffset;
-
-        // Even if a ByteBuf has a backing array (i.e. buf.hasArray() returns true), the using it isn't always possible because
-        // the buffer might be a slice of other buffer or a pooled buffer:
-        //noinspection Duplicates
-        if (objectOutputBuffer.hasArray() &&
-            objectOutputBuffer.array()[0] == objectOutputBuffer.getByte(0) &&
-            objectOutputBuffer.array().length == objectOutputBuffer.capacity()) {
-
-            // we can use it...
-            inputArray = objectOutputBuffer.array();
-            inputArrayLength = -1; // this is so we don't REUSE this array accidentally!
-            inputOffset = objectOutputBuffer.arrayOffset();
-        }
-        else {
-            // we can NOT use it.
-            if (length > inputArrayLength) {
-                inputArrayLength = length;
-                inputArray = new byte[length];
-                this.inputArray = inputArray;
-            }
-            else {
-                inputArray = this.inputArray;
-            }
-
-            objectOutputBuffer.getBytes(objectOutputBuffer.readerIndex(), inputArray, 0, length);
-            inputOffset = 0;
-        }
+        // save off how much data the object took
+        int length = writer.position();
+        int maxCompressedLength = compressor.maxCompressedLength(length);
 
         ////////// compressing data
         // we ALWAYS compress our data stream -- because of how AES-GCM pads data out, the small input (that would result in a larger
         // output), will be negated by the increase in size by the encryption
+        byte[] compressOutput = temp;
 
-        byte[] compressOutput = this.compressOutput;
+        // LZ4 compress.
+        int compressedLength = compressor.compress(writer.getBuffer(), 0, length, compressOutput, 0, maxCompressedLength);
 
-        int maxLengthLengthOffset = 4; // length is never negative, so 4 is OK (5 means it's negative)
-        int maxCompressedLength = compressor.maxCompressedLength(length);
-
-        // add 4 so there is room to write the compressed size to the buffer
-        int maxCompressedLengthWithOffset = maxCompressedLength + maxLengthLengthOffset;
-
-        // lazy initialize the compression output buffer
-        if (maxCompressedLengthWithOffset > compressOutputLength) {
-            compressOutputLength = maxCompressedLengthWithOffset;
-            compressOutput = new byte[maxCompressedLengthWithOffset];
-            this.compressOutput = compressOutput;
+        if (DEBUG) {
+            String orig = ByteBufUtil.hexDump(writer.getBuffer(), 0, length);
+            String compressed = ByteBufUtil.hexDump(compressOutput, 0, compressedLength);
+            System.err.println("ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +
+                               OS.LINE_SEPARATOR +
+                               "COMPRESSED: (" + compressedLength + ")" + OS.LINE_SEPARATOR + compressed);
         }
 
-
-        // LZ4 compress. output offset max 4 bytes to leave room for length of tempOutput data
-        int compressedLength = compressor.compress(inputArray, inputOffset, length, compressOutput, maxLengthLengthOffset, maxCompressedLength);
-
-        // bytes can now be written to, because our compressed data is stored in a temp array.
-
-        final int lengthLength = OptimizeUtilsByteArray.intLength(length, true);
-
-        // correct input.  compression output is now buffer input
-        inputArray = compressOutput;
-        inputOffset = maxLengthLengthOffset - lengthLength;
-
-
-        // now write the ORIGINAL (uncompressed) length to the front of the byte array (this is NOT THE BUFFER!). This is so we can use the FAST decompress version
-        OptimizeUtilsByteArray.writeInt(inputArray, length, true, inputOffset);
+        // now write the ORIGINAL (uncompressed) length. This is so we can use the FAST decompress version
+        OptimizeUtilsByteBuf.writeInt(buffer, length, true);
 
         // have to copy over the orig data, because we used the temp buffer. Also have to account for the length of the uncompressed size
-        buffer.writeBytes(inputArray, inputOffset, compressedLength + lengthLength);
+        buffer.writeBytes(compressOutput, 0, compressedLength);
     }
 
-    /**
-     * This is NOT ENCRYPTED (and is only done on the loopback connection!)
-     */
     public
     Object readCompressed(final ByteBuf buffer, int length) throws IOException {
         return readCompressed(NOP_CONNECTION, buffer, length);
     }
 
     /**
-     * This is NOT ENCRYPTED (and is only done on the loopback connection!)
+     * BUFFER:
+     *  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *  +  uncompressed length (1-4 bytes)  +  compressed data   +
+     *  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *
+     * COMPRESSED DATA:
+     *  ++++++++++++++++++++++++++
+     *  + class and object bytes +
+     *  ++++++++++++++++++++++++++
      */
     public
     Object readCompressed(final Connection_ connection, final ByteBuf buffer, int length) throws IOException {
-        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
-        this.rmiSupport = connection.rmiSupport();
-
-
         ////////////////
         // Note: we CANNOT write BACK to the buffer as "temp" storage, since there could be additional data on it!
         ////////////////
 
-        ByteBuf inputBuf = buffer;
-
         // get the decompressed length (at the beginning of the array)
         final int uncompressedLength = OptimizeUtilsByteBuf.readInt(buffer, true);
-        final int lengthLength = OptimizeUtilsByteArray.intLength(uncompressedLength, true); // because 1-5 bytes for the decompressed size
+        if (uncompressedLength > ABSOLUTE_MAX_SIZE_OBJECT) {
+            throw new IOException("Uncompressed size (" + uncompressedLength + ") is larger than max allowed size (" + ABSOLUTE_MAX_SIZE_OBJECT + ")!");
+        }
 
-        // have to adjust for uncompressed length
+        // because 1-4 bytes for the decompressed size (this number is never negative)
+        final int lengthLength = OptimizeUtilsByteArray.intLength(uncompressedLength, true);
+
+        int start = buffer.readerIndex();
+
+        // have to adjust for uncompressed length-length
         length = length - lengthLength;
 
 
-        ///////// decompress data -- as it's ALWAYS compressed
+        ///////// decompress data
+        buffer.getBytes(start, temp, 0, length);
+        buffer.readerIndex(length);
 
-        // NOTE: compression and encryption MUST work with byte[] because they use JNI!
-        // Realistically, it is impossible to get the backing arrays out of a Heap Buffer once they are resized and begin to use
-        // sliced. It's lame that there is a "double copy" of bytes here, but I don't know how to avoid it...
-        // see:   https://stackoverflow.com/questions/19296386/netty-java-getting-data-from-bytebuf
-
-        byte[] inputArray;
-        int inputOffset;
-
-        // Even if a ByteBuf has a backing array (i.e. buf.hasArray() returns true), the using it isn't always possible because
-        // the buffer might be a slice of other buffer or a pooled buffer:
-        //noinspection Duplicates
-        if (inputBuf.hasArray() &&
-            inputBuf.array()[0] == inputBuf.getByte(0) &&
-            inputBuf.array().length == inputBuf.capacity()) {
-
-            // we can use it...
-            inputArray = inputBuf.array();
-            inputArrayLength = -1; // this is so we don't REUSE this array accidentally!
-            inputOffset = inputBuf.arrayOffset() + lengthLength;
-        }
-        else {
-            // we can NOT use it.
-            if (length > inputArrayLength) {
-                inputArrayLength = length;
-                inputArray = new byte[length];
-                this.inputArray = inputArray;
-            }
-            else {
-                inputArray = this.inputArray;
-            }
-
-            inputBuf.getBytes(inputBuf.readerIndex(), inputArray, 0, length);
-            inputOffset = 0;
-        }
-
-        // have to make sure to set the position of the buffer, since our conversion to array DOES NOT set the new reader index.
-        buffer.readerIndex(buffer.readerIndex() + length);
-
-
-        ///////// decompress data -- as it's ALWAYS compressed
-
-        byte[] decompressOutputArray = this.decompressOutput;
-        if (uncompressedLength > decompressOutputLength) {
-            decompressOutputLength = uncompressedLength;
-            decompressOutputArray = new byte[uncompressedLength];
-            this.decompressOutput = decompressOutputArray;
-
-            decompressBuf = Unpooled.wrappedBuffer(decompressOutputArray);  // so we can read via kryo
-        }
-        inputBuf = decompressBuf;
 
         // LZ4 decompress, requires the size of the ORIGINAL length (because we use the FAST decompressor)
-        decompressor.decompress(inputArray, inputOffset, decompressOutputArray, 0, uncompressedLength);
+        reader.reset();
+        decompressor.decompress(temp, 0, reader.getBuffer(), 0, uncompressedLength);
+        reader.setLimit(uncompressedLength);
 
-        inputBuf.setIndex(0, uncompressedLength);
-
+        if (DEBUG) {
+            String compressed = ByteBufUtil.hexDump(buffer, start, length);
+            String orig = ByteBufUtil.hexDump(reader.getBuffer(), start, uncompressedLength);
+            System.err.println("COMPRESSED: (" + length + ")" + OS.LINE_SEPARATOR + compressed +
+                               OS.LINE_SEPARATOR +
+                               "ORIG: (" + uncompressedLength + ")" + OS.LINE_SEPARATOR + orig);
+        }
 
         // read the object from the buffer.
-        reader.setBuffer(inputBuf);
+        Object classAndObject = read(connection, reader);
 
-        return readClassAndObject(reader); // this properly sets the readerIndex, but only if it's the correct buffer
+        if (DEBUG) {
+            System.err.println("Read compress object" + classAndObject.getClass().getSimpleName());
+        }
+        return classAndObject;
     }
 
+    /**
+     * BUFFER:
+     *  +++++++++++++++++++++++++++++++
+     *  +  IV (12)  + encrypted data  +
+     *  +++++++++++++++++++++++++++++++
+     *
+     * ENCRYPTED DATA:
+     *  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *  +  uncompressed length (1-4 bytes)  +  compressed data   +
+     *  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *
+     * COMPRESSED DATA:
+     *  ++++++++++++++++++++++++++
+     *  + class and object bytes +
+     *  ++++++++++++++++++++++++++
+     */
     public synchronized
     void writeCrypto(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
-        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
-        this.rmiSupport = connection.rmiSupport();
-
-        ByteBuf objectOutputBuffer = this.tempBuffer;
-        objectOutputBuffer.clear(); // always have to reset everything
-
-        // write the object to a TEMP buffer! this will be compressed
-        writer.setBuffer(objectOutputBuffer);
-
-        writeClassAndObject(writer, message);
+        // write the object to a TEMP buffer! this will be compressed later
+        write(connection, writer, message);
 
         // save off how much data the object took
-        int length = objectOutputBuffer.writerIndex();
-
-
-        // NOTE: compression and encryption MUST work with byte[] because they use JNI!
-        // Realistically, it is impossible to get the backing arrays out of a Heap Buffer once they are resized and begin to use
-        // sliced. It's lame that there is a "double copy" of bytes here, but I don't know how to avoid it...
-        // see:   https://stackoverflow.com/questions/19296386/netty-java-getting-data-from-bytebuf
-
-        byte[] inputArray;
-        int inputOffset;
-
-        // Even if a ByteBuf has a backing array (i.e. buf.hasArray() returns true), the using it isn't always possible because
-        // the buffer might be a slice of other buffer or a pooled buffer:
-        //noinspection Duplicates
-        if (objectOutputBuffer.hasArray() &&
-            objectOutputBuffer.array()[0] == objectOutputBuffer.getByte(0) &&
-            objectOutputBuffer.array().length == objectOutputBuffer.capacity()) {
-
-            // we can use it...
-            inputArray = objectOutputBuffer.array();
-            inputArrayLength = -1; // this is so we don't REUSE this array accidentally!
-            inputOffset = objectOutputBuffer.arrayOffset();
-        }
-        else {
-            // we can NOT use it.
-            if (length > inputArrayLength) {
-                inputArrayLength = length;
-                inputArray = new byte[length];
-                this.inputArray = inputArray;
-            }
-            else {
-                inputArray = this.inputArray;
-            }
-
-            objectOutputBuffer.getBytes(objectOutputBuffer.readerIndex(), inputArray, 0, length);
-            inputOffset = 0;
-        }
-
+        int length = writer.position();
+        int maxCompressedLength = compressor.maxCompressedLength(length);
 
         ////////// compressing data
         // we ALWAYS compress our data stream -- because of how AES-GCM pads data out, the small input (that would result in a larger
         // output), will be negated by the increase in size by the encryption
+        byte[] compressOutput = temp;
 
-        byte[] compressOutput = this.compressOutput;
+        // LZ4 compress. Offset by 4 in the dest array so we have room for the length
+        int compressedLength = compressor.compress(writer.getBuffer(), 0, length, compressOutput, 4, maxCompressedLength);
 
-        int maxLengthLengthOffset = 4; // length is never negative, so 4 is OK (5 means it's negative)
-        int maxCompressedLength = compressor.maxCompressedLength(length);
-
-        // add 4 so there is room to write the compressed size to the buffer
-        int maxCompressedLengthWithOffset = maxCompressedLength + maxLengthLengthOffset;
-
-        // lazy initialize the compression output buffer
-        if (maxCompressedLengthWithOffset > compressOutputLength) {
-            compressOutputLength = maxCompressedLengthWithOffset;
-            compressOutput = new byte[maxCompressedLengthWithOffset];
-            this.compressOutput = compressOutput;
+        if (DEBUG) {
+            String orig = ByteBufUtil.hexDump(writer.getBuffer(), 0, length);
+            String compressed = ByteBufUtil.hexDump(compressOutput, 4, compressedLength);
+            System.err.println("ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +
+                               OS.LINE_SEPARATOR +
+                               "COMPRESSED: (" + compressedLength + ")" + OS.LINE_SEPARATOR + compressed);
         }
 
-
-
-        // LZ4 compress. output offset max 4 bytes to leave room for length of tempOutput data
-        int compressedLength = compressor.compress(inputArray, inputOffset, length, compressOutput, maxLengthLengthOffset, maxCompressedLength);
-
-        // bytes can now be written to, because our compressed data is stored in a temp array.
-
+        // now write the ORIGINAL (uncompressed) length. This is so we can use the FAST decompress version
         final int lengthLength = OptimizeUtilsByteArray.intLength(length, true);
 
-        // correct input.  compression output is now encryption input
-        inputArray = compressOutput;
-        inputOffset = maxLengthLengthOffset - lengthLength;
+        // this is where we start writing the length data, so that the end of this lines up with the compressed data
+        int start = 4 - lengthLength;
 
+        OptimizeUtilsByteArray.writeInt(compressOutput, length, true, start);
 
-        // now write the ORIGINAL (uncompressed) length to the front of the byte array. This is so we can use the FAST decompress version
-        OptimizeUtilsByteArray.writeInt(inputArray, length, true, inputOffset);
-
-        // correct length for encryption
-        length = compressedLength + lengthLength; // +1 to +4 for the uncompressed size bytes
-
+        // now compressOutput contains "uncompressed length + data"
+        int compressedArrayLength = lengthLength + compressedLength;
 
 
         /////// encrypting data.
-        final long nextGcmSequence = connection.getNextGcmSequence();
+        final SecretKey cryptoKey = connection.cryptoKey();
 
-        // this is a threadlocal, so that we don't clobber other threads that are performing crypto on the same connection at the same time
-        final ParametersWithIV cryptoParameters = connection.getCryptoParameters();
-        BigEndian.Long_.toBytes(nextGcmSequence, cryptoParameters.getIV(), 4); // put our counter into the IV
+        byte[] iv = new byte[IV_LENGTH_BYTE]; // NEVER REUSE THIS IV WITH SAME KEY
+        secureRandom.nextBytes(iv);
 
-        final GCMBlockCipher aes = this.aesEngine;
-        aes.reset();
-        aes.init(true, cryptoParameters);
-
-        byte[] cryptoOutput;
-
-        // lazy initialize the crypto output buffer
-        int cryptoSize = length + 16;   // from:  aes.getOutputSize(length);
-
-        // 'output' is the temp byte array
-        if (cryptoSize > cryptoOutputLength) {
-            cryptoOutputLength = cryptoSize;
-            cryptoOutput = new byte[cryptoSize];
-            this.cryptoOutput = cryptoOutput;
-        } else {
-            cryptoOutput = this.cryptoOutput;
-        }
-
-        int encryptedLength = aes.processBytes(inputArray, inputOffset, length, cryptoOutput, 0);
-
+        GCMParameterSpec parameterSpec = new GCMParameterSpec(TAG_LENGTH_BIT, iv); // 128 bit auth tag length
         try {
-            // authentication tag for GCM
-            encryptedLength += aes.doFinal(cryptoOutput, encryptedLength);
+            cipher.init(Cipher.ENCRYPT_MODE, cryptoKey, parameterSpec);
         } catch (Exception e) {
             throw new IOException("Unable to AES encrypt the data", e);
         }
 
-        // write out our GCM counter
-        OptimizeUtilsByteBuf.writeLong(buffer, nextGcmSequence, true);
+        // we REUSE the writer buffer! (since that data is now compressed in a different array)
+
+        int encryptedLength;
+        try {
+            encryptedLength = cipher.doFinal(compressOutput, start, compressedArrayLength, writer.getBuffer(), 0);
+        } catch (Exception e) {
+            throw new IOException("Unable to AES encrypt the data", e);
+        }
+
+        // write out our IV
+        buffer.writeBytes(iv, 0, IV_LENGTH_BYTE);
 
         // have to copy over the orig data, because we used the temp buffer
-        buffer.writeBytes(cryptoOutput, 0, encryptedLength);
+        buffer.writeBytes(writer.getBuffer(), 0, encryptedLength);
+
+        if (DEBUG) {
+            String ivString = ByteBufUtil.hexDump(iv, 0, IV_LENGTH_BYTE);
+            String crypto = ByteBufUtil.hexDump(writer.getBuffer(), 0, encryptedLength);
+            System.err.println("IV: (12)" + OS.LINE_SEPARATOR + ivString +
+                               OS.LINE_SEPARATOR +
+                               "CRYPTO: (" + encryptedLength + ")" + OS.LINE_SEPARATOR + crypto);
+        }
     }
 
+
+    /**
+     * BUFFER:
+     *  +++++++++++++++++++++++++++++++
+     *  +  IV (12)  + encrypted data  +
+     *  +++++++++++++++++++++++++++++++
+     *
+     * ENCRYPTED DATA:
+     *  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *  +  uncompressed length (1-4 bytes)  +  compressed data   +
+     *  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *
+     * COMPRESSED DATA:
+     *  ++++++++++++++++++++++++++
+     *  + class and object bytes +
+     *  ++++++++++++++++++++++++++
+     */
     public
     Object readCrypto(final Connection_ connection, final ByteBuf buffer, int length) throws IOException {
-        // required by RMI and some serializers to determine which connection wrote (or has info about) this object
-        this.rmiSupport = connection.rmiSupport();
+        // read out the crypto IV
+        final byte[] iv =  new byte[IV_LENGTH_BYTE];
+        buffer.readBytes(iv, 0 , IV_LENGTH_BYTE);
 
-        ////////////////
-        // Note: we CANNOT write BACK to the buffer as "temp" storage, since there could be additional data on it!
-        ////////////////
+        // have to adjust for the IV
+        length = length - IV_LENGTH_BYTE;
 
-        ByteBuf inputBuf = buffer;
-
-        final long gcmIVCounter = OptimizeUtilsByteBuf.readLong(buffer, true);
-        int lengthLength = OptimizeUtilsByteArray.longLength(gcmIVCounter, true);
-
-
-        // have to adjust for the gcmIVCounter
-        length = length - lengthLength;
-
-
-        /////////// decrypting data
-
-        // NOTE: compression and encryption MUST work with byte[] because they use JNI!
-        // Realistically, it is impossible to get the backing arrays out of a Heap Buffer once they are resized and begin to use
-        // sliced. It's lame that there is a "double copy" of bytes here, but I don't know how to avoid it...
-        // see:   https://stackoverflow.com/questions/19296386/netty-java-getting-data-from-bytebuf
-
-        byte[] inputArray;
-        int inputOffset;
-
-        // Even if a ByteBuf has a backing array (i.e. buf.hasArray() returns true), the using it isn't always possible because
-        // the buffer might be a slice of other buffer or a pooled buffer:
-        //noinspection Duplicates
-        if (inputBuf.hasArray() &&
-            inputBuf.array()[0] == inputBuf.getByte(0) &&
-            inputBuf.array().length == inputBuf.capacity()) {
-
-            // we can use it...
-            inputArray = inputBuf.array();
-            inputArrayLength = -1; // this is so we don't REUSE this array accidentally!
-            inputOffset = inputBuf.arrayOffset() + lengthLength;
-        }
-        else {
-            // we can NOT use it.
-            if (length > inputArrayLength) {
-                inputArrayLength = length;
-                inputArray = new byte[length];
-                this.inputArray = inputArray;
-            }
-            else {
-                inputArray = this.inputArray;
-            }
-
-            inputBuf.getBytes(inputBuf.readerIndex(), inputArray, 0, length);
-            inputOffset = 0;
-        }
-
-
-
-        // have to make sure to set the position of the buffer, since our conversion to array DOES NOT set the new reader index.
-        buffer.readerIndex(buffer.readerIndex() + length);
-
-        // this is a threadlocal, so that we don't clobber other threads that are performing crypto on the same connection at the same time
-        final ParametersWithIV cryptoParameters = connection.getCryptoParameters();
-        BigEndian.Long_.toBytes(gcmIVCounter, cryptoParameters.getIV(), 4); // put our counter into the IV
-
-        final GCMBlockCipher aes = this.aesEngine;
-        aes.reset();
-        aes.init(false, cryptoParameters);
-
-        int cryptoSize = length - 16; // from:  aes.getOutputSize(length);
-
-        // lazy initialize the decrypt output buffer
-        byte[] decryptOutputArray;
-        if (cryptoSize > decryptOutputLength) {
-            decryptOutputLength = cryptoSize;
-            decryptOutputArray = new byte[cryptoSize];
-            this.decryptOutput = decryptOutputArray;
-
-            decryptBuf = Unpooled.wrappedBuffer(decryptOutputArray);
-        } else {
-            decryptOutputArray = this.decryptOutput;
-        }
-
-        int decryptedLength = aes.processBytes(inputArray, inputOffset, length, decryptOutputArray, 0);
+        /////////// decrypt data
+        final SecretKey cryptoKey = connection.cryptoKey();
 
         try {
-            // authentication tag for GCM
-            decryptedLength += aes.doFinal(decryptOutputArray, decryptedLength);
+            cipher.init(Cipher.DECRYPT_MODE, cryptoKey, new GCMParameterSpec(TAG_LENGTH_BIT, iv));
         } catch (Exception e) {
             throw new IOException("Unable to AES decrypt the data", e);
+        }
+
+        // have to copy out bytes, we reuse the reader byte array!
+        buffer.readBytes(reader.getBuffer(), 0, length);
+
+        if (DEBUG) {
+            String ivString = ByteBufUtil.hexDump(iv, 0, IV_LENGTH_BYTE);
+            String crypto = ByteBufUtil.hexDump(reader.getBuffer(), 0, length);
+            System.err.println("IV: (12)" + OS.LINE_SEPARATOR + ivString +
+                               OS.LINE_SEPARATOR + "CRYPTO: (" + length + ")" + OS.LINE_SEPARATOR + crypto);
+        }
+
+        int decryptedLength;
+        try {
+            decryptedLength = cipher.doFinal(reader.getBuffer(),0, length, temp, 0);
+        } catch (Exception e) {
+           throw new IOException("Unable to AES decrypt the data", e);
         }
 
         ///////// decompress data -- as it's ALWAYS compressed
 
         // get the decompressed length (at the beginning of the array)
-        inputArray = decryptOutputArray;
-        final int uncompressedLength = OptimizeUtilsByteArray.readInt(inputArray, true);
-        inputOffset = OptimizeUtilsByteArray.intLength(uncompressedLength, true); // because 1-4 bytes for the decompressed size
+        final int uncompressedLength = OptimizeUtilsByteArray.readInt(temp, true);
 
-
-        byte[] decompressOutputArray = this.decompressOutput;
-        if (uncompressedLength > decompressOutputLength) {
-            decompressOutputLength = uncompressedLength;
-            decompressOutputArray = new byte[uncompressedLength];
-            this.decompressOutput = decompressOutputArray;
-
-            decompressBuf = Unpooled.wrappedBuffer(decompressOutputArray);  // so we can read via kryo
-        }
-        inputBuf = decompressBuf;
+        // where does our data start, AFTER the length field
+        int start = OptimizeUtilsByteArray.intLength(uncompressedLength, true); // because 1-4 bytes for the uncompressed size;
 
         // LZ4 decompress, requires the size of the ORIGINAL length (because we use the FAST decompressor
-        decompressor.decompress(inputArray, inputOffset, decompressOutputArray, 0, uncompressedLength);
+        reader.reset();
+        decompressor.decompress(temp, start, reader.getBuffer(), 0, uncompressedLength);
+        reader.setLimit(uncompressedLength);
 
-        inputBuf.setIndex(0, uncompressedLength);
+        if (DEBUG) {
+            int endWithoutUncompressedLength = decryptedLength - start;
+            String compressed = ByteBufUtil.hexDump(temp, start, endWithoutUncompressedLength);
+            String orig = ByteBufUtil.hexDump(reader.getBuffer(), 0, uncompressedLength);
+            System.err.println("COMPRESSED: (" + endWithoutUncompressedLength + ")" + OS.LINE_SEPARATOR + compressed +
+                               OS.LINE_SEPARATOR +
+                               "ORIG: (" + uncompressedLength + ")" + OS.LINE_SEPARATOR + orig);
+        }
 
         // read the object from the buffer.
-        reader.setBuffer(inputBuf);
-
-        return readClassAndObject(reader); // this properly sets the readerIndex, but only if it's the correct buffer
+        return read(connection, reader);
     }
+
 
     @Override
     protected
     void finalize() throws Throwable {
-        if (decompressBuf != null) {
-            decompressBuf.release();
-        }
-
-        if (decryptBuf != null) {
-            decryptBuf.release();
-        }
+        readerBuff.getByteBuf().release();
+        writerBuff.getByteBuf().release();
 
         super.finalize();
     }
@@ -594,5 +486,4 @@ class KryoExtra extends Kryo {
     NetworkSerializationManager getSerializationManager() {
         return serializationManager;
     }
-
 }

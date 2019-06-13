@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection.registration;
 
-import org.bouncycastle.crypto.params.ParametersWithIV;
+import javax.crypto.SecretKey;
 
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPoint;
@@ -61,14 +61,14 @@ class ConnectionRegistrationImpl implements Connection_, ChannelHandler {
 
     @Override
     public
-    long getNextGcmSequence() {
-        return connection.getNextGcmSequence();
+    long nextGcmSequence() {
+        return connection.nextGcmSequence();
     }
 
     @Override
     public
-    ParametersWithIV getCryptoParameters() {
-        return connection.getCryptoParameters();
+    SecretKey cryptoKey() {
+        return connection.cryptoKey();
     }
 
     @Override

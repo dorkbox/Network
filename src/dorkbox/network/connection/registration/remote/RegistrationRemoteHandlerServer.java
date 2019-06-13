@@ -20,6 +20,8 @@ import java.net.InetSocketAddress;
 import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 
+import javax.crypto.spec.SecretKeySpec;
+
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.BasicAgreement;
 import org.bouncycastle.crypto.agreement.ECDHCBasicAgreement;
@@ -123,7 +125,7 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
 
         //  IN: remote ECDH shared payload
         // OUT: server ECDH shared payload
-        if (metaChannel.aesKey == null) {
+        if (metaChannel.secretKey == null) {
             /*
              * Diffie-Hellman-Merkle key exchange for the AES key
              * http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
@@ -157,14 +159,8 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
             sha384.update(keySeed, 0, keySeed.length);
             sha384.doFinal(digest, 0);
 
-            metaChannel.aesKey = Arrays.copyOfRange(digest, 0, 32); // 256bit keysize (32 bytes)
-            metaChannel.aesIV = Arrays.copyOfRange(digest, 32, 44); // 96bit blocksize (12 bytes) required by AES-GCM
-
-            if (invalidAES(metaChannel)) {
-                // abort if something messed up!
-                shutdown(channel, registration.sessionID);
-                return;
-            }
+            byte[] key = Arrays.copyOfRange(digest, 0, 32); // 256bit keysize (32 bytes)
+            metaChannel.secretKey = new SecretKeySpec(key, "AES");
 
             Registration outboundRegister = new Registration(metaChannel.sessionId);
 

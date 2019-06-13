@@ -17,6 +17,8 @@ package dorkbox.network.connection.registration;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.crypto.SecretKey;
+
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
@@ -44,9 +46,7 @@ class MetaChannel {
     public volatile ECPublicKeyParameters publicKey; // used for ECC crypto + handshake on NETWORK (remote) connections. This is the remote public key.
     public volatile AsymmetricCipherKeyPair ecdhKey; // used for ECC Diffie-Hellman-Merkle key exchanges: see http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
 
-    // since we are using AES-GCM, the aesIV here **MUST** be exactly 12 bytes
-    public volatile byte[] aesKey;
-    public volatile byte[] aesIV;
+    public volatile SecretKey secretKey;
 
     // indicates if the remote ECC key has changed for an IP address. If the client detects this, it will not connect.
     // If the server detects this, it has the option for additional security (two-factor auth, perhaps?)

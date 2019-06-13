@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection.wrapper;
 
-import org.bouncycastle.crypto.params.ParametersWithIV;
+import javax.crypto.SecretKey;
 
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPoint;
@@ -33,11 +33,9 @@ interface ChannelWrapper {
     void flush();
 
     /**
-     * @return a threadlocal AES key + IV. key=32 byte, iv=12 bytes (AES-GCM implementation). This is a threadlocal
-     * because multiple protocols can be performing crypto AT THE SAME TIME, and so we have to make sure that operations don't
-     * clobber each other
+     * @return the AES key.
      */
-    ParametersWithIV cryptoParameters();
+    SecretKey cryptoKey();
 
     /**
      * @return true if this connection is connection on the loopback interface. This is specifically used to dynamically enable/disable

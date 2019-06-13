@@ -35,17 +35,40 @@ interface NetworkSerializationManager extends SerializationManager {
      * <p/>
      * There is a small speed penalty if there were no kryo's available to use.
      */
+    void write(Connection_ connection, ByteBuf buffer, Object message) throws IOException;
+
+    /**
+     * Reads an object from the buffer.
+     *
+     * @param length should ALWAYS be the length of the expected object!
+     */
+    Object read(Connection_ connection, ByteBuf buffer, int length) throws IOException;
+
+    /**
+     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
+     * <p/>
+     * There is a small speed penalty if there were no kryo's available to use.
+     */
+    void writeWithCompression(Connection_ connection, ByteBuf buffer, Object message) throws IOException;
+
+    /**
+     * Reads an object from the buffer.
+     *
+     * @param length should ALWAYS be the length of the expected object!
+     */
+    Object readWithCompression(Connection_ connection, ByteBuf buffer, int length) throws IOException;
+
+    /**
+     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
+     * <p/>
+     * There is a small speed penalty if there were no kryo's available to use.
+     */
     void writeWithCrypto(Connection_ connection, ByteBuf buffer, Object message) throws IOException;
 
     /**
      * Reads an object from the buffer.
-     * <p/>
-     * Crypto + sequence number
      *
-     * @param connection
-     *                 can be NULL
-     * @param length
-     *                 should ALWAYS be the length of the expected object!
+     * @param length should ALWAYS be the length of the expected object!
      */
     Object readWithCrypto(Connection_ connection, ByteBuf buffer, int length) throws IOException;
 
