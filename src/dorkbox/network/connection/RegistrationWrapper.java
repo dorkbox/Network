@@ -337,7 +337,7 @@ class RegistrationWrapper {
             // it is too large to send in a single packet
 
             // child arrays have index 0 also as their 'index' and 1 is the total number of fragments
-            byte[][] fragments = divideArray(details, 480);
+            byte[][] fragments = divideArray(details, 400);
             if (fragments == null) {
                 logger.error("Too many classes have been registered for Serialization. Please report this issue");
 
