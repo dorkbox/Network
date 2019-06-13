@@ -26,12 +26,19 @@ import org.slf4j.Logger;
 
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
+import dorkbox.network.connection.registration.UpgradeType;
 import dorkbox.network.pipeline.tcp.KryoEncoderTcp;
+import dorkbox.network.pipeline.tcp.KryoEncoderTcpCompression;
 import dorkbox.network.pipeline.tcp.KryoEncoderTcpCrypto;
+import dorkbox.network.pipeline.tcp.KryoEncoderTcpNone;
 import dorkbox.network.pipeline.udp.KryoDecoderUdp;
+import dorkbox.network.pipeline.udp.KryoDecoderUdpCompression;
 import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
+import dorkbox.network.pipeline.udp.KryoDecoderUdpNone;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
+import dorkbox.network.pipeline.udp.KryoEncoderUdpCompression;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
+import dorkbox.network.pipeline.udp.KryoEncoderUdpNone;
 import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.util.RandomUtil;
@@ -40,6 +47,7 @@ import dorkbox.util.collections.LockFreeIntMap;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.exceptions.SecurityException;
 import io.netty.channel.Channel;
+import io.netty.util.NetUtil;
 
 /**
  * Just wraps common/needed methods of the client/server endpoint by the registration stage/handshake.
@@ -55,11 +63,18 @@ class RegistrationWrapper {
     private final org.slf4j.Logger logger;
 
     public final KryoEncoderTcp kryoTcpEncoder;
+    public final KryoEncoderTcpNone kryoTcpEncoderNone;
+    public final KryoEncoderTcpCompression kryoTcpEncoderCompression;
     public final KryoEncoderTcpCrypto kryoTcpEncoderCrypto;
 
     public final KryoEncoderUdp kryoUdpEncoder;
+    public final KryoEncoderUdpNone kryoUdpEncoderNone;
+    public final KryoEncoderUdpCompression kryoUdpEncoderCompression;
     public final KryoEncoderUdpCrypto kryoUdpEncoderCrypto;
+
     public final KryoDecoderUdp kryoUdpDecoder;
+    public final KryoDecoderUdpNone kryoUdpDecoderNone;
+    public final KryoDecoderUdpCompression kryoUdpDecoderCompression;
     public final KryoDecoderUdpCrypto kryoUdpDecoderCrypto;
 
     private final EndPoint endPoint;
@@ -74,13 +89,20 @@ class RegistrationWrapper {
         this.logger = logger;
 
         this.kryoTcpEncoder = new KryoEncoderTcp(endPoint.serializationManager);
+        this.kryoTcpEncoderNone = new KryoEncoderTcpNone(endPoint.serializationManager);
+        this.kryoTcpEncoderCompression = new KryoEncoderTcpCompression(endPoint.serializationManager);
         this.kryoTcpEncoderCrypto = new KryoEncoderTcpCrypto(endPoint.serializationManager);
 
 
         this.kryoUdpEncoder = new KryoEncoderUdp(endPoint.serializationManager);
+        this.kryoUdpEncoderNone = new KryoEncoderUdpNone(endPoint.serializationManager);
+        this.kryoUdpEncoderCompression = new KryoEncoderUdpCompression(endPoint.serializationManager);
         this.kryoUdpEncoderCrypto = new KryoEncoderUdpCrypto(endPoint.serializationManager);
 
+
         this.kryoUdpDecoder = new KryoDecoderUdp(endPoint.serializationManager);
+        this.kryoUdpDecoderNone = new KryoDecoderUdpNone(endPoint.serializationManager);
+        this.kryoUdpDecoderCompression = new KryoDecoderUdpCompression(endPoint.serializationManager);
         this.kryoUdpDecoderCrypto = new KryoDecoderUdpCrypto(endPoint.serializationManager);
     }
 
@@ -142,6 +164,27 @@ class RegistrationWrapper {
     public
     ECPublicKeyParameters getPublicKey() {
         return this.endPoint.publicKey;
+    }
+
+
+
+
+    /**
+     * Only called by the server!
+     *
+     * If we are loopback or the client is a specific IP/CIDR address, then we do things differently. The LOOPBACK address will never encrypt or compress the traffic.
+     */
+    public
+    byte getConnectionUpgradeType(final InetSocketAddress remoteAddress) {
+        if (isClient()) {
+            throw new IllegalArgumentException("This should never be called by the client!");
+        }
+
+        if (remoteAddress.getAddress().equals(NetUtil.LOCALHOST)) {
+            return UpgradeType.COMPRESS;
+        }
+
+        return ((EndPointServer) this.endPoint).getConnectionUpgradeType(remoteAddress);
     }
 
     /**
@@ -353,7 +396,7 @@ class RegistrationWrapper {
                 fragmentedRegistration.payload = fragment;
 
                 // tell the server we are fragmented
-                fragmentedRegistration.upgrade = true;
+                fragmentedRegistration.upgradeType = UpgradeType.FRAGMENTED;
 
                 // tell the server we are upgraded (it will bounce back telling us to connect)
                 fragmentedRegistration.upgraded = true;
@@ -365,7 +408,7 @@ class RegistrationWrapper {
             fragmentedRegistration.payload = fragments[allButLast];
 
             // tell the server we are fragmented
-            fragmentedRegistration.upgrade = true;
+            fragmentedRegistration.upgradeType = UpgradeType.FRAGMENTED;
 
             // tell the server we are upgraded (it will bounce back telling us to connect)
             fragmentedRegistration.upgraded = true;
@@ -383,7 +426,7 @@ class RegistrationWrapper {
 
     public
     STATE verifyClassRegistration(final MetaChannel metaChannel, final Registration registration) {
-        if (registration.upgrade) {
+        if (registration.upgradeType == UpgradeType.FRAGMENTED) {
             byte[] fragment = registration.payload;
 
             // this means that the registrations are FRAGMENTED!

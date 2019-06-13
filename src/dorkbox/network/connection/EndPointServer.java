@@ -15,9 +15,12 @@
  */
 package dorkbox.network.connection;
 
+import java.net.InetSocketAddress;
+
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.bridge.ConnectionBridgeServer;
+import dorkbox.network.connection.registration.UpgradeType;
 import dorkbox.util.exceptions.SecurityException;
 
 /**
@@ -103,5 +106,10 @@ class EndPointServer extends EndPoint {
     public
     void remove(Connection connection) {
         connectionManager.removeConnection(connection);
+    }
+
+    byte getConnectionUpgradeType(final InetSocketAddress remoteAddress) {
+        // TODO, crypto/compression based on ip/range of remote address
+        return UpgradeType.ENCRYPT;
     }
 }

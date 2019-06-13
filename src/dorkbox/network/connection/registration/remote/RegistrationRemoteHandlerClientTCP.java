@@ -81,7 +81,7 @@ class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient
             }
 
             logger.trace("TCP read");
-            readClient(channel, registration, "TCP client", metaChannel);
+            readClient(context, channel, registration, "TCP client", metaChannel);
         }
         else {
             logger.trace("Out of order TCP message from server!");

@@ -40,6 +40,7 @@ import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.exceptions.SecurityException;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
 
 public
@@ -96,7 +97,7 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
 
     @SuppressWarnings("Duplicates")
-    void readClient(final Channel channel, final Registration registration, final String type, final MetaChannel metaChannel) {
+    void readClient(final ChannelHandlerContext context, final Channel channel, final Registration registration, final String type, final MetaChannel metaChannel) {
         final InetSocketAddress remoteAddress = (InetSocketAddress) channel.remoteAddress();
 
         //  IN: session ID + public key + ecc parameters (which are a nonce. the SERVER defines what these are)
@@ -170,6 +171,10 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
             // do we have any more registrations?
             outboundRegister.hasMore = registrationWrapper.hasMoreRegistrations();
+            if (outboundRegister.hasMore) {
+                metaChannel.totalProtocols.incrementAndGet();
+            }
+
             channel.writeAndFlush(outboundRegister);
 
             // wait for ack from the server before registering the next protocol
@@ -177,18 +182,19 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
         }
 
 
-        // IN: upgrade=true if we must upgrade this connection
-        if (registration.upgrade) {
-            // this pipeline can now be marked to be upgraded
+        // IN: upgrade>0 if we must upgrade this connection
+        // can this pipeline can now be upgraded
+        int upgradeType = registration.upgradeType;
+        if (upgradeType > 0) {
+            // upgrade the connection to an none/compression/encrypted connection
+            upgradeEncoders(upgradeType, channel, metaChannel);
+            upgradeDecoders(upgradeType, channel, metaChannel);
 
-            // upgrade the connection to an encrypted connection
-            // this pipeline encoder/decoder can now be upgraded, and the "connection" added
-            upgradeEncoders(channel, metaChannel, remoteAddress);
-            upgradeDecoders(channel, metaChannel);
+            logChannelUpgrade(upgradeType, channel, metaChannel);
         }
 
         // IN: hasMore=true if we have more registrations to do, false otherwise
-        if (registration.hasMore) {
+        if (registrationWrapper.hasMoreRegistrations()) {
             logger.trace("Starting another protocol registration");
             metaChannel.totalProtocols.incrementAndGet();
             registrationWrapper.startNextProtocolRegistration();
@@ -198,45 +204,75 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
         //
         //
-        // we only get this when we are 100% done with the registration of all connection types.
+        // we only get this when we are 100% done with the registration and upgrade of all connection types.
         //
+        // THIS is the last channel registered!
         //
 
 
+
+        // we don't verify anything on the CLIENT. We only verify on the server.
+        // we don't support registering NEW classes after the client starts.
+
+        // this will perform channel WRITE on whatever channel is the last channel registered!
         if (!registration.upgraded) {
-            // setup the pipeline with the real connection
-            upgradePipeline(metaChannel, remoteAddress);
+            // this only get's called once. Ever other time the server talks to the client now, "upgraded" will be true.
 
-            // we don't verify anything on the CLIENT. We only verify on the server.
-            // we don't support registering NEW classes after the client starts.
-            if (!registrationWrapper.initClassRegistration(channel, registration)) {
+            // this can ONLY be created when all protocols are registered!
+            metaChannel.connection = this.registrationWrapper.connection0(metaChannel, remoteAddress);
+
+            if (metaChannel.tcpChannel != null) {
+                metaChannel.tcpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
+            }
+            if (metaChannel.udpChannel != null) {
+                metaChannel.udpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
+            }
+
+
+            // this tells the server we are now "upgraded" and can continue
+            boolean hasErrors = !registrationWrapper.initClassRegistration(channel, registration);
+            if (hasErrors) {
                 // abort if something messed up!
                 shutdown(channel, registration.sessionID);
             }
 
+            // the server will ping back when it is ready to connect
             return;
         }
 
 
-        // IN: upgraded=true this means we are ready to connect, and the server is done with it's onConnect calls
-        //              we defer the messages until after our own onConnect() is called...
+        // NOTE: The server will ALWAYS call "onConnect" before we do!
+        //  it does this via sending the client the "upgraded" signal JUST before it calls "onConnect"
 
 
-        // we have to wait for ALL messages to be received, this way we can prevent out-of-order oddities...
-        int protocolsRemaining = metaChannel.totalProtocols.decrementAndGet();
-        if (protocolsRemaining > 0) {
-            logger.trace("{} done. Waiting for {} more protocols registrations to arrive...", type, protocolsRemaining);
+        // It will upgrade the different connections INDIVIDUALLY, and whichever one arrives first will start the process
+        // and the "late" message will be ignored
+        if (!metaChannel.canUpgradePipeline.compareAndSet(true, false)) {
             return;
         }
+
+        // remove ourselves from handling any more messages, because we are done.
+
+        // since only the FIRST registration gets here, setup other ones as well (since they are no longer needed)
+        if (metaChannel.tcpChannel != null) {
+            // the "other" channel is the TCP channel that we have to cleanup
+            metaChannel.tcpChannel.pipeline().remove(RegistrationRemoteHandlerClientTCP.class);
+        }
+
+        if (metaChannel.udpChannel != null) {
+            // the "other" channel is the UDP channel that we have to cleanup
+            metaChannel.udpChannel.pipeline().remove(RegistrationRemoteHandlerClientUDP.class);
+        }
+
 
 
         // remove the ConnectionWrapper (that was used to upgrade the connection) and cleanup the pipeline
         // always wait until AFTER the server calls "onConnect", then we do this
-        cleanupPipeline(metaChannel, new Runnable() {
+        Runnable postConnectRunnable = new Runnable() {
             @Override
             public
             void run() {
-                // this method runs after the "onConnect()" runs and only after all of the channels have be correctly updated
+                // this method runs after all of the channels have be correctly updated
 
                 // get all of the out of order messages that we missed
                 List<Object> messages = new LinkedList<Object>();
@@ -259,7 +295,7 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
 
                 // now call 'onMessage' in the connection object with our messages!
                 try {
-                    ConnectionImpl connection = (ConnectionImpl) metaChannel.connection;
+                    ConnectionImpl connection = metaChannel.connection;
 
                     for (Object message : messages) {
                         logger.trace("    deferred onMessage({}, {})", connection.id(), message);
@@ -274,6 +310,8 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
                     logger.error("Error initialising deferred messages!", e);
                 }
             }
-        });
+        };
+
+        cleanupPipeline(channel, metaChannel, null, postConnectRunnable);
     }
 }

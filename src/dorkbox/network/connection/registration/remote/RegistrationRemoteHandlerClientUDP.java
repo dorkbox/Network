@@ -103,7 +103,7 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
                 metaChannel.udpChannel = channel;
             }
 
-            readClient(channel, registration, "UDP client", metaChannel);
+            readClient(context, channel, registration, "UDP client", metaChannel);
         }
         else {
             logger.trace("Out of order UDP message from server!");

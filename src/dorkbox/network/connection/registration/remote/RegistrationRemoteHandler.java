@@ -26,21 +26,21 @@ import org.bouncycastle.jce.spec.ECParameterSpec;
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper;
-import dorkbox.network.connection.registration.ConnectionRegistrationImpl;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.registration.RegistrationHandler;
+import dorkbox.network.connection.registration.UpgradeType;
 import dorkbox.network.pipeline.tcp.KryoDecoderTcp;
+import dorkbox.network.pipeline.tcp.KryoDecoderTcpCompression;
 import dorkbox.network.pipeline.tcp.KryoDecoderTcpCrypto;
+import dorkbox.network.pipeline.tcp.KryoDecoderTcpNone;
 import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.crypto.CryptoECC;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
-import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -57,20 +57,34 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     static final String DELETE_IP = "eleteIP"; // purposefully missing the "D", since that is a system parameter, which starts with "-D"
     static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.curve25519);
 
-    static final String KRYO_ENCODER = "kryoEncoder";
-    static final String KRYO_DECODER = "kryoDecoder";
+    private static final String UDP_DECODE = "ud1";
+    private static final String UDP_DECODE_NONE = "ud2";
+    private static final String UDP_DECODE_COMPRESS = "ud3";
+    private static final String UDP_DECODE_CRYPTO = "ud4";
 
-    private static final String IDLE_HANDLER_FULL = "idleHandlerFull";
-    private static final String FRAME_AND_KRYO_ENCODER = "frameAndKryoEncoder";
-    private static final String FRAME_AND_KRYO_DECODER = "frameAndKryoDecoder";
+    private static final String TCP_DECODE = "td1";
+    private static final String TCP_DECODE_NONE = "td2";
+    private static final String TCP_DECODE_COMPRESS = "td3";
+    private static final String TCP_DECODE_CRYPTO = "td4";
 
-    private static final String FRAME_AND_KRYO_CRYPTO_ENCODER = "frameAndKryoCryptoEncoder";
-    private static final String FRAME_AND_KRYO_CRYPTO_DECODER = "frameAndKryoCryptoDecoder";
 
-    private static final String KRYO_CRYPTO_ENCODER = "kryoCryptoEncoder";
-    private static final String KRYO_CRYPTO_DECODER = "kryoCryptoDecoder";
+    private static final String IDLE_HANDLER = "idle";
+    private static final String IDLE_HANDLER_FULL = "idleFull";
 
-    private static final String IDLE_HANDLER = "idleHandler";
+    private static final String UDP_ENCODE = "ue";
+    private static final String UDP_ENCODE_NONE = "ue2";
+    private static final String UDP_ENCODE_COMPRESS = "ue3";
+    private static final String UDP_ENCODE_CRYPTO = "ue4";
+
+    private static final String TCP_ENCODE = "te1";
+    private static final String TCP_ENCODE_NONE = "te2";
+    private static final String TCP_ENCODE_COMPRESS = "te3";
+    private static final String TCP_ENCODE_CRYPTO = "te4";
+
+
+
+
+
 
     protected final NetworkSerializationManager serializationManager;
 
@@ -98,12 +112,11 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             ///////////////////////
             // DECODE (or upstream)
             ///////////////////////
-            pipeline.addFirst(FRAME_AND_KRYO_DECODER,
-                              new KryoDecoderTcp(this.serializationManager)); // cannot be shared because of possible fragmentation.
+            pipeline.addFirst(TCP_DECODE, new KryoDecoderTcp(this.serializationManager)); // cannot be shared because of possible fragmentation.
         }
         else if (isUdpChannel) {
             // can be shared because there cannot be fragmentation for our UDP packets. If there is, we throw an error and continue...
-            pipeline.addFirst(KRYO_DECODER, this.registrationWrapper.kryoUdpDecoder);
+            pipeline.addFirst(UDP_DECODE, this.registrationWrapper.kryoUdpDecoder);
         }
 
         // this makes the proper event get raised in the registrationHandler to kill NEW idle connections. Once "connected" they last a lot longer.
@@ -115,10 +128,10 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             /////////////////////////
             // ENCODE (or downstream)
             /////////////////////////
-            pipeline.addFirst(FRAME_AND_KRYO_ENCODER, this.registrationWrapper.kryoTcpEncoder); // this is shared
+            pipeline.addFirst(TCP_ENCODE, this.registrationWrapper.kryoTcpEncoder); // this is shared
         }
         else if (isUdpChannel) {
-            pipeline.addFirst(KRYO_ENCODER, this.registrationWrapper.kryoUdpEncoder);
+            pipeline.addFirst(UDP_ENCODE, this.registrationWrapper.kryoUdpEncoder);
         }
     }
 
@@ -204,18 +217,45 @@ class RegistrationRemoteHandler extends RegistrationHandler {
      * upgrades a channel ONE channel at a time
      */
     final
-    void upgradeDecoders(final Channel channel, final MetaChannel metaChannel) {
+    void upgradeDecoders(final int upgradeType, final Channel channel, final MetaChannel metaChannel) {
         ChannelPipeline pipeline = channel.pipeline();
 
         try {
             if (metaChannel.tcpChannel == channel) {
-                pipeline.replace(FRAME_AND_KRYO_DECODER,
-                                 FRAME_AND_KRYO_CRYPTO_DECODER,
-                                 new KryoDecoderTcpCrypto(this.serializationManager)); // cannot be shared because of possible fragmentation.
-            }
+                // cannot be shared because of possible fragmentation.
+                switch (upgradeType) {
+                    case (UpgradeType.NONE) :
+                        pipeline.replace(TCP_DECODE, TCP_DECODE_NONE, new KryoDecoderTcpNone(this.serializationManager));
+                        break;
 
-            if (metaChannel.udpChannel == channel) {
-                pipeline.replace(KRYO_DECODER, KRYO_CRYPTO_DECODER, this.registrationWrapper.kryoUdpDecoderCrypto); // shared encoder
+                    case (UpgradeType.COMPRESS) :
+                        pipeline.replace(TCP_DECODE, TCP_DECODE_COMPRESS, new KryoDecoderTcpCompression(this.serializationManager));
+                        break;
+
+                    case (UpgradeType.ENCRYPT) :
+                        pipeline.replace(TCP_DECODE, TCP_DECODE_CRYPTO, new KryoDecoderTcpCrypto(this.serializationManager));
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Unable to upgrade TCP connection pipeline for type: " + upgradeType);
+                }
+            }
+            else if (metaChannel.udpChannel == channel) {
+                // shared decoder
+                switch (upgradeType) {
+                    case (UpgradeType.NONE) :
+                        pipeline.replace(UDP_DECODE, UDP_DECODE_NONE, this.registrationWrapper.kryoUdpDecoderNone);
+                        break;
+
+                    case (UpgradeType.COMPRESS) :
+                        pipeline.replace(UDP_DECODE, UDP_DECODE_COMPRESS, this.registrationWrapper.kryoUdpDecoderCompression);
+                        break;
+
+                    case (UpgradeType.ENCRYPT) :
+                        pipeline.replace(UDP_DECODE, UDP_DECODE_CRYPTO, this.registrationWrapper.kryoUdpDecoderCrypto);
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Unable to upgrade UDP connection pipeline for type: " + upgradeType);
+                }
             }
         } catch (Exception e) {
             logger.error("Error during connection pipeline upgrade", e);
@@ -226,104 +266,117 @@ class RegistrationRemoteHandler extends RegistrationHandler {
      * upgrades a channel ONE channel at a time
      */
     final
-    void upgradeEncoders(final Channel channel, final MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
+    void upgradeEncoders(final int upgradeType, final Channel channel, final MetaChannel metaChannel) {
         ChannelPipeline pipeline = channel.pipeline();
 
-        try {
+        if (metaChannel.tcpChannel == channel) {
+            // shared encoder
+            switch (upgradeType) {
+                case (UpgradeType.NONE) :
+                    pipeline.replace(TCP_ENCODE, TCP_ENCODE_NONE, this.registrationWrapper.kryoTcpEncoderNone);
+                    break;
+
+                case (UpgradeType.COMPRESS) :
+                    pipeline.replace(TCP_ENCODE, TCP_ENCODE_COMPRESS, this.registrationWrapper.kryoTcpEncoderCompression);
+                    break;
+
+                case (UpgradeType.ENCRYPT) :
+                    pipeline.replace(TCP_ENCODE, TCP_ENCODE_CRYPTO, this.registrationWrapper.kryoTcpEncoderCrypto);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unable to upgrade TCP connection pipeline for type: " + upgradeType);
+            }
+        }
+        else if (metaChannel.udpChannel == channel) {
+            // shared encoder
+            switch (upgradeType) {
+                case (UpgradeType.NONE) :
+                    pipeline.replace(UDP_ENCODE, UDP_ENCODE_NONE, this.registrationWrapper.kryoUdpEncoderNone);
+                    break;
+
+                case (UpgradeType.COMPRESS) :
+                    pipeline.replace(UDP_ENCODE, UDP_ENCODE_COMPRESS, this.registrationWrapper.kryoUdpEncoderCompression);
+                    break;
+
+                case (UpgradeType.ENCRYPT) :
+                    pipeline.replace(UDP_ENCODE, UDP_ENCODE_CRYPTO, this.registrationWrapper.kryoUdpEncoderCrypto);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unable to upgrade UDP connection pipeline for type: " + upgradeType);
+            }
+        }
+    }
+
+    final
+    void logChannelUpgrade(final int upgradeType, final Channel channel, final MetaChannel metaChannel) {
+        if (this.logger.isInfoEnabled()) {
+            final String channelType;
+
             if (metaChannel.tcpChannel == channel) {
-                pipeline.replace(FRAME_AND_KRYO_ENCODER,
-                                 FRAME_AND_KRYO_CRYPTO_ENCODER,
-                                 registrationWrapper.kryoTcpEncoderCrypto);  // this is shared
-            }
+                // cannot be shared because of possible fragmentation.
+                switch (upgradeType) {
+                    case (UpgradeType.NONE) :
+                        channelType = "TCP simple";
+                        break;
 
-            if (metaChannel.udpChannel == channel) {
-                pipeline.replace(KRYO_ENCODER, KRYO_CRYPTO_ENCODER, registrationWrapper.kryoUdpEncoderCrypto); // shared encoder
-            }
-        } catch (Exception e) {
-            logger.error("Error during connection pipeline upgrade", e);
-        }
-    }
+                    case (UpgradeType.COMPRESS) :
+                        channelType = "TCP compression";
+                        break;
 
-    /**
-     * upgrades a channel ONE channel at a time
-     */
-    final
-    void upgradePipeline(final MetaChannel metaChannel, final InetSocketAddress remoteAddress) {
-        logger.trace("Upgrading pipeline");
-        try {
-            if (metaChannel.udpChannel != null) {
-                if (metaChannel.tcpChannel == null) {
-                    // TODO: UDP (and TCP??) idle timeout (also, to close UDP session when TCP shuts down)
-                    // this means that we are ONLY UDP, and we should have an idle timeout that CLOSES the session after a while.
-                    // Naturally, one would want the "normal" idle to trigger first, but there always be a heartbeat if the idle trigger DOES NOT
-                    // send data on the network, to make sure that the UDP-only session stays alive or disconnects.
-
-                    // If the server disconnects, the client has to be made aware of this when it tries to send data again (it must go through
-                    // it's entire reconnect protocol)
+                    case (UpgradeType.ENCRYPT) :
+                        channelType = "TCP encrypted";
+                        break;
+                    default:
+                        this.logger.error("Unable to upgrade TCP connection pipeline for type: " + upgradeType);
+                        return;
                 }
             }
+            else if (metaChannel.udpChannel == channel) {
+                // shared decoder
+                switch (upgradeType) {
+                    case (UpgradeType.NONE) :
+                        channelType = "UDP simple";
+                        break;
 
-            // add the "connected"/"normal" handler now that we have established a "new" connection.
-            // This will have state, etc. for this connection. THIS MUST BE 100% TCP/UDP created, otherwise it will break connections!
-            ConnectionImpl connection = this.registrationWrapper.connection0(metaChannel, remoteAddress);
-            metaChannel.connection = new ConnectionRegistrationImpl(connection);
+                    case (UpgradeType.COMPRESS) :
+                        channelType = "UDP compression";
+                        break;
 
-            // Now setup our meta-channel to migrate to the correct connection handler for all regular data.
-
-            if (metaChannel.tcpChannel != null) {
-                final ChannelPipeline pipeline = metaChannel.tcpChannel.pipeline();
-                pipeline.addLast(CONNECTION_HANDLER, metaChannel.connection);
-            }
-
-            if (metaChannel.udpChannel != null) {
-                final ChannelPipeline pipeline = metaChannel.udpChannel.pipeline();
-                pipeline.addLast(CONNECTION_HANDLER, metaChannel.connection);
-            }
-
-
-            if (this.logger.isInfoEnabled()) {
-                StringBuilder stringBuilder = new StringBuilder(96);
-
-                if (metaChannel.tcpChannel != null) {
-                    stringBuilder.append("Encrypted TCP connection  [");
-                    EndPoint.getHostDetails(stringBuilder, metaChannel.tcpChannel.localAddress());
-
-                    stringBuilder.append(getConnectionDirection());
-                    EndPoint.getHostDetails(stringBuilder, metaChannel.tcpChannel.remoteAddress());
-                    stringBuilder.append("]");
+                    case (UpgradeType.ENCRYPT) :
+                        channelType = "UDP encrypted";
+                        break;
+                    default:
+                        this.logger.error("Unable to upgrade UDP connection pipeline for type: " + upgradeType);
+                        return;
                 }
-
-                if (metaChannel.udpChannel != null) {
-                    stringBuilder.append("Encrypted UDP connection  [");
-                    EndPoint.getHostDetails(stringBuilder, metaChannel.udpChannel.localAddress());
-
-                    stringBuilder.append(getConnectionDirection());
-                    EndPoint.getHostDetails(stringBuilder, metaChannel.udpChannel.remoteAddress());
-                    stringBuilder.append("]");
-                }
-
-                this.logger.info(stringBuilder.toString());
             }
-        } catch (Exception e) {
-            logger.error("Error during connection pipeline upgrade", e);
+           else {
+                this.logger.error("Unable to upgrade unknown connection pipeline for type: " + upgradeType);
+                return;
+            }
+
+
+            StringBuilder stringBuilder = new StringBuilder(96);
+
+            stringBuilder.append(channelType);
+            stringBuilder.append(" connection  [");
+
+            EndPoint.getHostDetails(stringBuilder, channel.localAddress());
+
+            stringBuilder.append(getConnectionDirection());
+            EndPoint.getHostDetails(stringBuilder, channel.remoteAddress());
+
+            stringBuilder.append("]");
+
+            this.logger.info(stringBuilder.toString());
         }
     }
 
     final
-    void cleanupPipeline(final MetaChannel metaChannel, final Runnable onConnectFinishRunnable) {
+    void cleanupPipeline(final Channel channel, final MetaChannel metaChannel, final Runnable preConnectRunnable, final Runnable postConnectRunnable) {
         final int idleTimeout = this.registrationWrapper.getIdleTimeout();
 
         try {
-            // REMOVE our channel wrapper (only used for encryption) with the actual connection
-            ChannelHandler handler = metaChannel.connection = ((ConnectionRegistrationImpl) metaChannel.connection).connection;
-
-            Channel channel;
-            if (metaChannel.tcpChannel != null) {
-                channel = metaChannel.tcpChannel;
-            } else {
-                channel = metaChannel.udpChannel;
-            }
-
             // channel should NEVER == null! (we will always have TCP or UDP!)
             // we also ONLY want to add this to a single cleanup, NOT BOTH, because this must only run once!!
             final ChannelPromise channelPromise = channel.newPromise();
@@ -331,33 +384,29 @@ class RegistrationRemoteHandler extends RegistrationHandler {
                 @Override
                 public
                 void operationComplete(final Future<Void> future) throws Exception {
-                    EventLoop loop = channelPromise.channel()
-                                                   .eventLoop();
-                    loop.execute(new Runnable() {
-                        @Override
-                        public
-                        void run() {
-                            logger.trace("Notify Connection");
+                    // this runs on the channel's event loop
+                    logger.trace("Connection connected");
 
-                            // safe cast, because it's always this way...
-                            registrationWrapper.connectionConnected0((ConnectionImpl) metaChannel.connection);
+                    if (preConnectRunnable != null) {
+                        preConnectRunnable.run();
+                    }
 
-                            // run things AFTER the onConnect() method is called...
-                            // CLIENT - runs the deferred 'onMessage' events in the connection as needed
-                            // SERVER - send 'onConnect' bounce back message to client
-                            onConnectFinishRunnable.run();
-                        }
-                    });
+                    // safe cast, because it's always this way...
+                    registrationWrapper.connectionConnected0(metaChannel.connection);
+
+                    if (postConnectRunnable != null) {
+                        postConnectRunnable.run();
+                    }
                 }
             });
 
 
             if (metaChannel.tcpChannel != null) {
-                cleanupPipeline0(idleTimeout, handler, metaChannel.tcpChannel, channelPromise, true);
+                cleanupPipeline0(idleTimeout, metaChannel.tcpChannel, channelPromise);
             }
 
             if (metaChannel.udpChannel != null) {
-                cleanupPipeline0(idleTimeout, handler, metaChannel.udpChannel, channelPromise, false);
+                cleanupPipeline0(idleTimeout, metaChannel.udpChannel, channelPromise);
             }
         } catch (Exception e) {
             logger.error("Error during pipeline replace", e);
@@ -365,33 +414,8 @@ class RegistrationRemoteHandler extends RegistrationHandler {
     }
 
     private
-    void cleanupPipeline0(final int idleTimeout,
-                          final ChannelHandler connection,
-                          final Channel channel,
-                          final ChannelPromise channelPromise,
-                          final boolean isTcp) {
+    void cleanupPipeline0(final int idleTimeout, final Channel channel, final ChannelPromise channelPromise) {
         final ChannelPipeline pipeline = channel.pipeline();
-
-        // have to explicitly remove handlers based on the input type. Cannot use this.getClass()....
-        boolean isClient = registrationWrapper.isClient();
-        if (isClient) {
-            if (isTcp) {
-                pipeline.remove(RegistrationRemoteHandlerClientTCP.class);
-            }
-            else {
-                pipeline.remove(RegistrationRemoteHandlerClientUDP.class);
-            }
-        }
-        else {
-            if (isTcp) {
-                pipeline.remove(RegistrationRemoteHandlerServerTCP.class);
-            }
-            else {
-                pipeline.remove(RegistrationRemoteHandlerServerUDP.class);
-            }
-        }
-
-        pipeline.remove(ConnectionRegistrationImpl.class);
 
         if (idleTimeout > 0) {
             pipeline.replace(IDLE_HANDLER, IDLE_HANDLER_FULL, new IdleStateHandler(0, 0, idleTimeout, TimeUnit.MILLISECONDS));
@@ -400,8 +424,6 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             pipeline.remove(IDLE_HANDLER);
         }
 
-        pipeline.addLast(CONNECTION_HANDLER, connection);
-
         // we also DEREGISTER from the HANDSHAKE event-loop and run on the worker event-loop!
         ChannelFuture future = channel.deregister();
         future.addListener(new GenericFutureListener<Future<? super Void>>() {
@@ -409,12 +431,12 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             public
             void operationComplete(final Future<? super Void> f) throws Exception {
                 if (f.isSuccess()) {
-                    // TCP and UDP register on DIFFERENT event loops. The channel promise ONLY runs on 1 of them...
+                    workerEventLoop.register(channel);
+
+                    // TCP and UDP register on DIFFERENT event loops. This channel promise ONLY runs on the same worker as the
+                    // channel that called `cleanupPipeline`
                     if (channelPromise.channel() == channel) {
                         workerEventLoop.register(channelPromise);
-                    }
-                    else {
-                        workerEventLoop.register(channel);
                     }
                 }
             }

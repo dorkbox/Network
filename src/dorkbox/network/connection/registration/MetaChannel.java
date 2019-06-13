@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection.registration;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.crypto.SecretKey;
@@ -22,8 +23,8 @@ import javax.crypto.SecretKey;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 
+import dorkbox.network.connection.ConnectionImpl;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandler;
 
 public
 class MetaChannel {
@@ -38,10 +39,13 @@ class MetaChannel {
 
     // keep track of how many protocols to register, so that way when we are ready to connect the SERVER sends a message to the client over
     // all registered protocols and the last protocol to receive the message does the registration
-    // we ALWAYS start off with at least 1 protocol
-    public AtomicInteger totalProtocols = new AtomicInteger(1);
+    public AtomicInteger totalProtocols = new AtomicInteger(0);
 
-    public volatile ChannelHandler connection; // only needed until the connection has been notified.
+
+    // only permits the FIST protocol for running the pipeline upgrade.
+    public AtomicBoolean canUpgradePipeline = new AtomicBoolean(true);
+
+    public volatile ConnectionImpl connection; // only needed until the connection has been notified.
 
     public volatile ECPublicKeyParameters publicKey; // used for ECC crypto + handshake on NETWORK (remote) connections. This is the remote public key.
     public volatile AsymmetricCipherKeyPair ecdhKey; // used for ECC Diffie-Hellman-Merkle key exchanges: see http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange

@@ -42,6 +42,7 @@ import dorkbox.network.connection.registration.Registration;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
 
@@ -175,32 +176,51 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
         // NOTE: if we have more registrations, we will "bounce back" that status so the client knows what to do.
         // IN: hasMore=true if we have more registrations to do, false otherwise
 
-        // ALWAYS upgrade the connection at this point.
+        // Some cases we want to SKIP encryption (ie, loopback or specific IP/CIDR addresses)
+        //     OTHERWISE ALWAYS upgrade the connection at this point.
         // IN: upgraded=false if we haven't upgraded to encryption yet (this will always be the case right after encryption is setup)
 
         if (!registration.upgraded) {
-            // upgrade the connection to an encrypted connection
-            registration.upgrade = true;
-            upgradeDecoders(channel, metaChannel);
+            // this is the last protocol registered
+            if (!registration.hasMore) {
+                // this can ONLY be created when all protocols are registered!
+                // this must happen before we verify class registrations.
+                metaChannel.connection = this.registrationWrapper.connection0(metaChannel, remoteAddress);
+
+                if (metaChannel.tcpChannel != null) {
+                    metaChannel.tcpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
+                }
+                if (metaChannel.udpChannel != null) {
+                    metaChannel.udpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
+                }
+            }
+
+            // If we are loopback or the client is a specific IP/CIDR address, then we do things differently. The LOOPBACK address will never encrypt or compress the traffic.
+            byte upgradeType = registrationWrapper.getConnectionUpgradeType(remoteAddress);
+            registration.upgradeType = upgradeType;
+
+            // upgrade the connection to a none/compression/encrypted connection
+            upgradeDecoders(upgradeType, channel, metaChannel);
 
             // bounce back to the client so it knows we received it
             channel.write(registration);
 
-            // this pipeline encoder/decoder can now be upgraded, and the "connection" added
-            upgradeEncoders(channel, metaChannel, remoteAddress);
+            upgradeEncoders(upgradeType, channel, metaChannel);
 
-            if (!registration.hasMore) {
-                // we only get this when we are 100% done with the registration of all connection types.
-
-                // setup the pipeline with the real connection
-                upgradePipeline(metaChannel, remoteAddress);
-            }
+            logChannelUpgrade(upgradeType, channel, metaChannel);
 
             channel.flush();
             return;
         }
 
-        // the client will send their class registration data. VERIFY IT IS CORRECT!
+        //
+        //
+        // we only get this when we are 100% done with encrypting/etc the connections
+        //
+        //
+
+
+        // upgraded=true when the client will send their class registration data. VERIFY IT IS CORRECT!
         STATE state = registrationWrapper.verifyClassRegistration(metaChannel, registration);
         if (state == STATE.ERROR) {
             // abort! There was an error
@@ -216,34 +236,57 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
 
         //
         //
-        // we only get this when we are 100% done with the registration of all connection types.
-        //      the context is the LAST protocol to be registered
+        // we only get this when we are 100% done with validation of class registrations. The last protocol to register gets us here.
         //
         //
+
+
+
+        // remove ourselves from handling any more messages, because we are done.
+        ChannelHandler handler = context.handler();
+        channel.pipeline().remove(handler);
+
+
+        // since only the LAST registration gets here, setup other ones as well (since they are no longer needed)
+        if (channel == metaChannel.tcpChannel && metaChannel.udpChannel != null) {
+            // the "other" channel is the UDP channel that we have to cleanup
+            metaChannel.udpChannel.pipeline().remove(RegistrationRemoteHandlerServerUDP.class);
+        }
+        else if (channel == metaChannel.udpChannel && metaChannel.tcpChannel != null) {
+            // the "other" channel is the TCP channel that we have to cleanup
+            metaChannel.tcpChannel.pipeline().remove(RegistrationRemoteHandlerServerTCP.class);
+        }
+
 
 
         // remove the ConnectionWrapper (that was used to upgrade the connection) and cleanup the pipeline
-        cleanupPipeline(metaChannel, new Runnable() {
+        Runnable preConnectRunnable = new Runnable() {
             @Override
             public
             void run() {
-                // this method runs after the "onConnect()" runs and only after all of the channels have be correctly updated
+                // this method BEFORE the "onConnect()" runs and only after all of the channels have be correctly updated
 
-                // this tells the client we are ready to connect (we just bounce back the original message over ALL protocols)
+                // this tells the client we are ready to connect (we just bounce back "upgraded" over TCP, preferably).
+                // only the FIRST one to arrive at the client will actually setup the pipeline
+                Registration reg = new Registration(registration.sessionID);
+                reg.upgraded = true;
+
+                // there is a risk of UDP losing the packet, so if we can send via TCP, then we do so.
                 if (metaChannel.tcpChannel != null) {
                     logger.trace("Sending TCP upgraded command");
-                    Registration reg = new Registration(registration.sessionID);
-                    reg.upgraded = true;
                     metaChannel.tcpChannel.writeAndFlush(reg);
                 }
-
-                if (metaChannel.udpChannel != null) {
+                else if (metaChannel.udpChannel != null) {
                     logger.trace("Sending UDP upgraded command");
-                    Registration reg = new Registration(registration.sessionID);
-                    reg.upgraded = true;
                     metaChannel.udpChannel.writeAndFlush(reg);
                 }
+                else {
+                    logger.error("This shouldn't happen!");
+
+                }
             }
-        });
+        };
+
+        cleanupPipeline(channel, metaChannel, preConnectRunnable, null);
     }
 }

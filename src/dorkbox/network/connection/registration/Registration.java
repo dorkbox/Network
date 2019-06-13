@@ -25,7 +25,7 @@ public
 class Registration {
     // used to keep track and associate TCP/UDP/etc sessions. This is always defined by the server
     // a sessionId if '0', means we are still figuring it out.
-    public int sessionID;
+    public int sessionID = 0;
 
     public ECPublicKeyParameters publicKey;
     public IESParameters eccParameters;
@@ -33,14 +33,14 @@ class Registration {
     public byte[] payload;
 
     // true if we have more registrations to process, false if we are done
-    public boolean hasMore;
+    public boolean hasMore = false;
 
-    // true when we are ready to setup the connection (hasMore will always be false if this is true). False when we are ready to connect
+    // > 0 when we are ready to setup the connection (hasMore will always be false if this is >0). 0 when we are ready to connect
     // ALSO used if there are fragmented frames for registration data (since we have to split it up to fit inside a single UDP packet without fragmentation)
-    public boolean upgrade;
+    public byte upgradeType = (byte) 0;
 
     // true when we are fully upgraded
-    public boolean upgraded;
+    public boolean upgraded = false;
 
     private
     Registration() {
