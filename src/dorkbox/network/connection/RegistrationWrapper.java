@@ -47,6 +47,8 @@ import io.netty.channel.Channel;
  */
 public
 class RegistrationWrapper {
+    private static final int CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE = 400;
+
     public
     enum STATE { ERROR, WAIT, CONTINUE }
 
@@ -327,17 +329,16 @@ class RegistrationWrapper {
         }
     }
 
-
     public
     boolean initClassRegistration(final Channel channel, final Registration registration) {
         byte[] details = this.endPoint.getSerialization().getKryoRegistrationDetails();
 
         int length = details.length;
-        if (length > 480) {
+        if (length > CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE) {
             // it is too large to send in a single packet
 
             // child arrays have index 0 also as their 'index' and 1 is the total number of fragments
-            byte[][] fragments = divideArray(details, 480);
+            byte[][] fragments = divideArray(details, CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE);
             if (fragments == null) {
                 logger.error("Too many classes have been registered for Serialization. Please report this issue");
 
@@ -386,19 +387,19 @@ class RegistrationWrapper {
             byte[] fragment = registration.payload;
 
             // this means that the registrations are FRAGMENTED!
-            // max size of ALL fragments is 480 * 127
+            // max size of ALL fragments is xxx * 127
             if (metaChannel.fragmentedRegistrationDetails == null) {
                 metaChannel.remainingFragments = fragment[1];
-                metaChannel.fragmentedRegistrationDetails = new byte[480 * fragment[1]];
+                metaChannel.fragmentedRegistrationDetails = new byte[CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE * fragment[1]];
             }
 
-            System.arraycopy(fragment, 2, metaChannel.fragmentedRegistrationDetails, fragment[0] * 480, fragment.length - 2);
+            System.arraycopy(fragment, 2, metaChannel.fragmentedRegistrationDetails, fragment[0] * CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE, fragment.length - 2);
             metaChannel.remainingFragments--;
 
 
             if (fragment[0] + 1 == fragment[1]) {
                 // this is the last fragment in the in byte array (but NOT necessarily the last fragment to arrive)
-                int correctSize = (480 * (fragment[1] - 1)) + (fragment.length - 2);
+                int correctSize = (CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE * (fragment[1] - 1)) + (fragment.length - 2);
                 byte[] correctlySized = new byte[correctSize];
                 System.arraycopy(metaChannel.fragmentedRegistrationDetails, 0, correctlySized, 0, correctSize);
                 metaChannel.fragmentedRegistrationDetails = correctlySized;
