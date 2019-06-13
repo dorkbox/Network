@@ -23,26 +23,18 @@ import io.netty.channel.ChannelHandlerContext;
 // on client this is MessageToMessage (because of the UdpDecoder in the pipeline!)
 
 public
-class KryoDecoderCrypto extends KryoDecoder {
+class KryoDecoderTcpCrypto extends KryoDecoderTcp {
 
     public
-    KryoDecoderCrypto(final NetworkSerializationManager serializationManager) {
+    KryoDecoderTcpCrypto(final NetworkSerializationManager serializationManager) {
         super(serializationManager);
     }
 
     @Override
     protected
     Object readObject(final NetworkSerializationManager serializationManager,
-                      final ChannelHandlerContext context,
-                      final ByteBuf in,
-                      final int length) throws Exception {
-
-        try {
-            Connection_ connection = (Connection_) context.pipeline()
-                                                          .last();
-            return serializationManager.readWithCrypto(connection, in, length);
-        } catch (Exception e) {
-           throw e;
-        }
+                      final ChannelHandlerContext context, final ByteBuf in, final int length) throws Exception {
+        Connection_ connection = (Connection_) context.pipeline().last();
+        return serializationManager.readWithCrypto(connection, in, length);
     }
 }

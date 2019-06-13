@@ -26,20 +26,19 @@ import io.netty.handler.codec.MessageToByteEncoder;
 
 @Sharable
 public
-class KryoEncoder extends MessageToByteEncoder<Object> {
+class KryoEncoderTcp extends MessageToByteEncoder<Object> {
     // maximum size of length field. Un-optimized will always be 4, but optimized version can take from 1 - 4 (for 0-Integer.MAX_VALUE).
     private static final int reservedLengthIndex = 4;
     private final NetworkSerializationManager serializationManager;
 
     // When this is a UDP encode, there are ALREADY size limits placed on the buffer, so any extra checks are unnecessary
     public
-    KryoEncoder(final NetworkSerializationManager serializationManager) {
+    KryoEncoderTcp(final NetworkSerializationManager serializationManager) {
         super(true); // just use direct buffers anyways. When using Heap buffers, they because chunked and the backing array is invalid.
         this.serializationManager = serializationManager;
     }
 
     // the crypto writer will override this
-    @SuppressWarnings("unused")
     protected
     void writeObject(final NetworkSerializationManager kryoWrapper,
                      final ChannelHandlerContext context,
@@ -52,16 +51,16 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
 
     @Override
     protected
-    void encode(final ChannelHandlerContext context, final Object msg, final ByteBuf out) throws Exception {
+    void encode(final ChannelHandlerContext context, final Object message, final ByteBuf out) throws Exception {
         // we don't necessarily start at 0!!
         // START at index = 4. This is to make room for the integer placed by the frameEncoder for TCP.
         int startIndex = out.writerIndex() + reservedLengthIndex;
 
-        if (msg != null) {
+        if (message != null) {
             out.writerIndex(startIndex);
 
             try {
-                writeObject(this.serializationManager, context, msg, out);
+                writeObject(this.serializationManager, context, message, out);
                 int index = out.writerIndex();
 
                 // now set the frame length
@@ -80,8 +79,8 @@ class KryoEncoder extends MessageToByteEncoder<Object> {
 
                 // newIndex is actually where we want to start reading the data as well when written to the socket
                 out.setIndex(indexForLength, index);
-            } catch (Exception ex) {
-                context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + msg.getClass().getName(), ex));
+            } catch (Exception e) {
+                context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + message.getClass().getName(), e));
             }
         }
     }

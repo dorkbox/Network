@@ -18,8 +18,6 @@ package dorkbox.network.pipeline.udp;
 import java.io.IOException;
 import java.util.List;
 
-import org.slf4j.LoggerFactory;
-
 import dorkbox.network.serialization.NetworkSerializationManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.AddressedEnvelope;
@@ -38,6 +36,12 @@ class KryoDecoderUdp extends MessageToMessageDecoder<Object> {
     public
     KryoDecoderUdp(NetworkSerializationManager serializationManager) {
         this.serializationManager = serializationManager;
+    }
+
+    protected
+    Object readObject(NetworkSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) throws Exception {
+        // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
+        return serializationManager.read(in, length);
     }
 
     @Override
@@ -76,14 +80,9 @@ class KryoDecoderUdp extends MessageToMessageDecoder<Object> {
         ByteBuf data = (ByteBuf) ((AddressedEnvelope) message).content();
 
         try {
-            // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-            Object object = serializationManager.read(data, data.writerIndex());
-            out.add(object);
+            out.add(readObject(serializationManager, context, data, data.writerIndex()));
         } catch (IOException e) {
-            String msg = "Unable to deserialize object";
-            LoggerFactory.getLogger(this.getClass())
-                         .error(msg, e);
-            throw new IOException(msg, e);
+            context.fireExceptionCaught(new IOException("Unable to deserialize object!", e));
         }
     }
 }

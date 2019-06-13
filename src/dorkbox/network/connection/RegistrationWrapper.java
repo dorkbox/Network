@@ -26,8 +26,8 @@ import org.slf4j.Logger;
 
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
-import dorkbox.network.pipeline.tcp.KryoEncoder;
-import dorkbox.network.pipeline.tcp.KryoEncoderCrypto;
+import dorkbox.network.pipeline.tcp.KryoEncoderTcp;
+import dorkbox.network.pipeline.tcp.KryoEncoderTcpCrypto;
 import dorkbox.network.pipeline.udp.KryoDecoderUdp;
 import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
@@ -52,8 +52,8 @@ class RegistrationWrapper {
 
     private final org.slf4j.Logger logger;
 
-    public final KryoEncoder kryoTcpEncoder;
-    public final KryoEncoderCrypto kryoTcpEncoderCrypto;
+    public final KryoEncoderTcp kryoTcpEncoder;
+    public final KryoEncoderTcpCrypto kryoTcpEncoderCrypto;
 
     public final KryoEncoderUdp kryoUdpEncoder;
     public final KryoEncoderUdpCrypto kryoUdpEncoderCrypto;
@@ -71,8 +71,8 @@ class RegistrationWrapper {
         this.endPoint = endPoint;
         this.logger = logger;
 
-        this.kryoTcpEncoder = new KryoEncoder(endPoint.serializationManager);
-        this.kryoTcpEncoderCrypto = new KryoEncoderCrypto(endPoint.serializationManager);
+        this.kryoTcpEncoder = new KryoEncoderTcp(endPoint.serializationManager);
+        this.kryoTcpEncoderCrypto = new KryoEncoderTcpCrypto(endPoint.serializationManager);
 
 
         this.kryoUdpEncoder = new KryoEncoderUdp(endPoint.serializationManager);

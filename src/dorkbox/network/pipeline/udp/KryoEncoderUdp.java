@@ -44,6 +44,13 @@ class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
         this.serializationManager = serializationManager;
     }
 
+    // the crypto writer will override this
+    protected
+    void writeObject(NetworkSerializationManager serializationManager, ChannelHandlerContext context, Object msg, ByteBuf buffer) throws IOException {
+        // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
+        serializationManager.write(buffer, msg);
+    }
+
     @Override
     protected
     void encode(ChannelHandlerContext context, Object message, List<Object> out) throws Exception {
@@ -70,18 +77,8 @@ class KryoEncoderUdp extends MessageToMessageEncoder<Object> {
                                                                                       .remoteAddress());
                 out.add(packet);
             } catch (Exception e) {
-                String msg = "Unable to serialize object of type: " + message.getClass()
-                                                                             .getName();
-                LoggerFactory.getLogger(this.getClass())
-                             .error(msg, e);
-                throw new IOException(msg, e);
+                context.fireExceptionCaught(new IOException("Unable to serialize object of type: " + message.getClass().getName(), e));
             }
         }
-    }
-
-    // the crypto writer will override this
-    void writeObject(NetworkSerializationManager serializationManager, ChannelHandlerContext context, Object msg, ByteBuf buffer) throws IOException {
-        // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
-        serializationManager.write(buffer, msg);
     }
 }

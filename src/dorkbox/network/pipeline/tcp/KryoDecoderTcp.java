@@ -25,16 +25,15 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
 public
-class KryoDecoder extends ByteToMessageDecoder {
+class KryoDecoderTcp extends ByteToMessageDecoder {
     private final NetworkSerializationManager serializationManager;
 
     public
-    KryoDecoder(final NetworkSerializationManager serializationManager) {
+    KryoDecoderTcp(final NetworkSerializationManager serializationManager) {
         super();
         this.serializationManager = serializationManager;
     }
 
-    @SuppressWarnings("unused")
     protected
     Object readObject(NetworkSerializationManager serializationManager, ChannelHandlerContext context, ByteBuf in, int length) throws Exception {
         // no connection here because we haven't created one yet. When we do, we replace this handler with a new one.
@@ -165,8 +164,8 @@ class KryoDecoder extends ByteToMessageDecoder {
             try {
                 object = readObject(serializationManager, context, in, length);
                 out.add(object);
-            } catch (Exception ex) {
-                context.fireExceptionCaught(new IOException("Unable to deserialize object for " + this.getClass(), ex));
+            } catch (Exception e) {
+                context.fireExceptionCaught(new IOException("Unable to deserialize object!", e));
             }
         }
     }

@@ -30,8 +30,8 @@ import dorkbox.network.connection.registration.ConnectionRegistrationImpl;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.network.connection.registration.RegistrationHandler;
-import dorkbox.network.pipeline.tcp.KryoDecoder;
-import dorkbox.network.pipeline.tcp.KryoDecoderCrypto;
+import dorkbox.network.pipeline.tcp.KryoDecoderTcp;
+import dorkbox.network.pipeline.tcp.KryoDecoderTcpCrypto;
 import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.crypto.CryptoECC;
 import io.netty.channel.Channel;
@@ -99,7 +99,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             // DECODE (or upstream)
             ///////////////////////
             pipeline.addFirst(FRAME_AND_KRYO_DECODER,
-                              new KryoDecoder(this.serializationManager)); // cannot be shared because of possible fragmentation.
+                              new KryoDecoderTcp(this.serializationManager)); // cannot be shared because of possible fragmentation.
         }
         else if (isUdpChannel) {
             // can be shared because there cannot be fragmentation for our UDP packets. If there is, we throw an error and continue...
@@ -230,7 +230,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             if (metaChannel.tcpChannel == channel) {
                 pipeline.replace(FRAME_AND_KRYO_DECODER,
                                  FRAME_AND_KRYO_CRYPTO_DECODER,
-                                 new KryoDecoderCrypto(this.serializationManager)); // cannot be shared because of possible fragmentation.
+                                 new KryoDecoderTcpCrypto(this.serializationManager)); // cannot be shared because of possible fragmentation.
             }
 
             if (metaChannel.udpChannel == channel) {
