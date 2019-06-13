@@ -122,8 +122,6 @@ class KryoExtra extends Kryo {
     }
 
     /**
-     * This is NOT ENCRYPTED
-     *
      *  ++++++++++++++++++++++++++
      *  + class and object bytes +
      *  ++++++++++++++++++++++++++
@@ -134,8 +132,6 @@ class KryoExtra extends Kryo {
     }
 
     /**
-     * This is NOT ENCRYPTED
-     *
      *  ++++++++++++++++++++++++++
      *  + class and object bytes +
      *  ++++++++++++++++++++++++++
