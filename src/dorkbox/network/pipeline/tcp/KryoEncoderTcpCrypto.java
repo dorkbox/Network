@@ -25,22 +25,18 @@ import io.netty.channel.ChannelHandlerContext;
 
 @Sharable
 public
-class KryoEncoderCrypto extends KryoEncoder {
+class KryoEncoderTcpCrypto extends KryoEncoderTcp {
 
     public
-    KryoEncoderCrypto(final NetworkSerializationManager serializationManager) {
+    KryoEncoderTcpCrypto(final NetworkSerializationManager serializationManager) {
         super(serializationManager);
     }
 
     @Override
     protected
     void writeObject(final NetworkSerializationManager serializationManager,
-                     final ChannelHandlerContext context,
-                     final Object msg,
-                     final ByteBuf buffer) throws IOException {
-
-        Connection_ connection = (Connection_) context.pipeline()
-                                                      .last();
+                     final ChannelHandlerContext context, final Object msg, final ByteBuf buffer) throws IOException {
+        Connection_ connection = (Connection_) context.pipeline().last();
         serializationManager.writeWithCrypto(connection, buffer, msg);
     }
 }
