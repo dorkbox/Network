@@ -22,7 +22,10 @@ package dorkbox.network;
 import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
 
@@ -69,6 +72,8 @@ class ReconnectTest extends BaseTest {
             configuration.udpPort = udpPort;
         }
 
+        AtomicReference<CountDownLatch> latch = new AtomicReference<CountDownLatch>();
+
 
         Server server = new Server(configuration);
         addEndPoint(server);
@@ -94,9 +99,7 @@ class ReconnectTest extends BaseTest {
                 int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
                 System.out.println("----- <S " + connection + "> " + incrementAndGet + " : " + object);
 
-                synchronized (receivedCount) {
-                    receivedCount.notifyAll();
-                }
+                latch.get().countDown();
             }
         });
         server.bind(false);
@@ -128,55 +131,67 @@ class ReconnectTest extends BaseTest {
                 int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
                 System.out.println("----- <C " + connection + "> " + incrementAndGet + " : " + object);
 
-                synchronized (receivedCount) {
-                    receivedCount.notifyAll();
-                }
+                latch.get().countDown();
             }
         });
 
 
 
+        int latchCount = 2;
         int count = 100;
         int initialCount = 2;
         if (useTCP && useUDP) {
             initialCount += 2;
+            latchCount += 2;
         }
+
+
         try {
             for (int i = 1; i < count + 1; i++) {
                 System.out.println(".....");
+                latch.set(new CountDownLatch(latchCount));
+
                 try {
                     client.connect(5000);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
 
-                int waitingRetryCount = 20;
+                int retryCount = 20;
+                int lastRetryCount;
+
                 int target = i * initialCount;
                 boolean failed = false;
 
                 synchronized (receivedCount) {
                     while (this.receivedCount.get() != target) {
-                        if (waitingRetryCount-- < 0) {
-                            System.err.println("Aborting unit test... wrong count!");
-                            if (useUDP) {
-                                // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
-                                // it results in severe UDP packet loss and contention.
-                                //
-                                // http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM
-                                // also, a google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
-                                // Usually it's with ISPs.
+                        lastRetryCount = this.receivedCount.get();
 
-                                System.err.println("NOTE: UDP can fail, even on loopback! See: http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM");
-                            }
-                            if (target != this.receivedCount.get()) {
+                        try {
+                            latch.get().await(1, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+
+                        // check to see if we changed at all...
+                        if (lastRetryCount == this.receivedCount.get()) {
+                            if (retryCount-- < 0) {
+                                System.err.println("Aborting unit test... wrong count!");
+                                if (useUDP) {
+                                    // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
+                                    // it results in severe UDP packet loss and contention.
+                                    //
+                                    // http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM
+                                    // also, a google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
+                                    // Usually it's with ISPs.
+
+                                    System.err.println("NOTE: UDP can fail, even on loopback! See: http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM");
+                                }
                                 failed = true;
                                 break;
                             }
-                        }
-                        try {
-                            receivedCount.wait(1000);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
+                        } else {
+                            retryCount = 20;
                         }
                     }
                 }
