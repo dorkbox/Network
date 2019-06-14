@@ -19,11 +19,14 @@ import static dorkbox.network.pipeline.ConnectionType.LOCAL;
 
 import java.io.IOException;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.List;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.EndPointServer;
+import dorkbox.network.connection.RegistrationWrapperServer;
+import dorkbox.network.connection.connectionType.ConnectionRule;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerTCP;
 import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerUDP;
@@ -49,6 +52,10 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
+import io.netty.handler.ipfilter.IpFilterRule;
+import io.netty.handler.ipfilter.IpFilterRuleType;
+import io.netty.handler.ipfilter.IpSubnetFilterRule;
+import io.netty.util.NetUtil;
 
 /**
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
@@ -59,6 +66,10 @@ import io.netty.channel.socket.oio.OioServerSocketChannel;
 public
 class Server<C extends Connection> extends EndPointServer {
 
+    /**
+     * Rule that will always allow LOCALHOST to connect to the server. This is not added by default
+     */
+    public static final IpFilterRule permitLocalHostRule = new IpSubnetFilterRule(NetUtil.LOCALHOST, 32, IpFilterRuleType.ACCEPT);
 
     /**
      * Gets the version number.
@@ -158,7 +169,7 @@ class Server<C extends Connection> extends EndPointServer {
                           .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                           .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                           .localAddress(new LocalAddress(localChannelName))
-                          .childHandler(new RegistrationLocalHandlerServer(threadName, registrationWrapper));
+                          .childHandler(new RegistrationLocalHandlerServer(threadName, (RegistrationWrapperServer) registrationWrapper));
         }
 
 
@@ -195,7 +206,7 @@ class Server<C extends Connection> extends EndPointServer {
 
                         .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .childOption(ChannelOption.SO_KEEPALIVE, true)
-                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName, registrationWrapper, workerEventLoop));
+                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName, (RegistrationWrapperServer) registrationWrapper, workerEventLoop));
 
             // have to check options.host for "0.0.0.0". we don't bind to "0.0.0.0", we bind to "null" to get the "any" address!
             if (hostName.equals("0.0.0.0")) {
@@ -244,7 +255,7 @@ class Server<C extends Connection> extends EndPointServer {
                         // TODO: move broadcast to it's own handler, and have UDP server be able to be bound to a specific IP
                         // OF NOTE: At the end in my case I decided to bind to .255 broadcast address on Linux systems. (to receive broadcast packets)
                         .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets! see: http://developerweb.net/viewtopic.php?id=5722
-                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, registrationWrapper, workerEventLoop));
+                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, (RegistrationWrapperServer) registrationWrapper, workerEventLoop));
 
             // // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
             // if (hostName.equals("0.0.0.0")) {
@@ -363,6 +374,37 @@ class Server<C extends Connection> extends EndPointServer {
         if (blockUntilTerminate) {
             waitForShutdown();
         }
+    }
+
+    /**
+     * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
+     * <p>
+     * If there are any IP+subnet added to this list - then ONLY those are permitted (all else are denied)
+     * <p>
+     * If there is nothing added to this list - then ALL are permitted
+     */
+    public
+    void addIpFilter(IpFilterRule... rules) {
+        ipFilterRules.addAll(Arrays.asList(rules));
+    }
+
+    /**
+     * Adds an IP+subnet rule that defines what type of connection this IP+subnet should have.
+     *  - NOTHING : Nothing happens to the in/out bytes
+     *  - COMPRESS: The in/out bytes are compressed with LZ4-fast
+     *  - COMPRESS_AND_ENCRYPT: The in/out bytes are compressed (LZ4-fast) THEN encrypted (AES-256-GCM)
+     *
+     * If no rules are defined, then for LOOPBACK, it will always be `COMPRESS` and for everything else it will always be `COMPRESS_AND_ENCRYPT`.
+     *
+     * If rules are defined, then everything by default is `COMPRESS_AND_ENCRYPT`.
+     *
+     * The compression algorithm is LZ4-fast, so there is a small performance impact for a very large gain
+     *   Compress   :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
+     *   Uncompress :       0.641 micros/op; 6097.9 MB/s
+     */
+    public
+    void addConnectionTypeFilter(ConnectionRule... rules) {
+        connectionRules.addAll(Arrays.asList(rules));
     }
 
     // called when we are stopped/shut down

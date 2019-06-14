@@ -18,7 +18,7 @@ package dorkbox.network.connection.registration.remote;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
-import dorkbox.network.connection.RegistrationWrapper;
+import dorkbox.network.connection.RegistrationWrapperClient;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import io.netty.channel.Channel;
@@ -30,7 +30,7 @@ public
 class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient {
     public
     RegistrationRemoteHandlerClientUDP(final String name,
-                                       final RegistrationWrapper registrationWrapper,
+                                       final RegistrationWrapperClient registrationWrapper,
                                        final EventLoopGroup workerEventLoop) {
         super(name, registrationWrapper, workerEventLoop);
     }
@@ -91,7 +91,7 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
                 metaChannel = registrationWrapper.getSession(sessionId);
 
                 if (metaChannel == null) {
-                    metaChannel = registrationWrapper.createSessionClient(sessionId);
+                    metaChannel = registrationWrapper.createSession(sessionId);
 
                     logger.debug("New UDP connection. Saving meta-channel id: {}", metaChannel.sessionId);
                 }

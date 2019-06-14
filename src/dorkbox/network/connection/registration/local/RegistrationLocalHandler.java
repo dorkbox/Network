@@ -23,26 +23,11 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.AttributeKey;
 
 public abstract
-class RegistrationLocalHandler extends RegistrationHandler {
+class RegistrationLocalHandler<T extends RegistrationWrapper> extends RegistrationHandler<T> {
     public static final AttributeKey<MetaChannel> META_CHANNEL = AttributeKey.valueOf(RegistrationLocalHandler.class, "MetaChannel.local");
 
-    RegistrationLocalHandler(String name, RegistrationWrapper registrationWrapper) {
+    RegistrationLocalHandler(String name, T registrationWrapper) {
         super(name, registrationWrapper, null);
-    }
-
-    /**
-     * STEP 1: Channel is first created
-     */
-    @Override
-    protected
-    void initChannel(Channel channel) {
-        MetaChannel metaChannel = registrationWrapper.createSessionServer();
-        metaChannel.localChannel = channel;
-
-        channel.attr(META_CHANNEL)
-               .set(metaChannel);
-
-        logger.trace("New LOCAL connection.");
     }
 
     @Override

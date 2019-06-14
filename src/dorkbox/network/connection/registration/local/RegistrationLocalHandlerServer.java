@@ -16,8 +16,8 @@
 package dorkbox.network.connection.registration.local;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.RegistrationWrapper;
 import dorkbox.network.connection.RegistrationWrapper.STATE;
+import dorkbox.network.connection.RegistrationWrapperServer;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import io.netty.channel.Channel;
@@ -26,12 +26,27 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.util.ReferenceCountUtil;
 
 public
-class RegistrationLocalHandlerServer extends RegistrationLocalHandler {
+class RegistrationLocalHandlerServer extends RegistrationLocalHandler<RegistrationWrapperServer> {
 
 
     public
-    RegistrationLocalHandlerServer(String name, RegistrationWrapper registrationWrapper) {
+    RegistrationLocalHandlerServer(String name, RegistrationWrapperServer registrationWrapper) {
         super(name, registrationWrapper);
+    }
+
+    /**
+     * STEP 1: Channel is first created
+     */
+    @Override
+    protected
+    void initChannel(Channel channel) {
+        MetaChannel metaChannel = registrationWrapper.createSession();
+        metaChannel.localChannel = channel;
+
+        channel.attr(META_CHANNEL)
+               .set(metaChannel);
+
+        logger.trace("New LOCAL connection.");
     }
 
     /**

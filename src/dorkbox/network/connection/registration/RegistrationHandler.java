@@ -24,10 +24,10 @@ import io.netty.channel.EventLoopGroup;
 
 @Sharable
 public abstract
-class RegistrationHandler extends ChannelInboundHandlerAdapter {
+class RegistrationHandler<T extends RegistrationWrapper> extends ChannelInboundHandlerAdapter {
     protected static final String CONNECTION_HANDLER = "connection";
 
-    protected final RegistrationWrapper registrationWrapper;
+    protected final T registrationWrapper;
     protected final org.slf4j.Logger logger;
     protected final String name;
     protected final EventLoopGroup workerEventLoop;
@@ -38,7 +38,7 @@ class RegistrationHandler extends ChannelInboundHandlerAdapter {
      * @param workerEventLoop can be null for local JVM connections
      */
     public
-    RegistrationHandler(final String name, RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
+    RegistrationHandler(final String name, T registrationWrapper, final EventLoopGroup workerEventLoop) {
         this.name = name;
         this.workerEventLoop = workerEventLoop;
         this.logger = org.slf4j.LoggerFactory.getLogger(this.name);

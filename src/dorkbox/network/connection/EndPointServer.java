@@ -15,19 +15,35 @@
  */
 package dorkbox.network.connection;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
 import dorkbox.network.connection.bridge.ConnectionBridgeServer;
-import dorkbox.network.connection.registration.UpgradeType;
+import dorkbox.network.connection.connectionType.ConnectionRule;
+import dorkbox.network.connection.connectionType.ConnectionType;
 import dorkbox.util.exceptions.SecurityException;
+import io.netty.handler.ipfilter.IpFilterRule;
+import io.netty.handler.ipfilter.IpFilterRuleType;
+import io.netty.util.NetUtil;
 
 /**
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
 class EndPointServer extends EndPoint {
+
+    /**
+     * Maintains a thread-safe collection of rules to allow/deny connectivity to this server.
+     */
+    protected final CopyOnWriteArrayList<IpFilterRule> ipFilterRules = new CopyOnWriteArrayList<>();
+
+    /**
+     * Maintains a thread-safe collection of rules used to define the connection type with this server.
+     */
+    protected final CopyOnWriteArrayList<ConnectionRule> connectionRules = new CopyOnWriteArrayList<>();
 
     public
     EndPointServer(final Configuration config) throws SecurityException {
@@ -108,8 +124,74 @@ class EndPointServer extends EndPoint {
         connectionManager.removeConnection(connection);
     }
 
+    @Override
+    protected
+    void shutdownChannelsPre() {
+        // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
+        registrationWrapper.clearSessions();
+
+        // this calls connectionManager.stop()
+        super.shutdownChannelsPre();
+    }
+
+    // if no rules, then always yes
+    // if rules, then default no unless a rule says yes. ACCEPT rules take precedence over REJECT (so if you have both rules, ACCEPT will happen)
+    boolean acceptRemoteConnection(final InetSocketAddress remoteAddress) {
+        int size = ipFilterRules.size();
+
+        if (size == 0) {
+            return true;
+        }
+
+        InetAddress address = remoteAddress.getAddress();
+
+        // it's possible for a remote address to match MORE than 1 rule.
+        boolean isAllowed = false;
+        for (int i = 0; i < size; i++) {
+            final IpFilterRule rule = ipFilterRules.get(i);
+            if (rule == null) {
+                continue;
+            }
+
+            if (isAllowed) {
+                break;
+            }
+
+            if (rule.matches(remoteAddress)) {
+                isAllowed = rule.ruleType() == IpFilterRuleType.ACCEPT;
+            }
+        }
+
+        logger.debug("Validating {}  Connection allowed: {}", address, isAllowed);
+        return isAllowed;
+    }
+
+    // after the handshake, what sort of connection do we want (NONE, COMPRESS, ENCRYPT+COMPRESS)
     byte getConnectionUpgradeType(final InetSocketAddress remoteAddress) {
-        // TODO, crypto/compression based on ip/range of remote address
-        return UpgradeType.ENCRYPT;
+        InetAddress address = remoteAddress.getAddress();
+
+        int size = connectionRules.size();
+
+        // if it's unknown, then by default we encrypt the traffic
+        ConnectionType connectionType = ConnectionType.COMPRESS_AND_ENCRYPT;
+        if (size == 0 && address.equals(NetUtil.LOCALHOST)) {
+            // if nothing is specified, then by default localhost is compression and everything else is encrypted
+            connectionType = ConnectionType.COMPRESS;
+        }
+
+        for (int i = 0; i < size; i++) {
+            final ConnectionRule rule = connectionRules.get(i);
+            if (rule == null) {
+                continue;
+            }
+
+            if (rule.matches(remoteAddress)) {
+                connectionType = rule.ruleType();
+                break;
+            }
+        }
+
+        logger.debug("Validating {}  Permitted type is: {}", remoteAddress, connectionType);
+        return connectionType.getType();
     }
 }

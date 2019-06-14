@@ -16,7 +16,7 @@
 package dorkbox.network.connection.registration.remote;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.RegistrationWrapper;
+import dorkbox.network.connection.RegistrationWrapperServer;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import io.netty.channel.Channel;
@@ -30,11 +30,14 @@ public
 class RegistrationRemoteHandlerServerUDP extends RegistrationRemoteHandlerServer {
     public
     RegistrationRemoteHandlerServerUDP(final String name,
-                                       final RegistrationWrapper registrationWrapper,
+                                       final RegistrationWrapperServer registrationWrapper,
                                        final EventLoopGroup workerEventLoop) {
         super(name, registrationWrapper, workerEventLoop);
     }
 
+    /**
+     * STEP 3-XXXXX: We pass registration messages around until we the registration handshake is complete!
+     */
     @Override
     public
     void channelRead(final ChannelHandlerContext context, Object message) throws Exception {
@@ -47,7 +50,7 @@ class RegistrationRemoteHandlerServerUDP extends RegistrationRemoteHandlerServer
             int sessionId = 0;
             sessionId = registration.sessionID;
             if (sessionId == 0) {
-                metaChannel = registrationWrapper.createSessionServer();
+                metaChannel = registrationWrapper.createSession();
                 metaChannel.udpChannel = channel;
                 logger.debug("New UDP connection. Saving meta-channel id: {}", metaChannel.sessionId);
             }
@@ -66,12 +69,15 @@ class RegistrationRemoteHandlerServerUDP extends RegistrationRemoteHandlerServer
 
             readServer(context, channel, registration, "UDP server", metaChannel);
         }
-        else {
+        else if (message instanceof io.netty.channel.socket.DatagramPacket) {
             logger.error("Error registering UDP with remote client!");
+            shutdown(channel, 0);
+        }
+        else {
+            logger.error("Error registering UDP with remote client! Attempting to queue message: " + message.getClass());
 
             // this is what happens when the registration happens too quickly...
-            Object connection = context.pipeline()
-                                       .last();
+            Object connection = context.pipeline().last();
             if (connection instanceof ConnectionImpl) {
                 ((ConnectionImpl) connection).channelRead(context, message);
             }

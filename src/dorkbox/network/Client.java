@@ -24,6 +24,7 @@ import dorkbox.network.connection.BootstrapWrapper;
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.EndPointClient;
+import dorkbox.network.connection.RegistrationWrapperClient;
 import dorkbox.network.connection.idle.IdleBridge;
 import dorkbox.network.connection.idle.IdleSender;
 import dorkbox.network.connection.registration.local.RegistrationLocalHandlerClient;
@@ -150,7 +151,7 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
             localBootstrap.group(newEventLoop(LOCAL, 1, threadName + "-JVM-BOSS"))
                           .channel(LocalChannel.class)
                           .remoteAddress(new LocalAddress(config.localChannelName))
-                          .handler(new RegistrationLocalHandlerClient(threadName, registrationWrapper));
+                          .handler(new RegistrationLocalHandlerClient(threadName, (RegistrationWrapperClient) registrationWrapper));
         }
 
 
@@ -183,7 +184,7 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                         .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                         .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                         .remoteAddress(config.host, config.tcpPort)
-                        .handler(new RegistrationRemoteHandlerClientTCP(threadName, registrationWrapper, workerEventLoop));
+                        .handler(new RegistrationRemoteHandlerClientTCP(threadName, (RegistrationWrapperClient) registrationWrapper, workerEventLoop));
 
             // android screws up on this!!
             tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid())
@@ -217,7 +218,7 @@ class Client<C extends Connection> extends EndPointClient implements Connection 
                         .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
                         .localAddress(new InetSocketAddress(0))  // bind to wildcard
                         .remoteAddress(new InetSocketAddress(config.host, config.udpPort))
-                        .handler(new RegistrationRemoteHandlerClientUDP(threadName, registrationWrapper, workerEventLoop));
+                        .handler(new RegistrationRemoteHandlerClientUDP(threadName, (RegistrationWrapperClient) registrationWrapper, workerEventLoop));
 
             // Enable to READ and WRITE MULTICAST data (ie, 192.168.1.0)
             // in order to WRITE: write as normal, just make sure it ends in .255

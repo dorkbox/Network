@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dorkbox.network.Configuration;
+import dorkbox.network.Server;
 import dorkbox.network.connection.bridge.ConnectionBridgeBase;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
@@ -214,8 +215,11 @@ class EndPoint extends Shutdownable {
         // The registration wrapper permits the registration process to access protected/package fields/methods, that we don't want
         // to expose to external code. "this" escaping can be ignored, because it is benign.
         //noinspection ThisEscapedInObjectConstruction
-        registrationWrapper = new RegistrationWrapper(this,
-                                                      logger);
+        if (type == Server.class) {
+            registrationWrapper = new RegistrationWrapperServer(this, logger);
+        } else {
+            registrationWrapper = new RegistrationWrapperClient(this, logger);
+        }
 
 
         // we have to be able to specify WHAT property store we want to use, since it can change!

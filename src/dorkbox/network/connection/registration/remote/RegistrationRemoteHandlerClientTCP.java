@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection.registration.remote;
 
-import dorkbox.network.connection.RegistrationWrapper;
+import dorkbox.network.connection.RegistrationWrapperClient;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import io.netty.channel.Channel;
@@ -26,7 +26,7 @@ public
 class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient {
     public
     RegistrationRemoteHandlerClientTCP(final String name,
-                                       final RegistrationWrapper registrationWrapper,
+                                       final RegistrationWrapperClient registrationWrapper,
                                        final EventLoopGroup workerEventLoop) {
         super(name, registrationWrapper, workerEventLoop);
     }
@@ -70,7 +70,7 @@ class RegistrationRemoteHandlerClientTCP extends RegistrationRemoteHandlerClient
 
                 // TCP channel registration is ALWAYS first, so this is the correct way to do this.
                 if (metaChannel == null) {
-                    metaChannel = registrationWrapper.createSessionClient(sessionId);
+                    metaChannel = registrationWrapper.createSession(sessionId);
                     metaChannel.tcpChannel = channel;
 
                     logger.debug("New TCP connection. Saving meta-channel id: {}", metaChannel.sessionId);

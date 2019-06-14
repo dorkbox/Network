@@ -34,7 +34,6 @@ import dorkbox.network.pipeline.tcp.KryoDecoderTcp;
 import dorkbox.network.pipeline.tcp.KryoDecoderTcpCompression;
 import dorkbox.network.pipeline.tcp.KryoDecoderTcpCrypto;
 import dorkbox.network.pipeline.tcp.KryoDecoderTcpNone;
-import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.util.crypto.CryptoECC;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -51,7 +50,7 @@ import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.GenericFutureListener;
 
 public abstract
-class RegistrationRemoteHandler extends RegistrationHandler {
+class RegistrationRemoteHandler<T extends RegistrationWrapper> extends RegistrationHandler<T> {
     static final AttributeKey<LinkedList> MESSAGES = AttributeKey.valueOf(RegistrationRemoteHandler.class, "messages");
 
     static final String DELETE_IP = "eleteIP"; // purposefully missing the "D", since that is a system parameter, which starts with "-D"
@@ -86,12 +85,8 @@ class RegistrationRemoteHandler extends RegistrationHandler {
 
 
 
-    protected final NetworkSerializationManager serializationManager;
-
-    RegistrationRemoteHandler(final String name, final RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
+    RegistrationRemoteHandler(final String name, final T registrationWrapper, final EventLoopGroup workerEventLoop) {
         super(name, registrationWrapper, workerEventLoop);
-
-        this.serializationManager = registrationWrapper.getSerialization();
     }
 
     /**
@@ -112,7 +107,7 @@ class RegistrationRemoteHandler extends RegistrationHandler {
             ///////////////////////
             // DECODE (or upstream)
             ///////////////////////
-            pipeline.addFirst(TCP_DECODE, new KryoDecoderTcp(this.serializationManager)); // cannot be shared because of possible fragmentation.
+            pipeline.addFirst(TCP_DECODE, new KryoDecoderTcp(registrationWrapper.getSerialization())); // cannot be shared because of possible fragmentation.
         }
         else if (isUdpChannel) {
             // can be shared because there cannot be fragmentation for our UDP packets. If there is, we throw an error and continue...
@@ -225,15 +220,15 @@ class RegistrationRemoteHandler extends RegistrationHandler {
                 // cannot be shared because of possible fragmentation.
                 switch (upgradeType) {
                     case (UpgradeType.NONE) :
-                        pipeline.replace(TCP_DECODE, TCP_DECODE_NONE, new KryoDecoderTcpNone(this.serializationManager));
+                        pipeline.replace(TCP_DECODE, TCP_DECODE_NONE, new KryoDecoderTcpNone(registrationWrapper.getSerialization()));
                         break;
 
                     case (UpgradeType.COMPRESS) :
-                        pipeline.replace(TCP_DECODE, TCP_DECODE_COMPRESS, new KryoDecoderTcpCompression(this.serializationManager));
+                        pipeline.replace(TCP_DECODE, TCP_DECODE_COMPRESS, new KryoDecoderTcpCompression(registrationWrapper.getSerialization()));
                         break;
 
                     case (UpgradeType.ENCRYPT) :
-                        pipeline.replace(TCP_DECODE, TCP_DECODE_CRYPTO, new KryoDecoderTcpCrypto(this.serializationManager));
+                        pipeline.replace(TCP_DECODE, TCP_DECODE_CRYPTO, new KryoDecoderTcpCrypto(registrationWrapper.getSerialization()));
                         break;
                     default:
                         throw new IllegalArgumentException("Unable to upgrade TCP connection pipeline for type: " + upgradeType);

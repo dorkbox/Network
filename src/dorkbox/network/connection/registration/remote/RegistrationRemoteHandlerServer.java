@@ -35,8 +35,9 @@ import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import dorkbox.network.connection.RegistrationWrapper;
+import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.RegistrationWrapper.STATE;
+import dorkbox.network.connection.RegistrationWrapperServer;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.util.crypto.CryptoECC;
@@ -47,7 +48,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
 
 public
-class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
+class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler<RegistrationWrapperServer> {
     private static final long ECDH_TIMEOUT = TimeUnit.MINUTES.toNanos(10L); // 10 minutes in nanoseconds
 
     private static final ECParameterSpec eccSpec = ECNamedCurveTable.getParameterSpec(CryptoECC.curve25519);
@@ -56,9 +57,30 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler {
     private volatile long ecdhTimeout = System.nanoTime();
 
 
-    RegistrationRemoteHandlerServer(final String name, final RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
+    RegistrationRemoteHandlerServer(final String name, final RegistrationWrapperServer registrationWrapper, final EventLoopGroup workerEventLoop) {
         super(name, registrationWrapper, workerEventLoop);
     }
+
+    /**
+     * STEP 1: Channel is first created
+     */
+    @Override
+    protected
+    void initChannel(final Channel channel) {
+        // check to see if this connection is permitted.
+        final InetSocketAddress remoteAddress = (InetSocketAddress) channel.remoteAddress();
+        if (!registrationWrapper.acceptRemoteConnection(remoteAddress)) {
+            StringBuilder stringBuilder = new StringBuilder();
+            EndPoint.getHostDetails(stringBuilder, remoteAddress);
+
+            logger.error("Remote connection [{}] is not permitted! Aborting connection process.", stringBuilder.toString());
+            shutdown(channel, 0);
+            return;
+        }
+
+        super.initChannel(channel);
+    }
+
 
     /**
      * @return the direction that traffic is going to this handler (" <== " or " ==> ")

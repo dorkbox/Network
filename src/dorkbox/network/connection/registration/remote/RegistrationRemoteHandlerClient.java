@@ -33,7 +33,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
 import dorkbox.network.connection.ConnectionImpl;
-import dorkbox.network.connection.RegistrationWrapper;
+import dorkbox.network.connection.RegistrationWrapperClient;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.registration.Registration;
 import dorkbox.util.crypto.CryptoECC;
@@ -44,9 +44,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
 
 public
-class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler {
+class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler<RegistrationWrapperClient> {
 
-    RegistrationRemoteHandlerClient(final String name, final RegistrationWrapper registrationWrapper, final EventLoopGroup workerEventLoop) {
+    RegistrationRemoteHandlerClient(final String name, final RegistrationWrapperClient registrationWrapper, final EventLoopGroup workerEventLoop) {
         super(name, registrationWrapper, workerEventLoop);
 
         // check to see if we need to delete an IP address as commanded from the user prompt

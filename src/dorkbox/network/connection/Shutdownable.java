@@ -425,7 +425,6 @@ class Shutdownable {
         synchronized (shutdownInProgress) {
             shutdownChannelsPre();
             shutdownAllChannels();
-
             shutdownEventLoops();
 
             logger.info("Stopping endpoint.");
