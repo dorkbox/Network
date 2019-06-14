@@ -93,7 +93,7 @@ Maven Info
     <dependency>
       <groupId>com.dorkbox</groupId>
       <artifactId>Network</artifactId>
-      <version>3.0</version>
+      <version>4.0</version>
     </dependency>
 </dependencies>
 ```
@@ -103,7 +103,7 @@ Gradle Info
 ````
 dependencies {
     ...
-    compile 'com.dorkbox:Network:3.0'
+    compile 'com.dorkbox:Network:4.0'
 }
 ````
 
