@@ -122,8 +122,7 @@ class Broadcast {
     static
     List<BroadcastResponse> discoverHosts0(Logger logger, int udpPort, int discoverTimeoutMillis, boolean fetchAllServers) throws IOException {
         // fetch a buffer that contains the serialized object.
-        ByteBuf buffer = Unpooled.buffer(1);
-        buffer.writeByte(MagicBytes.broadcastID);
+        ByteBuf buffer = Unpooled.wrappedBuffer(new byte[]{MagicBytes.broadcastID});
 
         List<BroadcastResponse> servers = new ArrayList<BroadcastResponse>();
 
