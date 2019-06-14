@@ -146,7 +146,8 @@ class KryoExtra extends Kryo {
         // read the object from the buffer.
         readerBuff.setBuffer(buffer);
 
-        return readClassAndObject(readerBuff); // this properly sets the readerIndex, but only if it's the correct buffer
+        // this properly sets the readerIndex, but only if it's the correct buffer
+        return readClassAndObject(readerBuff);
     }
 
     ////////////////
@@ -465,16 +466,6 @@ class KryoExtra extends Kryo {
 
         // read the object from the buffer.
         return read(connection, reader);
-    }
-
-
-    @Override
-    protected
-    void finalize() throws Throwable {
-        readerBuff.getByteBuf().release();
-        writerBuff.getByteBuf().release();
-
-        super.finalize();
     }
 
     public

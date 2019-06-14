@@ -610,7 +610,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
                 }
             }
 
-            this.logger.info("Closed remote {} connection [{}]",
+            this.logger.info("Closed {} connection [{}]",
                              type,
                              EndPoint.getHostDetails(channel.remoteAddress()));
         }
