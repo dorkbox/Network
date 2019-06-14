@@ -17,19 +17,20 @@ These are the main features:
    - Exceptions can be returned
  - Sending data when Idle
  - "Pinging" the remote end (for measuring round-trip time)
+ - Firewall connections by IP+CIDR
+ - Specify the connection type (nothing, compress, compress+encrypt)
  
 
 - The available transports are TCP and UDP
 - There are simple wrapper classes for:
   - Server
   - Client
-  - DNS Client (for querying DNS servers)
   - MultiCast Broadcast client and server discovery
   
 
 - Note: There is a maximum packet size for UDP, 508 bytes *to guarantee it's unfragmented*
 
-- This is for cross-platform use, specifically - linux 32/64, mac 64, and windows 32/64. Java 8+
+- This is for cross-platform use, specifically - linux 32/64, mac 64, and windows 32/64. Java 11+
     
 ``` java
 public static
@@ -92,7 +93,7 @@ Maven Info
     <dependency>
       <groupId>com.dorkbox</groupId>
       <artifactId>Network</artifactId>
-      <version>2.11</version>
+      <version>3.0</version>
     </dependency>
 </dependencies>
 ```
@@ -102,30 +103,9 @@ Gradle Info
 ````
 dependencies {
     ...
-    compile 'com.dorkbox:Network:2.11'
+    compile 'com.dorkbox:Network:3.0'
 }
 ````
-
-Or if you don't want to use Maven, you can access the files directly here:  
-https://repo1.maven.org/maven2/com/dorkbox/Network/  
-
-
-https://repo1.maven.org/maven2/releases/com/dorkbox/ObjectPool/  
-https://repo1.maven.org/maven2/com/dorkbox/MinLog-SLF4J/  
-
-https://repo1.maven.org/maven2/org/slf4j/slf4j-api/  
-https://repo1.maven.org/maven2/io/netty/netty-all/  (latest 4.1)  
-https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk15on/  
-https://repo1.maven.org/maven2/org/bouncycastle/bcpkix-jdk15on/  
-https://repo1.maven.org/maven2/asm/asm/  
-https://repo1.maven.org/maven2/org/javassist/javassist/  
-https://repo1.maven.org/maven2/com/esotericsoftware/jsonbeans/   
-
-
-https://repo1.maven.org/maven2/com/esotericsoftware/reflectasm/  
-https://repo1.maven.org/maven2/net/jpountz/lz4/lz4/    
-https://repo1.maven.org/maven2/org/objenesis/objenesis/  
-https://repo1.maven.org/maven2/com/esotericsoftware/kryo/  
 
 License
 ---------
