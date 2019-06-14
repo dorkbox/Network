@@ -17,6 +17,7 @@ package dorkbox.network.connection;
 
 import java.io.IOException;
 import java.security.SecureRandom;
+import java.util.Arrays;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -376,6 +377,8 @@ class KryoExtra extends Kryo {
 
         // write out our IV
         buffer.writeBytes(iv, 0, IV_LENGTH_BYTE);
+
+        Arrays.fill(iv, (byte) 0); // overwrite the IV with zeros so we can't leak this value
 
         // have to copy over the orig data, because we used the temp buffer
         buffer.writeBytes(writer.getBuffer(), 0, encryptedLength);
