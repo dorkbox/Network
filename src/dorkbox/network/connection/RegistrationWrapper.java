@@ -33,6 +33,7 @@ import dorkbox.network.pipeline.udp.KryoDecoderUdpCrypto;
 import dorkbox.network.pipeline.udp.KryoEncoderUdp;
 import dorkbox.network.pipeline.udp.KryoEncoderUdpCrypto;
 import dorkbox.network.serialization.NetworkSerializationManager;
+import dorkbox.network.serialization.Serialization;
 import dorkbox.util.RandomUtil;
 import dorkbox.util.collections.IntMap.Values;
 import dorkbox.util.collections.LockFreeIntMap;
@@ -47,7 +48,6 @@ import io.netty.channel.Channel;
  */
 public
 class RegistrationWrapper {
-    private static final int CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE = 400;
 
     public
     enum STATE { ERROR, WAIT, CONTINUE }
@@ -334,11 +334,11 @@ class RegistrationWrapper {
         byte[] details = this.endPoint.getSerialization().getKryoRegistrationDetails();
 
         int length = details.length;
-        if (length > CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE) {
+        if (length > Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE) {
             // it is too large to send in a single packet
 
             // child arrays have index 0 also as their 'index' and 1 is the total number of fragments
-            byte[][] fragments = divideArray(details, CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE);
+            byte[][] fragments = divideArray(details, Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE);
             if (fragments == null) {
                 logger.error("Too many classes have been registered for Serialization. Please report this issue");
 
@@ -390,16 +390,16 @@ class RegistrationWrapper {
             // max size of ALL fragments is xxx * 127
             if (metaChannel.fragmentedRegistrationDetails == null) {
                 metaChannel.remainingFragments = fragment[1];
-                metaChannel.fragmentedRegistrationDetails = new byte[CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE * fragment[1]];
+                metaChannel.fragmentedRegistrationDetails = new byte[Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE * fragment[1]];
             }
 
-            System.arraycopy(fragment, 2, metaChannel.fragmentedRegistrationDetails, fragment[0] * CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE, fragment.length - 2);
+            System.arraycopy(fragment, 2, metaChannel.fragmentedRegistrationDetails, fragment[0] * Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE, fragment.length - 2);
             metaChannel.remainingFragments--;
 
 
             if (fragment[0] + 1 == fragment[1]) {
                 // this is the last fragment in the in byte array (but NOT necessarily the last fragment to arrive)
-                int correctSize = (CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE * (fragment[1] - 1)) + (fragment.length - 2);
+                int correctSize = (Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE * (fragment[1] - 1)) + (fragment.length - 2);
                 byte[] correctlySized = new byte[correctSize];
                 System.arraycopy(metaChannel.fragmentedRegistrationDetails, 0, correctlySized, 0, correctSize);
                 metaChannel.fragmentedRegistrationDetails = correctlySized;

@@ -81,6 +81,8 @@ import io.netty.buffer.Unpooled;
 public
 class Serialization implements NetworkSerializationManager {
 
+    public static final int CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE = 400;
+
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(Serialization.class.getSimpleName());
 
     public static
@@ -517,7 +519,7 @@ class Serialization implements NetworkSerializationManager {
 
 
             // save this as a byte array (so registration is faster)
-            ByteBuf buffer = Unpooled.buffer(480);
+            ByteBuf buffer = Unpooled.buffer(CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE);
 
             kryo.setRegistrationRequired(false);
             try {
