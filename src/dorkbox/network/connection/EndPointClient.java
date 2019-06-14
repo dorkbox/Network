@@ -21,6 +21,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 
 import dorkbox.network.Client;
 import dorkbox.network.Configuration;
@@ -46,6 +47,7 @@ class EndPointClient extends EndPoint {
 
     protected volatile int connectionTimeout = 5000; // default is 5 seconds
 
+    private volatile long previousClosedConnectionActivity = 0;
 
     private volatile ConnectionBridge connectionBridgeFlushAlways;
 
@@ -60,6 +62,13 @@ class EndPointClient extends EndPoint {
      */
     protected
     void startRegistration() throws IOException {
+        // make sure we WAIT 100ms BEFORE starting registrations again IF we recently called close...
+        while (previousClosedConnectionActivity > 0 &&
+               System.nanoTime() - previousClosedConnectionActivity < TimeUnit.MILLISECONDS.toNanos(200)) {
+            LockSupport.parkNanos(100L); // wait
+        }
+
+
         synchronized (bootstrapLock) {
             // always reset everything.
             registration = new CountDownLatch(1);
@@ -264,7 +273,7 @@ class EndPointClient extends EndPoint {
      */
     protected
     void startUdpHeartbeat() {
-
+        // TODO...
     }
 
     /**
@@ -318,6 +327,8 @@ class EndPointClient extends EndPoint {
 
             connection = null;
             isConnected.set(false);
+
+            previousClosedConnectionActivity = System.nanoTime();
         }
     }
 
