@@ -16,12 +16,7 @@
 
 import Build_gradle.Extras.bcVersion
 import java.time.Instant
-import java.util.*
-import kotlin.collections.component1
-import kotlin.collections.component2
 import kotlin.collections.set
-import kotlin.reflect.KMutableProperty
-import kotlin.reflect.full.declaredMemberProperties
 
 ///////////////////////////////
 //////    PUBLISH TO SONATYPE / MAVEN CENTRAL
@@ -43,9 +38,10 @@ plugins {
     // close and release on sonatype
     id("io.codearte.nexus-staging") version "0.20.0"
 
+    id("com.dorkbox.CrossCompile") version "1.0.1"
     id("com.dorkbox.Licensing") version "1.4"
     id("com.dorkbox.VersionUpdate") version "1.4.1"
-    id("com.dorkbox.GradleUtils") version "1.0"
+    id("com.dorkbox.GradleUtils") version "1.2"
 
     kotlin("jvm") version "1.3.31"
 }
@@ -63,7 +59,7 @@ object Extras {
     const val url = "https://git.dorkbox.com/dorkbox/Network"
     val buildDate = Instant.now().toString()
 
-    val JAVA_VERSION = JavaVersion.VERSION_1_8.toString()
+    val JAVA_VERSION = JavaVersion.VERSION_11
 
     const val bcVersion = "1.60"
 
@@ -74,33 +70,11 @@ object Extras {
 ///////////////////////////////
 /////  assign 'Extras'
 ///////////////////////////////
+GradleUtils.load("$projectDir/../../gradle.properties", Extras)
 description = Extras.description
 group = Extras.group
 version = Extras.version
 
-val propsFile = File("$projectDir/../../gradle.properties").normalize()
-if (propsFile.canRead()) {
-    println("\tLoading custom property data from: [$propsFile]")
-
-    val props = Properties()
-    propsFile.inputStream().use {
-        props.load(it)
-    }
-
-    val extraProperties = Extras::class.declaredMemberProperties.filterIsInstance<KMutableProperty<String>>()
-    props.forEach { (k, v) -> run {
-        val key = k as String
-        val value = v as String
-
-        val member = extraProperties.find { it.name == key }
-        if (member != null) {
-            member.setter.call(Extras::class.objectInstance, value)
-        }
-        else {
-            project.extra.set(k, v)
-        }
-    }}
-}
 
 licensing {
     license(License.APACHE_2) {
@@ -246,15 +220,19 @@ repositories {
 ///////////////////////////////
 //////    Task defaults
 ///////////////////////////////
+java {
+    sourceCompatibility = Extras.JAVA_VERSION
+    targetCompatibility = Extras.JAVA_VERSION
+}
+
 tasks.compileJava.get().apply {
     println("\tCompiling classes to Java $sourceCompatibility")
 }
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
-
-    sourceCompatibility = Extras.JAVA_VERSION
-    targetCompatibility = Extras.JAVA_VERSION
+    sourceCompatibility = Extras.JAVA_VERSION.toString()
+    targetCompatibility = Extras.JAVA_VERSION.toString()
 }
 
 tasks.withType<Jar> {
