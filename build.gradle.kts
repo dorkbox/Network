@@ -48,7 +48,7 @@ plugins {
 
 object Extras {
     // set for the project
-    const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 8+"
+    const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
     const val version = "3.0"
 
@@ -269,7 +269,7 @@ dependencies {
     implementation("net.jodah:typetools:0.6.1")
     implementation("de.javakaffee:kryo-serializers:0.45")
 
-    implementation("com.dorkbox:ObjectPool:2.11")
+    implementation("com.dorkbox:ObjectPool:2.12")
     implementation("com.dorkbox:Utilities:1.1")
 
     implementation("org.slf4j:slf4j-api:1.7.25")
