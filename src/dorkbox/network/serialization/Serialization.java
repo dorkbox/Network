@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
@@ -132,6 +133,18 @@ class Serialization implements NetworkSerializationManager {
         serialization.register(StackTraceElement[].class);
 
         serialization.register(Arrays.asList().getClass());
+
+        serialization.register(Collections.emptyList().getClass());
+
+        serialization.register(Collections.emptySet().getClass());
+        serialization.register(Collections.emptyNavigableSet().getClass());
+        serialization.register(Collections.emptySortedSet().getClass());
+
+        serialization.register(Collections.emptyMap().getClass());
+        serialization.register(Collections.emptyNavigableMap().getClass());
+        serialization.register(Collections.emptySortedMap().getClass());
+
+        // java.util.Collections$EmptyList
 
         // hacky way to register unmodifiable serializers
         Kryo kryo = new Kryo() {
@@ -508,7 +521,7 @@ class Serialization implements NetworkSerializationManager {
 
             kryo.setRegistrationRequired(false);
             try {
-                kryo.writeCompressed(buffer, registrationDetails);
+                kryo.writeCompressed(logger, buffer, registrationDetails);
             } catch (Exception e) {
                 logger.error("Unable to write compressed data for registration details");
             }
@@ -568,7 +581,7 @@ class Serialization implements NetworkSerializationManager {
         try {
             kryo.setRegistrationRequired(false);
             @SuppressWarnings("unchecked")
-            Object[][] classRegistrations = (Object[][]) kryo.readCompressed(byteBuf, otherRegistrationData.length);
+            Object[][] classRegistrations = (Object[][]) kryo.readCompressed(logger, byteBuf, otherRegistrationData.length);
 
 
             int lengthOrg = mergedRegistrations.length;
@@ -785,13 +798,13 @@ class Serialization implements NetworkSerializationManager {
         try {
             if (wireWriteLogger.isTraceEnabled()) {
                 int start = buffer.writerIndex();
-                kryo.writeCompressed(connection, buffer, message);
+                kryo.writeCompressed(wireWriteLogger, connection, buffer, message);
                 int end = buffer.writerIndex();
 
                 wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
             }
             else {
-                kryo.writeCompressed(connection, buffer, message);
+                kryo.writeCompressed(wireWriteLogger, connection, buffer, message);
             }
         } finally {
             kryoPool.put(kryo);
@@ -863,7 +876,7 @@ class Serialization implements NetworkSerializationManager {
         try {
             if (wireReadLogger.isTraceEnabled()) {
                 int start = buffer.readerIndex();
-                Object object = kryo.readCompressed(connection, buffer, length);
+                Object object = kryo.readCompressed(wireReadLogger, connection, buffer, length);
                 int end = buffer.readerIndex();
 
                 wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
@@ -871,7 +884,7 @@ class Serialization implements NetworkSerializationManager {
                 return object;
             }
             else {
-                return kryo.readCompressed(connection, buffer, length);
+                return kryo.readCompressed(wireReadLogger, connection, buffer, length);
             }
         } finally {
             kryoPool.put(kryo);
@@ -890,13 +903,13 @@ class Serialization implements NetworkSerializationManager {
         try {
             if (wireWriteLogger.isTraceEnabled()) {
                 int start = buffer.writerIndex();
-                kryo.writeCrypto(connection, buffer, message);
+                kryo.writeCrypto(wireWriteLogger, connection, buffer, message);
                 int end = buffer.writerIndex();
 
                 wireWriteLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
             }
             else {
-                kryo.writeCrypto(connection, buffer, message);
+                kryo.writeCrypto(wireWriteLogger, connection, buffer, message);
             }
         } finally {
             kryoPool.put(kryo);
@@ -917,7 +930,7 @@ class Serialization implements NetworkSerializationManager {
         try {
             if (wireReadLogger.isTraceEnabled()) {
                 int start = buffer.readerIndex();
-                Object object = kryo.readCrypto(connection, buffer, length);
+                Object object = kryo.readCrypto(wireReadLogger, connection, buffer, length);
                 int end = buffer.readerIndex();
 
                 wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start));
@@ -925,7 +938,7 @@ class Serialization implements NetworkSerializationManager {
                 return object;
             }
             else {
-                return kryo.readCrypto(connection, buffer, length);
+                return kryo.readCrypto(wireReadLogger, connection, buffer, length);
             }
         } finally {
             kryoPool.put(kryo);

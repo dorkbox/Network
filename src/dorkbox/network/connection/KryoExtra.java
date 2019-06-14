@@ -22,6 +22,8 @@ import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
+import org.slf4j.Logger;
+
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
@@ -135,7 +137,6 @@ class KryoExtra extends Kryo {
      *  ++++++++++++++++++++++++++
      *  + class and object bytes +
      *  ++++++++++++++++++++++++++
-     *
      */
     public synchronized
     Object read(final Connection_ connection, final ByteBuf buffer) throws IOException {
@@ -189,8 +190,8 @@ class KryoExtra extends Kryo {
 
 
     public synchronized
-    void writeCompressed(final ByteBuf buffer, final Object message) throws IOException {
-        writeCompressed(NOP_CONNECTION, buffer, message);
+    void writeCompressed(final Logger logger, final ByteBuf buffer, final Object message) throws IOException {
+        writeCompressed(logger, NOP_CONNECTION, buffer, message);
     }
 
     /**
@@ -205,7 +206,7 @@ class KryoExtra extends Kryo {
      *  ++++++++++++++++++++++++++
      */
     public synchronized
-    void writeCompressed(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
+    void writeCompressed(final Logger logger, final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
         // write the object to a TEMP buffer! this will be compressed later
         write(connection, writer, message);
 
@@ -224,9 +225,10 @@ class KryoExtra extends Kryo {
         if (DEBUG) {
             String orig = ByteBufUtil.hexDump(writer.getBuffer(), 0, length);
             String compressed = ByteBufUtil.hexDump(compressOutput, 0, compressedLength);
-            System.err.println("ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +
-                               OS.LINE_SEPARATOR +
-                               "COMPRESSED: (" + compressedLength + ")" + OS.LINE_SEPARATOR + compressed);
+            logger.error(OS.LINE_SEPARATOR +
+                         "ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +
+                         OS.LINE_SEPARATOR +
+                         "COMPRESSED: (" + compressedLength + ")" + OS.LINE_SEPARATOR + compressed);
         }
 
         // now write the ORIGINAL (uncompressed) length. This is so we can use the FAST decompress version
@@ -236,9 +238,9 @@ class KryoExtra extends Kryo {
         buffer.writeBytes(compressOutput, 0, compressedLength);
     }
 
-    public
-    Object readCompressed(final ByteBuf buffer, int length) throws IOException {
-        return readCompressed(NOP_CONNECTION, buffer, length);
+    public synchronized
+    Object readCompressed(final Logger logger, final ByteBuf buffer, int length) throws IOException {
+        return readCompressed(logger, NOP_CONNECTION, buffer, length);
     }
 
     /**
@@ -252,8 +254,8 @@ class KryoExtra extends Kryo {
      *  + class and object bytes +
      *  ++++++++++++++++++++++++++
      */
-    public
-    Object readCompressed(final Connection_ connection, final ByteBuf buffer, int length) throws IOException {
+    public synchronized
+    Object readCompressed(final Logger logger, final Connection_ connection, final ByteBuf buffer, int length) throws IOException {
         ////////////////
         // Note: we CANNOT write BACK to the buffer as "temp" storage, since there could be additional data on it!
         ////////////////
@@ -274,8 +276,7 @@ class KryoExtra extends Kryo {
 
 
         ///////// decompress data
-        buffer.getBytes(start, temp, 0, length);
-        buffer.readerIndex(length);
+        buffer.readBytes(temp, 0, length);
 
 
         // LZ4 decompress, requires the size of the ORIGINAL length (because we use the FAST decompressor)
@@ -286,18 +287,14 @@ class KryoExtra extends Kryo {
         if (DEBUG) {
             String compressed = ByteBufUtil.hexDump(buffer, start, length);
             String orig = ByteBufUtil.hexDump(reader.getBuffer(), start, uncompressedLength);
-            System.err.println("COMPRESSED: (" + length + ")" + OS.LINE_SEPARATOR + compressed +
-                               OS.LINE_SEPARATOR +
-                               "ORIG: (" + uncompressedLength + ")" + OS.LINE_SEPARATOR + orig);
+            logger.error(OS.LINE_SEPARATOR +
+                         "COMPRESSED: (" + length + ")" + OS.LINE_SEPARATOR + compressed +
+                         OS.LINE_SEPARATOR +
+                         "ORIG: (" + uncompressedLength + ")" + OS.LINE_SEPARATOR + orig);
         }
 
         // read the object from the buffer.
-        Object classAndObject = read(connection, reader);
-
-        if (DEBUG) {
-            System.err.println("Read compress object" + classAndObject.getClass().getSimpleName());
-        }
-        return classAndObject;
+        return read(connection, reader);
     }
 
     /**
@@ -317,7 +314,7 @@ class KryoExtra extends Kryo {
      *  ++++++++++++++++++++++++++
      */
     public synchronized
-    void writeCrypto(final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
+    void writeCrypto(final Logger logger, final Connection_ connection, final ByteBuf buffer, final Object message) throws IOException {
         // write the object to a TEMP buffer! this will be compressed later
         write(connection, writer, message);
 
@@ -336,9 +333,10 @@ class KryoExtra extends Kryo {
         if (DEBUG) {
             String orig = ByteBufUtil.hexDump(writer.getBuffer(), 0, length);
             String compressed = ByteBufUtil.hexDump(compressOutput, 4, compressedLength);
-            System.err.println("ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +
-                               OS.LINE_SEPARATOR +
-                               "COMPRESSED: (" + compressedLength + ")" + OS.LINE_SEPARATOR + compressed);
+            logger.error(OS.LINE_SEPARATOR +
+                         "ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +
+                         OS.LINE_SEPARATOR +
+                         "COMPRESSED: (" + compressedLength + ")" + OS.LINE_SEPARATOR + compressed);
         }
 
         // now write the ORIGINAL (uncompressed) length. This is so we can use the FAST decompress version
@@ -384,9 +382,10 @@ class KryoExtra extends Kryo {
         if (DEBUG) {
             String ivString = ByteBufUtil.hexDump(iv, 0, IV_LENGTH_BYTE);
             String crypto = ByteBufUtil.hexDump(writer.getBuffer(), 0, encryptedLength);
-            System.err.println("IV: (12)" + OS.LINE_SEPARATOR + ivString +
-                               OS.LINE_SEPARATOR +
-                               "CRYPTO: (" + encryptedLength + ")" + OS.LINE_SEPARATOR + crypto);
+            logger.error(OS.LINE_SEPARATOR +
+                         "IV: (12)" + OS.LINE_SEPARATOR + ivString +
+                         OS.LINE_SEPARATOR +
+                         "CRYPTO: (" + encryptedLength + ")" + OS.LINE_SEPARATOR + crypto);
         }
     }
 
@@ -408,7 +407,7 @@ class KryoExtra extends Kryo {
      *  ++++++++++++++++++++++++++
      */
     public
-    Object readCrypto(final Connection_ connection, final ByteBuf buffer, int length) throws IOException {
+    Object readCrypto(final Logger logger, final Connection_ connection, final ByteBuf buffer, int length) throws IOException {
         // read out the crypto IV
         final byte[] iv =  new byte[IV_LENGTH_BYTE];
         buffer.readBytes(iv, 0 , IV_LENGTH_BYTE);
@@ -431,8 +430,8 @@ class KryoExtra extends Kryo {
         if (DEBUG) {
             String ivString = ByteBufUtil.hexDump(iv, 0, IV_LENGTH_BYTE);
             String crypto = ByteBufUtil.hexDump(reader.getBuffer(), 0, length);
-            System.err.println("IV: (12)" + OS.LINE_SEPARATOR + ivString +
-                               OS.LINE_SEPARATOR + "CRYPTO: (" + length + ")" + OS.LINE_SEPARATOR + crypto);
+            logger.error("IV: (12)" + OS.LINE_SEPARATOR + ivString +
+                         OS.LINE_SEPARATOR + "CRYPTO: (" + length + ")" + OS.LINE_SEPARATOR + crypto);
         }
 
         int decryptedLength;
@@ -459,9 +458,9 @@ class KryoExtra extends Kryo {
             int endWithoutUncompressedLength = decryptedLength - start;
             String compressed = ByteBufUtil.hexDump(temp, start, endWithoutUncompressedLength);
             String orig = ByteBufUtil.hexDump(reader.getBuffer(), 0, uncompressedLength);
-            System.err.println("COMPRESSED: (" + endWithoutUncompressedLength + ")" + OS.LINE_SEPARATOR + compressed +
-                               OS.LINE_SEPARATOR +
-                               "ORIG: (" + uncompressedLength + ")" + OS.LINE_SEPARATOR + orig);
+            logger.error("COMPRESSED: (" + endWithoutUncompressedLength + ")" + OS.LINE_SEPARATOR + compressed +
+                         OS.LINE_SEPARATOR +
+                         "ORIG: (" + uncompressedLength + ")" + OS.LINE_SEPARATOR + orig);
         }
 
         // read the object from the buffer.
