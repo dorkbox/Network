@@ -119,6 +119,7 @@ class ByteBufInput extends Input {
     /** Throws {@link UnsupportedOperationException} because this input uses a ByteBuffer, not a byte[].
      * @deprecated
      * @see #getByteBuf() */
+    @Deprecated
     public byte[] getBuffer () {
         throw new UnsupportedOperationException("This input does not used a byte[], see #getByteBuf().");
     }
@@ -126,6 +127,7 @@ class ByteBufInput extends Input {
     /** Throws {@link UnsupportedOperationException} because this input uses a ByteBuffer, not a byte[].
      * @deprecated
      * @see #setBuffer(ByteBuf) */
+    @Deprecated
     public void setBuffer (byte[] bytes) {
         throw new UnsupportedOperationException("This input does not used a byte[], see #setByteBuf(ByteBuf).");
     }
@@ -133,6 +135,7 @@ class ByteBufInput extends Input {
     /** Throws {@link UnsupportedOperationException} because this input uses a ByteBuffer, not a byte[].
      * @deprecated
      * @see #setBuffer(ByteBuf) */
+    @Deprecated
     public void setBuffer (byte[] bytes, int offset, int count) {
         throw new UnsupportedOperationException("This input does not used a byte[], see #setByteBuf().");
     }
