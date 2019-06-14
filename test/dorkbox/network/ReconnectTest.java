@@ -28,6 +28,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener;
@@ -38,6 +40,8 @@ import dorkbox.util.exceptions.SecurityException;
 public
 class ReconnectTest extends BaseTest {
     private final AtomicInteger receivedCount = new AtomicInteger(0);
+
+    private static final Logger logger = LoggerFactory.getLogger(ReconnectTest.class.getSimpleName());
 
     @Test
     public
@@ -97,7 +101,7 @@ class ReconnectTest extends BaseTest {
             public
             void received(Connection connection, String object) {
                 int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
-                System.out.println("----- <S " + connection + "> " + incrementAndGet + " : " + object);
+                logger.error("----- <S " + connection + "> " + incrementAndGet + " : " + object);
 
                 latch.get().countDown();
             }
@@ -129,7 +133,7 @@ class ReconnectTest extends BaseTest {
             public
             void received(Connection connection, String object) {
                 int incrementAndGet = ReconnectTest.this.receivedCount.incrementAndGet();
-                System.out.println("----- <C " + connection + "> " + incrementAndGet + " : " + object);
+                logger.error("----- <C " + connection + "> " + incrementAndGet + " : " + object);
 
                 latch.get().countDown();
             }
@@ -148,7 +152,7 @@ class ReconnectTest extends BaseTest {
 
         try {
             for (int i = 1; i < count + 1; i++) {
-                System.out.println(".....");
+                logger.error(".....");
                 latch.set(new CountDownLatch(latchCount));
 
                 try {
@@ -176,7 +180,7 @@ class ReconnectTest extends BaseTest {
                         // check to see if we changed at all...
                         if (lastRetryCount == this.receivedCount.get()) {
                             if (retryCount-- < 0) {
-                                System.err.println("Aborting unit test... wrong count!");
+                                logger.error("Aborting unit test... wrong count!");
                                 if (useUDP) {
                                     // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
                                     // it results in severe UDP packet loss and contention.
@@ -185,7 +189,7 @@ class ReconnectTest extends BaseTest {
                                     // also, a google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
                                     // Usually it's with ISPs.
 
-                                    System.err.println("NOTE: UDP can fail, even on loopback! See: http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM");
+                                    logger.error("NOTE: UDP can fail, even on loopback! See: http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM");
                                 }
                                 failed = true;
                                 break;
@@ -197,10 +201,9 @@ class ReconnectTest extends BaseTest {
                 }
 
                 client.close();
-                System.out.println(".....");
+                logger.error(".....");
 
                 if (failed) {
-
                     break;
                 }
             }
