@@ -45,6 +45,10 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
 
         Channel channel = context.channel();
 
+        // have to add a way for us to store messages in case the remote end calls "onConnect()" and sends messages before we are ready.
+        // note: UDP channels are also unique (just like TCP channels) because of the SessionManager we added
+        prepChannelForOutOfOrderMessages(channel);
+
         InetSocketAddress udpRemoteAddress = (InetSocketAddress) channel.remoteAddress();
         if (udpRemoteAddress != null) {
             Registration outboundRegister = new Registration(0);
@@ -97,10 +101,6 @@ class RegistrationRemoteHandlerClientUDP extends RegistrationRemoteHandlerClient
 
                 // in the event that we start with a TCP channel first, we still have to set the UDP channel
                 metaChannel.udpChannel = channel;
-
-                // have to add a way for us to store messages in case the remote end calls "onConnect()" and sends messages before we are ready.
-                // note: UDP channels are also unique (just like TCP channels) because of the SessionManager we added
-                prepChannelForOutOfOrderMessages(channel);
             }
 
             readClient(channel, registration, "UDP client", metaChannel);
