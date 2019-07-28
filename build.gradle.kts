@@ -36,7 +36,7 @@ plugins {
     // publish on sonatype
     id("de.marcphilipp.nexus-publish") version "0.2.0"
     // close and release on sonatype
-    id("io.codearte.nexus-staging") version "0.20.0"
+    id("io.codearte.nexus-staging") version "0.21.0"
 
     id("com.dorkbox.CrossCompile") version "1.0.1"
     id("com.dorkbox.Licensing") version "1.4"
