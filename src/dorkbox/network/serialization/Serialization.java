@@ -566,58 +566,64 @@ class Serialization implements NetworkSerializationManager {
     @SuppressWarnings("Duplicates")
     @Override
     public
-    boolean verifyKryoRegistration(byte[] otherRegistrationData) {
+    boolean verifyKryoRegistration(byte[] clientRegistrationData) {
         // verify the registration IDs if necessary with our own. The CLIENT does not verify anything, only the server!
         byte[] kryoRegistrationDetails = savedRegistrationDetails;
-        boolean equals = java.util.Arrays.equals(kryoRegistrationDetails, otherRegistrationData);
+        boolean equals = java.util.Arrays.equals(kryoRegistrationDetails, clientRegistrationData);
         if (equals) {
             return true;
         }
 
 
         // now we need to figure out WHAT was screwed up so we know what to fix
+        // NOTE: it could just be that the byte arrays are different, because java has a non-deterministic iteration of hash maps.
         KryoExtra kryo = takeKryo();
 
-        ByteBuf byteBuf = Unpooled.wrappedBuffer(otherRegistrationData);
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(clientRegistrationData);
 
         try {
+            boolean success = true;
             kryo.setRegistrationRequired(false);
             @SuppressWarnings("unchecked")
-            Object[][] classRegistrations = (Object[][]) kryo.readCompressed(logger, byteBuf, otherRegistrationData.length);
+            Object[][] clientClassRegistrations = (Object[][]) kryo.readCompressed(logger, byteBuf, clientRegistrationData.length);
 
 
-            int lengthOrg = mergedRegistrations.length;
-            int lengthNew = classRegistrations.length;
+            int lengthServer = mergedRegistrations.length;
+            int lengthClient = clientClassRegistrations.length;
             int index = 0;
 
             // list all of the registrations that are mis-matched between the server/client
-            for (; index < lengthOrg; index++) {
-                final ClassRegistration classOrg = mergedRegistrations[index];
+            for (; index < lengthServer; index++) {
+                final ClassRegistration classServer = mergedRegistrations[index];
 
-                if (index >= lengthNew) {
-                    logger.error("Missing client registration for {} -> {}", classOrg.id, classOrg.clazz.getName());
+                if (index < lengthClient) {
+                    Object[] classClient = clientClassRegistrations[index];
+                    int idClient = (Integer) classClient[0];
+                    String nameClient = (String) classClient[1];
+                    String serializerClient = (String) classClient[2];
+
+                    int idServer = classServer.id;
+                    String nameServer = classServer.clazz.getName();
+                    String serializerServer = classServer.serializer.getClass().getName();
+
+                    if (idClient != idServer || !nameServer.equals(nameClient) || !serializerClient.equalsIgnoreCase(serializerServer)) {
+                        success = false;
+                        logger.error("Registration {} Client -> {} ({})", idClient, nameClient, serializerClient);
+                        logger.error("Registration {} Server -> {} ({})", idServer, nameServer, serializerServer);
+                    }
                 }
                 else {
-                    Object[] classNew = classRegistrations[index];
-                    int idNew = (Integer) classNew[0];
-                    String nameNew = (String) classNew[1];
-                    String serializerNew = (String) classNew[2];
-
-                    int idOrg = classOrg.id;
-                    String nameOrg = classOrg.clazz.getName();
-                    String serializerOrg = classOrg.serializer.getClass().getName();
-
-                    if (idNew != idOrg || !nameOrg.equals(nameNew) || !serializerNew.equalsIgnoreCase(serializerOrg)) {
-                        logger.error("Registration {} Client -> {} ({})", idNew, nameNew, serializerNew);
-                        logger.error("Registration {} Server -> {} ({})", idOrg, nameOrg, serializerOrg);
-                    }
+                    success = false;
+                    logger.error("Missing client registration for {} -> {}", classServer.id, classServer.clazz.getName());
                 }
             }
 
             // list all of the registrations that are missing on the server
-            if (index < lengthNew) {
-                for (; index < lengthNew; index++) {
-                    Object[] holderClass = classRegistrations[index];
+            if (index < lengthClient) {
+                success = false;
+
+                for (; index < lengthClient; index++) {
+                    Object[] holderClass = clientClassRegistrations[index];
                     int id = (Integer) holderClass[0];
                     String name = (String) holderClass[1];
                     String serializer = (String) holderClass[2];
@@ -625,6 +631,9 @@ class Serialization implements NetworkSerializationManager {
                     logger.error("Missing server registration : {} -> {} ({})", id, name, serializer);
                 }
             }
+
+            // maybe everything was actually correct, and the byte arrays were different because hashmaps use non-deterministic ordering.
+            return success;
         } catch(Exception e) {
             logger.error("Error [{}] during registration validation", e.getMessage());
 
