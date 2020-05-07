@@ -146,7 +146,7 @@ class RegistrationWrapperClient extends RegistrationWrapper {
     private static
     byte[][] divideArray(byte[] source, int chunksize) {
 
-        int fragments = (int) Math.ceil(source.length / ((double) chunksize + 2));
+        int fragments = (int) Math.ceil(source.length / ((double) chunksize));
         if (fragments > 127) {
             // cannot allow more than 127
             return null;
@@ -165,9 +165,9 @@ class RegistrationWrapperClient extends RegistrationWrapper {
             else {
                 length = chunksize;
             }
-            splitArray[i] = new byte[length+2];
-            splitArray[i][0] = (byte) i;
-            splitArray[i][1] = (byte) fragments;
+            splitArray[i] = new byte[length + 2];
+            splitArray[i][0] = (byte) i;  // index
+            splitArray[i][1] = (byte) fragments; // total number of fragments
             System.arraycopy(source, start, splitArray[i], 2, length);
 
             start += chunksize;
