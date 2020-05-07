@@ -41,8 +41,8 @@ class FirewallTest extends BaseTest {
     public
     void sendDataFromClientClass() throws SecurityException, IOException {
         Configuration configuration = new Configuration();
-        // configuration.tcpPort = tcpPort;
-        configuration.udpPort = udpPort;
+        configuration.tcpPort = tcpPort;
+        // configuration.udpPort = udpPort;
         configuration.host = host;
         configuration.serialization = Serialization.DEFAULT();
         register(configuration.serialization);
@@ -63,8 +63,7 @@ class FirewallTest extends BaseTest {
                   public
                   void received(Connection connection, AMessage object) {
                       System.err.println("Server received message from client. Bouncing back.");
-                      connection.send()
-                                .TCP(object);
+                      connection.send(object);
                   }
               });
 
@@ -82,8 +81,7 @@ class FirewallTest extends BaseTest {
                   }
               });
 
-        client.send()
-              .TCP(new AMessage());
+        client.send(new AMessage());
 
         waitForThreads();
 
