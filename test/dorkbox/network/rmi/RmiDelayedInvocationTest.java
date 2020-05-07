@@ -133,7 +133,7 @@ class RmiDelayedInvocationTest extends BaseTest {
                           void created(final TestObject remoteObject) {
                               // MUST run on a separate thread because remote object method invocations are blocking
                               new Thread() {
-                                  int totalRuns = 100_000_000;
+                                  int totalRuns = 100_000;
                                   @Override
                                   public
                                   void run() {
