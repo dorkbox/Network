@@ -401,12 +401,12 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
 
     /**
      * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
-     * is available to use. If you want specify the protocol, use {@link #send()}, followed by the protocol you wish to use.
+     * is available to use. If you want specify the protocol, use {@link #TCP(Object)}, {@link #UDP(Object)}, or {@link #self(Object)}.
      *
      * By default, this will try in the following order:
      *  - TCP (if available)
      *  - UDP (if available)
-     *  - LOCAL
+     *  - LOCAL (sending a message to itself)
      */
     @Override
     public final
