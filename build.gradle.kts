@@ -34,16 +34,16 @@ plugins {
     `maven-publish`
 
     // publish on sonatype
-    id("de.marcphilipp.nexus-publish") version "0.2.0"
+    id("de.marcphilipp.nexus-publish") version "0.4.0"
     // close and release on sonatype
-    id("io.codearte.nexus-staging") version "0.21.0"
+    id("io.codearte.nexus-staging") version "0.21.2"
 
-    id("com.dorkbox.CrossCompile") version "1.0.1"
-    id("com.dorkbox.Licensing") version "1.4"
-    id("com.dorkbox.VersionUpdate") version "1.4.1"
-    id("com.dorkbox.GradleUtils") version "1.2"
+    id("com.dorkbox.CrossCompile") version "1.1"
+    id("com.dorkbox.Licensing") version "1.4.2"
+    id("com.dorkbox.VersionUpdate") version "1.6.1"
+    id("com.dorkbox.GradleUtils") version "1.4"
 
-    kotlin("jvm") version "1.3.31"
+    kotlin("jvm") version "1.3.72"
 }
 
 object Extras {
@@ -257,7 +257,7 @@ tasks.jar.get().apply {
 }
 
 dependencies {
-    implementation("io.netty:netty-all:4.1.34.Final")
+    implementation("io.netty:netty-all:4.1.49.Final")
     implementation("com.esotericsoftware:kryo:5.0.0-RC2")
     implementation("net.jpountz.lz4:lz4:1.3.0")
 
@@ -266,16 +266,16 @@ dependencies {
     implementation("org.bouncycastle:bcmail-jdk15on:$bcVersion")
     implementation("org.bouncycastle:bctls-jdk15on:$bcVersion")
 
-    implementation("net.jodah:typetools:0.6.1")
+    implementation("net.jodah:typetools:0.6.2")
     implementation("de.javakaffee:kryo-serializers:0.45")
 
     implementation("com.dorkbox:ObjectPool:2.12")
-    implementation("com.dorkbox:Utilities:1.1")
+    implementation("com.dorkbox:Utilities:1.2")
 
-    implementation("org.slf4j:slf4j-api:1.7.25")
+    implementation("org.slf4j:slf4j-api:1.7.30")
 
-    testCompile("junit:junit:4.12")
-    testCompile("ch.qos.logback:logback-classic:1.2.3")
+    testImplementation("junit:junit:4.13")
+    testImplementation("ch.qos.logback:logback-classic:1.2.3")
 }
 
 ///////////////////////////////
@@ -369,9 +369,13 @@ publishing {
 
     nexusPublishing {
         packageGroup.set(Extras.group)
-        repositoryName.set("maven")
-        username.set(Extras.sonatypeUserName)
-        password.set(Extras.sonatypePassword)
+
+        repositories {
+            sonatype() {
+                username.set(Extras.sonatypeUserName)
+                password.set(Extras.sonatypePassword)
+            }
+        }
     }
 
     signing {
@@ -382,7 +386,7 @@ publishing {
         group = "publish and release"
 
         // required to make sure the tasks run in the correct order
-        tasks["closeAndReleaseRepository"].mustRunAfter(tasks["publishToNexus"])
+        tasks["closeAndReleaseRepository"].mustRunAfter(tasks["publishToSonatype"])
         dependsOn("publishToNexus", "closeAndReleaseRepository")
     }
 }
