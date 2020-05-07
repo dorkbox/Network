@@ -23,6 +23,8 @@ package dorkbox.network;
 import static dorkbox.network.connection.EndPoint.THREADGROUP_NAME;
 import static org.junit.Assert.fail;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -61,6 +63,24 @@ class BaseTest {
     private volatile Thread autoFailThread = null;
 
     static {
+        // disableAccessWarnings
+        try {
+            Class unsafeClass = Class.forName("sun.misc.Unsafe");
+            Field field = unsafeClass.getDeclaredField("theUnsafe");
+            field.setAccessible(true);
+            Object unsafe = field.get(null);
+
+            Method putObjectVolatile = unsafeClass.getDeclaredMethod("putObjectVolatile", Object.class, long.class, Object.class);
+            Method staticFieldOffset = unsafeClass.getDeclaredMethod("staticFieldOffset", Field.class);
+
+            Class loggerClass = Class.forName("jdk.internal.module.IllegalAccessLogger");
+            Field loggerField = loggerClass.getDeclaredField("logger");
+            Long offset = (Long) staticFieldOffset.invoke(unsafe, loggerField);
+            putObjectVolatile.invoke(unsafe, loggerClass, offset, null);
+        }
+        catch (Exception ignored) {
+        }
+
         // we want our entropy generation to be simple (ie, no user interaction to generate)
         try {
             Entropy.init(SimpleEntropy.class);
