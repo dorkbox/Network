@@ -208,7 +208,14 @@ class ReconnectTest extends BaseTest {
                 }
             }
 
-            assertEquals(count * initialCount, this.receivedCount.get());
+            int specified = count * initialCount;
+            int received = this.receivedCount.get();
+
+            if (specified != received) {
+                logger.error("NOTE: UDP can fail, even on loopback! See: http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM");
+            }
+
+            assertEquals(specified, received);
         } finally {
             stopEndPoints();
             waitForThreads(10);
