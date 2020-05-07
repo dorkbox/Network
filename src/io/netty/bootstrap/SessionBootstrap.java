@@ -214,20 +214,8 @@ class SessionBootstrap extends AbstractBootstrap<SessionBootstrap, Channel> {
 
     @Override
     void init(Channel channel) throws Exception {
-        final Map<ChannelOption<?>, Object> options = options0();
-        synchronized (options) {
-            setChannelOptions(channel, options, logger);
-        }
-
-        final Map<AttributeKey<?>, Object> attrs = attrs0();
-        synchronized (attrs) {
-            for (Entry<AttributeKey<?>, Object> e : attrs.entrySet()) {
-                @SuppressWarnings("unchecked")
-                AttributeKey<Object> key = (AttributeKey<Object>) e.getKey();
-                channel.attr(key)
-                       .set(e.getValue());
-            }
-        }
+        setChannelOptions(channel, options0().entrySet().toArray(EMPTY_OPTION_ARRAY), logger);
+        setAttributes(channel, attrs0().entrySet().toArray(EMPTY_ATTRIBUTE_ARRAY));
 
         ChannelPipeline p = channel.pipeline();
 
