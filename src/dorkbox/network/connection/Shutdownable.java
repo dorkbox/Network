@@ -121,7 +121,7 @@ class Shutdownable {
 
     protected final ThreadGroup threadGroup;
 
-    protected final Class<? extends Shutdownable> type;
+    private final Class<? extends Shutdownable> type;
 
     protected final Object shutdownInProgress = new Object();
     private volatile boolean isShutdown = false;
@@ -486,8 +486,19 @@ class Shutdownable {
         return "EndPoint [" + getName() + "]";
     }
 
+    /**
+     * @return the type class of this connection endpoint
+     */
+    public Class<? extends Shutdownable> getType() {
+        return type;
+    }
+
+    /**
+     * @return the simple name (for the class) of this connection endpoint
+     */
     public
     String getName() {
         return type.getSimpleName();
     }
+
 }
