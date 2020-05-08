@@ -65,6 +65,8 @@ object Extras {
 
     var sonatypeUserName = ""
     var sonatypePassword = ""
+    var sonatypePrivateKeyFile = ""
+    var sonatypePrivateKeyPassword = ""
 }
 
 ///////////////////////////////
@@ -281,9 +283,9 @@ dependencies {
 ///////////////////////////////
 //////    PUBLISH TO SONATYPE / MAVEN CENTRAL
 //////
-////// TESTING (local maven repo) -> PUBLISHING -> publishToMavenLocal
+////// TESTING (local maven repo) -> "PUBLISHING" -> publishToMavenLocal
 //////
-////// RELEASE (sonatype / maven central) -> "PUBLISH AND RELEASE" -> publishAndRelease
+////// RELEASE (sonatype / maven central) -> "PUBLISHING" -> publishToSonaytypeAndRelease
 ///////////////////////////////
 publishing {
     publications {
@@ -342,7 +344,7 @@ publishing {
         }
 
         onlyIf {
-            publication == publishing.publications["maven"] && repository == publishing.repositories["maven"]
+            publication == publishing.publications["maven"] && repository == publishing.repositories["sonatype"]
         }
     }
 
@@ -379,14 +381,15 @@ publishing {
     }
 
     signing {
+        useInMemoryPgpKeys(File(Extras.sonatypePrivateKeyFile).readText(), Extras.sonatypePrivateKeyPassword)
         sign(publishing.publications["maven"])
     }
 
-    task<Task>("publishAndRelease") {
-        group = "publish and release"
+    task<Task>("publishToSonatypeAndRelease") {
+        group = "publishing"
 
         // required to make sure the tasks run in the correct order
         tasks["closeAndReleaseRepository"].mustRunAfter(tasks["publishToSonatype"])
-        dependsOn("publishToNexus", "closeAndReleaseRepository")
+        dependsOn("publishToSonatype", "closeAndReleaseRepository")
     }
 }
