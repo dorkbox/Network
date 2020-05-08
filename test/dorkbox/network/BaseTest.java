@@ -197,12 +197,23 @@ class BaseTest {
         synchronized (lock) {
         }
 
-        for (EndPoint endPointConnection : this.endPointConnections) {
+        // shutdown clients first
+        for (EndPoint endPoint : this.endPointConnections) {
+            if (endPoint.getType() == Client.class) {
+                endPoint.stop();
+                endPoint.waitForShutdown();
 
-            endPointConnection.stop();
-            endPointConnection.waitForShutdown();
+                latch.countDown();
+            }
+        }
+        // shutdown servers last
+        for (EndPoint endPoint : this.endPointConnections) {
+            if (endPoint.getType() == Server.class) {
+                endPoint.stop();
+                endPoint.waitForShutdown();
 
-            latch.countDown();
+                latch.countDown();
+            }
         }
 
         // we start with "1", so make sure to end it
