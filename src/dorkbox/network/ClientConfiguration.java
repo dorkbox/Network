@@ -13,27 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.idle;
-
-import dorkbox.network.connection.Connection;
+package dorkbox.network;
 
 public
-class IdleListenerTCP<C extends Connection, M> implements IdleListener<C, M> {
+class ClientConfiguration extends Configuration {
 
     /**
-     * used by the Idle Sender
+     * The network or IPC address for the client to connect to.
+     *
+     * For a network connection, it can be:
+     *  - a network name ("localhost", "loopback", "lo", "bob.example.org")
+     *  - an IP address ("127.0.0.1", "123.123.123.123")
+     *
+     *  For the IPC (Inter-Process-Communication) connection. it must be:
+     *  - the IPC designation, "ipc"
+     *
+     *  Note: Case does not matter, and "localhost" is the default
      */
-    public
-    IdleListenerTCP() {
-    }
+    public String remoteAddress = "localhost";
 
-    /**
-     * used by the Idle Sender
-     */
-    @Override
     public
-    void send(C connection, M message) {
-        connection.send()
-                  .TCP(message);
+    ClientConfiguration() {
+        super();
     }
 }

@@ -14,12 +14,6 @@
  */
 package dorkbox.network.connection;
 
-import static dorkbox.network.pipeline.ConnectionType.EPOLL;
-import static dorkbox.network.pipeline.ConnectionType.KQUEUE;
-import static dorkbox.network.pipeline.ConnectionType.NIO;
-import static dorkbox.network.pipeline.ConnectionType.OIO;
-
-import java.security.AccessControlException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -29,53 +23,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 
-import dorkbox.network.NativeLibrary;
-import dorkbox.network.pipeline.ConnectionType;
-import dorkbox.util.NamedThreadFactory;
-import dorkbox.util.OS;
 import dorkbox.util.Property;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.kqueue.KQueueEventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
-import io.netty.util.internal.PlatformDependent;
 
 /**
  * This is the highest level endpoint, for lifecycle support/management.
  */
 public
 class Shutdownable {
-    static {
-        //noinspection Duplicates
-        try {
-            // doesn't work when running from inside eclipse.
-            // Needed for NIO selectors on Android 2.2, and to force IPv4.
-            System.setProperty("java.net.preferIPv4Stack", Boolean.TRUE.toString());
-            System.setProperty("java.net.preferIPv6Addresses", Boolean.FALSE.toString());
-
-            // java6 has stack overflow problems when loading certain classes in it's classloader. The result is a StackOverflow when
-            // loading them normally. This calls AND FIXES this issue.
-            if (OS.javaVersion == 6) {
-                if (PlatformDependent.hasUnsafe()) {
-                    //noinspection ResultOfMethodCallIgnored
-                    PlatformDependent.newFixedMpscQueue(8);
-                }
-            }
-        } catch (AccessControlException ignored) {
-        }
-    }
-
 
     protected static final String shutdownHookName = "::SHUTDOWN_HOOK::";
     protected static final String stopTreadName = "::STOP_THREAD::";
 
-    public static final String THREADGROUP_NAME = "(Netty)";
 
     /**
      * The HIGH and LOW watermark points for connections
@@ -90,18 +53,6 @@ class Shutdownable {
      */
     @Property
     public static long maxShutdownWaitTimeInMilliSeconds = 2000L; // in milliseconds
-
-    /**
-     * Checks to see if we are running in the netty thread. This is (usually) to prevent potential deadlocks in code that CANNOT be run from
-     * inside a netty worker.
-     */
-    public static
-    boolean isNettyThread() {
-        return Thread.currentThread()
-                     .getThreadGroup()
-                     .getName()
-                     .contains(THREADGROUP_NAME);
-    }
 
     /**
      * Runs a runnable inside a NEW thread that is NOT in the same thread group as Netty
@@ -146,7 +97,7 @@ class Shutdownable {
         threadGroup = new ThreadGroup(s != null
                                       ? s.getThreadGroup()
                                       : Thread.currentThread()
-                                              .getThreadGroup(), type.getSimpleName() + " " + THREADGROUP_NAME);
+                                              .getThreadGroup(), type.getSimpleName());
         threadGroup.setDaemon(true);
 
         logger = org.slf4j.LoggerFactory.getLogger(type.getSimpleName());
@@ -270,72 +221,6 @@ class Shutdownable {
         return true;
     }
 
-
-    /**
-     * Creates a new event loop based on the OS type and specified configuration
-     *
-     * @param threadCount number of threads for the event loop
-     *
-     * @return a new event loop group based on the specified parameters
-     */
-    protected
-    EventLoopGroup newEventLoop(final int threadCount, final String threadName) {
-        if (OS.isAndroid()) {
-            // android ONLY supports OIO
-            return newEventLoop(OIO, threadCount, threadName);
-        }
-        else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-            // epoll network stack is MUCH faster (but only on linux)
-            return newEventLoop(EPOLL, threadCount, threadName);
-        }
-        else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
-            // KQueue network stack is MUCH faster (but only on macosx)
-            return newEventLoop(KQUEUE, threadCount, threadName);
-        }
-        else {
-            return newEventLoop(NIO, threadCount, threadName);
-        }
-    }
-
-    /**
-     * Creates a new event loop based on the specified configuration
-     *
-     * @param connectionType LOCAL, NIO, EPOLL, etc...
-     * @param threadCount number of threads for the event loop
-     *
-     * @return a new event loop group based on the specified parameters
-     */
-    protected
-    EventLoopGroup newEventLoop(final ConnectionType connectionType, final int threadCount, final String threadName) {
-        NamedThreadFactory threadFactory = new NamedThreadFactory(threadName, threadGroup);
-
-        EventLoopGroup group;
-
-        switch (connectionType) {
-            case LOCAL:
-                group = new DefaultEventLoopGroup(threadCount, threadFactory);
-                break;
-            case OIO:
-                group = new OioEventLoopGroup(threadCount, threadFactory);
-                break;
-            case NIO:
-                group = new NioEventLoopGroup(threadCount, threadFactory);
-                break;
-            case EPOLL:
-                group = new EpollEventLoopGroup(threadCount, threadFactory);
-                break;
-            case KQUEUE:
-                group = new KQueueEventLoopGroup(threadCount, threadFactory);
-                break;
-
-            default:
-                group = new DefaultEventLoopGroup(threadCount, threadFactory);
-                break;
-        }
-
-        manageForShutdown(group);
-        return group;
-    }
 
     /**
      * Check to see if the current thread is running from it's OWN thread, or from Netty... This is used to prevent deadlocks.

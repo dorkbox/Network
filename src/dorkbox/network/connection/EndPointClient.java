@@ -20,21 +20,16 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.LockSupport;
 
-import dorkbox.network.Client;
-import dorkbox.network.Configuration;
+import dorkbox.network.ClientConfiguration;
 import dorkbox.network.connection.bridge.ConnectionBridge;
 import dorkbox.util.exceptions.SecurityException;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelOption;
 
 /**
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointClient extends EndPoint {
+class EndPointClient extends EndPoint<ClientConfiguration> {
 
     // is valid when there is a connection to the server, otherwise it is null
     protected volatile Connection connection;
@@ -52,144 +47,11 @@ class EndPointClient extends EndPoint {
     private volatile ConnectionBridge connectionBridgeFlushAlways;
 
 
-    public
-    EndPointClient(Configuration config) throws SecurityException {
-        super(Client.class, config);
-    }
-
-    /**
-     * Internal call by the pipeline to start the client registering the different session protocols.
-     */
     protected
-    void startRegistration() throws IOException {
-        // make sure we WAIT 100ms BEFORE starting registrations again IF we recently called close...
-        while (previousClosedConnectionActivity > 0 &&
-               System.nanoTime() - previousClosedConnectionActivity < TimeUnit.MILLISECONDS.toNanos(200)) {
-            LockSupport.parkNanos(100L); // wait
-        }
-
-
-        synchronized (bootstrapLock) {
-            // always reset everything.
-            registration = new CountDownLatch(1);
-            bootstrapIterator = bootstraps.iterator();
-
-            doRegistration();
-        }
-
-        // have to BLOCK (must be outside of the synchronize call), we don't want the client to run before registration is complete
-        try {
-            if (connectionTimeout > 0) {
-                if (!registration.await(connectionTimeout, TimeUnit.MILLISECONDS)) {
-                    closeConnection();
-                    throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds");
-                }
-            }
-            else {
-                registration.await();
-            }
-        } catch (InterruptedException e) {
-            if (connectionTimeout > 0) {
-                throw new IOException("Unable to complete registration within '" + connectionTimeout + "' milliseconds", e);
-            }
-            else {
-                throw new IOException("Unable to complete registration.", e);
-            }
-        }
+    EndPointClient(ClientConfiguration config) throws SecurityException, IOException {
+        super(config);
     }
 
-    /**
-     * Internal call by the pipeline to notify the client to continue registering the different session protocols.
-     *
-     * @return true if we are done registering bootstraps
-     */
-    @Override
-    protected
-    void startNextProtocolRegistration() {
-        logger.trace("Registered protocol from server.");
-
-        synchronized (bootstrapLock) {
-            if (hasMoreRegistrations()) {
-                doRegistration();
-            }
-        }
-    }
-
-    /**
-     * Internal call by the pipeline to check if the client has more protocol registrations to complete.
-     *
-     * @return true if there are more registrations to process, false if we are 100% done with all types to register (TCP/UDP/etc)
-     */
-    @Override
-    protected
-    boolean hasMoreRegistrations() {
-        synchronized (bootstrapLock) {
-            return !(bootstrapIterator == null || !bootstrapIterator.hasNext());
-        }
-    }
-
-    /**
-     * this is called by 2 threads. The startup thread, and the registration-in-progress thread
-     *
-     * NOTE: must be inside synchronize(bootstrapLock)!
-     */
-    private
-    void doRegistration() {
-        BootstrapWrapper bootstrapWrapper = bootstrapIterator.next();
-
-        ChannelFuture future;
-
-        if (connectionTimeout != 0) {
-            // must be before connect
-            bootstrapWrapper.bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectionTimeout);
-        }
-
-        try {
-            // UDP : When this is CONNECT, a udp socket will ONLY accept UDP traffic from the remote address (ip/port combo).
-            //       If the reply isn't from the correct port, then the other end will receive a "Port Unreachable" exception.
-
-            future = bootstrapWrapper.bootstrap.connect();
-            future.await(connectionTimeout);
-        } catch (Exception e) {
-            String errorMessage =
-                    "Could not connect to the " + bootstrapWrapper.type + " server at " + bootstrapWrapper.address + " on port: " +
-                    bootstrapWrapper.port;
-            if (logger.isDebugEnabled()) {
-                // extra info if debug is enabled
-                logger.error(errorMessage, e);
-            }
-            else {
-                logger.error(errorMessage);
-            }
-
-            return;
-        }
-
-        if (!future.isSuccess()) {
-            Throwable cause = future.cause();
-
-            // extra space here is so it aligns with "Connecting to server:"
-            String errorMessage = "Connection refused  :" + bootstrapWrapper.address + " at " + bootstrapWrapper.type + " port: " +
-                                  bootstrapWrapper.port;
-
-            if (cause instanceof java.net.ConnectException) {
-                if (cause.getMessage()
-                         .contains("refused")) {
-                    logger.error(errorMessage);
-                }
-
-            }
-            else {
-                logger.error(errorMessage, cause);
-            }
-
-            return;
-        }
-
-        logger.trace("Waiting for registration from server.");
-
-        manageForShutdown(future);
-    }
 
     /**
      * Internal (to the networking stack) to notify the client that registration has COMPLETED. This is necessary because the client
@@ -265,30 +127,7 @@ class EndPointClient extends EndPoint {
         }
     }
 
-    /**
-     * AFTER registration is complete, if we are UDP only -- setup a heartbeat (must be the larger of 2x the idle timeout OR 10 seconds)
-     *
-     * If the server disconnects because of a heartbeat failure, the client has to be made aware of this when it tries to send data again
-     * (and it must go through it's entire reconnect protocol)
-     */
-    protected
-    void startUdpHeartbeat() {
-        // TODO...
-    }
 
-    /**
-     * Expose methods to send objects to a destination.
-     * <p/>
-     * This returns a bridge that will flush after EVERY send! This is because sending data can occur on the client, outside
-     * of the normal eventloop patterns, and it is confusing to the user to have to manually flush the channel each time.
-     */
-    @Override
-    public
-    ConnectionBridge send() {
-        return connectionBridgeFlushAlways;
-    }
-
-    @Override
     public
     ConnectionPoint send(final Object message) {
         ConnectionPoint send = connection.send(message);
@@ -300,37 +139,57 @@ class EndPointClient extends EndPoint {
         return send;
     }
 
-    /**
-     * Closes all connections ONLY (keeps the client running).  To STOP the client, use stop().
-     * <p/>
-     * This is used, for example, when reconnecting to a server.
-     */
-    protected
-    void closeConnection() {
-        if (isConnected.get()) {
-            // make sure we're not waiting on registration
-            stopRegistration();
-
-            // for the CLIENT only, we clear these connections! (the server only clears them on shutdown)
-
-            // stop does the same as this + more.  Only keep the listeners for connections IF we are the client. If we remove listeners as a client,
-            // ALL of the client logic will be lost. The server is reactive, so listeners are added to connections as needed (instead of before startup)
-            connectionManager.closeConnections(true);
-
-            // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
-            registrationWrapper.clearSessions();
-
-
-            closeConnections(true);
-            shutdownAllChannels();
-            // shutdownEventLoops();  we don't do this here!
-
-            connection = null;
-            isConnected.set(false);
-
-            previousClosedConnectionActivity = System.nanoTime();
-        }
+    public
+    ConnectionPoint send(final Object message, final byte priority) {
+        return null;
     }
+
+    public
+    ConnectionPoint sendUnreliable(final Object message) {
+        return null;
+    }
+
+    public
+    ConnectionPoint sendUnreliable(final Object message, final byte priority) {
+        return null;
+    }
+
+    public
+    Ping ping() {
+        return null;
+    }
+
+    // /**
+    //  * Closes all connections ONLY (keeps the client running).  To STOP the client, use stop().
+    //  * <p/>
+    //  * This is used, for example, when reconnecting to a server.
+    //  */
+    // protected
+    // void closeConnection() {
+    //     if (isConnected.get()) {
+    //         // make sure we're not waiting on registration
+    //         stopRegistration();
+    //
+    //         // for the CLIENT only, we clear these connections! (the server only clears them on shutdown)
+    //
+    //         // stop does the same as this + more.  Only keep the listeners for connections IF we are the client. If we remove listeners as a client,
+    //         // ALL of the client logic will be lost. The server is reactive, so listeners are added to connections as needed (instead of before startup)
+    //         connectionManager.closeConnections(true);
+    //
+    //         // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
+    //         registrationWrapper.clearSessions();
+    //
+    //
+    //         closeConnections(true);
+    //         shutdownAllChannels();
+    //         // shutdownEventLoops();  we don't do this here!
+    //
+    //         connection = null;
+    //         isConnected.set(false);
+    //
+    //         previousClosedConnectionActivity = System.nanoTime();
+    //     }
+    // }
 
     /**
      * Internal call to abort registration if the shutdown command is issued during channel registration.
@@ -339,13 +198,13 @@ class EndPointClient extends EndPoint {
         // make sure we're not waiting on registration
         stopRegistration();
     }
-
-    @Override
-    protected
-    void shutdownChannelsPre() {
-        closeConnection();
-
-        // this calls connectionManager.stop()
-        super.shutdownChannelsPre();
-    }
+    //
+    // @Override
+    // protected
+    // void shutdownChannelsPre() {
+    //     closeConnection();
+    //
+    //     // this calls connectionManager.stop()
+    //     super.shutdownChannelsPre();
+    // }
 }

@@ -49,7 +49,7 @@ import net.jpountz.lz4.LZ4FastDecompressor;
 @SuppressWarnings("Duplicates")
 public
 class KryoExtra extends Kryo {
-    private static final int ABSOLUTE_MAX_SIZE_OBJECT = EndPoint.udpMaxSize * 1000; // by default, this is about 500k
+    private static final int ABSOLUTE_MAX_SIZE_OBJECT = 500_000; // by default, this is about 500k
     private static final boolean DEBUG = false;
 
     private static final Connection_ NOP_CONNECTION = new RmiNopConnection();

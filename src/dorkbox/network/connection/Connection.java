@@ -15,9 +15,6 @@
  */
 package dorkbox.network.connection;
 
-import dorkbox.network.connection.bridge.ConnectionBridge;
-import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.connection.idle.IdleSender;
 import dorkbox.network.rmi.RemoteObject;
 import dorkbox.network.rmi.RemoteObjectCallback;
 import dorkbox.network.rmi.TimeoutException;
@@ -42,56 +39,81 @@ interface Connection {
     boolean isLoopback();
 
     /**
-     * @return the connection (TCP or LOCAL) id of this connection.
+     * @return true if this connection is an IPC connection
+     */
+    boolean isIPC();
+
+    /**
+     * @return true if this connection is a network connection
+     */
+    boolean isNetwork();
+
+    /**
+     * @return the connection id of this connection.
      */
     int id();
 
     /**
-     * @return the connection (TCP or LOCAL) id of this connection as a HEX string.
+     * @return the connection id of this connection as a HEX string.
      */
     String idAsHex();
 
-    /**
-     * @return true if this connection is also configured to use UDP
-     */
-    boolean hasUDP();
 
     /**
-     * Expose methods to send objects to a destination (such as a custom object or a standard ping)
-     */
-    ConnectionBridge send();
-
-    /**
-     * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
-     * is available to use. If you want specify the protocol, use {@link #send()}, followed by the protocol you wish to use.
+     * Safely sends objects to a destination.
      */
     ConnectionPoint send(Object message);
 
     /**
-     * Expose methods to send objects to a destination when the connection has become idle.
+     * Safely sends objects to a destination with the specified priority.
+     * <p>
+     * A priority of 255 (highest) will always be sent immediately.
+     * <p>
+     * A priority of 0-254 will be sent (0, the lowest, will be last) if there is no backpressure from the MediaDriver.
      */
-    IdleBridge sendOnIdle(IdleSender<?, ?> sender);
+    ConnectionPoint send(Object message, byte priority);
 
     /**
-     * Expose methods to send objects to a destination when the connection has become idle.
+     * Safely sends objects to a destination, but does not guarantee delivery
      */
-    IdleBridge sendOnIdle(Object message);
+    ConnectionPoint sendUnreliable(Object message);
+
 
     /**
-     * Expose methods to modify the connection listeners.
+     * Safely sends objects to a destination, but does not guarantee delivery.
+     * <p>
+     * A priority of 255 (highest) will always be sent immediately.
+     * <p>
+     * A priority of 0-254 will be sent (0, the lowest, will be last) if there is no backpressure from the MediaDriver.
+     */
+    ConnectionPoint sendUnreliable(Object message, byte priority);
+
+    /**
+     * Sends a "ping" packet, trying UDP then TCP (in that order) to measure <b>ROUND TRIP</b> time to the remote connection.
+     *
+     * @return Ping can have a listener attached, which will get called when the ping returns.
+     */
+    Ping ping(); // TODO: USE AERON FOR THIS
+
+
+
+    /**
+     * Expose methods to modify the connection-specific listeners.
      */
     Listeners listeners();
 
     /**
-     * Closes the connection, but does not remove any listeners
+     * Closes the connection and removes all listeners
      */
     void close();
 
-    /**
-     * Marks the connection to be closed as soon as possible. This is evaluated when the current thread execution returns to the network stack.
-     */
-    void closeAsap();
-
+    // TODO: below should just be "new()" to create a new object, to mirror "new Object()"
+    //   // RMI
+    //         // client.get(5) -> gets from the server connection, if exists, then global.
+    //         //                  on server, a connection local RMI object "uses" an id for global, so there will never be a conflict
+    //         //                  using some tricks, we can make it so that it DOESN'T matter the order in which objects are created,
+    //         //                  and can specify, if we want, the object created.
+    //         //                  Once created though, as NEW ONE with the same ID cannot be created until the old one is removed!
     /**
      * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
      * to an object that is created remotely.

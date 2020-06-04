@@ -20,9 +20,8 @@ import dorkbox.network.connection.ConnectionPoint;
 import dorkbox.network.connection.Connection_;
 import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.Listeners;
-import dorkbox.network.connection.bridge.ConnectionBridge;
-import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.connection.idle.IdleSender;
+import dorkbox.network.connection.Ping;
+
 
 public
 class RmiNopConnection implements Connection_ {
@@ -46,6 +45,18 @@ class RmiNopConnection implements Connection_ {
 
     @Override
     public
+    boolean isIPC() {
+        return false;
+    }
+
+    @Override
+    public
+    boolean isNetwork() {
+        return false;
+    }
+
+    @Override
+    public
     EndPoint getEndPoint() {
         return null;
     }
@@ -64,33 +75,34 @@ class RmiNopConnection implements Connection_ {
 
     @Override
     public
-    boolean hasUDP() {
-        return false;
-    }
-
-    @Override
-    public
-    ConnectionBridge send() {
-        return null;
-    }
-
-    @Override
-    public
     ConnectionPoint send(final Object message) {
         return null;
     }
 
     @Override
     public
-    IdleBridge sendOnIdle(final IdleSender<?, ?> sender) {
+    ConnectionPoint send(final Object message, final byte priority) {
         return null;
     }
 
     @Override
     public
-    IdleBridge sendOnIdle(final Object message) {
+    ConnectionPoint sendUnreliable(final Object message) {
         return null;
     }
+
+    @Override
+    public
+    ConnectionPoint sendUnreliable(final Object message, final byte priority) {
+        return null;
+    }
+
+    @Override
+    public
+    Ping ping() {
+        return null;
+    }
+
 
     @Override
     public
@@ -101,12 +113,6 @@ class RmiNopConnection implements Connection_ {
     @Override
     public
     void close() {
-
-    }
-
-    @Override
-    public
-    void closeAsap() {
 
     }
 

@@ -15,39 +15,31 @@
  */
 package dorkbox.network;
 
-import dorkbox.network.connection.EndPoint;
+import java.io.File;
+import java.util.concurrent.TimeUnit;
+
+import org.agrona.concurrent.BackoffIdleStrategy;
+import org.agrona.concurrent.IdleStrategy;
+
 import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.network.store.SettingsStore;
+import io.aeron.driver.ThreadingMode;
 
 public
 class Configuration {
     /**
-     * On the server, if host is null, it will bind to the "any" address, otherwise you must specify the hostname/IP to bind to.
+     * Specify the UDP port to use. This port is used to establish client-server connections.
+     * <p>
+     * Must be greater than 0
      */
-    public String host = null;
+    public int port = 0;
 
     /**
-     * Specify the TCP port to use. The server will listen on this port, the client will connect to it.
+     * Specify the UDP MDC control port to use. This port is used to establish client-server connections.
      * <p>
-     * Must be > 0 to be used
+     * Must be greater than 0
      */
-    public int tcpPort = 0;
-
-    /**
-     * Specify the UDP port to use. The server will listen on this port, the client will connect to it.
-     * <p>
-     * Must be > 0 to be used
-     * <p>
-     * UDP requires TCP to handshake
-     */
-    public int udpPort = 0;
-
-    /**
-     * Specify the local channel name to use, if the default is not wanted.
-     * <p>
-     * Local/remote configurations are incompatible with each other.
-     */
-    public String localChannelName = null;
+    public int controlPort = 0;
 
     /**
      * Allows the end user to change how server settings are stored. For example, a custom database instead of the default.
@@ -59,34 +51,110 @@ class Configuration {
      */
     public NetworkSerializationManager serialization = null;
 
+
     /**
-     * The number of threads used for the worker threads by the end point. By default, this is the CPU_COUNT/2 or 1, whichever is larger.
+     * The idle strategy used when polling the Media Driver for new messages. BackOffIdleStrategy is the DEFAULT.
+     *
+     * There are a couple strategies of importance to understand.
+     * <p>
+     * BusySpinIdleStrategy uses a busy spin as an idle and will eat up CPU by default.
+     * <p>
+     * BackOffIdleStrategy uses a backoff strategy of spinning, yielding, and parking to be kinder to the CPU, but to be less
+     * responsive to activity when idle for a little while.
+     * <p>
+     * <p>
+     * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
+     * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    public int workerThreadPoolSize = Math.max(Runtime.getRuntime().availableProcessors() / 2, 1);
+    public IdleStrategy messagePollIdleStrategy = new BackoffIdleStrategy(100, 10,
+                                                                          TimeUnit.MICROSECONDS.toNanos(10),
+                                                                          TimeUnit.MILLISECONDS.toNanos(100));
+
+
+    /**
+     * A Media Driver, whether being run embedded or not, needs 1-3 threads to perform its operation.
+     * <p>
+     * There are three main Agents in the driver:
+     * <p>
+     *    Conductor: Responsible for reacting to client requests and house keeping duties as well as detecting loss, sending NAKs,
+     *                  rotating buffers, etc.
+     *       Sender: Responsible for shovelling messages from publishers to the network.
+     *     Receiver: Responsible for shovelling messages from the network to subscribers.
+     * <p>
+     * This value can be one of:
+     * <p>
+     *     INVOKER: No threads. The client is responsible for using the MediaDriver.Context.driverAgentInvoker() to invoke the duty
+     *                  cycle directly.
+     *     SHARED: All Agents share a single thread. 1 thread in total.
+     *     SHARED_NETWORK: Sender and Receiver shares a thread, conductor has its own thread. 2 threads in total.
+     *     DEDICATED: The default and dedicates one thread per Agent. 3 threads in total.
+     * <p>
+     * For performance, it is recommended to use DEDICATED as long as the number of busy threads is less than or equal to the number of
+     *      spare cores on the machine. If there are not enough cores to dedicate, then it is recommended to consider sharing some with
+     *      SHARED_NETWORK or SHARED. INVOKER can be used for low resource environments while the application using Aeron can invoke the
+     *      media driver to carry out its duty cycle on a regular interval.
+     */
+    public ThreadingMode threadingMode = ThreadingMode.SHARED;
+
+    /**
+     * Log Buffer Locations for the Media Driver. The default location is a TEMP dir. This must be unique PER application and instance!
+     */
+    public File aeronLogDirectory = null;
+
+    /**
+     * The Aeron MTU value impacts a lot of things.
+     * <p>
+     * The default MTU is set to a value that is a good trade-off. However, it is suboptimal for some use cases involving very large
+     * (> 4KB) messages and for maximizing throughput above everything else. Various checks during publication and subscription/connection
+     * setup are done to verify a decent relationship with MTU.
+     * <p>
+     * However, it is good to understand these relationships.
+     * <p>
+     * The MTU on the Media Driver controls the length of the MTU of data frames. This value is communicated to the Aeron clients during
+     * registration. So, applications do not have to concern themselves with the MTU value used by the Media Driver and use the same value.
+     * <p>
+     * An MTU value over the interface MTU will cause IP to fragment the datagram. This may increase the likelihood of loss under several
+     * circumstances. If increasing the MTU over the interface MTU, consider various ways to increase the interface MTU first in preparation.
+     * <p>
+     * The MTU value indicates the largest message that Aeron will send as a single data frame.
+     * <p>
+     * MTU length also has implications for socket buffer sizing.
+     * <p>
+     * <p>
+     * Default value is 1408 for internet; for a LAN, 9k is possible with jumbo frames (if the routers/interfaces support it)
+     */
+    public int networkMtuSize = io.aeron.driver.Configuration.MTU_LENGTH_DEFAULT;
+
+     /**
+      * This option (ultimately SO_SNDBUF for the network socket) can impact loss rate. Loss can occur on the sender side due
+      * to this buffer being too small.
+      * <p>
+      * This buffer must be large enough to accommodate the MTU as a minimum. In addition, some systems, most notably Windows,
+      * need plenty of buffering on the send side to reach adequate throughput rates. If too large, this buffer can increase latency
+      * or cause loss.
+      * <p>
+      * This usually should be less than 2MB.
+     */
+    public int sendBufferSize = 0;
+
+    /**
+     * This option (ultimately SO_RCVBUF for the network socket) can impact loss rates when too small for the given processing.
+     * If too large, this buffer can increase latency.
+     * <p>
+     * Values that tend to work well with Aeron are 2MB to 4MB. This setting must be large enough for the MTU of the sender. If not,
+     * persistent loss can result. In addition, the receiver window length should be less than or equal to this value to allow plenty
+     * of space for burst traffic from a sender.
+     */
+    public int receiveBufferSize = 0;
+
+
+
+
+
 
 
     public
     Configuration() {
-    }
 
-    /**
-     * Creates a new configuration for a connection that is local inside the JVM using the default name.
-     * <p>
-     * Local/remote configurations are incompatible with each other when running as a client. Servers can listen on all of them.
-     */
-    public static
-    Configuration localOnly() {
-        Configuration configuration = new Configuration();
-        configuration.localChannelName = EndPoint.LOCAL_CHANNEL;
-
-        return configuration;
-    }
-
-    public
-    Configuration(String host, int tcpPort, int udpPort, String localChannelName) {
-        this.host = host;
-        this.tcpPort = tcpPort;
-        this.udpPort = udpPort;
-        this.localChannelName = localChannelName;
     }
 }

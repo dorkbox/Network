@@ -112,7 +112,7 @@ class RegistrationWrapper {
      */
     public
     int getIdleTimeout() {
-        return this.endPoint.getIdleTimeout();
+        return 5;
     }
 
     /**

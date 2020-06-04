@@ -20,7 +20,6 @@
 package dorkbox.network;
 
 
-import static dorkbox.network.connection.EndPoint.THREADGROUP_NAME;
 import static org.junit.Assert.fail;
 
 import java.lang.reflect.Field;
@@ -162,21 +161,21 @@ class BaseTest {
                                         .getThreadGroup();
         final String name = threadGroup.getName();
 
-        if (name.contains(THREADGROUP_NAME)) {
-            // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will DEADLOCK
-            final Thread thread = new Thread(threadGroup.getParent(), new Runnable() {
-                @Override
-                public
-                void run() {
-                    stopEndPoints_(stopAfterMillis);
-                }
-            }, "UnitTest shutdown"); // a different name for the thread
-
-            thread.setDaemon(true);
-            thread.start();
-        } else {
+        // if (name.contains(THREADGROUP_NAME)) {
+        //     // We have to ALWAYS run this in a new thread, BECAUSE if stopEndPoints() is called from a client/server thread, it will DEADLOCK
+        //     final Thread thread = new Thread(threadGroup.getParent(), new Runnable() {
+        //         @Override
+        //         public
+        //         void run() {
+        //             stopEndPoints_(stopAfterMillis);
+        //         }
+        //     }, "UnitTest shutdown"); // a different name for the thread
+        //
+        //     thread.setDaemon(true);
+        //     thread.start();
+        // } else {
             stopEndPoints_(stopAfterMillis);
-        }
+        // }
     }
 
     private

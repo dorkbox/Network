@@ -1,0 +1,24 @@
+<configuration scan="true">
+    <!-- see http://logback.qos.ch/manual/architecture.html for more info -->
+    <!-- logger order goes (from lowest to highest) TRACE->DEBUG->INFO->WARN->ERROR->OFF -->
+
+    <!-- Ignore startup info -->
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <!-- encoders are assigned the type
+             ch.qos.logback.classic.encoder.PatternLayoutEncoder by default -->
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+
+    <!-- external/libs -->
+    <logger name="ch.qos.logback" level="ERROR"/>
+
+
+    <root level="INFO"> <!-- Release: ERROR -->
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

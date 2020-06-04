@@ -15,6 +15,9 @@
  */
 package dorkbox.network.connection;
 
+import java.io.Closeable;
+import java.io.File;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -28,9 +31,11 @@ import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dorkbox.network.Client;
+import dorkbox.network.ClientConfiguration;
 import dorkbox.network.Configuration;
 import dorkbox.network.Server;
-import dorkbox.network.connection.bridge.ConnectionBridgeBase;
+import dorkbox.network.ServerConfiguration;
 import dorkbox.network.connection.registration.MetaChannel;
 import dorkbox.network.connection.wrapper.ChannelLocalWrapper;
 import dorkbox.network.connection.wrapper.ChannelNetworkWrapper;
@@ -40,53 +45,43 @@ import dorkbox.network.serialization.NetworkSerializationManager;
 import dorkbox.network.serialization.Serialization;
 import dorkbox.network.store.NullSettingsStore;
 import dorkbox.network.store.SettingsStore;
-import dorkbox.util.Property;
+import dorkbox.util.OS;
+import dorkbox.util.RandomUtil;
 import dorkbox.util.crypto.CryptoECC;
 import dorkbox.util.entropy.Entropy;
 import dorkbox.util.exceptions.SecurityException;
+import io.aeron.Aeron;
+import io.aeron.driver.MediaDriver;
 import io.netty.channel.local.LocalAddress;
-import io.netty.handler.codec.ByteToMessageDecoder;
-import io.netty.handler.timeout.IdleStateHandler;
-import io.netty.resolver.DefaultNameResolver;
-import io.netty.resolver.InetSocketAddressResolver;
 import io.netty.util.NetUtil;
 
 /**
  * represents the base of a client/server end point
  */
 public abstract
-class EndPoint extends Shutdownable {
+class EndPoint<_Configuration extends Configuration> implements Closeable {
+    /**
+     * The inclusive lower bound of the reserved sessions range.
+     */
+
+    public static final int RESERVED_SESSION_ID_LOW = 1;
+
+    /**
+     * The inclusive upper bound of the reserved sessions range.
+     */
+
+    public static final int RESERVED_SESSION_ID_HIGH = 2147483647;
+
+    public static final int UDP_STREAM_ID = 0x1337cafe;
+    public static final int IPC_STREAM_ID = 0xdeadbeef;
+
+
     // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
     // it results in severe UDP packet loss and contention.
     //
     // http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM
     // also, a google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
     // Usually it's with ISPs.
-
-    // TODO: will also want an UDP keepalive? (TCP is already there b/c of socket options, but might need a heartbeat to detect dead connections?)
-    //          routers sometimes need a heartbeat to keep the connection
-    // TODO: maybe some sort of STUN-like connection keep-alive??
-
-
-    static {
-        // have to load some classes early to prevent stack overflow issues on windows
-        ConnectionImpl.isTcpChannel(null);
-        ConnectionImpl.isUdpChannel(null);
-
-        Object clazz = ByteToMessageDecoder.class;
-        clazz = IdleStateHandler.class;
-
-        try {
-            // this class is a private, inner class to IdleStateHandler...
-            clazz = Class.forName("io.netty.handler.timeout.IdleStateHandler$AbstractIdleTask");
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-
-        clazz = DefaultNameResolver.class;
-        clazz = InetSocketAddressResolver.class;
-    }
-
 
     public static
     String getHostDetails(final SocketAddress socketAddress) {
@@ -122,44 +117,20 @@ class EndPoint extends Shutdownable {
         }
     }
 
-    /**
-     * Defines if we are allowed to use the native OS-specific network interface (non-native to java) for boosted networking performance.
-     */
-    @Property
-    public static boolean enableNativeLibrary = false;
 
 
-    public static final String LOCAL_CHANNEL = "local_channel";
 
-    /**
-     * The default size for UDP packets is 768 bytes.
-     * <p/>
-     * You could increase or decrease this value to avoid truncated packets
-     * or to improve memory footprint respectively.
-     * <p/>
-     * Please also note that a large UDP packet might be truncated or
-     * dropped by your router no matter how you configured this option.
-     * In UDP, a packet is truncated or dropped if it is larger than a
-     * certain size, depending on router configuration.  IPv4 routers
-     * truncate and IPv6 routers drop a large packet.  That's why it is
-     * safe to send small packets in UDP.
-     * <p/>
-     * To fit into that magic 576-byte MTU and avoid fragmentation, your
-     * UDP payload should be restricted by 576-60-8=508 bytes.
-     *
-     * This can be set higher on an internal lan!
-     *
-     * DON'T go higher that 1400 over the internet, but 9k is possible
-     * with jumbo frames on a local network (if it's supported)
-     */
-    @Property
-    public static int udpMaxSize = 508;
+    protected final org.slf4j.Logger logger;
 
-    protected final Configuration config;
+    private final Class<?> type;
+    protected final _Configuration config;
+
+    protected MediaDriver mediaDriver = null;
+    protected Aeron aeron = null;
 
     protected final ConnectionManager connectionManager;
     protected final NetworkSerializationManager serializationManager;
-    protected final RegistrationWrapper registrationWrapper;
+    // protected final RegistrationWrapper registrationWrapper;
 
     final ECPrivateKeyParameters privateKey;
     final ECPublicKeyParameters publicKey;
@@ -175,14 +146,19 @@ class EndPoint extends Shutdownable {
     SettingsStore propertyStore;
     boolean disableRemoteKeyValidation;
 
-    /**
-     * in milliseconds. default is disabled!
-     */
-    private volatile int idleTimeoutMs = 0;
-
     // the connection status of this endpoint. Once a server has connected to ANY client, it will always return true until server.close() is called
     protected final AtomicBoolean isConnected = new AtomicBoolean(false);
 
+
+    protected
+    EndPoint(final ClientConfiguration config) throws SecurityException, IOException {
+        this(Client.class, config);
+    }
+
+    protected
+    EndPoint(final ServerConfiguration config) throws SecurityException, IOException {
+        this(Server.class, config);
+    }
 
     /**
      * @param type this is either "Client" or "Server", depending on who is creating this endpoint.
@@ -190,16 +166,121 @@ class EndPoint extends Shutdownable {
      *
      * @throws SecurityException if unable to initialize/generate ECC keys
      */
-    public
-    EndPoint(Class<? extends EndPoint> type, final Configuration config) throws SecurityException {
-        super(type);
-        this.config = config;
+    private
+    EndPoint(Class<?> type, final Configuration config) throws SecurityException, IOException {
+        this.type = type;
 
-        // make sure that 'localhost' is ALWAYS our specific loopback IP address
-        if (config.host != null && (config.host.equals("localhost") || config.host.startsWith("127."))) {
-            // localhost IP might not always be 127.0.0.1
-            config.host = NetUtil.LOCALHOST.getHostAddress();
+        logger = org.slf4j.LoggerFactory.getLogger(type.getSimpleName());
+
+        //noinspection unchecked
+        this.config = (_Configuration) config;
+
+
+        if (config instanceof ServerConfiguration) {
+            ServerConfiguration sConfig = (ServerConfiguration) config;
+
+            if (sConfig.listenIpAddress == null) {
+                throw new RuntimeException("The listen IP address cannot be null");
+            }
+
+            String listenIpAddress = sConfig.listenIpAddress = sConfig.listenIpAddress.toLowerCase();
+
+            if (listenIpAddress.equals("localhost") || listenIpAddress.equals("loopback") || listenIpAddress.equals("lo") ||
+                listenIpAddress.startsWith("127.") || listenIpAddress.startsWith("::1")) {
+
+                // localhost/loopback IP might not always be 127.0.0.1 or ::1
+                sConfig.listenIpAddress = NetUtil.LOCALHOST.getHostAddress();
+            }
+            else if (listenIpAddress.equals("*")) {
+                // we set this to "0.0.0.0" so that it is clear that we are trying to bind to that address.
+                sConfig.listenIpAddress = "0.0.0.0";
+            }
         }
+
+
+        // Aeron configuration
+        File aeronLogDirectory = config.aeronLogDirectory;
+        if (aeron == null) {
+            File baseFile;
+            if (OS.isLinux()) {
+                // this is significantly faster for linux than using the temp dir
+                baseFile = new File(System.getProperty("/dev/shm/"));
+            } else {
+                baseFile = new File(System.getProperty("java.io.tmpdir"));
+            }
+            // note: MacOS should create a ram-drive for this
+        /*
+         * Linux
+Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and net.core.wmem_max to allow larger SO_SNDBUF values to be set.
+Windows
+
+Windows tends to use SO_SNDBUF values that are too small. It is recommended to use values more like 1MB or so.
+Mac/Darwin
+
+Mac tends to use SO_SNDBUF values that are too small. It is recommended to use larger values, like 16KB.
+
+Note: Since Mac OS does not have a built-in support for /dev/shm it is advised to create a RAM disk for the Aeron directory (aeron.dir).
+
+You can create a RAM disk with the following command:
+
+$ diskutil erasevolume HFS+ "DISK_NAME" `hdiutil attach -nomount ram://$((2048 * SIZE_IN_MB))`
+
+where:
+
+    DISK_NAME should be replaced with a name of your choice.
+    SIZE_IN_MB is the size in megabytes for the disk (e.g. 4096 for a 4GB disk).
+
+For example, the following command creates a RAM disk named DevShm which is 2GB in size:
+
+$ diskutil erasevolume HFS+ "DevShm" `hdiutil attach -nomount ram://$((2048 * 2048))`
+
+After this command is executed the new disk will be mounted under /Volumes/DevShm.
+         */
+
+            String baseName = "aeron-" + type.getSimpleName();
+            aeronLogDirectory = new File(baseFile, baseName);
+            while (aeronLogDirectory.exists()) {
+                logger.error("Aeron log directory already exists! This might not be what you want!");
+                // avoid a collision
+                aeronLogDirectory = new File(baseFile, baseName + RandomUtil.get().nextInt(1000));
+            }
+        }
+
+        logger.debug("Aeron log directory: " + aeronLogDirectory);
+
+
+        // LOW-LATENCY SETTINGS
+        // .termBufferSparseFile(false)
+        //             .useWindowsHighResTimer(true)
+        //             .threadingMode(ThreadingMode.DEDICATED)
+        //             .conductorIdleStrategy(BusySpinIdleStrategy.INSTANCE)
+        //             .receiverIdleStrategy(NoOpIdleStrategy.INSTANCE)
+        //             .senderIdleStrategy(NoOpIdleStrategy.INSTANCE);
+
+        final MediaDriver.Context mediaDriverContext = new MediaDriver.Context()
+                                                               .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
+                                                               .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
+                                                               .dirDeleteOnShutdown(true)
+                                                               .threadingMode(config.threadingMode)
+                                                               .mtuLength(config.networkMtuSize)
+                                                               .socketSndbufLength(config.sendBufferSize)
+                                                               .socketRcvbufLength(config.receiveBufferSize)
+                                                               .aeronDirectoryName(aeronLogDirectory.getAbsolutePath());
+
+        final Aeron.Context aeronContext = new Aeron.Context().aeronDirectoryName(mediaDriverContext.aeronDirectoryName());
+
+        try {
+            mediaDriver = MediaDriver.launch(mediaDriverContext);
+            aeron = Aeron.connect(aeronContext);
+        } catch (final Exception e) {
+            try {
+                close();
+            } catch (final Exception secondaryException) {
+                e.addSuppressed(secondaryException);
+            }
+            throw new IOException(e);
+        }
+
 
         // serialization stuff
         if (config.serialization != null) {
@@ -215,11 +296,11 @@ class EndPoint extends Shutdownable {
         // The registration wrapper permits the registration process to access protected/package fields/methods, that we don't want
         // to expose to external code. "this" escaping can be ignored, because it is benign.
         //noinspection ThisEscapedInObjectConstruction
-        if (type == Server.class) {
-            registrationWrapper = new RegistrationWrapperServer(this, logger);
-        } else {
-            registrationWrapper = new RegistrationWrapperClient(this, logger);
-        }
+        // if (type == Server.class) {
+        //     registrationWrapper = new RegistrationWrapperServer(this, logger);
+        // } else {
+        //     registrationWrapper = new RegistrationWrapperClient(this, logger);
+        // }
 
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
@@ -319,44 +400,6 @@ class EndPoint extends Shutdownable {
     }
 
     /**
-     * Internal call by the pipeline to check if the client has more protocol registrations to complete.
-     *
-     * @return true if there are more registrations to process, false if we are 100% done with all types to register (TCP/UDP/etc)
-     */
-    protected
-    boolean hasMoreRegistrations() {
-        return false;
-    }
-
-    /**
-     * Internal call by the pipeline to notify the client to continue registering the different session protocols.
-     * The server does not use this.
-     */
-    protected
-    void startNextProtocolRegistration() {
-    }
-
-    /**
-     * The amount of milli-seconds that must elapse with no read or write before {@link Listener.OnIdle#idle(Connection)} }
-     * will be triggered
-     */
-    public
-    int getIdleTimeout() {
-        return idleTimeoutMs;
-    }
-
-    /**
-     * The {@link Listener:idle()} will be triggered when neither read nor write
-     * has happened for the specified period of time (in milli-seconds)
-     * <br>
-     * Specify {@code 0} to disable (default).
-     */
-    public
-    void setIdleTimeout(int idleTimeoutMs) {
-        this.idleTimeoutMs = idleTimeoutMs;
-    }
-
-    /**
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
      */
     public
@@ -445,19 +488,6 @@ class EndPoint extends Shutdownable {
     }
 
     /**
-     * Expose methods to send objects to a destination.
-     */
-    public abstract
-    ConnectionBridgeBase send();
-
-    /**
-     * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
-     * is available to use. If you want specify the protocol, use {@link #send()}, followed by the protocol you wish to use.
-     */
-    public abstract
-    ConnectionPoint send(final Object message);
-
-    /**
      * Closes all connections ONLY (keeps the server/client running).  To STOP the client/server, use stop().
      * <p/>
      * This is used, for example, when reconnecting to a server.
@@ -469,29 +499,47 @@ class EndPoint extends Shutdownable {
     }
 
     /**
-     * Starts the shutdown process during JVM shutdown, if necessary.
-     * </p>
-     * By default, we always can shutdown via the JVM shutdown hook.
+     * Creates a "global" RMI object for use by multiple connections.
+     *
+     * @return the ID assigned to this RMI object
      */
-    @Override
-    protected
-    boolean shouldShutdownHookRun() {
-        // connectionManager.shutdown accurately reflects the state of the app. Safe to use here
-        return (connectionManager != null && !connectionManager.shutdown.get());
+    public
+    <T> int createGlobalObject(final T globalObject) {
+        return rmiGlobalBridge.register(globalObject);
+    }
+
+    /**
+     * Gets a previously created "global" RMI object
+     *
+     * @param objectRmiId the ID of the RMI object to get
+     *
+     * @return null if the object doesn't exist or the ID is invalid.
+     */
+    @SuppressWarnings("unchecked")
+    public
+    <T> T getGlobalObject(final int objectRmiId) {
+        return (T) rmiGlobalBridge.getRegisteredObject(objectRmiId);
     }
 
     @Override
-    protected
-    void shutdownChannelsPre() {
-        // this does a closeConnections + clear_listeners
-        connectionManager.stop();
+    public
+    String toString() {
+        return "EndPoint [" + getName() + "]";
     }
 
-    @Override
-    protected
-    void stopExtraActionsInternal() {
-        // shutdown the database store
-        propertyStore.close();
+    /**
+     * @return the type class of this connection endpoint
+     */
+    public Class<?> getType() {
+        return type;
+    }
+
+    /**
+     * @return the simple name (for the class) of this connection endpoint
+     */
+    public
+    String getName() {
+        return type.getSimpleName();
     }
 
     @Override
@@ -537,26 +585,17 @@ class EndPoint extends Shutdownable {
         return true;
     }
 
-    /**
-     * Creates a "global" RMI object for use by multiple connections.
-     *
-     * @return the ID assigned to this RMI object
-     */
-    public
-    <T> int createGlobalObject(final T globalObject) {
-        return rmiGlobalBridge.register(globalObject);
-    }
+    @Override
+    public void close() {
+        if (aeron != null) {
+            aeron.close();
+        }
+        if (mediaDriver != null) {
+            mediaDriver.close();
+        }
 
-    /**
-     * Gets a previously created "global" RMI object
-     *
-     * @param objectRmiId the ID of the RMI object to get
-     *
-     * @return null if the object doesn't exist or the ID is invalid.
-     */
-    @SuppressWarnings("unchecked")
-    public
-    <T> T getGlobalObject(final int objectRmiId) {
-        return (T) rmiGlobalBridge.getRegisteredObject(objectRmiId);
+        if (propertyStore != null) {
+            propertyStore.close();
+        }
     }
 }

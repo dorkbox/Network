@@ -35,7 +35,6 @@ import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.util.Property;
 import dorkbox.util.collections.ConcurrentEntry;
 import dorkbox.util.generics.ClassHelper;
-import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.util.concurrent.ImmediateEventExecutor;
 import io.netty.util.concurrent.Promise;
 import net.jodah.typetools.TypeResolver;
@@ -330,9 +329,9 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         }
 
         // add the UDP "close hint" to close remote connections (internal use only!)
-        else if (messageClass == DatagramCloseMessage.class) {
-            connection.forceClose();
-        }
+        // else if (messageClass == DatagramCloseMessage.class) {
+        //     connection.forceClose();
+        // }
 
         else {
             notifyOnMessage0(connection, message, false);
@@ -720,8 +719,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             current = current.next();
 
             if (c != connection) {
-                c.send()
-                 .TCP(message);
+                // c.send()
+                //  .TCP(message);
             }
         }
         return this;
@@ -741,8 +740,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             current = current.next();
 
             if (c != connection) {
-                c.send()
-                 .UDP(message);
+                // c.send()
+                //  .UDP(message);
             }
         }
         return this;
@@ -777,8 +776,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             c = current.getValue();
             current = current.next();
 
-            c.send()
-             .TCP(message);
+            // c.send()
+            //  .TCP(message);
         }
         return this;
     }
@@ -795,8 +794,8 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             c = current.getValue();
             current = current.next();
 
-            c.send()
-             .UDP(message);
+            // c.send()
+            //  .UDP(message);
         }
         return this;
     }

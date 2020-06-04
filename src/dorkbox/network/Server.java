@@ -15,47 +15,28 @@
  */
 package dorkbox.network;
 
-import static dorkbox.network.pipeline.ConnectionType.LOCAL;
-
 import java.io.IOException;
-import java.net.Socket;
+import java.time.Clock;
 import java.util.Arrays;
-import java.util.List;
 
+import org.agrona.DirectBuffer;
+
+import dorkbox.network.aeron.EchoAddresses;
+import dorkbox.network.aeron.EchoChannels;
+import dorkbox.network.aeron.EchoMessages;
+import dorkbox.network.aeron.EchoServerExecutor;
+import dorkbox.network.aeron.EchoServerExecutorService;
 import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.EndPointServer;
-import dorkbox.network.connection.RegistrationWrapperServer;
 import dorkbox.network.connection.connectionType.ConnectionRule;
-import dorkbox.network.connection.registration.local.RegistrationLocalHandlerServer;
-import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerTCP;
-import dorkbox.network.connection.registration.remote.RegistrationRemoteHandlerServerUDP;
-import dorkbox.network.pipeline.discovery.BroadcastResponse;
-import dorkbox.util.OS;
-import dorkbox.util.Property;
+import dorkbox.network.ipFilter.IpFilterRule;
 import dorkbox.util.exceptions.SecurityException;
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.bootstrap.SessionBootstrap;
-import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.FixedRecvByteBufAllocator;
-import io.netty.channel.WriteBufferWaterMark;
-import io.netty.channel.epoll.EpollDatagramChannel;
-import io.netty.channel.epoll.EpollServerSocketChannel;
-import io.netty.channel.kqueue.KQueueDatagramChannel;
-import io.netty.channel.kqueue.KQueueServerSocketChannel;
-import io.netty.channel.local.LocalAddress;
-import io.netty.channel.local.LocalServerChannel;
-import io.netty.channel.socket.nio.NioDatagramChannel;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.channel.socket.oio.OioDatagramChannel;
-import io.netty.channel.socket.oio.OioServerSocketChannel;
-import io.netty.handler.ipfilter.IpFilterRule;
-import io.netty.handler.ipfilter.IpFilterRuleType;
-import io.netty.handler.ipfilter.IpSubnetFilterRule;
-import io.netty.util.NetUtil;
+import io.aeron.FragmentAssembler;
+import io.aeron.Image;
+import io.aeron.Publication;
+import io.aeron.Subscription;
+import io.aeron.logbuffer.FragmentHandler;
+import io.aeron.logbuffer.Header;
 
 /**
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
@@ -67,11 +48,6 @@ public
 class Server<C extends Connection> extends EndPointServer {
 
     /**
-     * Rule that will always allow LOCALHOST to connect to the server. This is not added by default
-     */
-    public static final IpFilterRule permitLocalHostRule = new IpSubnetFilterRule(NetUtil.LOCALHOST, 32, IpFilterRuleType.ACCEPT);
-
-    /**
      * Gets the version number.
      */
     public static
@@ -79,32 +55,17 @@ class Server<C extends Connection> extends EndPointServer {
         return "4.1";
     }
 
-    /**
-     * The maximum queue length for incoming connection indications (a request to connect). If a connection indication arrives when the
-     * queue is full, the connection is refused.
-     */
-    @Property
-    public static int backlogConnectionCount = 50;
-
-    private final ServerBootstrap localBootstrap;
-    private final ServerBootstrap tcpBootstrap;
-    private final SessionBootstrap udpBootstrap;
-
-    private final int tcpPort;
-    private final int udpPort;
-
-    private final String localChannelName;
-    private final String hostName;
-
     private volatile boolean isRunning = false;
 
+    private final EchoServerExecutorService executor;
+    private final ClientStates clients;
 
     /**
      * Starts a LOCAL <b>only</b> server, with the default serialization scheme.
      */
     public
-    Server() throws  SecurityException {
-        this(Configuration.localOnly());
+    Server() throws SecurityException, IOException {
+        this(new ServerConfiguration());
     }
 
     /**
@@ -112,169 +73,32 @@ class Server<C extends Connection> extends EndPointServer {
      */
     @SuppressWarnings("AutoBoxing")
     public
-    Server(Configuration config) throws SecurityException {
+    Server(ServerConfiguration config) throws SecurityException, IOException {
         // watch-out for serialization... it can be NULL incoming. The EndPoint (superclass) sets it, if null, so
         // you have to make sure to use this.serialization
         super(config);
 
-        tcpPort = config.tcpPort;
-        udpPort = config.udpPort;
+        EchoServerExecutorService exec = null;
+        try {
+            this.executor  = EchoServerExecutor.create(Server.class);
 
-        localChannelName = config.localChannelName;
-
-        if (config.host == null) {
-            // we set this to "0.0.0.0" so that it is clear that we are trying to bind to that address.
-            hostName = "0.0.0.0";
-
-            // make it clear that this is what we do (configuration wise) so that variable examination is consistent
-            config.host = hostName;
-        }
-        else {
-            hostName = config.host;
-        }
-
-
-        if (localChannelName != null) {
-            localBootstrap = new ServerBootstrap();
-        }
-        else {
-            localBootstrap = null;
-        }
-
-        if (tcpPort > 0) {
-            tcpBootstrap = new ServerBootstrap();
-        }
-        else {
-            tcpBootstrap = null;
-        }
-
-        if (udpPort > 0) {
-            // This is what allows us to have UDP behave "similar" to TCP, in that a session is established based on the port/ip of the
-            // remote connection. This allows us to reuse channels and have "state" for a UDP connection that normally wouldn't exist.
-            // Additionally, this is what responds to discovery broadcast packets
-            udpBootstrap = new SessionBootstrap(tcpPort, udpPort);
-        }
-        else {
-            udpBootstrap = null;
-        }
-
-
-        String threadName = Server.class.getSimpleName();
-
-        // always use local channels on the server.
-        if (localBootstrap != null) {
-            localBootstrap.group(newEventLoop(LOCAL, 1, threadName + "-JVM-BOSS"),
-                                 newEventLoop(LOCAL, 1, threadName ))
-                          .channel(LocalServerChannel.class)
-                          .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                          .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
-                          .localAddress(new LocalAddress(localChannelName))
-                          .childHandler(new RegistrationLocalHandlerServer(threadName, (RegistrationWrapperServer) registrationWrapper));
-        }
-
-
-        EventLoopGroup workerEventLoop = null;
-        if (tcpBootstrap != null || udpBootstrap != null) {
-            workerEventLoop = newEventLoop(config.workerThreadPoolSize, threadName);
-        }
-
-        if (tcpBootstrap != null) {
-            if (OS.isAndroid()) {
-                // android ONLY supports OIO (not NIO)
-                tcpBootstrap.channel(OioServerSocketChannel.class);
+            try {
+                this.clients = new ClientStates(this.aeron, Clock.systemUTC(), this.executor, this.config, logger);
+            } catch (final Exception e) {
+                if (mediaDriver != null) {
+                    mediaDriver.close();
+                }
+                throw e;
             }
-            else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-                // epoll network stack is MUCH faster (but only on linux)
-                tcpBootstrap.channel(EpollServerSocketChannel.class);
+        } catch (final Exception e) {
+            try {
+                if (exec != null) {
+                    exec.close();
+                }
+            } catch (final Exception c_ex) {
+                e.addSuppressed(c_ex);
             }
-            else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
-                // KQueue network stack is MUCH faster (but only on macosx)
-                tcpBootstrap.channel(KQueueServerSocketChannel.class);
-            }
-            else {
-                tcpBootstrap.channel(NioServerSocketChannel.class);
-            }
-
-            // TODO: If we use netty for an HTTP server,
-            // Beside the usual ChannelOptions the Native Transport allows to enable TCP_CORK which may come in handy if you implement a HTTP Server.
-
-            tcpBootstrap.group(newEventLoop(1, threadName + "-TCP-BOSS"),
-                               newEventLoop(1, threadName + "-TCP-REGISTRATION"))
-                        .option(ChannelOption.SO_BACKLOG, backlogConnectionCount)
-                        .option(ChannelOption.SO_REUSEADDR, true)
-                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
-
-                        .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                        .childOption(ChannelOption.SO_KEEPALIVE, true)
-                        .childHandler(new RegistrationRemoteHandlerServerTCP(threadName, (RegistrationWrapperServer) registrationWrapper, workerEventLoop));
-
-            // have to check options.host for "0.0.0.0". we don't bind to "0.0.0.0", we bind to "null" to get the "any" address!
-            if (hostName.equals("0.0.0.0")) {
-                tcpBootstrap.localAddress(tcpPort);
-            }
-            else {
-                tcpBootstrap.localAddress(hostName, tcpPort);
-            }
-
-
-            // android screws up on this!!
-            tcpBootstrap.option(ChannelOption.TCP_NODELAY, !OS.isAndroid())
-                        .childOption(ChannelOption.TCP_NODELAY, !OS.isAndroid());
-        }
-
-
-        if (udpBootstrap != null) {
-            if (OS.isAndroid()) {
-                // android ONLY supports OIO (not NIO)
-                udpBootstrap.channel(OioDatagramChannel.class);
-            }
-            else if (OS.isLinux() && NativeLibrary.isAvailable()) {
-                // epoll network stack is MUCH faster (but only on linux)
-                udpBootstrap.channel(EpollDatagramChannel.class);
-            }
-            else if (OS.isMacOsX() && NativeLibrary.isAvailable()) {
-                // KQueue network stack is MUCH faster (but only on macosx)
-                udpBootstrap.channel(KQueueDatagramChannel.class);
-            }
-            else {
-                // windows and linux/mac that are incompatible with the native implementations
-                udpBootstrap.channel(NioDatagramChannel.class);
-            }
-
-
-            // Netty4 has a default of 2048 bytes as upper limit for datagram packets, we want this to be whatever we specify
-            FixedRecvByteBufAllocator recvByteBufAllocator = new FixedRecvByteBufAllocator(EndPoint.udpMaxSize);
-
-            udpBootstrap.group(newEventLoop(1, threadName + "-UDP-BOSS"),
-                               newEventLoop(1, threadName + "-UDP-REGISTRATION"))
-                        .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                        .option(ChannelOption.RCVBUF_ALLOCATOR, recvByteBufAllocator)
-                        .option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(WRITE_BUFF_LOW, WRITE_BUFF_HIGH))
-
-                        // a non-root user can't receive a broadcast packet on *nix if the socket is bound on non-wildcard address.
-                        // TODO: move broadcast to it's own handler, and have UDP server be able to be bound to a specific IP
-                        // OF NOTE: At the end in my case I decided to bind to .255 broadcast address on Linux systems. (to receive broadcast packets)
-                        .localAddress(udpPort) // if you bind to a specific interface, Linux will be unable to receive broadcast packets! see: http://developerweb.net/viewtopic.php?id=5722
-                        .childHandler(new RegistrationRemoteHandlerServerUDP(threadName, (RegistrationWrapperServer) registrationWrapper, workerEventLoop));
-
-            // // have to check options.host for null. we don't bind to 0.0.0.0, we bind to "null" to get the "any" address!
-            // if (hostName.equals("0.0.0.0")) {
-            //     udpBootstrap.localAddress(hostName, tcpPort);
-            // }
-            // else {
-            //     udpBootstrap.localAddress(udpPort);
-            // }
-
-            // Enable to READ from MULTICAST data (ie, 192.168.1.0)
-            // in order to WRITE: write as normal, just make sure it ends in .255
-            // in order to LISTEN:
-            //    InetAddress group = InetAddress.getByName("203.0.113.0");
-            //    socket.joinGroup(group);
-            // THEN once done
-            //    socket.leaveGroup(group), close the socket
-            // Enable to WRITE to MULTICAST data (ie, 192.168.1.0)
-            udpBootstrap.option(ChannelOption.SO_BROADCAST, false)
-                        .option(ChannelOption.SO_SNDBUF, udpMaxSize);
+            throw new IOException(e);
         }
     }
 
@@ -301,79 +125,49 @@ class Server<C extends Connection> extends EndPointServer {
     @SuppressWarnings("AutoBoxing")
     public
     void bind(boolean blockUntilTerminate) {
-        // make sure we are not trying to connect during a close or stop event.
-        // This will wait until we have finished starting up/shutting down.
-        synchronized (shutdownInProgress) {
-        }
-
-
-        // The bootstraps will be accessed ONE AT A TIME, in this order!
-        ChannelFuture future;
-
-        // LOCAL
-        if (localBootstrap != null) {
-            try {
-                future = localBootstrap.bind();
-                future.await();
-            } catch (InterruptedException e) {
-                throw new IllegalArgumentException("Could not bind to LOCAL address '" + localChannelName + "' on the server.", e);
-            }
-
-            if (!future.isSuccess()) {
-                throw new IllegalArgumentException("Could not bind to LOCAL address '" + localChannelName + "' on the server.", future.cause());
-            }
-
-            logger.info("Listening on LOCAL address: [{}]", localChannelName);
-            manageForShutdown(future);
-        }
-
-
-        // TCP
-        if (tcpBootstrap != null) {
-            // Wait until the connection attempt succeeds or fails.
-            try {
-                future = tcpBootstrap.bind();
-                future.await();
-            } catch (Exception e) {
-                stop();
-                throw new IllegalArgumentException("Could not bind to address " + hostName + " TCP port " + tcpPort + " on the server.", e);
-            }
-
-            if (!future.isSuccess()) {
-                stop();
-                throw new IllegalArgumentException("Could not bind to address " + hostName + " TCP port " + tcpPort + " on the server.", future.cause());
-            }
-
-            logger.info("TCP server listen address [{}:{}]", hostName, tcpPort);
-            manageForShutdown(future);
-        }
-
-        // UDP
-        if (udpBootstrap != null) {
-            // Wait until the connection attempt succeeds or fails.
-            try {
-                future = udpBootstrap.bind();
-                future.await();
-            } catch (Exception e) {
-                throw new IllegalArgumentException("Could not bind to address " + hostName + " UDP port " + udpPort + " on the server.", e);
-            }
-
-            if (!future.isSuccess()) {
-                throw new IllegalArgumentException("Could not bind to address " + hostName + " UDP port " + udpPort + " on the server.",
-                                                   future.cause());
-            }
-
-            logger.info("UDP server listen address [{}:{}]", hostName, udpPort);
-            manageForShutdown(future);
+        if (isRunning) {
+            logger.error("Unable to bind when the server is already running!");
+            return;
         }
 
         isRunning = true;
 
+        try (final Publication publication = this.setupAllClientsPublication()) {
+            try (final Subscription subscription = this.setupAllClientsSubscription()) {
+
+                /**
+                 * Note: Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is desired, then limiting message sizes to MTU size is a good practice.
+                 *
+                 * Note: There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB. Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery properties from failure and streams with mechanical sympathy.
+                 */
+                final FragmentHandler handler = new FragmentAssembler((buffer, offset, length, header)->this.onInitialClientMessage(
+                        publication,
+                        buffer,
+                        offset,
+                        length,
+                        header));
+
+                while (true) {
+                    this.executor.execute(()->{
+                        subscription.poll(handler, 100); // this checks to see if there are NEW clients
+                        this.clients.poll();  // this manages existing clients
+                    });
+
+                    try {
+                        Thread.sleep(100L);
+                    } catch (final InterruptedException e) {
+                        Thread.currentThread()
+                              .interrupt();
+                    }
+                }
+            }
+        }
+
         // we now BLOCK until the stop method is called.
         // if we want to continue running code in the server, bind should be called in a separate, non-daemon thread.
-        if (blockUntilTerminate) {
-            waitForShutdown();
-        }
+        // if (blockUntilTerminate) {
+            // waitForShutdown();
+        // }
     }
 
     /**
@@ -384,7 +178,7 @@ class Server<C extends Connection> extends EndPointServer {
      * If there is nothing added to this list - then ALL are permitted
      */
     public
-    void addIpFilter(IpFilterRule... rules) {
+    void addIpFilterRule(IpFilterRule... rules) {
         ipFilterRules.addAll(Arrays.asList(rules));
     }
 
@@ -403,26 +197,8 @@ class Server<C extends Connection> extends EndPointServer {
      *   Uncompress :       0.641 micros/op; 6097.9 MB/s
      */
     public
-    void addConnectionTypeFilter(ConnectionRule... rules) {
+    void addConnectionRules(ConnectionRule... rules) {
         connectionRules.addAll(Arrays.asList(rules));
-    }
-
-    // called when we are stopped/shut down
-    @Override
-    protected
-    void stopExtraActions() {
-        isRunning = false;
-
-        // now WAIT until bind has released the socket
-        // wait a max of 10 tries
-        int tries = 10;
-        while (tries-- > 0 && isRunning(this.config)) {
-            logger.warn("Server has requested shutdown, but the socket is still bound. Waiting {} more times", tries);
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException ignored) {
-            }
-        }
     }
 
     /**
@@ -445,41 +221,99 @@ class Server<C extends Connection> extends EndPointServer {
      */
     public static
     boolean isRunning(Configuration config) {
-        String host = config.host;
+        // create an IPC client to see if we can connect to the same machine. IF YES, then
+        // String host = config.host;
+        //
+        // for us, we want a "*" host to connect to the "any" interface.
+        // if (host == null) {
+        //     host = "0.0.0.0";
+        // }
 
-        // for us, we want a "null" host to connect to the "any" interface.
-        if (host == null) {
-            host = "0.0.0.0";
-        }
 
-        if (config.tcpPort > 0) {
-            Socket sock = null;
-            // since we check the socket, if we cannot connect to a socket, then we're done.
-            try {
-                sock = new Socket(host, config.tcpPort);
-                // if we can connect to the socket, it means that we are already running.
-                return sock.isConnected();
-            } catch (Exception ignored) {
-                if (sock != null) {
-                    try {
-                        sock.close();
-                    } catch (IOException ignored2) {
-                    }
-                }
-            }
-        }
+        // create a client and see if it can connect
 
-        // use Broadcast to see if there is a UDP server connected
-        if (config.udpPort > 0) {
-            List<BroadcastResponse> broadcastResponses = null;
-            try {
-                broadcastResponses = Broadcast.discoverHosts0(null, config.udpPort, 500, true);
-                return !broadcastResponses.isEmpty();
-            } catch (IOException ignored) {
-            }
+        if (config.port > 0) {
+            // List<BroadcastResponse> broadcastResponses = null;
+            // try {
+            //     broadcastResponses = Broadcast.discoverHosts0(null, config.controlPort1, 500, true);
+            //     return !broadcastResponses.isEmpty();
+            // } catch (IOException ignored) {
+            // }
         }
 
         return false;
+    }
+
+
+    private
+    void onInitialClientMessage(final Publication publication,
+                                final DirectBuffer buffer,
+                                final int offset,
+                                final int length,
+                                final Header header) {
+        final String message = EchoMessages.parseMessageUTF8(buffer, offset, length);
+
+        final String session_name = Integer.toString(header.sessionId());
+        final Integer session_boxed = Integer.valueOf(header.sessionId());
+
+        this.executor.execute(()->{
+            try {
+                this.clients.onInitialClientMessageProcess(publication, session_name, session_boxed, message);
+            } catch (final Exception e) {
+                logger.error("could not process client message: ", e);
+            }
+        });
+    }
+
+    /**
+     * Configure the publication for the "all-clients" channel.
+     */
+
+    private
+    Publication setupAllClientsPublication() {
+        return EchoChannels.createPublicationDynamicMDC(this.aeron,
+                                                        this.config.listenIpAddress,
+                                                        this.config.controlPort,
+                                                        UDP_STREAM_ID);
+    }
+
+    /**
+     * Configure the subscription for the "all-clients" channel.
+     */
+
+    private
+    Subscription setupAllClientsSubscription() {
+        return EchoChannels.createSubscriptionWithHandlers(this.aeron,
+                                                           this.config.listenIpAddress,
+                                                           this.config.port,
+                                                           UDP_STREAM_ID,
+                                                           this::onInitialClientConnected,
+                                                           this::onInitialClientDisconnected);
+    }
+
+    private
+    void onInitialClientConnected(final Image image) {
+        this.executor.execute(()->{
+            logger.debug("[{}] initial client connected ({})", Integer.toString(image.sessionId()), image.sourceIdentity());
+
+            this.clients.onInitialClientConnected(image.sessionId(), EchoAddresses.extractAddress(image.sourceIdentity()));
+        });
+    }
+
+    private
+    void onInitialClientDisconnected(final Image image) {
+        this.executor.execute(()->{
+            logger.debug("[{}] initial client disconnected ({})", Integer.toString(image.sessionId()), image.sourceIdentity());
+
+            this.clients.onInitialClientDisconnected(image.sessionId());
+        });
+    }
+
+    @Override
+    public
+    void close() {
+        super.close();
+        isRunning = false;
     }
 }
 

@@ -25,9 +25,6 @@ import javax.crypto.SecretKey;
 
 import dorkbox.network.Client;
 import dorkbox.network.connection.bridge.ConnectionBridge;
-import dorkbox.network.connection.idle.IdleBridge;
-import dorkbox.network.connection.idle.IdleSender;
-import dorkbox.network.connection.idle.IdleSenderFactory;
 import dorkbox.network.connection.ping.PingFuture;
 import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.network.connection.ping.PingTuple;
@@ -39,19 +36,14 @@ import dorkbox.network.rmi.ConnectionRmiLocalSupport;
 import dorkbox.network.rmi.ConnectionRmiNetworkSupport;
 import dorkbox.network.rmi.ConnectionRmiSupport;
 import dorkbox.network.rmi.RemoteObjectCallback;
-import io.netty.bootstrap.DatagramSessionChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.epoll.EpollDatagramChannel;
 import io.netty.channel.epoll.EpollSocketChannel;
-import io.netty.channel.kqueue.KQueueDatagramChannel;
 import io.netty.channel.kqueue.KQueueSocketChannel;
 import io.netty.channel.local.LocalChannel;
-import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.channel.socket.oio.OioDatagramChannel;
 import io.netty.channel.socket.oio.OioSocketChannel;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -76,11 +68,7 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
 
     public static
     boolean isUdpChannel(Class<? extends Channel> channelClass) {
-        return channelClass == OioDatagramChannel.class ||
-               channelClass == NioDatagramChannel.class ||
-               channelClass == KQueueDatagramChannel.class ||
-               channelClass == EpollDatagramChannel.class ||
-               channelClass == DatagramSessionChannel.class;
+        return false;
     }
 
     public static
@@ -114,9 +102,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
 
     private final EndPoint endPoint;
 
-    // when true, the connection will be closed (either as RMI or as 'normal' listener execution) when the thread execution returns control
-    // back to the network stack
-    private boolean closeAsap = false;
 
     // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
     // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
@@ -241,6 +226,18 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
         return channelWrapper.isLoopback();
     }
 
+    @Override
+    public
+    boolean isIPC() {
+        return false;
+    }
+
+    @Override
+    public
+    boolean isNetwork() {
+        return false;
+    }
+
     /**
      * @return the endpoint associated with this connection
      */
@@ -342,15 +339,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
         }
     }
 
-    /**
-     * @return true if this connection is also configured to use UDP
-     */
-    @Override
-    public final
-    boolean hasUDP() {
-        return this.channelWrapper.udp() != null;
-    }
-
     @Override
     public
     void channelWritabilityChanged(final ChannelHandlerContext context) throws Exception {
@@ -391,15 +379,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
     }
 
     /**
-     * Expose methods to send objects to a destination.
-     */
-    @Override
-    public final
-    ConnectionBridge send() {
-        return this;
-    }
-
-    /**
      * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
      * is available to use. If you want specify the protocol, use {@link #TCP(Object)}, {@link #UDP(Object)}, or {@link #self(Object)}.
      *
@@ -423,6 +402,24 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
             // we have to return something, otherwise dependent code will throw a null pointer exception
             return ChannelNull.get();
         }
+    }
+
+    @Override
+    public
+    ConnectionPoint send(final Object message, final byte priority) {
+        return null;
+    }
+
+    @Override
+    public
+    ConnectionPoint sendUnreliable(final Object message) {
+        return null;
+    }
+
+    @Override
+    public
+    ConnectionPoint sendUnreliable(final Object message, final byte priority) {
+        return null;
     }
 
     /**
@@ -495,24 +492,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
         this.channelWrapper.flush();
     }
 
-    /**
-     * Expose methods to modify the connection listeners.
-     */
-    @Override
-    public final
-    IdleBridge sendOnIdle(@SuppressWarnings("rawtypes") IdleSender sender) {
-        return new IdleSenderFactory(this, sender);
-    }
-
-
-    /**
-     * Expose methods to modify the connection listeners.
-     */
-    @Override
-    public final
-    IdleBridge sendOnIdle(Object message) {
-        return new IdleSenderFactory(this, message);
-    }
 
     /**
      * Invoked when a {@link Channel} has been idle for a while.
@@ -566,9 +545,9 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
 
         // in some cases, we want to close the current connection -- and given the way the system is designed, we cannot always close it before
         // we return. This will let us close the connection when our business logic is finished.
-        if (closeAsap) {
-            close();
-        }
+        // if (closeAsap) {
+        //     close();
+        // }
     }
 
     @Override
@@ -691,26 +670,22 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
     final
     void close(final boolean keepListeners) {
         // if we are in the same thread as netty, run in a new thread to prevent deadlocks with messageInProgress
-        if (!this.closeInProgress.get() && this.messageInProgress.get() && Shutdownable.isNettyThread()) {
-            Shutdownable.runNewThread("Close connection Thread", new Runnable() {
-                @Override
-                public
-                void run() {
-                    close(keepListeners);
-                }
-            });
-
-            return;
-        }
+        // if (!this.closeInProgress.get() && this.messageInProgress.get() && Shutdownable.isNettyThread()) {
+        //     Shutdownable.runNewThread("Close connection Thread", new Runnable() {
+        //         @Override
+        //         public
+        //         void run() {
+        //             close(keepListeners);
+        //         }
+        //     });
+        //
+        //     return;
+        // }
 
 
         // only close if we aren't already in the middle of closing.
         if (this.closeInProgress.compareAndSet(false, true)) {
-            int idleTimeoutMs = this.endPoint.getIdleTimeout();
-            if (idleTimeoutMs == 0) {
-                // default is 2 second timeout, in milliseconds.
-                idleTimeoutMs = 2000;
-            }
+            int idleTimeoutMs = 2000;
 
             // if we are in the middle of a message, hold off.
             synchronized (this.messageInProgressLock) {
@@ -757,16 +732,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
             // remove all RMI listeners
             rmiSupport.close();
         }
-    }
-
-    /**
-     * Marks the connection to be closed as soon as possible. This is evaluated when the current
-     * thread execution returns to the network stack.
-     */
-    @Override
-    public final
-    void closeAsap() {
-        closeAsap = true;
     }
 
     @Override

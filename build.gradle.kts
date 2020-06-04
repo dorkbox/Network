@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 dorkbox, llc
+ * Copyright 2020 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,34 +14,23 @@
  * limitations under the License.
  */
 
-import Build_gradle.Extras.bcVersion
 import java.time.Instant
-import kotlin.collections.set
 
 ///////////////////////////////
 //////    PUBLISH TO SONATYPE / MAVEN CENTRAL
-//////
-////// TESTING (local maven repo) -> PUBLISHING -> publishToMavenLocal
-//////
-////// RELEASE (sonatype / maven central) -> "PUBLISH AND RELEASE" -> publishAndRelease
+////// TESTING : (to local maven repo) <'publish and release' - 'publishToMavenLocal'>
+////// RELEASE : (to sonatype/maven central), <'publish and release' - 'publishToSonatypeAndRelease'>
 ///////////////////////////////
-
-println("\tGradle ${project.gradle.gradleVersion} on Java ${JavaVersion.current()}")
 
 plugins {
     java
-    signing
-    `maven-publish`
-
-    // publish on sonatype
-    id("de.marcphilipp.nexus-publish") version "0.4.0"
-    // close and release on sonatype
-    id("io.codearte.nexus-staging") version "0.21.2"
 
     id("com.dorkbox.CrossCompile") version "1.1"
     id("com.dorkbox.Licensing") version "1.4.2"
     id("com.dorkbox.VersionUpdate") version "1.6.1"
-    id("com.dorkbox.GradleUtils") version "1.4"
+    id("com.dorkbox.GradlePublish") version "1.1"
+    id("com.dorkbox.GradleModuleInfo") version "1.0"
+    id("com.dorkbox.GradleUtils") version "1.6"
 
     kotlin("jvm") version "1.3.72"
 }
@@ -56,6 +45,7 @@ object Extras {
     const val name = "Network"
     const val id = "Network"
     const val vendor = "Dorkbox LLC"
+    const val vendorUrl = "https://dorkbox.com"
     const val url = "https://git.dorkbox.com/dorkbox/Network"
     val buildDate = Instant.now().toString()
 
@@ -77,6 +67,38 @@ description = Extras.description
 group = Extras.group
 version = Extras.version
 
+// NOTE: now using aeron instead of netty
+
+// using netty IP filters for connections
+// /*
+// * Copyright 2014 The Netty Project
+// *
+// * The Netty Project licenses this file to you under the Apache License,
+// * version 2.0 (the "License"); you may not use this file except in compliance
+// * with the License. You may obtain a copy of the License at:
+// *
+// *   http://www.apache.org/licenses/LICENSE-2.0
+// *
+// * Unless required by applicable law or agreed to in writing, software
+// * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+// * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+// * License for the specific language governing permissions and limitations
+// * under the License.
+// */
+//package dorkbox.network.ipFilter;
+
+
+// also, NOT using bouncastle, but instead the google one
+// better SSL library
+// implementation("org.conscrypt:conscrypt-openjdk-uber:2.2.1")
+//    init {
+//            try {
+//                Security.insertProviderAt(Conscrypt.newProvider(), 1);
+//            }
+//            catch (e: Throwable) {
+//                e.printStackTrace();
+//            }
+//        }
 
 licensing {
     license(License.APACHE_2) {
@@ -263,10 +285,10 @@ dependencies {
     implementation("com.esotericsoftware:kryo:5.0.0-RC2")
     implementation("net.jpountz.lz4:lz4:1.3.0")
 
-    implementation("org.bouncycastle:bcprov-jdk15on:$bcVersion")
-    implementation("org.bouncycastle:bcpg-jdk15on:$bcVersion")
-    implementation("org.bouncycastle:bcmail-jdk15on:$bcVersion")
-    implementation("org.bouncycastle:bctls-jdk15on:$bcVersion")
+    implementation("org.bouncycastle:bcprov-jdk15on:${Extras.bcVersion}")
+    implementation("org.bouncycastle:bcpg-jdk15on:${Extras.bcVersion}")
+    implementation("org.bouncycastle:bcmail-jdk15on:${Extras.bcVersion}")
+    implementation("org.bouncycastle:bctls-jdk15on:${Extras.bcVersion}")
 
     implementation("net.jodah:typetools:0.6.2")
     implementation("de.javakaffee:kryo-serializers:0.45")
@@ -276,120 +298,43 @@ dependencies {
 
     implementation("org.slf4j:slf4j-api:1.7.30")
 
+    // https://github.com/real-logic/aeron
+    implementation("io.aeron:aeron-all:1.28.2")
+
     testImplementation("junit:junit:4.13")
     testImplementation("ch.qos.logback:logback-classic:1.2.3")
 }
 
-///////////////////////////////
-//////    PUBLISH TO SONATYPE / MAVEN CENTRAL
-//////
-////// TESTING (local maven repo) -> "PUBLISHING" -> publishToMavenLocal
-//////
-////// RELEASE (sonatype / maven central) -> "PUBLISHING" -> publishToSonaytypeAndRelease
-///////////////////////////////
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            groupId = Extras.group
-            artifactId = Extras.id
-            version = Extras.version
+publishToSonatype {
+    groupId = Extras.group
+    artifactId = Extras.id
+    version = Extras.version
 
-            from(components["java"])
+    name = Extras.name
+    description = Extras.description
+    url = Extras.url
 
-            artifact(task<Jar>("sourceJar") {
-                description = "Creates a JAR that contains the source code."
+    vendor = Extras.vendor
+    vendorUrl = Extras.vendorUrl
 
-                from(sourceSets["main"].java)
-                archiveClassifier.set("sources")
-            })
-
-            artifact(task<Jar>("javaDocJar") {
-                description = "Creates a JAR that contains the javadocs."
-
-                archiveClassifier.set("javadoc")
-            })
-
-            pom {
-                name.set(Extras.name)
-                description.set(Extras.description)
-                url.set(Extras.url)
-
-                issueManagement {
-                    url.set("${Extras.url}/issues")
-                    system.set("Gitea Issues")
-                }
-                organization {
-                    name.set(Extras.vendor)
-                    url.set("https://dorkbox.com")
-                }
-                developers {
-                    developer {
-                        id.set("dorkbox")
-                        name.set(Extras.vendor)
-                        email.set("email@dorkbox.com")
-                    }
-                }
-                scm {
-                    url.set(Extras.url)
-                    connection.set("scm:${Extras.url}.git")
-                }
-            }
-
-        }
+    issueManagement {
+        url = "${Extras.url}/issues"
+        nickname = "Gitea Issues"
     }
 
-    tasks.withType<PublishToMavenRepository> {
-        doFirst {
-            println("\tPublishing '${publication.groupId}:${publication.artifactId}:${publication.version}' to ${repository.url}")
-        }
-
-        onlyIf {
-            publication == publishing.publications["maven"] && repository == publishing.repositories["sonatype"]
-        }
+    developer {
+        id = "dorkbox"
+        name = Extras.vendor
+        email = "email@dorkbox.com"
     }
 
-    tasks.withType<PublishToMavenLocal> {
-        onlyIf {
-            publication == publishing.publications["maven"]
-        }
-    }
-
-    // output the release URL in the console
-    tasks["releaseRepository"].doLast {
-        val url = "https://oss.sonatype.org/content/repositories/releases/"
-        val projectName = Extras.group.replace('.', '/')
-        val name = Extras.name
-        val version = Extras.version
-
-        println("Maven URL: $url$projectName/$name/$version/")
-    }
-
-    nexusStaging {
-        username = Extras.sonatypeUserName
+    sonatype {
+        userName = Extras.sonatypeUserName
         password = Extras.sonatypePassword
     }
 
-    nexusPublishing {
-        packageGroup.set(Extras.group)
-
-        repositories {
-            sonatype() {
-                username.set(Extras.sonatypeUserName)
-                password.set(Extras.sonatypePassword)
-            }
-        }
-    }
-
-    signing {
-        useInMemoryPgpKeys(File(Extras.sonatypePrivateKeyFile).readText(), Extras.sonatypePrivateKeyPassword)
-        sign(publishing.publications["maven"])
-    }
-
-    task<Task>("publishToSonatypeAndRelease") {
-        group = "publishing"
-
-        // required to make sure the tasks run in the correct order
-        tasks["closeAndReleaseRepository"].mustRunAfter(tasks["publishToSonatype"])
-        dependsOn("publishToSonatype", "closeAndReleaseRepository")
+    privateKey {
+        fileName = Extras.sonatypePrivateKeyFile
+        password = Extras.sonatypePrivateKeyPassword
     }
 }

@@ -15,8 +15,6 @@
  */
 package dorkbox.network.connection;
 
-import java.io.IOException;
-
 public
 interface Listener {
     /**
@@ -58,17 +56,6 @@ interface Listener {
          * The error is sent to an error log before this method is called.
          */
         void error(C connection, Throwable throwable);
-    }
-
-
-    /**
-     * Called when the connection is idle for longer than the {@link EndPoint#setIdleTimeout(int)} idle threshold.
-     */
-    interface OnIdle<C extends Connection> extends Listener {
-        /**
-         * Called when the connection is idle for longer than the {@link EndPoint#setIdleTimeout(int)} idle threshold.
-         */
-        void idle(C connection) throws IOException;
     }
 
 

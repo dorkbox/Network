@@ -22,7 +22,6 @@ import javax.crypto.spec.SecretKeySpec;
 
 import dorkbox.network.connection.ConnectionImpl;
 import dorkbox.network.connection.ConnectionPoint;
-import dorkbox.network.connection.EndPoint;
 import dorkbox.network.connection.ISessionManager;
 import dorkbox.network.connection.registration.MetaChannel;
 import io.netty.channel.Channel;
@@ -117,13 +116,13 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
     @Override
     public
     void close(ConnectionImpl connection, ISessionManager sessionManager, boolean hintedClose) {
-        long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
-
-        this.shouldFlush.set(false);
-
-        // Wait until the connection is closed or the connection attempt fails.
-        this.channel.close()
-                    .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
+        // long maxShutdownWaitTimeInMilliSeconds = EndPoint.maxShutdownWaitTimeInMilliSeconds;
+        //
+        // this.shouldFlush.set(false);
+        //
+        // // Wait until the connection is closed or the connection attempt fails.
+        // this.channel.close()
+        //             .awaitUninterruptibly(maxShutdownWaitTimeInMilliSeconds);
     }
 
     @Override

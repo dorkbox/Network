@@ -65,7 +65,6 @@ import dorkbox.util.serialization.EccPrivateKeySerializer;
 import dorkbox.util.serialization.EccPublicKeySerializer;
 import dorkbox.util.serialization.IesParametersSerializer;
 import dorkbox.util.serialization.IesWithCipherParametersSerializer;
-import io.netty.bootstrap.DatagramCloseMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -118,8 +117,8 @@ class Serialization implements NetworkSerializationManager {
                                                               registrationRequired,
                                                               factory);
 
-        serialization.register(PingMessage.class);
-        serialization.register(DatagramCloseMessage.class);
+        serialization.register(ControlMessage.class);
+        serialization.register(PingMessage.class); // TODO this is built into aeron!
         serialization.register(byte[].class);
 
         serialization.register(IESParameters.class, new IesParametersSerializer());

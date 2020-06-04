@@ -15,6 +15,8 @@
  */
 package dorkbox.network.store;
 
+import java.io.Closeable;
+
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.slf4j.Logger;
@@ -31,7 +33,7 @@ import dorkbox.util.storage.Storage;
  */
 @SuppressWarnings({"deprecation", "unused", "Duplicates"})
 public abstract
-class SettingsStore {
+class SettingsStore implements Closeable {
 
     /**
      * Initialize the settingsStore with the provided serialization manager.
@@ -339,6 +341,7 @@ class SettingsStore {
     /**
      * Take the proper steps to close the storage system.
      */
+    @Override
     public abstract
     void close();
 }

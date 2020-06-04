@@ -57,7 +57,7 @@ class RegistrationWrapperClient extends RegistrationWrapper {
      */
     public
     boolean hasMoreRegistrations() {
-        return this.endPoint.hasMoreRegistrations();
+        return false;
     }
 
     /**
@@ -66,7 +66,6 @@ class RegistrationWrapperClient extends RegistrationWrapper {
      */
     public
     void startNextProtocolRegistration() {
-        this.endPoint.startNextProtocolRegistration();
     }
 
     public

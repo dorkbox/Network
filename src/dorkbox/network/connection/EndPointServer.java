@@ -15,25 +15,24 @@
  */
 package dorkbox.network.connection;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import dorkbox.network.Configuration;
-import dorkbox.network.Server;
-import dorkbox.network.connection.bridge.ConnectionBridgeServer;
+import dorkbox.network.NetUtil;
+import dorkbox.network.ServerConfiguration;
 import dorkbox.network.connection.connectionType.ConnectionRule;
 import dorkbox.network.connection.connectionType.ConnectionType;
+import dorkbox.network.ipFilter.IpFilterRule;
+import dorkbox.network.ipFilter.IpFilterRuleType;
 import dorkbox.util.exceptions.SecurityException;
-import io.netty.handler.ipfilter.IpFilterRule;
-import io.netty.handler.ipfilter.IpFilterRuleType;
-import io.netty.util.NetUtil;
 
 /**
  * This serves the purpose of making sure that specific methods are not available to the end user.
  */
 public
-class EndPointServer extends EndPoint {
+class EndPointServer extends EndPoint<ServerConfiguration> {
 
     /**
      * Maintains a thread-safe collection of rules to allow/deny connectivity to this server.
@@ -46,28 +45,33 @@ class EndPointServer extends EndPoint {
     protected final CopyOnWriteArrayList<ConnectionRule> connectionRules = new CopyOnWriteArrayList<>();
 
     public
-    EndPointServer(final Configuration config) throws SecurityException {
-        super(Server.class, config);
+    EndPointServer(final ServerConfiguration config) throws SecurityException, IOException {
+        super(config);
     }
 
     /**
-     * Expose methods to send objects to a destination.
+     * Safely sends objects to a destination
      */
-    @Override
-    public
-    ConnectionBridgeServer send() {
-        return this.connectionManager;
-    }
-
-    /**
-     * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
-     * is available to use. If you want specify the protocol, use {@link #send()}, followed by the protocol you wish to use.
-     */
-    @Override
     public
     ConnectionPoint send(final Object message) {
         return this.connectionManager.send(message);
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     /**
@@ -122,16 +126,6 @@ class EndPointServer extends EndPoint {
     public
     void remove(Connection connection) {
         connectionManager.removeConnection(connection);
-    }
-
-    @Override
-    protected
-    void shutdownChannelsPre() {
-        // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
-        registrationWrapper.clearSessions();
-
-        // this calls connectionManager.stop()
-        super.shutdownChannelsPre();
     }
 
     // if no rules, then always yes
