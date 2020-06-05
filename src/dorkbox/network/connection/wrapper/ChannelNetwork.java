@@ -58,14 +58,6 @@ class ChannelNetwork implements ConnectionPoint {
 
     @Override
     public
-    void flush() {
-        if (shouldFlush.compareAndSet(true, false)) {
-            channel.flush();
-        }
-    }
-
-    @Override
-    public
     <V> Promise<V> newPromise() {
         return channel.eventLoop().newPromise();
     }

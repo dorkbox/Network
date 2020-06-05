@@ -408,7 +408,7 @@ After this command is executed the new disk will be mounted under /Volumes/DevSh
     }
 
     /**
-     * This method allows the connections used by the client/server to be subclassed (custom implementations).
+     * This method allows the connections used by the client/server to be subclassed (with custom implementations).
      * <p/>
      * As this is for the network stack, the new connection MUST subclass {@link ConnectionImpl}
      * <p/>
@@ -485,17 +485,6 @@ After this command is executed the new disk will be mounted under /Volumes/DevSh
     public
     <C extends Connection> List<C> getConnections() {
         return connectionManager.getConnections();
-    }
-
-    /**
-     * Closes all connections ONLY (keeps the server/client running).  To STOP the client/server, use stop().
-     * <p/>
-     * This is used, for example, when reconnecting to a server.
-     * <p/>
-     * The server should ALWAYS use STOP.
-     */
-    void closeConnections(boolean shouldKeepListeners) {
-
     }
 
     /**

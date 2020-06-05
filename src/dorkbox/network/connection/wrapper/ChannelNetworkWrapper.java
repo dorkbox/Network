@@ -86,21 +86,6 @@ class ChannelNetworkWrapper implements ChannelWrapper {
     }
 
     /**
-     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
-     */
-    @Override
-    public
-    void flush() {
-        if (this.tcp != null) {
-            this.tcp.flush();
-        }
-
-        if (this.udp != null) {
-            this.udp.flush();
-        }
-    }
-
-    /**
      * @return the AES key.
      */
     @Override

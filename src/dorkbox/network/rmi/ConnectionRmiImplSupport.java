@@ -79,6 +79,7 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
 
     abstract void registration(final ConnectionImpl connection, final RmiRegistration message);
 
+    @Override
     public
     void close() {
         // proxy listeners are cleared in the removeAll() call (which happens BEFORE close)
@@ -90,11 +91,13 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
     /**
      * This will remove the invoke and invoke response listeners for this remote object
      */
+    @Override
     public
     void removeAllListeners() {
         proxyListeners.clear();
     }
 
+    @Override
     public
     <Iface> void createRemoteObject(final ConnectionImpl connection, final Class<Iface> interfaceClass, final RemoteObjectCallback<Iface> callback) {
         if (!interfaceClass.isInterface()) {
@@ -112,9 +115,10 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
 
         // this means we are creating a NEW object on the server, bound access to only this connection
-        connection.send(message).flush();
+        connection.send(message);
     }
 
+    @Override
     public
     <Iface> void getRemoteObject(final ConnectionImpl connection, final int objectId, final RemoteObjectCallback<Iface> callback) {
         if (objectId < 0) {
@@ -137,12 +141,13 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
 
         // this means we are getting an EXISTING object on the server, bound access to only this connection
-        connection.send(message).flush();
+        connection.send(message);
     }
 
     /**
      * Manages the RMI stuff for a connection.
      */
+    @Override
     public
     boolean manage(final ConnectionImpl connection, final Object message) {
         if (message instanceof InvokeMethod) {
@@ -167,7 +172,7 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
                 InvokeMethodResult result = RmiBridge.invoke(connection, target, invokeMethod, logger);
                 if (result != null) {
                     // System.err.println("Sending: " + invokeMethod.responseID);
-                    connection.send(result).flush();
+                    connection.send(result);
                 }
 
             } catch (IOException e) {
@@ -207,6 +212,7 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
      *
      * @return the registered ID for a specific object, or RmiBridge.INVALID_RMI if there was no ID.
      */
+    @Override
     public
     <T> int getRegisteredId(final T object) {
         // always check global before checking local, because less contention on the synchronization
@@ -225,6 +231,7 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
      *
      * @param objectId this is the RMI object ID
      */
+    @Override
     public
     Object getImplementationObject(final int objectId) {
         if (RmiBridge.isGlobal(objectId)) {
@@ -363,6 +370,7 @@ class ConnectionRmiImplSupport implements ConnectionRmiSupport {
      * @param rmiId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
      * @param iFace this is the RMI interface
      */
+    @Override
     public
     RemoteObject getProxyObject(final int rmiId, final Class<?> iFace) {
         if (iFace == null) {

@@ -132,36 +132,62 @@ class Server<C extends Connection> extends EndPointServer {
 
         isRunning = true;
 
-        try (final Publication publication = this.setupAllClientsPublication()) {
-            try (final Subscription subscription = this.setupAllClientsSubscription()) {
+        Publication publication = null;
+        Subscription subscription = null;
+        FragmentHandler handler = null;
+        try {
+            publication = EchoChannels.createPublicationDynamicMDC(this.aeron,
+                                                                   this.config.listenIpAddress,
+                                                                   this.config.controlPort,
+                                                                   UDP_STREAM_ID);
 
-                /**
-                 * Note: Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is desired, then limiting message sizes to MTU size is a good practice.
-                 *
-                 * Note: There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB. Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery properties from failure and streams with mechanical sympathy.
-                 */
-                final FragmentHandler handler = new FragmentAssembler((buffer, offset, length, header)->this.onInitialClientMessage(
-                        publication,
-                        buffer,
-                        offset,
-                        length,
-                        header));
+            subscription = EchoChannels.createSubscriptionWithHandlers(this.aeron,
+                                                                       this.config.listenIpAddress,
+                                                                       this.config.port,
+                                                                       UDP_STREAM_ID,
+                                                                       this::onInitialClientConnected,
+                                                                       this::onInitialClientDisconnected);
 
-                while (true) {
-                    this.executor.execute(()->{
-                        subscription.poll(handler, 100); // this checks to see if there are NEW clients
-                        this.clients.poll();  // this manages existing clients
-                    });
 
-                    try {
-                        Thread.sleep(100L);
-                    } catch (final InterruptedException e) {
-                        Thread.currentThread()
-                              .interrupt();
-                    }
+
+            /**
+             * Note: Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is desired, then limiting message sizes to MTU size is a good practice.
+             *
+             * Note: There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB. Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery properties from failure and streams with mechanical sympathy.
+             */
+            final Publication finalPublication = publication;
+            handler = new FragmentAssembler((buffer, offset, length, header)->this.onInitialClientMessage(finalPublication,
+                                                                                                          buffer,
+                                                                                                          offset,
+                                                                                                          length,
+                                                                                                          header));
+
+            final FragmentHandler initialConnectionHandler = handler;
+            final Subscription initialConnectionSubscription = subscription;
+
+            while (true) {
+                this.executor.execute(()->{
+                    initialConnectionSubscription.poll(initialConnectionHandler, 100); // this checks to see if there are NEW clients
+                    this.clients.poll();  // this manages existing clients
+                });
+
+                try {
+                    Thread.sleep(100L);
+                } catch (final InterruptedException e) {
+                    Thread.currentThread()
+                          .interrupt();
                 }
             }
+        } finally {
+            if (publication != null) {
+                publication.close();
+            }
+
+            if (subscription != null) {
+                subscription.close();
+            }
         }
+
 
         // we now BLOCK until the stop method is called.
         // if we want to continue running code in the server, bind should be called in a separate, non-daemon thread.
@@ -263,32 +289,6 @@ class Server<C extends Connection> extends EndPointServer {
                 logger.error("could not process client message: ", e);
             }
         });
-    }
-
-    /**
-     * Configure the publication for the "all-clients" channel.
-     */
-
-    private
-    Publication setupAllClientsPublication() {
-        return EchoChannels.createPublicationDynamicMDC(this.aeron,
-                                                        this.config.listenIpAddress,
-                                                        this.config.controlPort,
-                                                        UDP_STREAM_ID);
-    }
-
-    /**
-     * Configure the subscription for the "all-clients" channel.
-     */
-
-    private
-    Subscription setupAllClientsSubscription() {
-        return EchoChannels.createSubscriptionWithHandlers(this.aeron,
-                                                           this.config.listenIpAddress,
-                                                           this.config.port,
-                                                           UDP_STREAM_ID,
-                                                           this::onInitialClientConnected,
-                                                           this::onInitialClientDisconnected);
     }
 
     private

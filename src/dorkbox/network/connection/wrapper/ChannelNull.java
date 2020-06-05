@@ -38,11 +38,6 @@ class ChannelNull implements ConnectionPoint {
     void write(Object object) {
     }
 
-    @Override
-    public
-    void flush() {
-    }
-
     /**
      * @return true if the channel is writable. Useful when sending large amounts of data at once.
      */

@@ -27,13 +27,6 @@ interface ISessionManager {
     void onMessage(ConnectionImpl connection, Object message);
 
     /**
-     * Called when the connection has been idle (read & write) for 2 seconds.
-     * <p>
-     * Will auto-flush the connection queue if necessary.
-     */
-    void onIdle(ConnectionImpl connection);
-
-    /**
      * Invoked when a Channel is open, bound to a local address, and connected to a remote address.
      */
     void addConnection(ConnectionImpl connection);

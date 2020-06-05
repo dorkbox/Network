@@ -156,7 +156,6 @@ class EchoServerDuologue implements AutoCloseable {
     /**
      * Poll the duologue for activity.
      */
-
     public
     void poll() {
         this.exec.assertIsExecutorThread();

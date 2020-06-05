@@ -76,18 +76,6 @@ class ChannelLocalWrapper implements ChannelWrapper, ConnectionPoint {
         return this;
     }
 
-    /**
-     * Flushes the contents of the LOCAL pipes to the actual transport.
-     */
-    @Override
-    public
-    void flush() {
-        if (this.shouldFlush.compareAndSet(true, false)) {
-            this.channel.flush();
-        }
-    }
-
-
     @Override
     public
     <V> Promise<V> newPromise() {

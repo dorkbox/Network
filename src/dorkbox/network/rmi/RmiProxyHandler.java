@@ -297,11 +297,11 @@ class RmiProxyHandler implements InvocationHandler {
         // Sends our invokeMethod to the remote connection, which the RmiBridge listens for
         if (this.udp) {
             // flush is necessary in case this is called outside of a network worker thread
-            this.connection.UDP(invokeMethod).flush();
+            this.connection.UDP(invokeMethod);
         }
         else {
             // flush is necessary in case this is called outside of a network worker thread
-            this.connection.send(invokeMethod).flush();
+            this.connection.send(invokeMethod);
         }
 
         if (logger.isTraceEnabled()) {

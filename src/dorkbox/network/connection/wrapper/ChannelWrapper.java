@@ -28,11 +28,6 @@ interface ChannelWrapper {
     ConnectionPoint udp();
 
     /**
-     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
-     */
-    void flush();
-
-    /**
      * @return the AES key.
      */
     SecretKey cryptoKey();

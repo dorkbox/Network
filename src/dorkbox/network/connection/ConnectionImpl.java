@@ -45,8 +45,6 @@ import io.netty.channel.kqueue.KQueueSocketChannel;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.socket.oio.OioSocketChannel;
-import io.netty.handler.timeout.IdleState;
-import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Promise;
 
@@ -315,10 +313,10 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
     public final
     void ping0(PingMessage ping) {
         if (this.channelWrapper.udp() != null) {
-            UDP(ping).flush();
+            UDP(ping);
         }
         else if (this.channelWrapper.tcp() != null) {
-            TCP(ping).flush();
+            TCP(ping);
         }
         else {
             self(ping);
@@ -482,36 +480,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
             // we have to return something, otherwise dependent code will throw a null pointer exception
             return ChannelNull.get();
         }
-    }
-
-    /**
-     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport.
-     */
-    final
-    void flush() {
-        this.channelWrapper.flush();
-    }
-
-
-    /**
-     * Invoked when a {@link Channel} has been idle for a while.
-     */
-    @Override
-    public
-    void userEventTriggered(ChannelHandlerContext context, Object event) throws Exception {
-        //      if (e.getState() == IdleState.READER_IDLE) {
-        //      e.getChannel().close();
-        //  } else if (e.getState() == IdleState.WRITER_IDLE) {
-        //      e.getChannel().write(new Object());
-        //  } else
-        if (event instanceof IdleStateEvent) {
-            if (((IdleStateEvent) event).state() == IdleState.ALL_IDLE) {
-                // will auto-flush if necessary
-                this.sessionManager.onIdle(this);
-            }
-        }
-
-        super.userEventTriggered(context, event);
     }
 
     /**
@@ -698,8 +666,6 @@ class ConnectionImpl extends ChannelInboundHandlerAdapter implements Connection_
                 }
             }
 
-            // flush any pending messages
-            this.channelWrapper.flush();
 
             // close out the ping future
             PingFuture pingFuture2 = this.pingFuture;

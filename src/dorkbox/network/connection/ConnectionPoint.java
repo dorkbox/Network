@@ -31,11 +31,6 @@ interface ConnectionPoint {
     void write(Object object) throws Exception;
 
     /**
-     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport socket.
-     */
-    void flush();
-
-    /**
      * Creates a new promise associated with this connection type
      */
     <V> Promise<V> newPromise();

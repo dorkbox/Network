@@ -23,16 +23,13 @@ import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Listener.OnConnected;
 
 /**
- * Called when the remote end has been connected. This will be invoked before any objects are received by the network.
+ * Called when the remote computer has been connected. This will be invoked before any objects are received by the network.
  * This method should not block for long periods as other network activity will not be processed
  * until it returns.
  */
 public final
 class OnConnectedManager<C extends Connection> extends ConcurrentManager<C, OnConnected<C>> {
 
-    // synchronized is used here to ensure the "single writer principle", and make sure that ONLY one thread at a time can enter this
-    // section. Because of this, we can have unlimited reader threads all going at the same time, without contention (which is our
-    // use-case 99% of the time)
     public
     OnConnectedManager(final Logger logger) {
         super(logger);

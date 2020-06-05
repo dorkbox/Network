@@ -65,7 +65,6 @@ class EndPointClient extends EndPoint<ClientConfiguration> {
             public
             ConnectionPoint self(Object message) {
                 ConnectionPoint self = connection.self(message);
-                connection.flush();
 
                 return self;
             }
@@ -74,7 +73,6 @@ class EndPointClient extends EndPoint<ClientConfiguration> {
             public
             ConnectionPoint TCP(Object message) {
                 ConnectionPoint tcp = connection.TCP(message);
-                connection.flush();
 
                 // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
                 // INSIDE the event loop
@@ -87,7 +85,6 @@ class EndPointClient extends EndPoint<ClientConfiguration> {
             public
             ConnectionPoint UDP(Object message) {
                 ConnectionPoint udp = connection.UDP(message);
-                connection.flush();
 
                 // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
                 // INSIDE the event loop
@@ -99,7 +96,6 @@ class EndPointClient extends EndPoint<ClientConfiguration> {
             public
             Ping ping() {
                 Ping ping = connection.ping();
-                connection.flush();
                 return ping;
             }
         };
@@ -131,7 +127,6 @@ class EndPointClient extends EndPoint<ClientConfiguration> {
     public
     ConnectionPoint send(final Object message) {
         ConnectionPoint send = connection.send(message);
-        send.flush();
 
         // needed to place back-pressure when writing too much data to the connection. Will create deadlocks if called from
         // INSIDE the event loop

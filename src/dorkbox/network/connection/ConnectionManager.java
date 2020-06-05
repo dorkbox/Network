@@ -29,7 +29,6 @@ import dorkbox.network.connection.bridge.ConnectionBridgeServer;
 import dorkbox.network.connection.bridge.ConnectionExceptSpecifiedBridgeServer;
 import dorkbox.network.connection.listenerManagement.OnConnectedManager;
 import dorkbox.network.connection.listenerManagement.OnDisconnectedManager;
-import dorkbox.network.connection.listenerManagement.OnIdleManager;
 import dorkbox.network.connection.listenerManagement.OnMessageReceivedManager;
 import dorkbox.network.connection.ping.PingMessage;
 import dorkbox.util.Property;
@@ -69,7 +68,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
     private final OnConnectedManager<C> onConnectedManager;
     private final OnDisconnectedManager<C> onDisconnectedManager;
-    private final OnIdleManager<C> onIdleManager;
     private final OnMessageReceivedManager<C> onMessageReceivedManager;
 
     @SuppressWarnings({"FieldCanBeLocal", "unused"})
@@ -106,7 +104,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
         onConnectedManager = new OnConnectedManager<C>(logger);
         onDisconnectedManager = new OnDisconnectedManager<C>(logger);
-        onIdleManager = new OnIdleManager<C>(logger);
         onMessageReceivedManager = new OnMessageReceivedManager<C>(logger);
     }
 
@@ -159,10 +156,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         }
         if (listener instanceof Listener.OnDisconnected) {
             onDisconnectedManager.add((Listener.OnDisconnected) listener);
-            found = true;
-        }
-        if (listener instanceof Listener.OnIdle) {
-            onIdleManager.add((Listener.OnIdle) listener);
             found = true;
         }
 
@@ -226,13 +219,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
                 found |= true;
             }
         }
-        if (listener instanceof Listener.OnIdle) {
-            int size = onIdleManager.removeWithSize((Listener.OnIdle) listener);
-            if (size >= 0) {
-                remainingListeners += size;
-                found |= true;
-            }
-        }
         if (listener instanceof Listener.OnMessageReceived) {
             int size =  onMessageReceivedManager.removeWithSize((Listener.OnMessageReceived) listener);
             if (size >= 0) {
@@ -265,7 +251,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     Listeners removeAll() {
         onConnectedManager.clear();
         onDisconnectedManager.clear();
-        onIdleManager.clear();
         onMessageReceivedManager.clear();
 
         logger.trace("ALL listeners removed !!");
@@ -305,8 +290,7 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
     /**
      * Invoked when a message object was received from a remote peer.
      * <p/>
-     * If data is sent in response to this event, the connection data is automatically flushed to the wire. If the data is sent in a separate thread,
-     * {@link EndPoint#send().flush()} must be called manually.
+     * If data is sent in response to this event, the connection data is automatically flushed to the wire.
      * <p/>
      * {@link ISessionManager}
      */
@@ -344,9 +328,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         if (connection.manageRmi(message)) {
             // if we are an RMI message/registration, we have very specific, defined behavior. We do not use the "normal" listener callback pattern
             // because these methods are rare, and require special functionality
-
-            // make sure we flush the message to the socket!
-            connection.flush();
             return true;
         }
 
@@ -367,38 +348,13 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         }
 
         // only run a flush once
-        if (foundListener) {
-            connection.flush();
-        }
-        else {
+        if (!foundListener) {
             this.logger.warn("----------- LISTENER NOT REGISTERED FOR TYPE: {}",
                               message.getClass()
                                      .getSimpleName());
         }
         return foundListener;
     }
-
-    /**
-     * Invoked when a Connection has been idle for a while.
-     */
-    @Override
-    public final
-    void onIdle(final ConnectionImpl connection) {
-        boolean foundListener = onIdleManager.notifyIdle((C) connection, shutdown);
-
-        if (foundListener) {
-            connection.flush();
-        }
-
-        // now have to account for additional (local) listener managers.
-        // access a snapshot of the managers (single-writer-principle)
-        final IdentityMap<Connection, ConnectionManager> localManagers = localManagersREF.get(this);
-        ConnectionManager localManager = localManagers.get(connection);
-        if (localManager != null) {
-            localManager.onIdle(connection);
-        }
-    }
-
 
     /**
      * Invoked when a Channel is open, bound to a local address, and connected to a remote address.
@@ -409,10 +365,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         // we add the connection in a different step!
 
         boolean foundListener = onConnectedManager.notifyConnected((C) connection, shutdown);
-
-        if (foundListener) {
-            connection.flush();
-        }
 
         // now have to account for additional (local) listener managers.
         // access a snapshot of the managers (single-writer-principle)
@@ -432,10 +384,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
         logger.trace("onDisconnected({})", connection.id());
 
         boolean foundListener = onDisconnectedManager.notifyDisconnected((C) connection);
-
-        if (foundListener) {
-            connection.flush();
-        }
 
         // now have to account for additional (local) listener managers.
 
@@ -633,7 +581,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
 
         onConnectedManager.clear();
         onDisconnectedManager.clear();
-        onIdleManager.clear();
         onMessageReceivedManager.clear();
     }
 
@@ -820,22 +767,6 @@ class ConnectionManager<C extends Connection> implements Listeners, ISessionMana
             c.send(message);
         }
         return this;
-    }
-
-    /**
-     * Flushes the contents of the TCP/UDP/etc pipes to the actual transport socket.
-     */
-    @Override
-    public
-    void flush() {
-        ConcurrentEntry<ConnectionImpl> current = connectionsREF.get(this);
-        ConnectionImpl c;
-        while (current != null) {
-            c = current.getValue();
-            current = current.next();
-
-            c.flush();
-        }
     }
 
     @Override
