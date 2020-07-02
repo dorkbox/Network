@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import dorkbox.gradle.kotlin
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.time.Instant
 
 ///////////////////////////////
@@ -25,12 +27,12 @@ import java.time.Instant
 plugins {
     java
 
+    id("com.dorkbox.GradleUtils") version "1.8"
     id("com.dorkbox.CrossCompile") version "1.1"
     id("com.dorkbox.Licensing") version "1.4.2"
     id("com.dorkbox.VersionUpdate") version "1.6.1"
-    id("com.dorkbox.GradlePublish") version "1.1"
+    id("com.dorkbox.GradlePublish") version "1.2"
     id("com.dorkbox.GradleModuleInfo") version "1.0"
-    id("com.dorkbox.GradleUtils") version "1.6"
 
     kotlin("jvm") version "1.3.72"
 }
@@ -49,23 +51,20 @@ object Extras {
     const val url = "https://git.dorkbox.com/dorkbox/Network"
     val buildDate = Instant.now().toString()
 
-    val JAVA_VERSION = JavaVersion.VERSION_11
+    val JAVA_VERSION = JavaVersion.VERSION_11.toString()
+    const val KOTLIN_API_VERSION = "1.3"
+    const val KOTLIN_LANG_VERSION = "1.3"
 
     const val bcVersion = "1.60"
-
-    var sonatypeUserName = ""
-    var sonatypePassword = ""
-    var sonatypePrivateKeyFile = ""
-    var sonatypePrivateKeyPassword = ""
+    const val atomicfuVer = "0.14.3"
+    const val coroutineVer = "1.3.7"
 }
 
 ///////////////////////////////
 /////  assign 'Extras'
 ///////////////////////////////
 GradleUtils.load("$projectDir/../../gradle.properties", Extras)
-description = Extras.description
-group = Extras.group
-version = Extras.version
+GradleUtils.fixIntellijPaths()
 
 // NOTE: now using aeron instead of netty
 
@@ -100,6 +99,8 @@ version = Extras.version
 //            }
 //        }
 
+
+// NOTE: uses network util from netty!
 licensing {
     license(License.APACHE_2) {
         author(Extras.vendor)
@@ -224,6 +225,13 @@ sourceSets {
             // want to include java files for the source. 'setSrcDirs' resets includes...
             include("**/*.java")
         }
+
+        kotlin {
+            setSrcDirs(listOf("src"))
+
+            // want to include java files for the source. 'setSrcDirs' resets includes...
+            include("**/*.java", "**/*.kt")
+        }
     }
 
     test {
@@ -232,6 +240,13 @@ sourceSets {
 
             // want to include java files for the source. 'setSrcDirs' resets includes...
             include("**/*.java")
+        }
+
+        kotlin {
+            setSrcDirs(listOf("src"))
+
+            // want to include java files for the source. 'setSrcDirs' resets includes...
+            include("**/*.java", "**/*.kt")
         }
     }
 }
@@ -244,19 +259,31 @@ repositories {
 ///////////////////////////////
 //////    Task defaults
 ///////////////////////////////
-java {
+tasks.withType<JavaCompile> {
+    doFirst {
+        println("\tCompiling classes to Java $sourceCompatibility")
+    }
+
+    options.encoding = "UTF-8"
+
     sourceCompatibility = Extras.JAVA_VERSION
     targetCompatibility = Extras.JAVA_VERSION
 }
 
-tasks.compileJava.get().apply {
-    println("\tCompiling classes to Java $sourceCompatibility")
-}
+tasks.withType<KotlinCompile> {
+    doFirst {
+        println("\tCompiling classes to Kotlin, Java ${kotlinOptions.jvmTarget}")
+    }
 
-tasks.withType<JavaCompile> {
-    options.encoding = "UTF-8"
-    sourceCompatibility = Extras.JAVA_VERSION.toString()
-    targetCompatibility = Extras.JAVA_VERSION.toString()
+    sourceCompatibility = Extras.JAVA_VERSION
+    targetCompatibility = Extras.JAVA_VERSION
+
+    // see: https://kotlinlang.org/docs/reference/using-gradle.html
+    kotlinOptions {
+        jvmTarget = Extras.JAVA_VERSION
+        apiVersion = Extras.KOTLIN_API_VERSION
+        languageVersion = Extras.KOTLIN_LANG_VERSION
+    }
 }
 
 tasks.withType<Jar> {
@@ -281,28 +308,67 @@ tasks.jar.get().apply {
 }
 
 dependencies {
-    implementation("io.netty:netty-all:4.1.49.Final")
-    implementation("com.esotericsoftware:kryo:5.0.0-RC2")
+    implementation(kotlin("stdlib-jdk8"))
+
+    implementation("org.jetbrains.kotlinx:atomicfu:${Extras.atomicfuVer}")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${Extras.coroutineVer}")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-common:${Extras.coroutineVer}")
+
+
+    // https://github.com/real-logic/aeron
+    val aeronVer = "1.28.2"
+    implementation("io.aeron:aeron-client:$aeronVer")
+    implementation("io.aeron:aeron-driver:$aeronVer")
+
+
+    implementation("io.netty:netty-buffer:4.1.49.Final")
+    implementation("com.esotericsoftware:kryo:5.0.0-RC6")
     implementation("net.jpountz.lz4:lz4:1.3.0")
 
-    implementation("org.bouncycastle:bcprov-jdk15on:${Extras.bcVersion}")
-    implementation("org.bouncycastle:bcpg-jdk15on:${Extras.bcVersion}")
-    implementation("org.bouncycastle:bcmail-jdk15on:${Extras.bcVersion}")
-    implementation("org.bouncycastle:bctls-jdk15on:${Extras.bcVersion}")
+    // this is NOT the same thing as LMAX disruptor.
+    // This is just a really fast queue (where LMAX is a fast queue + other things w/ a difficult DSL)
+    // https://github.com/conversant/disruptor_benchmark
+    // https://www.youtube.com/watch?v=jVMOgQgYzWU
+    implementation("com.conversantmedia:disruptor:1.2.15")
+
+    // todo: remove BC! use conscrypt instead, or native java? (if possible. we are java 11 now, instead of 1.6)
+    // java 14 is faster with aeron!
+//    implementation("org.bouncycastle:bcprov-jdk15on:${Extras.bcVersion}")
+//    implementation("org.bouncycastle:bcpg-jdk15on:${Extras.bcVersion}")
+//    implementation("org.bouncycastle:bcmail-jdk15on:${Extras.bcVersion}")
+//    implementation("org.bouncycastle:bctls-jdk15on:${Extras.bcVersion}")
 
     implementation("net.jodah:typetools:0.6.2")
     implementation("de.javakaffee:kryo-serializers:0.45")
+    implementation("org.javassist:javassist:3.27.0-GA")
 
     implementation("com.dorkbox:ObjectPool:2.12")
-    implementation("com.dorkbox:Utilities:1.2")
+    implementation("com.dorkbox:Utilities:1.5.3")
 
+    implementation("io.github.microutils:kotlin-logging:1.7.9")  // slick kotlin wrapper for slf4j
     implementation("org.slf4j:slf4j-api:1.7.30")
 
-    // https://github.com/real-logic/aeron
-    implementation("io.aeron:aeron-all:1.28.2")
+
 
     testImplementation("junit:junit:4.13")
     testImplementation("ch.qos.logback:logback-classic:1.2.3")
+}
+
+configurations.all {
+    resolutionStrategy {
+        // fail eagerly on version conflict (includes transitive dependencies)
+        // e.g. multiple different versions of the same dependency (group and name are equal)
+        failOnVersionConflict()
+
+        // if there is a version we specified, USE THAT VERSION (over transitive versions)
+        preferProjectModules()
+
+        // cache dynamic versions for 10 minutes
+        cacheDynamicVersionsFor(10 * 60, "seconds")
+
+        // don't cache changing modules at all
+        cacheChangingModulesFor(0, "seconds")
+    }
 }
 
 publishToSonatype {
@@ -326,15 +392,5 @@ publishToSonatype {
         id = "dorkbox"
         name = Extras.vendor
         email = "email@dorkbox.com"
-    }
-
-    sonatype {
-        userName = Extras.sonatypeUserName
-        password = Extras.sonatypePassword
-    }
-
-    privateKey {
-        fileName = Extras.sonatypePrivateKeyFile
-        password = Extras.sonatypePrivateKeyPassword
     }
 }

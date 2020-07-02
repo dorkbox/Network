@@ -22,7 +22,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 
-import io.netty.handler.ipfilter.RuleBasedIpFilter;
 import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.SocketUtils;
 

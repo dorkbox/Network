@@ -222,10 +222,10 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler<Registra
             metaChannel.connection = this.registrationWrapper.connection0(metaChannel, remoteAddress);
 
             if (metaChannel.tcpChannel != null) {
-                metaChannel.tcpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
+                // metaChannel.tcpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
             }
             if (metaChannel.udpChannel != null) {
-                metaChannel.udpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
+                // metaChannel.udpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
             }
 
 
@@ -300,7 +300,7 @@ class RegistrationRemoteHandlerClient extends RegistrationRemoteHandler<Registra
                     for (Object message : messages) {
                         logger.trace("    deferred onMessage({}, {})", connection.id(), message);
                         try {
-                            connection.channelRead(null, message);
+                            // connection.channelRead(null, message);
                         } catch (Exception e) {
                             logger.error("Error running deferred messages!", e);
                         }

@@ -74,7 +74,7 @@ class RegistrationRemoteHandlerServerTCP extends RegistrationRemoteHandlerServer
             // this is what happens when the registration happens too quickly...
             Object connection = context.pipeline().last();
             if (connection instanceof ConnectionImpl) {
-                ((ConnectionImpl) connection).channelRead(context, message);
+                // ((ConnectionImpl) connection).channelRead(context, message);
             }
             else {
                 shutdown(channel, 0);

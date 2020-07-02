@@ -71,7 +71,7 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler<Registra
         final InetSocketAddress remoteAddress = (InetSocketAddress) channel.remoteAddress();
         if (!registrationWrapper.acceptRemoteConnection(remoteAddress)) {
             StringBuilder stringBuilder = new StringBuilder();
-            EndPoint.getHostDetails(stringBuilder, remoteAddress);
+            EndPoint.Companion.getHostDetails(stringBuilder, remoteAddress);
 
             logger.error("Remote connection [{}] is not permitted! Aborting connection process.", stringBuilder.toString());
             shutdown(channel, 0);
@@ -210,10 +210,10 @@ class RegistrationRemoteHandlerServer extends RegistrationRemoteHandler<Registra
                 metaChannel.connection = this.registrationWrapper.connection0(metaChannel, remoteAddress);
 
                 if (metaChannel.tcpChannel != null) {
-                    metaChannel.tcpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
+                    // metaChannel.tcpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
                 }
                 if (metaChannel.udpChannel != null) {
-                    metaChannel.udpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
+                    // metaChannel.udpChannel.pipeline().addLast(CONNECTION_HANDLER, metaChannel.connection);
                 }
             }
 

@@ -316,7 +316,7 @@ public final class NetUtil {
      * @param sysctlKey The key which the return value corresponds to.
      * @return The <a href ="https://www.freebsd.org/cgi/man.cgi?sysctl(8)">sysctl</a> value for {@code sysctlKey}.
      */
-    private static Integer sysctlGetInt(String sysctlKey) throws IOException {
+    public static Integer sysctlGetInt(String sysctlKey) throws IOException {
         Process process = new ProcessBuilder("sysctl", sysctlKey).start();
         try {
             InputStream is = process.getInputStream();

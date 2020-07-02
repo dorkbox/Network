@@ -117,6 +117,7 @@ public class ByteBufOutput extends Output {
         this.outputStream = outputStream;
     }
 
+    @Override
     public OutputStream getOutputStream () {
         return outputStream;
     }
@@ -124,6 +125,7 @@ public class ByteBufOutput extends Output {
     /** Throws {@link UnsupportedOperationException} because this output uses a ByteBuffer, not a byte[].
      * @deprecated
      * @see #getByteBuf() */
+    @Override
     @Deprecated
     public byte[] getBuffer () {
         throw new UnsupportedOperationException("This buffer does not used a byte[], see #getByteBuffer().");
@@ -132,6 +134,7 @@ public class ByteBufOutput extends Output {
     /** Throws {@link UnsupportedOperationException} because this output uses a ByteBuffer, not a byte[].
      * @deprecated
      * @see #getByteBuf() */
+    @Override
     @Deprecated
     public void setBuffer (byte[] buffer) {
         throw new UnsupportedOperationException("This buffer does not used a byte[], see #setByteBuffer(ByteBuffer).");
@@ -140,6 +143,7 @@ public class ByteBufOutput extends Output {
     /** Throws {@link UnsupportedOperationException} because this output uses a ByteBuffer, not a byte[].
      * @deprecated
      * @see #getByteBuf() */
+    @Override
     @Deprecated
     public void setBuffer (byte[] buffer, int maxBufferSize) {
         throw new UnsupportedOperationException("This buffer does not used a byte[], see #setByteBuffer(ByteBuffer).");
@@ -181,6 +185,7 @@ public class ByteBufOutput extends Output {
         return byteBuf;
     }
 
+    @Override
     public byte[] toBytes () {
         byte[] newBuffer = new byte[position];
         byteBuf.readerIndex(initialReaderIndex);
@@ -188,11 +193,13 @@ public class ByteBufOutput extends Output {
         return newBuffer;
     }
 
+    @Override
     public void setPosition (int position) {
         this.position = position;
         this.byteBuf.writerIndex(position);
     }
 
+    @Override
     public void reset () {
         super.reset();
         byteBuf.setIndex(initialReaderIndex, initialWriterIndex);
@@ -202,6 +209,7 @@ public class ByteBufOutput extends Output {
      * Ensures the buffer is large enough to read the specified number of bytes.
      * @return true if the buffer has been resized.
      */
+    @Override
     protected boolean require (int required) throws KryoException {
         if (byteBuf.isWritable(required)) {
             return false;
@@ -251,6 +259,7 @@ public class ByteBufOutput extends Output {
 
     // OutputStream:
 
+    @Override
     public void flush () throws KryoException {
         if (outputStream == null) return;
         try {
@@ -265,6 +274,7 @@ public class ByteBufOutput extends Output {
         position = 0;
     }
 
+    @Override
     public void close () throws KryoException {
         flush();
         if (outputStream != null) {
@@ -275,40 +285,47 @@ public class ByteBufOutput extends Output {
         }
     }
 
+    @Override
     public void write (int value) throws KryoException {
         require(1);
         byteBuf.writeByte((byte)value);
         position++;
     }
 
+    @Override
     public void write (byte[] bytes) throws KryoException {
         if (bytes == null) throw new IllegalArgumentException("bytes cannot be null.");
         writeBytes(bytes, 0, bytes.length);
     }
 
+    @Override
     public void write (byte[] bytes, int offset, int length) throws KryoException {
         writeBytes(bytes, offset, length);
     }
 
     // byte:
 
+    @Override
     public void writeByte (byte value) throws KryoException {
         require(1);
         byteBuf.writeByte(value);
         position++;
     }
 
+    @Override
     public void writeByte (int value) throws KryoException {
         require(1);
         byteBuf.writeByte((byte)value);
         position++;
     }
 
+    @Override
     public void writeBytes (byte[] bytes) throws KryoException {
         if (bytes == null) throw new IllegalArgumentException("bytes cannot be null.");
         writeBytes(bytes, 0, bytes.length);
     }
 
+    @Override
     public void writeBytes (byte[] bytes, int offset, int count) throws KryoException {
         if (bytes == null) throw new IllegalArgumentException("bytes cannot be null.");
 
@@ -319,6 +336,7 @@ public class ByteBufOutput extends Output {
 
     // int:
 
+    @Override
     public void writeInt (int value) throws KryoException {
         require(4);
         position += 4;
@@ -329,6 +347,7 @@ public class ByteBufOutput extends Output {
         byteBuf.writeByte((byte)(value >> 24));
     }
 
+    @Override
     public int writeVarInt (int value, boolean optimizePositive) throws KryoException {
         if (!optimizePositive) value = (value << 1) ^ (value >> 31);
         if (value >>> 7 == 0) {
@@ -374,6 +393,7 @@ public class ByteBufOutput extends Output {
         return 5;
     }
 
+    @Override
     public int writeVarIntFlag (boolean flag, int value, boolean optimizePositive) throws KryoException {
         if (!optimizePositive) value = (value << 1) ^ (value >> 31);
         int first = (value & 0x3F) | (flag ? 0x80 : 0); // Mask first 6 bits, bit 8 is the flag.
@@ -422,6 +442,7 @@ public class ByteBufOutput extends Output {
 
     // long:
 
+    @Override
     public void writeLong (long value) throws KryoException {
         require(8);
         position += 8;
@@ -436,6 +457,7 @@ public class ByteBufOutput extends Output {
         byteBuf.writeByte((byte)(value >>> 56));
     }
 
+    @Override
     public int writeVarLong (long value, boolean optimizePositive) throws KryoException {
         if (!optimizePositive) value = (value << 1) ^ (value >> 63);
         if (value >>> 7 == 0) {
@@ -537,6 +559,7 @@ public class ByteBufOutput extends Output {
 
     // float:
 
+    @Override
     public void writeFloat (float value) throws KryoException {
         require(4);
         ByteBuf byteBuf = this.byteBuf;
@@ -550,6 +573,7 @@ public class ByteBufOutput extends Output {
 
     // double:
 
+    @Override
     public void writeDouble (double value) throws KryoException {
         require(8);
         position += 8;
@@ -567,6 +591,7 @@ public class ByteBufOutput extends Output {
 
     // short:
 
+    @Override
     public void writeShort (int value) throws KryoException {
         require(2);
         position += 2;
@@ -576,6 +601,7 @@ public class ByteBufOutput extends Output {
 
     // char:
 
+    @Override
     public void writeChar (char value) throws KryoException {
         require(2);
         position += 2;
@@ -585,6 +611,7 @@ public class ByteBufOutput extends Output {
 
     // boolean:
 
+    @Override
     public void writeBoolean (boolean value) throws KryoException {
         require(1);
         byteBuf.writeByte((byte)(value ? 1 : 0));
@@ -593,6 +620,7 @@ public class ByteBufOutput extends Output {
 
     // String:
 
+    @Override
     public void writeString (String value) throws KryoException {
         if (value == null) {
             writeByte(0x80); // 0 means null, bit 8 means UTF8.
@@ -606,8 +634,9 @@ public class ByteBufOutput extends Output {
 
         require(charCount); // must be able to write this number of chars
 
-        // Detect ASCII, we only do this for small strings
-        boolean isAscii = charCount <= 32;
+        // Detect ASCII, we only do this for small strings, but ONLY more than 1 char.
+        // since 1 char is used for bit-masking if we use for 1 char string, reading the string will not work!
+        boolean isAscii = charCount > 1 && charCount <= 32;
 
         if (isAscii) {
             for (int i = 0; i < charCount; i++) {
@@ -648,6 +677,7 @@ public class ByteBufOutput extends Output {
         }
     }
 
+    @Override
     public void writeAscii (String value) throws KryoException {
         if (value == null) {
             writeByte(0x80); // 0 means null, bit 8 means UTF8.
@@ -693,6 +723,7 @@ public class ByteBufOutput extends Output {
 
     // Primitive arrays:
 
+    @Override
     public void writeInts (int[] array, int offset, int count) throws KryoException {
         require(count << 2);
 
@@ -707,6 +738,7 @@ public class ByteBufOutput extends Output {
         position = byteBuf.writerIndex();
     }
 
+    @Override
     public void writeLongs (long[] array, int offset, int count) throws KryoException {
         require(count << 3);
 
@@ -725,6 +757,7 @@ public class ByteBufOutput extends Output {
         position = byteBuf.writerIndex();
     }
 
+    @Override
     public void writeFloats (float[] array, int offset, int count) throws KryoException {
         require(count << 2);
 
@@ -739,6 +772,7 @@ public class ByteBufOutput extends Output {
         position = byteBuf.writerIndex();
     }
 
+    @Override
     public void writeDoubles (double[] array, int offset, int count) throws KryoException {
         require(count << 3);
 
@@ -757,6 +791,7 @@ public class ByteBufOutput extends Output {
         position = byteBuf.writerIndex();
     }
 
+    @Override
     public void writeShorts (short[] array, int offset, int count) throws KryoException {
         require(count << 1);
 
@@ -768,6 +803,7 @@ public class ByteBufOutput extends Output {
         position = byteBuf.writerIndex();
     }
 
+    @Override
     public void writeChars (char[] array, int offset, int count) throws KryoException {
         require(count << 1);
 
@@ -779,6 +815,7 @@ public class ByteBufOutput extends Output {
         position = byteBuf.writerIndex();
     }
 
+    @Override
     public void writeBooleans (boolean[] array, int offset, int count) throws KryoException {
         require(count);
 
