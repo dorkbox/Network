@@ -15,14 +15,17 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.*
+import dorkbox.network.Client
+import dorkbox.network.Configuration
+import dorkbox.network.Server
+import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.other.CryptoEccNative
-import dorkbox.network.rmi.RmiServer
+import dorkbox.network.other.NetworkUtil
+import dorkbox.network.rmi.RmiSupport
 import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.NetworkSerializationManager
-import dorkbox.network.serialization.Serialization
 import dorkbox.network.store.NullSettingsStore
 import dorkbox.network.store.SettingsStore
 import dorkbox.util.NamedThreadFactory
@@ -38,9 +41,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import mu.KLogger
+import mu.KotlinLogging
 import org.agrona.DirectBuffer
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.io.File
 import java.security.KeyFactory
 import java.security.PrivateKey
@@ -58,7 +61,12 @@ import java.util.concurrent.CountDownLatch
 // Usually it's with ISPs.
 /**
  * represents the base of a client/server end point for interacting with aeron
- */
+ *
+ * @param type this is either "Client" or "Server", depending on who is creating this endpoint.
+ * @param config these are the specific connection options
+ *
+ * @throws SecurityException if unable to initialize/generate ECC keys
+*/
 abstract class EndPoint<C : Connection>
 internal constructor(val type: Class<*>, internal val config: Configuration) : AutoCloseable {
     protected constructor(config: Configuration) : this(Client::class.java, config)
@@ -81,7 +89,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         const val RESERVED_SESSION_ID_HIGH = Integer.MAX_VALUE
 
         const val UDP_HANDSHAKE_STREAM_ID: Int = 0x1337cafe
-        const val IPC_STREAM_ID: Int = 0x1337c0de
+        const val IPC_HANDSHAKE_STREAM_ID_PUB: Int = 0x1337c0de
+        const val IPC_HANDSHAKE_STREAM_ID_SUB: Int = 0x1337c0d3
 
         init {
             println("THIS IS ONLY IPV4 AT THE MOMENT. IPV6 is in progress!")
@@ -100,17 +109,16 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     }
 
 
-    // the simple name (for the class) of this connection endpoint
-    val name = type.simpleName
-    val logger: Logger = LoggerFactory.getLogger(name)
+    val logger: KLogger = KotlinLogging.logger(type.simpleName)
 
     internal val closables = CopyOnWriteArrayList<AutoCloseable>()
 
     internal val actionDispatch = CoroutineScope(Dispatchers.Default)
     internal abstract val connectionManager: ConnectionManager<C>
 
-    internal lateinit var mediaDriver: MediaDriver
-    internal lateinit var aeron: Aeron
+    internal val mediaDriverContext: MediaDriver.Context
+    internal val mediaDriver: MediaDriver
+    internal val aeron: Aeron
 
     /**
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
@@ -130,8 +138,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
-    val rmiGlobalBridge = RmiServer(logger, true)
+
     var disableRemoteKeyValidation = false
+
+    val rmiSupport = RmiSupport<C>(logger, actionDispatch, config.serialization)
 
     /**
      * Checks to see if this client has connected yet or not.
@@ -142,14 +152,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     abstract fun isConnected(): Boolean
 
-    /**
-     * @param type this is either "Client" or "Server", depending on who is creating this endpoint.
-     * @param config these are the specific connection options
-     *
-     * @throws SecurityException if unable to initialize/generate ECC keys
-     * @throws ServerException if unable to validate configuration
-     *
-     */
+
     init {
         // Aeron configuration
 
@@ -173,8 +176,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 //                OS.isMacOsX() ->
 //            }
 
-//            val rmem_max = dorkbox.network.NetUtil.sysctlGetInt("net.core.rmem_max")
-//            val wmem_max = dorkbox.network.NetUtil.sysctlGetInt("net.core.wmem_max")
+//            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
+//            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
         }
 
 
@@ -186,8 +189,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 //                OS.isMacOsX() ->
 //            }
 
-//            val rmem_max = dorkbox.network.NetUtil.sysctlGetInt("net.core.rmem_max")
-//            val wmem_max = dorkbox.network.NetUtil.sysctlGetInt("net.core.wmem_max")
+//            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
+//            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
         }
 
 
@@ -230,62 +233,57 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             val aeronLogDirectory = File(baseFile, baseName)
             if (aeronLogDirectory.exists()) {
                 logger.error("Aeron log directory already exists! This might not be what you want!")
-                // avoid a collision
-                // aeronLogDirectory = File(baseFile, baseName + RandomUtil.get().nextInt(1000))
             }
             logger.debug("Aeron log directory: $aeronLogDirectory")
             config.aeronLogDirectory = aeronLogDirectory
         }
 
-        // the RmiNoOpConnection must have an endpoint, and we DO NOT want it to actually setup/configure aeron!
-        if (config.publicationPort > 0) {
-            val threadFactory = NamedThreadFactory("Aeron", false)
+        val threadFactory = NamedThreadFactory("Aeron", false)
 
-            // LOW-LATENCY SETTINGS
-            // .termBufferSparseFile(false)
-            //             .useWindowsHighResTimer(true)
-            //             .threadingMode(ThreadingMode.DEDICATED)
-            //             .conductorIdleStrategy(BusySpinIdleStrategy.INSTANCE)
-            //             .receiverIdleStrategy(NoOpIdleStrategy.INSTANCE)
-            //             .senderIdleStrategy(NoOpIdleStrategy.INSTANCE);
-            val mediaDriverContext = MediaDriver.Context()
-                    .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
-                    .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
-                    .dirDeleteOnStart(true) // TODO: FOR NOW?
-                    .dirDeleteOnShutdown(true)
-                    .conductorThreadFactory(threadFactory)
-                    .receiverThreadFactory(threadFactory)
-                    .senderThreadFactory(threadFactory)
-                    .sharedNetworkThreadFactory(threadFactory)
-                    .sharedThreadFactory(threadFactory)
-                    .threadingMode(config.threadingMode)
-                    .mtuLength(config.networkMtuSize)
-                    .socketSndbufLength(config.sendBufferSize)
-                    .socketRcvbufLength(config.receiveBufferSize)
-                    .aeronDirectoryName(config.aeronLogDirectory!!.absolutePath)
+        // LOW-LATENCY SETTINGS
+        // .termBufferSparseFile(false)
+        //             .useWindowsHighResTimer(true)
+        //             .threadingMode(ThreadingMode.DEDICATED)
+        //             .conductorIdleStrategy(BusySpinIdleStrategy.INSTANCE)
+        //             .receiverIdleStrategy(NoOpIdleStrategy.INSTANCE)
+        //             .senderIdleStrategy(NoOpIdleStrategy.INSTANCE);
+        mediaDriverContext = MediaDriver.Context()
+                .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
+                .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
+                .dirDeleteOnStart(true) // TODO: FOR NOW?
+                .dirDeleteOnShutdown(true)
+                .conductorThreadFactory(threadFactory)
+                .receiverThreadFactory(threadFactory)
+                .senderThreadFactory(threadFactory)
+                .sharedNetworkThreadFactory(threadFactory)
+                .sharedThreadFactory(threadFactory)
+                .threadingMode(config.threadingMode)
+                .mtuLength(config.networkMtuSize)
+                .socketSndbufLength(config.sendBufferSize)
+                .socketRcvbufLength(config.receiveBufferSize)
+                .aeronDirectoryName(config.aeronLogDirectory!!.absolutePath)
 
-            val aeronContext = Aeron.Context().aeronDirectoryName(mediaDriverContext.aeronDirectoryName())
+        val aeronContext = Aeron.Context().aeronDirectoryName(mediaDriverContext.aeronDirectoryName())
 
-            try {
-                mediaDriver = MediaDriver.launch(mediaDriverContext)
-            } catch (e: Exception) {
-                throw e
-            }
-
-            try {
-                aeron = Aeron.connect(aeronContext)
-            } catch (e: Exception) {
-                try {
-                    mediaDriver.close()
-                } catch (secondaryException: Exception) {
-                    e.addSuppressed(secondaryException)
-                }
-                throw e
-            }
-
-            closables.add(aeron)
-            closables.add(mediaDriver)
+        try {
+            mediaDriver = MediaDriver.launch(mediaDriverContext)
+        } catch (e: Exception) {
+            throw e
         }
+
+        try {
+            aeron = Aeron.connect(aeronContext)
+        } catch (e: Exception) {
+            try {
+                mediaDriver.close()
+            } catch (secondaryException: Exception) {
+                e.addSuppressed(secondaryException)
+            }
+            throw e
+        }
+
+        closables.add(aeron)
+        closables.add(mediaDriver)
 
 
         // serialization stuff
@@ -417,6 +415,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     @Suppress("MemberVisibilityCanBePrivate")
     open fun newConnection(endPoint: EndPoint<C>, mediaDriverConnection: MediaDriverConnection): C {
+        @Suppress("UNCHECKED_CAST")
         return ConnectionImpl(endPoint, mediaDriverConnection) as C
     }
 
@@ -498,56 +497,13 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         connectionManager.forEachConnectionDoRead(function)
     }
 
-    /**
-     * Creates a "global" RMI object for use by multiple connections.
-     *
-     * @return the ID assigned to this RMI object
-     */
-    fun <T> createGlobalObject(globalObject: T): Int {
-        return rmiGlobalBridge.register(globalObject) ?: 0
-    }
-
-    /**
-     * Gets a previously created "global" RMI object
-     *
-     * @param objectRmiId the ID of the RMI object to get
-     *
-     * @return null if the object doesn't exist or the ID is invalid.
-     */
-    fun <T> getGlobalObject(objectRmiId: Int): T {
-        @Suppress("UNCHECKED_CAST")
-        return rmiGlobalBridge.getRegisteredObject(objectRmiId) as T
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    suspend fun writeMessage(publication: Publication, message: Any) {
-        writeMessage(publication, Serialization.NOP_CONNECTION, message)
-    }
-
-    suspend fun writeMessage(publication: Publication, connection: Connection_, message: Any) {
-        sendIdleStrategy.reset()
-        // TODO: WE MIGHT NOT WANT TO USE SESSIONID()!!
+    internal suspend fun writeHandshakeMessage(publication: Publication, message: Any) {
+        // The sessionId is globally unique, and is assigned by the server.
         logger.debug("[{}] send: {}", publication.sessionId(), message)
 
         val kryo: KryoExtra = serialization.takeKryo()
         try {
-            kryo.write(connection, message)
+            kryo.write(message)
 
             val buffer = kryo.writerBuffer
             val objectSize = buffer.position()
@@ -569,27 +525,16 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
                 // more critical error sending the message. we shouldn't retry or anything.
                 logger.error("Error sending message. ${errorCodeName(result)}")
+
                 return
             }
         } catch (e: Exception) {
             logger.error("Error serializing message $message", e)
         } finally {
+            sendIdleStrategy.reset()
             serialization.returnKryo(kryo)
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /**
      * @param buffer The buffer
@@ -598,14 +543,12 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * @return A string
      */
-    fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
-        // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
-//        val sessionId = header.sessionId()
-        // TODO: WE MIGHT NOT WANT TO USE SESSIONID()!!
-
+    internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
         val kryo: KryoExtra = serialization.takeKryo()
         try {
-            return kryo.read(buffer, offset, length, Serialization.NOP_CONNECTION)
+            val message = kryo.read(buffer, offset, length)
+            logger.debug("[{}] received: {}", header.sessionId(), message)
+            return message
         } catch (e: Exception) {
             logger.error("Error de-serializing message on connection ${header.sessionId()}!", e)
         } finally {
@@ -616,7 +559,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     }
 
     suspend fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection_) {
-        // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
+        // The sessionId is globally unique, and is assigned by the server.
         val sessionId = header.sessionId()
 
         // note: this address will ALWAYS be an IP:PORT combo
@@ -630,7 +573,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 //        val ipAsInt = NetworkUtil.IP.toInt(ip)
 
 
-        // TODO: WE MIGHT NOT WANT TO USE SESSIONID()!!
         var message: Any? = null
 
         val kryo: KryoExtra = serialization.takeKryo()
@@ -638,7 +580,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             message = kryo.read(buffer, offset, length, connection)
             logger.debug("[{}] received: {}", sessionId, message)
         } catch (e: Exception) {
-            logger.error("[${header.sessionId()}] Error de-serializing message", e)
+            logger.error("[${sessionId}] Error de-serializing message", e)
         } finally {
             serialization.returnKryo(kryo)
         }
@@ -646,7 +588,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         val data = ByteArray(length)
         buffer.getBytes(offset, data)
-
 
         when (message) {
             is PingMessage -> {
@@ -664,8 +605,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             is RmiMessage -> {
                 // if we are an RMI message/registration, we have very specific, defined behavior.
                 // We do not use the "normal" listener callback pattern because this require special functionality
-                // note: RMI messages are NEVER subclassed!
-                connection.rmiSupport().manage(connection, message, logger)
+                @Suppress("UNCHECKED_CAST")
+                rmiSupport.manage(this as EndPoint<Connection_>, connection, message, logger)
             }
             is Any -> {
                 connectionManager.notifyOnMessage(connection, message)
@@ -697,7 +638,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
 
     override fun toString(): String {
-        return "EndPoint [$name]"
+        return "EndPoint [${type.simpleName}]"
     }
 
     override fun hashCode(): Int {

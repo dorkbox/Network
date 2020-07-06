@@ -20,7 +20,6 @@ package dorkbox.network.connection
  * accidentally add an incompatible connection type.
  */
 interface Listeners<C> where C : Connection {
-
     /**
      * Adds a function that will be called BEFORE a client/server "connects" with
      * each other, and used to determine if a connection should be allowed

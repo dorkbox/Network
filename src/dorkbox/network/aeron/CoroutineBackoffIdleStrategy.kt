@@ -326,6 +326,13 @@ class CoroutineBackoffIdleStrategy : BackoffIdleStrategyData, CoroutineIdleStrat
         return ALIAS
     }
 
+    /**
+     * Creates a clone of this IdleStrategy
+     */
+    override fun clone(): CoroutineBackoffIdleStrategy {
+        return CoroutineBackoffIdleStrategy(maxSpins = maxSpins, maxYields = maxYields, minParkPeriodMs = minParkPeriodMs, maxParkPeriodMs = maxParkPeriodMs)
+    }
+
     override fun toString(): String {
         return "BackoffIdleStrategy{" +
                 "alias=" + ALIAS +

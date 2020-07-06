@@ -115,7 +115,8 @@ object AeronClient {
         }
 
         runBlocking {
-            client.connect("127.0.0.1")
+//            client.connect("127.0.0.1") // UDP connection via loopback
+            client.connect()  // IPC connection
         }
 
 

@@ -21,27 +21,25 @@ import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.connection.KryoExtra
 import dorkbox.network.rmi.RmiClient
-import org.slf4j.Logger
 import java.lang.reflect.Proxy
 
 /**
- * this is to manage serializing proxy object objects across the wire
+ * this is to manage serializing proxy object objects across the wire...
+ * SO the server sends an RMI object, and the client reads an RMI object
  */
-class ObjectRequestSerializer(private val logger: Logger) : Serializer<Any>() {
+class RmiClientRequestSerializer : Serializer<Any>() {
     override fun write(kryo: Kryo, output: Output, proxyObject: Any) {
         val handler = Proxy.getInvocationHandler(proxyObject) as RmiClient
+        output.writeBoolean(handler.isGlobal)
         output.writeInt(handler.rmiObjectId, true)
     }
 
     override fun read(kryo: Kryo, input: Input, type: Class<*>?): Any? {
-        val objectID = input.readInt(true)
-        val kryoExtra = kryo as KryoExtra
+        val isGlobal = input.readBoolean()
+        val objectId = input.readInt(true)
+        kryo as KryoExtra
 
-        val `object` = kryoExtra.rmiSupport.getImplementationObject(objectID)
-        if (`object` == null) {
-            logger.error("Unknown object ID in RMI ObjectSpace: {}", objectID)
-        }
-
-        return `object`
+        val connection = kryo.connection
+        return connection.endPoint().rmiSupport.getImplObject(isGlobal, objectId, connection)
     }
 }

@@ -102,4 +102,9 @@ interface CoroutineIdleStrategy {
     fun alias(): String {
         return ""
     }
+
+    /**
+     * Creates a clone of this IdleStrategy
+     */
+    fun clone(): CoroutineIdleStrategy
 }

@@ -18,9 +18,10 @@ package dorkbox.network.rmi
 /**
  * Callback for creating remote RMI classes
  */
+@FunctionalInterface
 interface RemoteObjectCallback<Iface> {
     /**
      * @param remoteObject the remote object (as a proxy object) or null if there was an error creating the RMI object
      */
-    fun created(remoteObject: Iface)
+    suspend fun created(remoteObject: Iface)
 }

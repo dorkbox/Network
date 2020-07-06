@@ -18,6 +18,8 @@ package dorkbox.network
 import dorkbox.network.aeron.client.ClientException
 import dorkbox.network.aeron.client.ClientTimedOutException
 import dorkbox.network.connection.*
+import dorkbox.network.other.NetUtil
+import dorkbox.network.other.NetworkUtil
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.launch
@@ -138,7 +140,7 @@ open class Client<C : Connection>(config: Configuration = Configuration()) : End
      */
     @JvmOverloads
     @Throws(IOException::class, ClientTimedOutException::class)
-    suspend fun connect(remoteAddress: String = "localhost", connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
+    suspend fun connect(remoteAddress: String = "", connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
         if (isConnected.value) {
             throw IOException("Unable to connect when already connected!");
         }
@@ -166,26 +168,52 @@ open class Client<C : Connection>(config: Configuration = Configuration()) : End
             throw IllegalArgumentException("0.0.0.0 is an invalid address to connect to!")
         }
 
+        connectionManager.init(this)
 
-        // this is an IPC address
-        if (this.remoteAddress.startsWith("0x")) {
-            val ipcAddress: Long
-            try {
-                ipcAddress = remoteAddress.toLong(radix = 16)
-            } catch (e: Exception) {
-                throw IOException(e)
-            }
+        if (this.remoteAddress.isEmpty()) {
+            // this is an IPC address
 
-            // val connectionType3 = ConnectionType(config.remoteAddress, config.controlPort, config.port, false, MediaDriverType.IPC, IPC_STREAM_ID)
+            // When conducting IPC transfers, we MUST use the same aeron configuration as the server!
+//            config.aeronLogDirectory
+
+
+
+
+            // stream IDs are flipped for a client because we operate from the perspective of the server
+            val handshakeConnection = IpcMediaDriverConnection(
+                    streamId = IPC_HANDSHAKE_STREAM_ID_SUB,
+                    streamIdSubscription = IPC_HANDSHAKE_STREAM_ID_PUB,
+                    sessionId = RESERVED_SESSION_ID_INVALID
+            )
+
+            closables.add(handshakeConnection)
+
+
+            // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
+            handshakeConnection.buildClient(aeron)
+//            logger.debug(handshakeConnection.clientInfo())
+
+
+            println("CONASD")
+
+            // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
+
+            // @Throws(ConnectTimedOutException::class, ClientRejectedException::class)
+            val connectionInfo = connectionManager.initHandshake(handshakeConnection, connectionTimeoutMS)
+            println("CO23232232323NASD")
         }
         else {
-            // this is a network address
+            // THIS IS A NETWORK ADDRESS
 
-            // initially we only connect to the client connect ports. Ports are flipped because they are in the perspective of the SERVER
+            // initially we only connect to the handshake connect ports. Ports are flipped because they are in the perspective of the SERVER
             val handshakeConnection = UdpMediaDriverConnection(
-                    this.remoteAddress, config.publicationPort, config.subscriptionPort,
-                    UDP_HANDSHAKE_STREAM_ID, RESERVED_SESSION_ID_INVALID,
-                    connectionTimeoutMS, reliable)
+                    address = this.remoteAddress,
+                    subscriptionPort = config.publicationPort,
+                    publicationPort = config.subscriptionPort,
+                    streamId = UDP_HANDSHAKE_STREAM_ID,
+                    sessionId = RESERVED_SESSION_ID_INVALID,
+                    connectionTimeoutMS = connectionTimeoutMS,
+                    isReliable = reliable)
 
             closables.add(handshakeConnection)
 
@@ -197,12 +225,18 @@ open class Client<C : Connection>(config: Configuration = Configuration()) : End
             // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
 
             // @Throws(ConnectTimedOutException::class, ClientRejectedException::class)
-            val connectionInfo = connectionManager.initHandshake(handshakeConnection, connectionTimeoutMS, this@Client)
+            val connectionInfo = connectionManager.initHandshake(handshakeConnection, connectionTimeoutMS)
 
 
             // we are now connected, so we can connect to the NEW client-specific ports
-            val reliableClientConnection = UdpMediaDriverConnection(handshakeConnection.address, connectionInfo.subscriptionPort, connectionInfo.publicationPort,
-                    connectionInfo.streamId, connectionInfo.sessionId, connectionTimeoutMS, handshakeConnection.isReliable)
+            val reliableClientConnection = UdpMediaDriverConnection(
+                    address = handshakeConnection.address,
+                    subscriptionPort = connectionInfo.subscriptionPort,
+                    publicationPort = connectionInfo.publicationPort,
+                    streamId = connectionInfo.streamId,
+                    sessionId = connectionInfo.sessionId,
+                    connectionTimeoutMS = connectionTimeoutMS,
+                    isReliable = handshakeConnection.isReliable)
 
             // VALIDATE:: check to see if the remote connection's public key has changed!
             if (!validateRemoteAddress(NetworkUtil.IP.toInt(this.remoteAddress), connectionInfo.publicKey)) {
@@ -308,77 +342,48 @@ open class Client<C : Connection>(config: Configuration = Configuration()) : End
 //    }
 
     /**
-     * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
-     * to an object that is created remotely.
+     * Tells the remote connection to create a new global object that implements the specified interface.
      *
-     *
+     * The methods on the returned object will remotely execute on the (remotely) created object
      * The callback will be notified when the remote object has been created.
      *
-     *
-     *
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * [response timeout][RemoteObject.setResponseTimeout].
-     *
-     *
-     * If [non-blocking][RemoteObject.setAsync] is false (the default), then methods that return a value must
-     * not be called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a
-     * void return value can be called on the update thread.
-     *
+     * If you want to create a connection specific remote object, call [Connection.create(Int, RemoteObjectCallback<Iface>)] on a connection
+     * The callback will be notified when the remote object has been created.
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
      *
      *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `RemoteObject remoteObject = (RemoteObject) test;`
+     * If one wishes to change the remote object behavior, cast the object [RemoteObject] to access the different methods, for example:
+     * ie:  `val remoteObject = test as RemoteObject`
      *
      * @see RemoteObject
      */
-//    override fun <Iface> createRemoteObject(interfaceClass: Class<Iface>, callback: RemoteObjectCallback<Iface>) {
-//        try {
-//            connection!!.createRemoteObject(interfaceClass, callback)
-//        } catch (e: NullPointerException) {
-//            logger.error("Error creating remote object!", e)
-//        }
-//    }
+    suspend inline fun <reified Iface> createObject(noinline callback: suspend (Iface) -> Unit) {
+        val classId = serialization.getClassId(Iface::class.java)
+        rmiSupport.createGlobalRemoteObject(getConnection(), classId, callback)
+    }
 
     /**
-     * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
-     * to an object that is created remotely.
+     * Gets a global remote object via the ID.
      *
+     * Global remote objects are accessible to ALL connections, where as a connection specific remote object is only accessible/visible
+     * to the connection.
      *
+     * If you want to access a connection specific remote object, call [Connection.get(Int, RemoteObjectCallback<Iface>)] on a connection
      * The callback will be notified when the remote object has been created.
-     *
-     *
-     *
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * [response timeout][RemoteObject.setResponseTimeout].
-     *
-     *
-     * If [non-blocking][RemoteObject.setAsync] is false (the default), then methods that return a value must
-     * not be called from the update thread for the connection. An exception will be thrown if this occurs. Methods with a
-     * void return value can be called on the update thread.
-     *
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
      *
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `RemoteObject remoteObject = (RemoteObject) test;`
+     * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
+     * ie:  `val remoteObject = test as RemoteObject`
      *
      * @see RemoteObject
      */
-//    override fun <Iface> getRemoteObject(objectId: Int, callback: RemoteObjectCallback<Iface>) {
-//        try {
-//            connection!!.getRemoteObject(objectId, callback)
-//        } catch (e: NullPointerException) {
-//            logger.error("Error getting remote object!", e)
-//        }
-//    }
-
+    fun <Iface> getObject(objectId: Int, interfaceClass: Class<Iface>): Iface {
+        return rmiSupport.getGlobalRemoteObject(getConnection(), this, objectId, interfaceClass)
+    }
 
     /**
      * Fetches the connection used by the client.
@@ -389,14 +394,9 @@ open class Client<C : Connection>(config: Configuration = Configuration()) : End
      *
      * This is preferred to [EndPoint.getConnections], as it properly does some error checking
      */
-    // can =just use super.get connection?
-//    override var connection: C = TODO()
-//        get() = field
-//        set(connection) {
-//            super.connection = connection
-//        }
-
-
+    fun getConnection(): C {
+        return connection as C
+    }
 
     @Throws(ClientException::class)
     suspend fun send(message: Any) {

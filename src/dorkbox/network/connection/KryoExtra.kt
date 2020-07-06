@@ -20,8 +20,7 @@ import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.pipeline.AeronInput
 import dorkbox.network.pipeline.AeronOutput
-import dorkbox.network.rmi.ConnectionRmiSupport
-import dorkbox.network.serialization.NetworkSerializationManager
+import dorkbox.network.rmi.CachedMethod
 import dorkbox.util.OS
 import dorkbox.util.bytes.OptimizeUtilsByteArray
 import dorkbox.util.bytes.OptimizeUtilsByteBuf
@@ -29,15 +28,15 @@ import io.netty.buffer.ByteBuf
 import io.netty.buffer.ByteBufUtil
 import net.jpountz.lz4.LZ4Factory
 import org.agrona.DirectBuffer
+import org.agrona.collections.Int2ObjectHashMap
 import org.slf4j.Logger
 import java.io.IOException
-import java.security.SecureRandom
 import javax.crypto.Cipher
 
 /**
  * Nothing in this class is thread safe
  */
-class KryoExtra(val serializationManager: NetworkSerializationManager) : Kryo() {
+class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>) : Kryo() {
     // for kryo serialization
     private val readerBuffer = AeronInput()
     val writerBuffer = AeronOutput()
@@ -50,10 +49,9 @@ class KryoExtra(val serializationManager: NetworkSerializationManager) : Kryo() 
 
 
     // volatile to provide object visibility for entire class. This is unique per connection
-    lateinit var rmiSupport: ConnectionRmiSupport
     lateinit var connection: Connection_
 
-    private val secureRandom = SecureRandom()
+//    private val secureRandom = SecureRandom()
     private var cipher: Cipher? = null
     private val compressor = factory.fastCompressor()
     private val decompressor = factory.fastDecompressor()
@@ -81,6 +79,24 @@ class KryoExtra(val serializationManager: NetworkSerializationManager) : Kryo() 
         }
     }
 
+    fun getMethods(classId: Int): Array<CachedMethod> {
+        return methodCache[classId]
+    }
+
+    /**
+     * NOTE: THIS CANNOT BE USED FOR ANYTHING RELATED TO RMI!
+     *
+     * OUTPUT:
+     * ++++++++++++++++++++++++++
+     * + class and object bytes +
+     * ++++++++++++++++++++++++++
+     */
+    @Throws(Exception::class)
+    fun write(message: Any) {
+        writerBuffer.reset()
+        writeClassAndObject(writerBuffer, message)
+    }
+
     /**
      * OUTPUT:
      * ++++++++++++++++++++++++++
@@ -91,10 +107,25 @@ class KryoExtra(val serializationManager: NetworkSerializationManager) : Kryo() 
     fun write(connection: Connection_, message: Any) {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
-        this.rmiSupport = connection.rmiSupport()
 
         writerBuffer.reset()
         writeClassAndObject(writerBuffer, message)
+    }
+
+    /**
+     * NOTE: THIS CANNOT BE USED FOR ANYTHING RELATED TO RMI!
+     *
+     * INPUT:
+     * ++++++++++++++++++++++++++
+     * + class and object bytes +
+     * ++++++++++++++++++++++++++
+     */
+    @Throws(Exception::class)
+    fun read(buffer: DirectBuffer, offset: Int, length: Int): Any {
+        // this properly sets the buffer info
+        readerBuffer.setBuffer(buffer, offset, length)
+
+        return readClassAndObject(readerBuffer)
     }
 
     /**
@@ -107,7 +138,6 @@ class KryoExtra(val serializationManager: NetworkSerializationManager) : Kryo() 
     fun read(buffer: DirectBuffer, offset: Int, length: Int, connection: Connection_): Any {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
-        this.rmiSupport = connection.rmiSupport()
 
         // this properly sets the buffer info
         readerBuffer.setBuffer(buffer, offset, length)
@@ -125,6 +155,20 @@ class KryoExtra(val serializationManager: NetworkSerializationManager) : Kryo() 
     ////////////////
 
     /**
+     * NOTE: THIS CANNOT BE USED FOR ANYTHING RELATED TO RMI!
+     *
+     * OUTPUT:
+     * ++++++++++++++++++++++++++
+     * + class and object bytes +
+     * ++++++++++++++++++++++++++
+     */
+    private fun write(writer: Output, message: Any) {
+        // write the object to the NORMAL output buffer!
+        writer.reset()
+        writeClassAndObject(writer, message)
+    }
+
+    /**
      * OUTPUT:
      * ++++++++++++++++++++++++++
      * + class and object bytes +
@@ -133,11 +177,22 @@ class KryoExtra(val serializationManager: NetworkSerializationManager) : Kryo() 
     private fun write(connection: Connection_, writer: Output, message: Any) {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
-        this.rmiSupport = connection.rmiSupport()
 
         // write the object to the NORMAL output buffer!
         writer.reset()
         writeClassAndObject(writer, message)
+    }
+
+    /**
+     * NOTE: THIS CANNOT BE USED FOR ANYTHING RELATED TO RMI!
+     *
+     * INPUT:
+     * ++++++++++++++++++++++++++
+     * + class and object bytes +
+     * ++++++++++++++++++++++++++
+     */
+    private fun read(reader: Input): Any {
+        return readClassAndObject(reader)
     }
 
     /**
@@ -149,9 +204,52 @@ class KryoExtra(val serializationManager: NetworkSerializationManager) : Kryo() 
     private fun read(connection: Connection_, reader: Input): Any {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
-        this.rmiSupport = connection.rmiSupport()
 
         return readClassAndObject(reader)
+    }
+
+    /**
+     * NOTE: THIS CANNOT BE USED FOR ANYTHING RELATED TO RMI!
+     *
+     * BUFFER:
+     * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     * +  uncompressed length (1-4 bytes)  +  compressed data   +
+     * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *
+     * COMPRESSED DATA:
+     * ++++++++++++++++++++++++++
+     * + class and object bytes +
+     * ++++++++++++++++++++++++++
+     */
+    fun writeCompressed(logger: Logger, buffer: ByteBuf, message: Any) {
+        // write the object to a TEMP buffer! this will be compressed later
+        write(writer, message)
+
+        // save off how much data the object took
+        val length = writer.position()
+        val maxCompressedLength = compressor.maxCompressedLength(length)
+
+        ////////// compressing data
+        // we ALWAYS compress our data stream -- because of how AES-GCM pads data out, the small input (that would result in a larger
+        // output), will be negated by the increase in size by the encryption
+        val compressOutput = temp
+
+        // LZ4 compress.
+        val compressedLength = compressor.compress(writer.buffer, 0, length, compressOutput, 0, maxCompressedLength)
+        if (DEBUG) {
+            val orig = ByteBufUtil.hexDump(writer.buffer, 0, length)
+            val compressed = ByteBufUtil.hexDump(compressOutput, 0, compressedLength)
+            logger.error(OS.LINE_SEPARATOR +
+                    "ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +
+                    OS.LINE_SEPARATOR +
+                    "COMPRESSED: (" + compressedLength + ")" + OS.LINE_SEPARATOR + compressed)
+        }
+
+        // now write the ORIGINAL (uncompressed) length. This is so we can use the FAST decompress version
+        OptimizeUtilsByteBuf.writeInt(buffer, length, true)
+
+        // have to copy over the orig data, because we used the temp buffer. Also have to account for the length of the uncompressed size
+        buffer.writeBytes(compressOutput, 0, compressedLength)
     }
 
     /**
@@ -194,6 +292,60 @@ class KryoExtra(val serializationManager: NetworkSerializationManager) : Kryo() 
 
         // have to copy over the orig data, because we used the temp buffer. Also have to account for the length of the uncompressed size
         buffer.writeBytes(compressOutput, 0, compressedLength)
+    }
+
+    /**
+     * NOTE: THIS CANNOT BE USED FOR ANYTHING RELATED TO RMI!
+     *
+     * BUFFER:
+     * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     * +  uncompressed length (1-4 bytes)  +  compressed data   +
+     * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     *
+     * COMPRESSED DATA:
+     * ++++++++++++++++++++++++++
+     * + class and object bytes +
+     * ++++++++++++++++++++++++++
+     */
+    fun readCompressed(logger: Logger, buffer: ByteBuf, length: Int): Any {
+        ////////////////
+        // Note: we CANNOT write BACK to the buffer as "temp" storage, since there could be additional data on it!
+        ////////////////
+
+        // get the decompressed length (at the beginning of the array)
+        var length = length
+        val uncompressedLength = OptimizeUtilsByteBuf.readInt(buffer, true)
+        if (uncompressedLength > ABSOLUTE_MAX_SIZE_OBJECT) {
+            throw IOException("Uncompressed size ($uncompressedLength) is larger than max allowed size ($ABSOLUTE_MAX_SIZE_OBJECT)!")
+        }
+
+        // because 1-4 bytes for the decompressed size (this number is never negative)
+        val lengthLength = OptimizeUtilsByteArray.intLength(uncompressedLength, true)
+        val start = buffer.readerIndex()
+
+        // have to adjust for uncompressed length-length
+        length = length - lengthLength
+
+
+        ///////// decompress data
+        buffer.readBytes(temp, 0, length)
+
+
+        // LZ4 decompress, requires the size of the ORIGINAL length (because we use the FAST decompressor)
+        reader.reset()
+        decompressor.decompress(temp, 0, reader.buffer, 0, uncompressedLength)
+        reader.setLimit(uncompressedLength)
+        if (DEBUG) {
+            val compressed = ByteBufUtil.hexDump(buffer, start, length)
+            val orig = ByteBufUtil.hexDump(reader.buffer, start, uncompressedLength)
+            logger.error(OS.LINE_SEPARATOR +
+                    "COMPRESSED: (" + length + ")" + OS.LINE_SEPARATOR + compressed +
+                    OS.LINE_SEPARATOR +
+                    "ORIG: (" + uncompressedLength + ")" + OS.LINE_SEPARATOR + orig)
+        }
+
+        // read the object from the buffer.
+        return read(reader)
     }
 
     /**

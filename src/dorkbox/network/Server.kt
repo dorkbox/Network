@@ -16,14 +16,13 @@
 package dorkbox.network
 
 import dorkbox.network.aeron.server.ServerException
-import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionManagerServer
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.UdpMediaDriverConnection
+import dorkbox.network.connection.*
 import dorkbox.network.connection.connectionType.ConnectionProperties
 import dorkbox.network.connection.connectionType.ConnectionRule
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.ipFilter.IpFilterRuleType
+import dorkbox.network.other.NetUtil
+import dorkbox.network.other.NetworkUtil
 import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
@@ -146,8 +145,11 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
         // The is how clients then get the new ports to connect to + other configuration options
 
         val handshakeDriver = UdpMediaDriverConnection(
-                config.listenIpAddress, config.subscriptionPort, config.publicationPort,
-                UDP_HANDSHAKE_STREAM_ID, RESERVED_SESSION_ID_INVALID)
+                address = config.listenIpAddress,
+                subscriptionPort = config.subscriptionPort,
+                publicationPort = config.publicationPort,
+                streamId = UDP_HANDSHAKE_STREAM_ID,
+                sessionId = RESERVED_SESSION_ID_INVALID)
 
         handshakeDriver.buildServer(aeron)
 
@@ -155,7 +157,19 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
         val handshakeSubscription = handshakeDriver.subscription
 
         logger.debug(handshakeDriver.serverInfo())
-        logger.debug("Server listening for incomming clients on ${handshakePublication.localSocketAddresses()}")
+        logger.debug("Server listening for incoming clients on ${handshakePublication.localSocketAddresses()}")
+
+
+        val ipcHandshakeDriver = IpcMediaDriverConnection(
+                streamId = IPC_HANDSHAKE_STREAM_ID_PUB,
+                streamIdSubscription = IPC_HANDSHAKE_STREAM_ID_SUB,
+                sessionId = RESERVED_SESSION_ID_INVALID
+        )
+        ipcHandshakeDriver.buildServer(aeron)
+
+        val ipcHandshakePublication = ipcHandshakeDriver.publication
+        val ipcHandshakeSubscription = ipcHandshakeDriver.subscription
+
 
         /**
          * Note:
@@ -171,17 +185,29 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
                 connectionManager.receiveHandshakeMessageServer(handshakePublication, buffer, offset, length, header, this@Server)
             }
         })
+        val ipcInitialConnectionHandler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+            actionDispatch.launch {
+                println("GOT MESSAGE!")
+            }
+        })
 
         actionDispatch.launch {
             val pollIdleStrategy = config.pollIdleStrategy
 
             try {
+                var pollCount: Int
                 while (!isShutdown()) {
+                    pollCount = 0
+
                     // this checks to see if there are NEW clients
-                    var pollCount = handshakeSubscription.poll(initialConnectionHandler, 100)
+//                    pollCount += handshakeSubscription.poll(initialConnectionHandler, 100)
+
+                    // this checks to see if there are NEW clients via IPC
+                    pollCount += ipcHandshakeSubscription.poll(ipcInitialConnectionHandler, 100)
 
                     // this manages existing clients (for cleanup + connection polling)
-                    pollCount += connectionManager.poll()
+//                    pollCount += connectionManager.poll()
+
 
                     // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
                     pollIdleStrategy.idle(pollCount)
@@ -189,6 +215,9 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
             } finally {
                 handshakePublication.close()
                 handshakeSubscription.close()
+
+                ipcHandshakePublication.close()
+                ipcHandshakeSubscription.close()
             }
         }
 
@@ -210,7 +239,7 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
      * If there is nothing added to this list - then ALL are permitted
      */
     fun addIpFilterRule(vararg rules: IpFilterRule?) {
-        ipFilterRules.addAll(Arrays.asList(*rules))
+        ipFilterRules.addAll(listOf(*rules))
     }
 
     /**
@@ -298,6 +327,35 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
 //    fun removeListenerManager(connection: C) {
 //        connectionManager.removeListenerManager(connection)
 //    }
+
+
+
+//
+//
+//    /**
+//     * Creates a "global" remote object for use by multiple connections.
+//     *
+//     * @return the ID assigned to this RMI object
+//     */
+//    fun <T> create(objectId: Short, globalObject: T) {
+//        return rmiGlobalObjects.register(globalObject)
+//    }
+//
+//    /**
+//     * Creates a "global" remote object for use by multiple connections.
+//     *
+//     * @return the ID assigned to this RMI object
+//     */
+//    fun <T> create(`object`: T): Short {
+//        return rmiGlobalObjects.register(`object`) ?: 0
+//    }
+//
+//
+//
+
+
+
+
 
     /**
      * Adds a custom connection to the server.

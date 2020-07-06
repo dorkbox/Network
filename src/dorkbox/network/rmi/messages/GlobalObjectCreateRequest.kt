@@ -1,9 +1,10 @@
 /*
- * Copyright 2019 dorkbox, llc.
+ * Copyright 2010 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -12,15 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.rmi.classes
+package dorkbox.network.rmi.messages
 
-open class TestCowBaseImpl : TestCowBase {
-    override fun throwException() {
-        System.err.println("The following exception is EXPECTED, but should only be on one log!")
-        throw UnsupportedOperationException("Why would I do that?")
-    }
-
-    open fun id(): Int {
-        return Int.MAX_VALUE
-    }
-}
+/**
+ * These use packed IDs, because both are REALLY shorts, but the JVM deals better with ints.
+ *
+ * @param interfaceClassId (LEFT) the Kryo interface class ID to create
+ * @param callbackId (RIGHT) to know which callback to use when the object is created
+ */
+data class GlobalObjectCreateRequest(val packedIds: Int) : RmiMessage

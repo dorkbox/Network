@@ -50,17 +50,19 @@ import dorkbox.network.connection.KryoExtra
 class ObjectResponseSerializer(private val rmiImplToIface: IdentityMap<Class<*>, Class<*>>) : Serializer<Any>(false) {
     override fun write(kryo: Kryo, output: Output, `object`: Any) {
         val kryoExtra = kryo as KryoExtra
-        val id = kryoExtra.rmiSupport.getRegisteredId(`object`) //
-        output.writeInt(id, true)
+//        val id = kryoExtra.rmiSupport.getRegisteredId(`object`) //
+//        output.writeInt(id, true)
+        output.writeInt(0, true)
     }
 
-    override fun read(kryo: Kryo, input: Input, implementationType: Class<*>): Any {
+    override fun read(kryo: Kryo, input: Input, implementationType: Class<*>): Any? {
         val kryoExtra = kryo as KryoExtra
         val objectID = input.readInt(true)
 
         // We have to lookup the iface, since the proxy object requires it
         val iface = rmiImplToIface.get(implementationType)
         val connection = kryoExtra.connection
-        return kryoExtra.rmiSupport.getProxyObject(connection, objectID, iface)
+//        return kryoExtra.rmiSupport.getProxyObject(connection, objectID, iface)
+        return null
     }
 }

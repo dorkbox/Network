@@ -141,12 +141,29 @@ interface NetworkSerializationManager : SerializationManager {
     /**
      * @return true if the remote kryo registration are the same as our own
      */
-    fun verifyKryoRegistration(bytes: ByteArray): Boolean
+    fun verifyKryoRegistration(clientBytes: ByteArray): Boolean
 
     /**
      * @return the details of all registration IDs -> Class name used by kryo
      */
     fun getKryoRegistrationDetails(): ByteArray
+
+    /**
+     * Creates a NEW object implementation based on the KRYO interface ID.
+     *
+     * @return the corresponding implementation object
+     */
+    fun createRmiObject(interfaceClassId: Int): Any
+
+    /**
+     * Returns the Kryo class registration ID
+     */
+    fun getClassId(iFace: Class<*>): Int
+
+    /**
+     * Returns the Kryo class from a registration ID
+     */
+    fun getClassFromId(interfaceClassId: Int): Class<*>
 
     /**
      * Gets the RMI implementation based on the specified interface

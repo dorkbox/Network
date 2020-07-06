@@ -14,9 +14,6 @@
  */
 package dorkbox.network.rmi.classes
 
-/**
- *
- */
 class MessageWithTestCow(val testCow: TestCow) {
     var number = 0
     var text: String? = null

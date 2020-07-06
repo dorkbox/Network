@@ -19,18 +19,22 @@ import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
+import dorkbox.network.rmi.RmiUtils
 
 class MethodResponseSerializer() : Serializer<MethodResponse>() {
-    override fun write(kryo: Kryo, output: Output, methodResponse: MethodResponse) {
-        output.writeInt(methodResponse.objectId, true)
-        output.writeByte(methodResponse.responseId)
-        kryo.writeClassAndObject(output, methodResponse.result)
+    override fun write(kryo: Kryo, output: Output, response: MethodResponse) {
+        output.writeInt(RmiUtils.packShorts(response.objectId, response.responseId), true)
+        output.writeBoolean(response.isGlobal)
+        kryo.writeClassAndObject(output, response.result)
     }
 
     override fun read(kryo: Kryo, input: Input, type: Class<out MethodResponse>): MethodResponse {
+        val packedInfo = input.readInt(true)
+
         val response = MethodResponse()
-        response.objectId = input.readInt(true)
-        response.responseId = input.readByte()
+        response.objectId = RmiUtils.unpackLeft(packedInfo)
+        response.responseId = RmiUtils.unpackRight(packedInfo)
+        response.isGlobal = input.readBoolean()
         response.result = kryo.readClassAndObject(input)
 
         return response

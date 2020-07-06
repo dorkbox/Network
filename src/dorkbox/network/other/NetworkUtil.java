@@ -1,4 +1,4 @@
-package dorkbox.network;
+package dorkbox.network.other;
 
 import java.io.BufferedWriter;
 import java.io.File;

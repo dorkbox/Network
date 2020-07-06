@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.rmi.ConnectionRmiSupport
+import dorkbox.network.rmi.RmiSupportConnection
 import javax.crypto.SecretKey
 
 /**
@@ -25,7 +25,7 @@ interface Connection_ : Connection {
     /**
      * @return the RMI support for this connection
      */
-    fun rmiSupport(): ConnectionRmiSupport
+    fun rmiSupport(): RmiSupportConnection<Connection_>
 
     /**
      * This is the per-message sequence number.

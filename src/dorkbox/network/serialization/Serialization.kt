@@ -15,20 +15,15 @@
  */
 package dorkbox.network.serialization
 
-import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.Registration
-import com.esotericsoftware.kryo.Serializer
-import com.esotericsoftware.kryo.SerializerFactory
+import com.esotericsoftware.kryo.*
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import com.esotericsoftware.kryo.util.IdentityMap
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer
-import dorkbox.network.connection.Connection_
 import dorkbox.network.connection.KryoExtra
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.rmi.CachedMethod
-import dorkbox.network.rmi.NopRmiConnection
 import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.rmi.messages.*
 import dorkbox.objectPool.ObjectPool
@@ -37,6 +32,7 @@ import dorkbox.util.OS
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import org.agrona.collections.Int2ObjectHashMap
+import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.StdInstantiatorStrategy
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -70,6 +66,26 @@ class Serialization(references: Boolean,
 
     companion object {
         const val CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE = 400
+        private val UNMODIFIABLE_COLLECTION_SERIALIZERS: Array<Pair<Class<Any>, Serializer<Any>>>
+
+        init {
+            val unmodSerializers = mutableListOf<Pair<Class<Any>, Serializer<Any>>>()
+
+            // hacky way to register unmodifiable serializers. This MUST be done here, because we ONLY want internal objects created once
+            @Suppress("UNCHECKED_CAST")
+            val kryo: Kryo = object : Kryo() {
+                override fun register(type: Class<*>, serializer: Serializer<*>): Registration {
+                    val type1 = type as Class<Any>
+                    val serializer1 = serializer as Serializer<Any>
+                    unmodSerializers.add(Pair(type1, serializer1))
+                    return super.register(type, serializer)
+                }
+            }
+            UnmodifiableCollectionsSerializer.registerSerializers(kryo)
+
+            UNMODIFIABLE_COLLECTION_SERIALIZERS = unmodSerializers.toTypedArray()
+            // end hack
+        }
 
         /**
          * Additionally, this serialization manager will register the entire class+interface hierarchy for an object. If you want to specify a
@@ -86,40 +102,8 @@ class Serialization(references: Boolean,
         fun DEFAULT(references: Boolean = true, factory: SerializerFactory<*>? = null): Serialization {
             val serialization = Serialization(references, factory)
 
-            // these are registered using the default serializers
-            serialization.register(String::class.java)
-            serialization.register(Array<String>::class.java)
-
-            serialization.register(IntArray::class.java)
-            serialization.register(ShortArray::class.java)
-            serialization.register(FloatArray::class.java)
-            serialization.register(DoubleArray::class.java)
-            serialization.register(LongArray::class.java)
-            serialization.register(ByteArray::class.java)
-            serialization.register(CharArray::class.java)
-            serialization.register(BooleanArray::class.java)
-
-            serialization.register(Array<Int>::class.java)
-            serialization.register(Array<Short>::class.java)
-            serialization.register(Array<Float>::class.java)
-            serialization.register(Array<Double>::class.java)
-            serialization.register(Array<Long>::class.java)
-            serialization.register(Array<Byte>::class.java)
-            serialization.register(Array<Char>::class.java)
-            serialization.register(Array<Boolean>::class.java)
-
-
-            serialization.register(Array<Any>::class.java)
-            serialization.register(Array<Array<Any>>::class.java)
-            serialization.register(Class::class.java)
-
-            // necessary for the transport of exceptions.
-            serialization.register(StackTraceElement::class.java)
-            serialization.register(Array<StackTraceElement>::class.java)
-
             serialization.register(ControlMessage::class.java)
             serialization.register(PingMessage::class.java) // TODO this is built into aeron!??!?!?!
-
 
             // TODO: this is for diffie hellmen handshake stuff!
 //            serialization.register(IESParameters::class.java, IesParametersSerializer())
@@ -129,47 +113,15 @@ class Serialization(references: Boolean,
 //            serialization.register(XECPrivateKey::class.java, XECPrivateKeySerializer())
             serialization.register(dorkbox.network.connection.registration.Registration::class.java) // must use full package name!
 
-
-            serialization.register(arrayListOf<Any>().javaClass)
-            serialization.register(hashMapOf<Any, Any>().javaClass)
-            serialization.register(hashSetOf<Any>().javaClass)
-
-            serialization.register(emptyList<Any>().javaClass)
-            serialization.register(emptySet<Any>().javaClass)
-            serialization.register(emptyMap<Any, Any>().javaClass)
-
-            serialization.register(Collections.EMPTY_LIST::class.java)
-            serialization.register(Collections.EMPTY_SET::class.java)
-            serialization.register(Collections.EMPTY_MAP::class.java)
-            serialization.register(Collections.emptyNavigableSet<Any>().javaClass)
-            serialization.register(Collections.emptyNavigableMap<Any, Any>().javaClass)
-
-
-            // hacky way to register unmodifiable serializers
-            @Suppress("UNCHECKED_CAST")
-            val kryo: Kryo = object : Kryo() {
-                override fun register(type: Class<*>, serializer: Serializer<*>): Registration {
-                    val type1 = type as Class<Any>
-                    val serializer1 = serializer as Serializer<Any>
-                    serialization.register(type1, serializer1)
-
-                    return super.register(type, serializer)
-                }
-            }
-            UnmodifiableCollectionsSerializer.registerSerializers(kryo)
-            // end hack
-
             return serialization
         }
-
-        // this prevents us from having to constantly do 'null' checks when serializing data
-        val NOP_CONNECTION: Connection_ = NopRmiConnection()
     }
 
     private lateinit var logger: Logger
 
     private var initialized = false
     private val kryoPool: ObjectPool<KryoExtra>
+    lateinit var classResolver: ClassResolver
 
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class)
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
@@ -178,13 +130,24 @@ class Serialization(references: Boolean,
     private lateinit var savedRegistrationDetails: ByteArray
 
     /// RMI things
+    private val rmiIfaceToInstantiator : Int2ObjectHashMap<ObjectInstantiator<Any>> = Int2ObjectHashMap()
     private val rmiIfaceToImpl = IdentityMap<Class<*>, Class<*>>()
     private val rmiImplToIface = IdentityMap<Class<*>, Class<*>>()
-    private val remoteObjectSerializer = ObjectResponseSerializer(rmiImplToIface)
+
+
+    // BY DEFAULT, DefaultInstantiatorStrategy() will use ReflectASM
+    // StdInstantiatorStrategy will create classes bypasses the constructor (which can be useful in some cases) THIS IS A FALLBACK!
+    private val instantiatorStrategy = DefaultInstantiatorStrategy(StdInstantiatorStrategy())
+
+    private val methodRequestSerializer = MethodRequestSerializer()
+    private val methodResponseSerializer = MethodResponseSerializer()
+    private val objectRequestSerializer = RmiClientRequestSerializer()
+    private val objectResponseSerializer = ObjectResponseSerializer(rmiImplToIface)
+
+
 
     // the purpose of the method cache, is to accelerate looking up methods for specific class
     private val methodCache : Int2ObjectHashMap<Array<CachedMethod>> = Int2ObjectHashMap()
-
 
 
     // reflectASM doesn't work on android
@@ -196,32 +159,80 @@ class Serialization(references: Boolean,
                 synchronized(this@Serialization) {
 
                     // we HAVE to pre-allocate the KRYOs
-                    val kryo = KryoExtra(this@Serialization)
+                    val kryo = KryoExtra(methodCache)
 
-
-                    // BY DEFAULT, DefaultInstantiatorStrategy() will use ReflectASM
-                    // StdInstantiatorStrategy will create classes bypasses the constructor (which can be useful in some cases) THIS IS A FALLBACK!
-                    kryo.instantiatorStrategy = DefaultInstantiatorStrategy(StdInstantiatorStrategy())
+                    kryo.instantiatorStrategy = instantiatorStrategy
                     kryo.references = references
 
                     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
+
+                    // these are registered using the default serializers. We don't customize these, because we don't care about it.
+                    kryo.register(String::class.java)
+                    kryo.register(Array<String>::class.java)
+
+                    kryo.register(IntArray::class.java)
+                    kryo.register(ShortArray::class.java)
+                    kryo.register(FloatArray::class.java)
+                    kryo.register(DoubleArray::class.java)
+                    kryo.register(LongArray::class.java)
+                    kryo.register(ByteArray::class.java)
+                    kryo.register(CharArray::class.java)
+                    kryo.register(BooleanArray::class.java)
+
+                    kryo.register(Array<Int>::class.java)
+                    kryo.register(Array<Short>::class.java)
+                    kryo.register(Array<Float>::class.java)
+                    kryo.register(Array<Double>::class.java)
+                    kryo.register(Array<Long>::class.java)
+                    kryo.register(Array<Byte>::class.java)
+                    kryo.register(Array<Char>::class.java)
+                    kryo.register(Array<Boolean>::class.java)
+
+
+                    kryo.register(Array<Any>::class.java)
+                    kryo.register(Array<Array<Any>>::class.java)
+                    kryo.register(Class::class.java)
+
+                    // necessary for the transport of exceptions.
+                    kryo.register(StackTraceElement::class.java)
+                    kryo.register(Array<StackTraceElement>::class.java)
+
+                    kryo.register(arrayListOf<Any>().javaClass)
+                    kryo.register(hashMapOf<Any, Any>().javaClass)
+                    kryo.register(hashSetOf<Any>().javaClass)
+
+                    kryo.register(emptyList<Any>().javaClass)
+                    kryo.register(emptySet<Any>().javaClass)
+                    kryo.register(emptyMap<Any, Any>().javaClass)
+
+                    kryo.register(Collections.EMPTY_LIST::class.java)
+                    kryo.register(Collections.EMPTY_SET::class.java)
+                    kryo.register(Collections.EMPTY_MAP::class.java)
+                    kryo.register(Collections.emptyNavigableSet<Any>().javaClass)
+                    kryo.register(Collections.emptyNavigableMap<Any, Any>().javaClass)
+
+                    UNMODIFIABLE_COLLECTION_SERIALIZERS.forEach {
+                        kryo.register(it.first, it.second)
+                    }
+
+                    // RMI stuff!
+                    kryo.register(GlobalObjectCreateRequest::class.java)
+                    kryo.register(GlobalObjectCreateResponse::class.java)
+
+                    kryo.register(ConnectionObjectCreateRequest::class.java)
+                    kryo.register(ConnectionObjectCreateResponse::class.java)
+
+                    kryo.register(MethodRequest::class.java, methodRequestSerializer)
+                    kryo.register(MethodResponse::class.java, methodResponseSerializer)
+
+                    @Suppress("UNCHECKED_CAST")
+                    kryo.register(InvocationHandler::class.java as Class<Any>, objectRequestSerializer)
+
 
                     // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
                     classesToRegister.forEach { registration ->
                         registration.register(kryo)
                     }
-
-                    // RMI stuff. This has to be for each kryo instance!
-
-                    // RMI stuff!
-                    kryo.register(DynamicObjectRequest::class.java, DORequestSerializer())
-                    kryo.register(DynamicObjectResponse::class.java, DOResponseSerializer())
-                    kryo.register(MethodRequest::class.java, MethodRequestSerializer())
-                    kryo.register(MethodResponse::class.java, MethodResponseSerializer())
-
-                    @Suppress("UNCHECKED_CAST")
-                    kryo.register(InvocationHandler::class.java as Class<Any>, ObjectRequestSerializer(logger))
-
 
                     if (factory != null) {
                         kryo.setDefaultSerializer(factory)
@@ -340,12 +351,7 @@ class Serialization(references: Boolean,
     /**
      * There is additional overhead to using RMI.
      *
-     * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
-     * return value which is not [ignored][dorkbox.network.rmi.RemoteObject.setAsync], an extra byte is written.
-     * If the type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
-     *
-     *
-     * Enable a "remote endpoint" to access methods and create objects (RMI) for this endpoint.
+     * This enables a "remote endpoint" to access methods and create objects (RMI) for this endpoint.
      *
      * This is NOT bi-directional, and this endpoint cannot access or create remote objects on the "remote client".
      *
@@ -361,7 +367,7 @@ class Serialization(references: Boolean,
         require(ifaceClass.isInterface) { "Cannot register an implementation for RMI access. It must be an interface." }
         require(!implClass.isInterface) { "Cannot register an interface for RMI implementations. It must be an implementation." }
 
-        classesToRegister.add(ClassRegistrationIfaceAndImpl(ifaceClass, implClass, remoteObjectSerializer))
+        classesToRegister.add(ClassRegistrationIfaceAndImpl(ifaceClass, implClass, objectResponseSerializer))
 
         // rmiIfaceToImpl tells us, "the server" how to create a (requested) remote object
         // this MUST BE UNIQUE otherwise unexpected and BAD things can happen.
@@ -390,6 +396,10 @@ class Serialization(references: Boolean,
         // initialize the kryo pool with at least 1 kryo instance. This ALSO makes sure that all of our class registration is done
         // correctly and (if not) we are are notified on the initial thread (instead of on the network update thread)
         val kryo = kryoPool.take()
+        // save off the class-resolver, so we can lookup the class <-> id relationships
+        classResolver = kryo.classResolver
+
+
         try {
             // now MERGE all of the registrations (since we can have registrations overwrite newer/specific registrations based on ID
             // in order to get the ID's, these have to be registered with a kryo instance!
@@ -451,10 +461,19 @@ class Serialization(references: Boolean,
                     // on the "RMI server" (aka, where the object lives) side, there will be an interface + implementation!
                     methodCache[classRegistration.id] =
                         RmiUtils.getCachedMethods(logger, kryo, useAsm, classRegistration.clazz, classRegistration.implClass, classRegistration.id)
+
+                    // we ALSO have to cache the instantiator for these, since these are used to create remote objects
+                    val instantiator = kryo.instantiatorStrategy.newInstantiatorOf(classRegistration.implClass)
+                    @Suppress("UNCHECKED_CAST")
+                    rmiIfaceToInstantiator[classRegistration.id] = instantiator as ObjectInstantiator<Any>
                 } else if (classRegistration.clazz.isInterface) {
                     // on the "RMI client"
                     methodCache[classRegistration.id] =
                         RmiUtils.getCachedMethods(logger, kryo, useAsm, classRegistration.clazz, null, classRegistration.id)
+                }
+
+                if (classRegistration.id > 65000) {
+                    throw RuntimeException("There are too many kryo class registrations!!")
                 }
             }
 
@@ -462,7 +481,7 @@ class Serialization(references: Boolean,
             val buffer = Unpooled.buffer(CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE)
 
             try {
-                kryo.writeCompressed(logger, NOP_CONNECTION, buffer, registrationDetails.toTypedArray())
+                kryo.writeCompressed(logger, buffer, registrationDetails.toTypedArray())
             } catch (e: Exception) {
                 logger.error("Unable to write compressed data for registration details", e)
             }
@@ -494,25 +513,22 @@ class Serialization(references: Boolean,
      *
      * @return true if kryo registration is required for all classes sent over the wire
      */
-    override fun verifyKryoRegistration(bytes: ByteArray): Boolean {
-        val clientRegistrationData = bytes
-
+    override fun verifyKryoRegistration(clientBytes: ByteArray): Boolean {
         // verify the registration IDs if necessary with our own. The CLIENT does not verify anything, only the server!
         val kryoRegistrationDetails = savedRegistrationDetails
-        val equals = kryoRegistrationDetails.contentEquals(clientRegistrationData)
+        val equals = kryoRegistrationDetails.contentEquals(clientBytes)
         if (equals) {
             return true
         }
 
-
         // now we need to figure out WHAT was screwed up so we know what to fix
         // NOTE: it could just be that the byte arrays are different, because java has a non-deterministic iteration of hash maps.
         val kryo = takeKryo()
-        val byteBuf = Unpooled.wrappedBuffer(clientRegistrationData)
+        val byteBuf = Unpooled.wrappedBuffer(clientBytes)
         try {
             var success = true
             @Suppress("UNCHECKED_CAST")
-            val clientClassRegistrations = kryo.readCompressed(logger, NOP_CONNECTION, byteBuf, clientRegistrationData.size) as Array<Array<Any>>
+            val clientClassRegistrations = kryo.readCompressed(logger, byteBuf, clientBytes.size) as Array<Array<Any>>
             val lengthServer = classesToRegister.size
             val lengthClient = clientClassRegistrations.size
             var index = 0
@@ -578,6 +594,31 @@ class Serialization(references: Boolean,
     override fun returnKryo(kryo: KryoExtra) {
         kryoPool.put(kryo)
     }
+
+    /**
+     * Returns the Kryo class registration ID
+     */
+    override fun getClassId(iFace: Class<*>): Int {
+        return classResolver.getRegistration(iFace).id
+    }
+
+    /**
+     * Returns the Kryo class from a registration ID
+     */
+    override fun getClassFromId(interfaceClassId: Int): Class<*> {
+        return classResolver.getRegistration(interfaceClassId).type
+    }
+
+
+    /**
+     * Creates a NEW object implementation based on the KRYO interface ID.
+     *
+     * @return the corresponding implementation object
+     */
+    override fun createRmiObject(interfaceClassId: Int): Any {
+        return rmiIfaceToInstantiator[interfaceClassId].newInstance()
+    }
+
 
     /**
      * Gets the RMI interface based on the specified implementation

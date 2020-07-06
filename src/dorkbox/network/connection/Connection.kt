@@ -15,8 +15,6 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.rmi.RemoteObjectCallback
-
 interface Connection : AutoCloseable {
     /**
      * Has the remote ECC public key changed. This can be useful if specific actions are necessary when the key has changed.
@@ -121,16 +119,6 @@ interface Connection : AutoCloseable {
     override fun close()
 
 
-
-    // TODO: below should just be "new()" to create a new object, to mirror "new Object()"
-    //   // RMI
-    //         // client.get(5) -> gets from the server connection, if exists, then global.
-    //         //                  on server, a connection local RMI object "uses" an id for global, so there will never be a conflict
-    //         //                  using some tricks, we can make it so that it DOESN'T matter the order in which objects are created,
-    //         //                  and can specify, if we want, the object created.
-    //         //                  Once created though, as NEW ONE with the same ID cannot be created until the old one is removed!
-
-
     /**
      * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
      * to an object that is created remotely.
@@ -158,7 +146,7 @@ interface Connection : AutoCloseable {
      *
      * @see RemoteObject
      */
-    suspend fun <Iface> createRemoteObject(interfaceClass: Class<Iface>, callback: RemoteObjectCallback<Iface>)
+    suspend fun <Iface> createObject(callback: suspend (Iface) -> Unit)
 
     /**
      * Tells the remote connection to access an already created proxy object that implements the specified interface. The methods on this object "map"
@@ -188,5 +176,5 @@ interface Connection : AutoCloseable {
      *
      * @see RemoteObject
      */
-    suspend fun <Iface> getRemoteObject(objectId: Int, callback: RemoteObjectCallback<Iface>)
+    fun <Iface> getObject(objectId: Int, interfaceClass: Class<Iface>): Iface
 }

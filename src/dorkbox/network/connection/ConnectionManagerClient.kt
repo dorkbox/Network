@@ -22,12 +22,15 @@ class ConnectionManagerClient<C : Connection>(logger: Logger, config: Configurat
 
     private var failed = false
 
+    lateinit var handler: FragmentHandler
+    lateinit var endPoint: EndPoint<C>
     var sessionId: Int = 0
 
-    @Throws(ClientTimedOutException::class, ClientRejectedException::class)
-    suspend fun initHandshake(mediaConnection: MediaDriverConnection, connectionTimeoutMS: Long, endPoint: EndPoint<C>) : ClientConnectionInfo {
-        // now we have a bi-directional connection with the server on the handshake socket.
-        val handler: FragmentHandler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+    fun init(endPoint: EndPoint<C>) {
+        this.endPoint = endPoint
+
+        // now we have a bi-directional connection with the server on the handshake "socket".
+        handler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             endPoint.actionDispatch.launch {
                 val message = endPoint.readHandshakeMessage(buffer, offset, length, header)
                 logger.debug("[{}] response: {}", sessionId, message)
@@ -54,19 +57,25 @@ class ConnectionManagerClient<C : Connection>(logger: Logger, config: Configurat
                         subscriptionPort = message.publicationPort,
                         publicationPort = message.subscriptionPort,
                         sessionId = oneTimePad xor message.oneTimePad,
-                        streamId = oneTimePad xor message.streamId, 
+                        streamId = oneTimePad xor message.streamId,
                         publicKey = message.publicKey!!)
 
                 connectionInfo!!.log(sessionId, logger)
             }
         })
+    }
 
-
-        val registrationMessage = Registration.hello(oneTimePad, config.settingsStore.getPublicKey()!!)
+    @Throws(ClientTimedOutException::class, ClientRejectedException::class)
+    suspend fun initHandshake(mediaConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {
+        val registrationMessage = Registration.hello(
+                oneTimePad = oneTimePad,
+                publicKey = config.settingsStore.getPublicKey()!!,
+                registrationData = config.serialization.getKryoRegistrationDetails()
+        )
 
 
         // Send the one-time pad to the server.
-        endPoint.writeMessage(mediaConnection.publication, registrationMessage)
+        endPoint.writeHandshakeMessage(mediaConnection.publication, registrationMessage)
         sessionId = mediaConnection.publication.sessionId()
 
 

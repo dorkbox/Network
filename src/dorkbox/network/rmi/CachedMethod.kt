@@ -39,7 +39,7 @@ import dorkbox.network.connection.Connection
 import java.lang.reflect.Method
 
 /**
- * This class is NOT sent across the wire
+ * This class is NOT sent across the wire, but some of it's contents are
  */
 open class CachedMethod(val method: Method, val methodIndex: Int, val methodClassId: Int, val serializers: Array<Serializer<*>?>) {
     /**

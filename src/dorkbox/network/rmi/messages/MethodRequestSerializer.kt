@@ -40,60 +40,78 @@ import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.connection.KryoExtra
+import dorkbox.network.rmi.RmiUtils
 import java.lang.reflect.Method
 
 /**
  * Internal message to invoke methods remotely.
  */
+@Suppress("ConstantConditionIf")
 class MethodRequestSerializer : Serializer<MethodRequest>() {
     companion object {
         private const val DEBUG = false
     }
 
     override fun write(kryo: Kryo, output: Output, methodRequest: MethodRequest) {
+        val method = methodRequest.cachedMethod
+
         if (DEBUG) {
             System.err.println("WRITING")
-            System.err.println(":: objectID " + methodRequest.objectId)
-            System.err.println(":: methodClassID " + methodRequest.cachedMethod.methodClassId)
-            System.err.println(":: methodIndex " + methodRequest.cachedMethod.methodIndex)
+            System.err.println(":: isGlobal ${methodRequest.isGlobal}")
+            System.err.println(":: objectID ${methodRequest.objectId}")
+            System.err.println(":: methodClassID ${method.methodClassId}")
+            System.err.println(":: methodIndex ${method.methodIndex}")
         }
 
-        output.writeInt(methodRequest.objectId, true)
-        output.writeInt(methodRequest.cachedMethod.methodClassId, true)
-        output.writeByte(methodRequest.cachedMethod.methodIndex)
+        // we pack objectId + responseId into the same "int", since they are both really shorts (but are represented as ints to make
+        // working with them a lot easier
+        output.writeInt(RmiUtils.packShorts(methodRequest.objectId, methodRequest.responseId), true)
+        output.writeInt(RmiUtils.packShorts(method.methodClassId, method.methodIndex), true)
+        output.writeBoolean(methodRequest.isGlobal)
 
-        val serializers = methodRequest.cachedMethod.serializers
-        val length = serializers.size
-        val args = methodRequest.args
 
-        for (i in 0 until length) {
-            val serializer = serializers[i]
-            if (serializer != null) {
-                kryo.writeObjectOrNull(output, args!![i], serializer)
-            } else {
-                kryo.writeClassAndObject(output, args!![i])
+
+        val serializers = method.serializers
+        if (serializers.isNotEmpty()) {
+            val args = methodRequest.args!!
+
+            serializers.forEachIndexed { index, serializer ->
+                if (serializer != null) {
+                    kryo.writeObjectOrNull(output, args[index], serializer)
+                } else {
+                    kryo.writeClassAndObject(output, args[index])
+                }
             }
         }
-
-        output.writeByte(methodRequest.responseId)
     }
 
+    @Suppress("UNCHECKED_CAST")
     override fun read(kryo: Kryo, input: Input, type: Class<out MethodRequest>): MethodRequest {
-        val objectID = input.readInt(true)
-        val methodClassID = input.readInt(true)
-        val methodIndex = input.readByte()
+        val objectIdRmiId = input.readInt(true)
+        val objectId = RmiUtils.unpackLeft(objectIdRmiId)
+        val responseId = RmiUtils.unpackRight(objectIdRmiId)
+
+
+        val methodInfo = input.readInt(true)
+        val methodClassId = RmiUtils.unpackLeft(methodInfo)
+        val methodIndex = RmiUtils.unpackRight(methodInfo)
+
+        val isGlobal = input.readBoolean()
 
         if (DEBUG) {
             System.err.println("READING")
-            System.err.println(":: objectID $objectID")
-            System.err.println(":: methodClassID $methodClassID")
+            System.err.println(":: isGlobal $isGlobal")
+            System.err.println(":: objectID $objectId")
+            System.err.println(":: methodClassID $methodClassId")
             System.err.println(":: methodIndex $methodIndex")
         }
 
+        (kryo as KryoExtra)
+
         val cachedMethod = try {
-            (kryo as KryoExtra).serializationManager.getMethods(methodClassID)[methodIndex.toInt()]
+            kryo.getMethods(methodClassId)[methodIndex]
         } catch (ex: Exception) {
-            val methodClass = kryo.getRegistration(methodClassID).type
+            val methodClass = kryo.getRegistration(methodClassId).type
             throw KryoException("Invalid method index " + methodIndex + " for class: " + methodClass.name)
         }
 
@@ -109,6 +127,8 @@ class MethodRequestSerializer : Serializer<MethodRequest>() {
             // this is specifically when we override an interface method, with an implementation method + Connection parameter (@ index 0)
             argStartIndex = 1
             args = arrayOfNulls<Any>(serializers.size + 1) as Array<Any>
+
+            // we have to save the connection this happened on, so it can be part of the method invocation
             args[0] = kryo.connection
         } else {
             method = cachedMethod.method
@@ -118,28 +138,29 @@ class MethodRequestSerializer : Serializer<MethodRequest>() {
 
         val parameterTypes = method.parameterTypes
 
-        // we don't start at 0 for the arguments, in case we have an overwritten method (in which case, the 1st arg is always "Connection.class")
-        var i = 0
-        val n = serializers.size
-        var j = argStartIndex
+        // we don't start at 0 for the arguments, in case we have an overwritten method, in which case, the 1st arg is always "Connection.class"
+        var index = 0
+        val size = serializers.size
+        var argStart = argStartIndex
 
-        while (i < n) {
-            val serializer = serializers[i]
+        while (index < size) {
+            val serializer = serializers[index]
             if (serializer != null) {
-                args[j] = kryo.readObjectOrNull(input, parameterTypes[i], serializer)
+                args[argStart] = kryo.readObjectOrNull(input, parameterTypes[index], serializer)
             } else {
-                args[j] = kryo.readClassAndObject(input)
+                args[argStart] = kryo.readClassAndObject(input)
             }
-            i++
-            j++
+            index++
+            argStart++
         }
 
 
         val invokeMethod = MethodRequest()
-        invokeMethod.objectId = objectID
+        invokeMethod.isGlobal = isGlobal
+        invokeMethod.objectId = objectId
         invokeMethod.cachedMethod = cachedMethod
         invokeMethod.args = args
-        invokeMethod.responseId = input.readByte()
+        invokeMethod.responseId = responseId
 
         return invokeMethod
     }

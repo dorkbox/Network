@@ -283,6 +283,9 @@ tasks.withType<KotlinCompile> {
         jvmTarget = Extras.JAVA_VERSION
         apiVersion = Extras.KOTLIN_API_VERSION
         languageVersion = Extras.KOTLIN_LANG_VERSION
+
+        // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
+        freeCompilerArgs += "-Xinline-classes"
     }
 }
 
@@ -345,10 +348,10 @@ dependencies {
     implementation("com.dorkbox:ObjectPool:2.12")
     implementation("com.dorkbox:Utilities:1.5.3")
 
+
+    // https://github.com/MicroUtils/kotlin-logging
     implementation("io.github.microutils:kotlin-logging:1.7.9")  // slick kotlin wrapper for slf4j
     implementation("org.slf4j:slf4j-api:1.7.30")
-
-
 
     testImplementation("junit:junit:4.13")
     testImplementation("ch.qos.logback:logback-classic:1.2.3")

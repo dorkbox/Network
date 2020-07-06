@@ -15,12 +15,12 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.NetworkUtil
 import dorkbox.network.Server
 import dorkbox.network.connection.ping.PingFuture
 import dorkbox.network.connection.ping.PingMessage
-import dorkbox.network.rmi.ConnectionRmiSupport
-import dorkbox.network.rmi.RemoteObjectCallback
+import dorkbox.network.other.NetworkUtil
+import dorkbox.network.rmi.RmiSupportConnection
+import dorkbox.util.classes.ClassHelper
 import io.aeron.FragmentAssembler
 import io.aeron.Publication
 import io.aeron.Subscription
@@ -33,7 +33,6 @@ import org.agrona.BitUtil
 import org.agrona.BufferUtil
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.UnsafeBuffer
-import org.slf4j.Logger
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -57,10 +56,13 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
     final override val sessionId: Int
 
 
+    private val serialization = endPoint.config.serialization
+    private val sendIdleStrategy = endPoint.config.sendIdleStrategy.clone()
 
-    val expirationTime = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(endPoint.config.connectionCleanupTimeoutInSeconds.toLong())
+    private val expirationTime = System.currentTimeMillis() +
+                                 TimeUnit.SECONDS.toMillis(endPoint.config.connectionCleanupTimeoutInSeconds.toLong())
 
-    private val logger: Logger = endPoint.logger
+    private val logger = endPoint.logger
 
 //    private val needsLock = AtomicBoolean(false)
 //    private val writeSignalNeeded = AtomicBoolean(false)
@@ -76,8 +78,8 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
     private var pingFuture: PingFuture? = null
 
     // used to store connection local listeners (instead of global listeners). Only possible on the server.
-    @Volatile
-    private var localListenerManager: ConnectionManager<*>? = null
+//    @Volatile
+//    private var localListenerManager: ConnectionManager<*>? = null
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private var remoteKeyChanged = false
@@ -91,7 +93,7 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
     private var closeLatch: CountDownLatch? = null
 
     // RMI support for this connection
-    var rmiSupport: ConnectionRmiSupport
+    private val rmiSupportConnection: RmiSupportConnection<Connection_>
 
 
     var messageHandler: FragmentAssembler
@@ -119,7 +121,7 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
         publicationPort = mediaDriverConnection.publicationPort
         remoteAddress = mediaDriverConnection.address
         remoteAddressInt = NetworkUtil.IP.toInt(remoteAddress)
-        streamId = mediaDriverConnection.streamId
+        streamId = mediaDriverConnection.streamId // NOTE: this is UNIQUE per server!
         sessionId = mediaDriverConnection.sessionId
 
         messageHandler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
@@ -130,7 +132,7 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
             }
         })
 
-        rmiSupport = ConnectionRmiSupport(endPoint.rmiGlobalBridge)
+        rmiSupportConnection = RmiSupportConnection(logger, endPoint.rmiSupport, endPoint.serialization, endPoint.actionDispatch)
 
         // when closing this connection, HOW MANY endpoints need to be closed?
         closeLatch = CountDownLatch(1)
@@ -139,8 +141,7 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
     /**
      * @param now The current time
      *
-     * @return `true` if this duologue has no subscribers and the current
-     * time `now` is after the intended expiry date of the duologue
+     * @return `true` if this connection has no subscribers and the current time `now` is after the expriation date
      */
     override fun isExpired(now: Long): Boolean {
         return subscription.imageCount() == 0 && now > expirationTime
@@ -290,7 +291,42 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
      * Safely sends objects to a destination (such as a custom object or a standard ping).
      */
     override suspend fun send(message: Any) {
-        endPoint.writeMessage(publication, this, message)
+        // The sessionId is globally unique, and is assigned by the server.
+        logger.debug("[{}] send: {}", publication.sessionId(), message)
+
+        val kryo: KryoExtra = serialization.takeKryo()
+        try {
+            kryo.write(this, message)
+
+            val buffer = kryo.writerBuffer
+            val objectSize = buffer.position()
+            val internalBuffer = buffer.internalBuffer
+
+            var result: Long
+            while (true) {
+                result = publication.offer(internalBuffer, 0, objectSize)
+                // success!
+                if (result > 0) {
+                    return
+                }
+
+                if (result == Publication.BACK_PRESSURED || result == Publication.ADMIN_ACTION) {
+                    // we should retry.
+                    sendIdleStrategy.idle()
+                    continue
+                }
+
+                // more critical error sending the message. we shouldn't retry or anything.
+                logger.error("Error sending message. ${EndPoint.errorCodeName(result)}")
+
+                return
+            }
+        } catch (e: Exception) {
+            logger.error("Error serializing message $message", e)
+        } finally {
+            sendIdleStrategy.reset()
+            serialization.returnKryo(kryo)
+        }
     }
 
 
@@ -359,8 +395,9 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
 
 
         // remove all RMI listeners
-        rmiSupport.close()
+//        rmiSupport.close() // TODO
     }
+
 
 //    @Throws(Exception::class)
 //    override fun exceptionCaught(context: ChannelHandlerContext, cause: Throwable) {
@@ -500,7 +537,7 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
      * This includes all proxy listeners
      */
     override fun removeAll(): Listeners<Connection> {
-        rmiSupport.removeAllListeners()
+//        rmiSupport.removeAllListeners() // TODO
 
         if (endPoint is Server) {
             // when we are a server, NORMALLY listeners are added at the GLOBAL level
@@ -600,15 +637,18 @@ open class ConnectionImpl(val endPoint: EndPoint<*>, mediaDriverConnection: Medi
     // RMI methods
     //
     //
-    override fun rmiSupport(): ConnectionRmiSupport {
-        return rmiSupport
+    override fun rmiSupport(): RmiSupportConnection<Connection_> {
+        return rmiSupportConnection
     }
 
-    override suspend fun <Iface> createRemoteObject(interfaceClass: Class<Iface>, callback: RemoteObjectCallback<Iface>) {
-        rmiSupport.createRemoteObject(this, interfaceClass, callback)
+    override suspend fun <Iface> createObject(callback: suspend (Iface) -> Unit) {
+        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 0)
+        val interfaceClassId = endPoint.serialization.getClassId(iFaceClass)
+        rmiSupportConnection.createRemoteObject(this, interfaceClassId, callback)
     }
 
-    override suspend fun <Iface> getRemoteObject(objectId: Int, callback: RemoteObjectCallback<Iface>) {
-        rmiSupport.getRemoteObject(this, objectId, callback)
+    override fun <Iface> getObject(objectId: Int, interfaceClass: Class<Iface>): Iface {
+        @Suppress("UNCHECKED_CAST")
+        return rmiSupportConnection.getRemoteObject(this, endPoint as EndPoint<Connection_>, objectId, interfaceClass)
     }
 }

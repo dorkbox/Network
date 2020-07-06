@@ -91,6 +91,14 @@ class CoroutineSleepingMillisIdleStrategy : CoroutineIdleStrategy {
         return ALIAS
     }
 
+    /**
+     * Creates a clone of this IdleStrategy
+     */
+    override fun clone(): CoroutineSleepingMillisIdleStrategy {
+        return CoroutineSleepingMillisIdleStrategy(sleepPeriodMs = sleepPeriodMs)
+    }
+
+
     override fun toString(): String {
         return "SleepingMillisIdleStrategy{" +
                 "alias=" + ALIAS +

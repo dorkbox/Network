@@ -38,12 +38,14 @@ package dorkbox.network.rmi.messages
  * Internal message to return the result of a remotely invoked method.
  */
 class MethodResponse : RmiMessage {
-    // the registered kryo ID for the object
-    var objectId = 0
+    // if this object was a global or connection specific object
+    var isGlobal: Boolean = false
 
-    // A value of 0 means to not respond (this object is NOT created if the request 'responseId = 0'
-    // This is just an ID to match requests <-> responses
-    var responseId: Byte = 0
+    // the registered kryo ID for the object
+    var objectId: Int = 0
+
+    // ID to match requests <-> responses
+    var responseId: Int = 0
 
     // this is the result of the invoked method
     var result: Any? = null

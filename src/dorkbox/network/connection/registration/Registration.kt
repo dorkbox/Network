@@ -25,11 +25,13 @@ class Registration private constructor() {
 
     // -1 means there is an error
     var state = INVALID
+
     var errorMessage: String? = null
     var publicationPort = 0
     var subscriptionPort = 0
     var sessionId = 0
     var streamId = 0
+
     var publicKey: ByteArray? = null
 
     // by default, this will be a reliable connection. When the client connects to the server, the client will specify if the new connection
@@ -37,9 +39,12 @@ class Registration private constructor() {
     val isReliable = true
 
 
+    // the client sends it's registration data to the server to make sure that the registered classes are the same between the client/server
+    var registrationData: ByteArray? = null
+
+
     // NOTE: this is for ECDSA!
 //    var eccParameters: IESParameters? = null
-    var payload: ByteArray? = null
 
     // > 0 when we are ready to setup the connection (hasMore will always be false if this is >0). 0 when we are ready to connect
     // ALSO used if there are fragmented frames for registration data (since we have to split it up to fit inside a single UDP packet without fragmentation)
@@ -53,11 +58,12 @@ class Registration private constructor() {
         const val HELLO = 0
         const val HELLO_ACK = 1
 
-        fun hello(oneTimePad: Int, publicKey: ByteArray): Registration {
+        fun hello(oneTimePad: Int, publicKey: ByteArray, registrationData: ByteArray): Registration {
             val hello = Registration()
             hello.state = HELLO
             hello.oneTimePad = oneTimePad
             hello.publicKey = publicKey
+            hello.registrationData = registrationData
             return hello
         }
 

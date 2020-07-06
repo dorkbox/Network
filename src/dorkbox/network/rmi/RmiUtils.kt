@@ -402,4 +402,17 @@ object RmiUtils {
         allClasses.remove(clazz)
         return allClasses
     }
+
+    private const val RIGHT = 0xFFFF
+    fun packShorts(left: Int, right: Int): Int {
+        return left shl 16 or (right and RIGHT)
+    }
+
+    fun unpackLeft(packedInt: Int): Int {
+        return packedInt ushr 16 // >>> operator 0-fills from left
+
+    }
+    fun unpackRight(packedInt: Int): Int {
+        return packedInt and RIGHT
+    }
 }

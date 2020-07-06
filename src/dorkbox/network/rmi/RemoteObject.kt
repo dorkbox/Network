@@ -47,19 +47,23 @@ interface RemoteObject {
     var responseTimeout: Int
 
     /**
-     * Sets the blocking behavior when invoking a remote method. Default is false (blocking).
-     *
-     * @param enable If false, the invoking thread will wait for the remote method to return or timeout.
-     *               If true, the invoking thread will not wait for a response. The method will return immediately and the return value
-     *               should be ignored.
-     *
-     *               WHEN TRUE, it will be impossible to
-     *
-     *      If return values are being transmitted, the return value or any thrown exception can later be retrieved with
-     *      [.waitForLastResponse] or [.waitForResponse(id)]. The responses will be stored until retrieved, so each method call
-     *      should have a matching retrieve.
+     * @return the ID of response for the last method invocation.
      */
-    fun setAsync(enable: Boolean)
+    val lastResponseId: Int
+
+    /**
+     * Sets the behavior when invoking a remote method. Default is false.
+     *
+     * If true, the invoking thread will not wait for a response. The method will return immediately and the return value
+     *    should be ignored.
+     *
+     * If false, the invoking thread will wait (if called via suspend, then it will use coroutines) for the remote method to return or
+     * timeout.
+     *
+     * The return value or any thrown exception can later be retrieved with [RemoteObject.waitForLastResponse] or [RemoteObject.waitForResponse].
+     *  The responses will be stored until retrieved, so each method call should have a matching retrieve.
+     */
+    var async: Boolean
 
     /**
      * Permits calls to [Object.toString] to actually return the `toString()` method on the object.
@@ -70,25 +74,36 @@ interface RemoteObject {
     fun enableToString(enableDetailedToString: Boolean)
 
     /**
+     * Permits calls to [RemoteObject.waitForLastResponse] and [RemoteObject.waitForResponse] to actually wait for a response.
+     *
+     * You must be in ASYNC mode already for this to work. There will be undefined errors if you do not enable waiting
+     * BEFORE calling the method you want to wait for
+     *
+     * @param enableWaiting if true, you want wait for the method results. If false, undefined errors can happen while waiting
+     */
+    fun enableWaitingForResponse(enableWaiting: Boolean)
+
+    /**
      * Waits for the response to the last method invocation to be received or the response timeout to be reached.
+     *
+     * You must be in ASYNC mode + enabled waiting for this to work. There will be undefined errors if you do not enable waiting BEFORE
+     * calling the method you want to wait for
      *
      * @return the response of the last method invocation
      */
-    fun waitForLastResponse(): Any?
-
-    /**
-     * @return the ID of response for the last method invocation.
-     */
-    val lastResponseID: Byte
+    suspend fun waitForLastResponse(): Any?
 
     /**
      * Waits for the specified method invocation response to be received or the response timeout to be reached.
      *
-     * @param responseID this is the response ID obtained via [.getLastResponseID]
+     * You must be in ASYNC mode + enabled waiting for this to work. There will be undefined errors if you do not enable waiting BEFORE
+     * calling the method you want to wait for
+     *
+     * @param responseId usually this is the response ID obtained via [RemoteObject.lastResponseId]
      *
      * @return the response of the last method invocation
      */
-    fun waitForResponse(responseID: Byte): Any?
+    suspend fun waitForResponse(responseId: Int): Any?
 
     /**
      * Causes this RemoteObject to stop listening to the connection for method invocation response messages.

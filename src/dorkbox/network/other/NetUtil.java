@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package dorkbox.network;
+package dorkbox.network.other;
 
 import static io.netty.util.AsciiString.indexOf;
 

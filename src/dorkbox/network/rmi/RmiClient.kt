@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 dorkbox, llc
+ * Copyright 2020 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,64 +12,37 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Copyright (c) 2008, Nathan Sweet
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
- * conditions are met:
- *
- * - Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
- * disclaimer in the documentation and/or other materials provided with the distribution.
- * - Neither the name of Esoteric Software nor the names of its contributors may be used to endorse or promote products derived
- * from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
- * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
- * SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package dorkbox.network.rmi
 
-import com.conversantmedia.util.concurrent.MultithreadConcurrentQueue
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.Connection_
-import dorkbox.network.connection.KryoExtra
-import dorkbox.network.connection.OnMessageReceived
+import dorkbox.network.other.SuspendWaiter
+import dorkbox.network.other.invokeSuspendFunction
 import dorkbox.network.rmi.messages.MethodRequest
-import dorkbox.network.rmi.messages.MethodResponse
-import kotlinx.coroutines.launch
-import org.agrona.collections.IntArrayList
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
-import java.io.IOException
+import kotlinx.coroutines.runBlocking
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.ReentrantLock
+import java.util.*
+import kotlin.coroutines.Continuation
 
 
 /**
- * Handles network communication when methods are invoked on a proxy.
+ * Handles network communication when methods are invoked on a proxy. For NON-BLOCKING performance, the interface
+ * must have the 'suspend' keyword added. If it is not present, then all method invocation will be BLOCKING.
  *
  *
- * If the method return type is 'void', then we don't have to explicitly set 'transmitReturnValue' to false
- *
- *
- * If there are no checked exceptions thrown, then we don't have to explicitly set 'transmitExceptions' to false
  *
  * @param connection this is really the network client -- there is ONLY ever 1 connection
  * @param rmiSupport is used to provide RMI support
- * @param rmiId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
- * @param iFace this is the RMI interface
+ * @param rmiObjectId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
+ * @param cachedMethods this is the methods available for the specified class
 */
-class RmiClient(private val connection: Connection_,
-                private val rmiSupport: ConnectionRmiSupport, // this is the RMI id
+class RmiClient(val isGlobal: Boolean,
                 val rmiObjectId: Int,
-                iFace: Class<*>?) : InvocationHandler {
+                private val connection: Connection,
+                private val proxyString: String,
+                private val rmiSupportCache: RmiSupportCache,
+                private val cachedMethods: Array<CachedMethod>) : InvocationHandler {
 
     companion object {
         private val methods = RmiUtils.getMethods(RemoteObject::class.java)
@@ -78,156 +51,31 @@ class RmiClient(private val connection: Connection_,
         private val setResponseTimeoutMethod = methods.find { it.name == "setResponseTimeout" }
         private val getResponseTimeoutMethod = methods.find { it.name == "getResponseTimeout" }
         private val setAsyncMethod = methods.find { it.name == "setAsync" }
+        private val getAsyncMethod = methods.find { it.name == "getAsync" }
         private val enableToStringMethod = methods.find { it.name == "enableToString" }
+        private val enableWaitingForResponseMethod = methods.find { it.name == "enableWaitingForResponse" }
         private val waitForLastResponseMethod = methods.find { it.name == "waitForLastResponse" }
-        private val getLastResponseIDMethod = methods.find { it.name == "getLastResponseID" }
+        private val getLastResponseIdMethod = methods.find { it.name == "getLastResponseId" }
         private val waitForResponseMethod = methods.find { it.name == "waitForResponse" }
         private val toStringMethod = methods.find { it.name == "toString" }
+
+        @Suppress("UNCHECKED_CAST")
+        private val EMPTY_ARRAY: Array<Any> = Collections.EMPTY_LIST.toTypedArray() as Array<Any>
     }
 
-    private val logger: Logger
+    private val responseWaiter = SuspendWaiter()
 
-    private val lock = ReentrantLock()
-    private val responseCondition = lock.newCondition()
-
-    private val responseTable = arrayOfNulls<MethodResponse>(256)
-    private val pendingResponses = BooleanArray(256)
-
-
-    // this is the KRYO class id
-    private val classId: Int
-    private val proxyString = "<proxy #$rmiObjectId>"
-
-    val listener: OnMessageReceived<Connection, MethodResponse>
-    private var timeoutMillis = 3000
+    private var timeoutMillis: Long = 3000
     private var isAsync = false
-
+    private var allowWaiting = false
     private var enableToString = false
 
-
-    // for responseId's, "0" means no response (or invalid response id)
-    private val responseIds = MultithreadConcurrentQueue<Byte>(256)
-
-    private var previousResponseId: Byte = 0x00
+    // this is really a a short!
+    @Volatile
+    private var previousResponseId: Int = 0
 
 
-    init {
-        // create a shuffled list of ID's
-        val ids = IntArrayList()
-        for (id in 1..255) {
-            ids.addInt(id)
-        }
-        ids.shuffle()
-
-        // populate the array of randomly assigned ID's.
-        ids.forEach {
-            responseIds.offer(it.toByte())
-        }
-
-        // figure out the class ID for this RMI object
-        val endPoint = connection.endPoint()
-        val serializationManager = endPoint.serialization
-
-        var kryoExtra: KryoExtra? = null
-        try {
-            kryoExtra = serializationManager.takeKryo()
-            classId = kryoExtra.getRegistration(iFace).id
-        } finally {
-            if (kryoExtra != null) {
-                serializationManager.returnKryo(kryoExtra)
-            }
-        }
-
-        logger = LoggerFactory.getLogger(endPoint.name + ":" + this.javaClass.simpleName)
-        // this listener is called when the "server" responds to our request.
-        // SPECIFICALLY, this is "unblocks" our "waiting for response" logic
-        listener = object : OnMessageReceived<Connection, MethodResponse> {
-            override fun received(connection: Connection, message: MethodResponse) {
-                // we have to check object ID's, BECAUSE we can have different objects all listening for a response
-                if (message.objectId != rmiObjectId) {
-                    return
-                }
-
-                val responseIdAsInt = 0xFF and message.responseId.toInt()
-                synchronized(this) {
-                    if (pendingResponses[responseIdAsInt]) {
-                        responseTable[responseIdAsInt] = message
-                    }
-                }
-                lock.lock()
-                try {
-                    responseCondition.signalAll()
-                } finally {
-                    lock.unlock()
-                }
-            }
-        }
-    }
-
-    @Throws(Exception::class)
-    override fun invoke(proxy: Any, method: Method, args: Array<Any>?): Any? {
-        val declaringClass = method.declaringClass
-        if (declaringClass == RemoteObject::class.java) {
-            // manage all of the RemoteObject proxy methods
-            when (method) {
-                closeMethod -> {
-                    rmiSupport.removeProxyObject(this)
-                    return null
-                }
-                setResponseTimeoutMethod -> {
-                    timeoutMillis = args!![0] as Int
-                    return null
-                }
-                getResponseTimeoutMethod -> {
-                    return timeoutMillis
-                }
-                setAsyncMethod -> {
-                    isAsync = args!![0] as Boolean
-                    return null
-                }
-                enableToStringMethod -> {
-                    enableToString = args!![0] as Boolean
-                    return null
-                }
-                waitForLastResponseMethod -> {
-                    return waitForResponse(0xFF and previousResponseId.toInt())
-                }
-                getLastResponseIDMethod -> {
-                    return previousResponseId
-                }
-                waitForResponseMethod -> {
-                    check(!isAsync) { "This RemoteObject is not currently set to ASYNC mode. Unable to ignore all responses." }
-                    return waitForResponse(args!![0] as Int)
-                }
-                else -> throw Exception("Invocation handler could not find RemoteObject method for ${method.name}")
-            }
-        } else if (!enableToString && method == toStringMethod) {
-            return proxyString
-        }
-
-        val invokeMethod = MethodRequest()
-        invokeMethod.objectId = rmiObjectId
-        invokeMethod.args = args
-
-        // which method do we access? We always want to access the IMPLEMENTATION (if available!)
-        val cachedMethods = connection.endPoint().serialization.getMethods(classId)
-        var i = 0
-        val n = cachedMethods.size
-        while (i < n) {
-            val cachedMethod = cachedMethods[i]
-            val checkMethod = cachedMethod.method
-            if (checkMethod == method) {
-                invokeMethod.cachedMethod = cachedMethod
-                break
-            }
-            i++
-        }
-
-        // a value of 0 means there is no response (for 'async' calls only)
-        val responseId: Byte
-        val responseIdAsInt: Int
-        val returnType = method.returnType
-
+    private suspend fun invokeSuspend(method: Method, args: Array<Any>): Any? {
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded
@@ -237,86 +85,31 @@ class RmiClient(private val connection: Connection_,
         // response (even if it is a void response). This simplifies our response mask, and lets us use more bits for storing the
         // response ID
 
+        val responseStorage = rmiSupportCache.getResponseStorage()
 
-        // If we are async, we always ignore the response.
-        // A value of 0 means to not respond, and the rest is just an ID to match requests <-> responses
-        if (isAsync) {
-            responseId = 0x00
-            responseIdAsInt = 0
-        } else {
-            responseId = responseIds.poll()
-            responseIdAsInt = 0xFF and responseId.toInt()
+        // If we are async, we ignore the response.... FOR NOW. The response, even if there is NOT one (ie: not void) will always return
+        // a thing (so we will know when to stop blocking).
+        val responseId = responseStorage.prep(rmiObjectId, responseWaiter)
 
-            synchronized(this) {
-                pendingResponses[responseIdAsInt] = true
-            }
-
-            invokeMethod.responseId = responseId
-        }
-
-        // so we can query this, if necessary
+        // so we can query for async, if we want to necessary
         previousResponseId = responseId
 
 
+        val invokeMethod = MethodRequest()
+        invokeMethod.isGlobal = isGlobal
+        invokeMethod.objectId = rmiObjectId
+        invokeMethod.responseId = responseId
+        invokeMethod.args = args
 
-        // Sends our invokeMethod to the remote connection, which the RmiBridge listens for
-        val endPoint = connection.endPoint()
-        endPoint.actionDispatch.launch {
-            connection.send(invokeMethod);
+        // which method do we access? We always want to access the IMPLEMENTATION (if available!). we know that this will always succeed
+        // this should be accessed via the KRYO class ID + method index (both are SHORT, and can be packed)
+        invokeMethod.cachedMethod = cachedMethods.first { it.method == method }
 
-            if (logger.isTraceEnabled) {
-                var argString = args?.contentDeepToString() ?: ""
-                argString = argString.substring(1, argString.length - 1)
-                logger.trace("$connection sent: ${method.declaringClass.simpleName}#${method.name}($argString)")
-            }
-        }
+        connection.send(invokeMethod)
 
-//        // if a 'suspend' function is called, then our last argument is a 'Continuation' object (and we can use that instead of runBlocking)
-//        val continuation = args?.lastOrNull()
-//        if (continuation is Continuation<*>) {
-////        val continuation = args!!.last() as Continuation<*>
-////            val argsWithoutContinuation = args.take(args.size - 1)
-////            continuation.context.
-//            return kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
-//        }
-
-
-        // MUST use 'waitForLastResponse()' or 'waitForResponse'('getLastResponseID()') to get the response
-        // If we are async then we return immediately
-        // If we are 'void' return type and do not throw checked exceptions then we return immediately
-        if (isAsync) {
-            if (returnType.isPrimitive) {
-                if (returnType == Int::class.javaPrimitiveType) {
-                    return 0
-                }
-                if (returnType == Boolean::class.javaPrimitiveType) {
-                    return java.lang.Boolean.FALSE
-                }
-                if (returnType == Float::class.javaPrimitiveType) {
-                    return 0.0f
-                }
-                if (returnType == Char::class.javaPrimitiveType) {
-                    return 0.toChar()
-                }
-                if (returnType == Long::class.javaPrimitiveType) {
-                    return 0L
-                }
-                if (returnType == Short::class.javaPrimitiveType) {
-                    return 0.toShort()
-                }
-                if (returnType == Byte::class.javaPrimitiveType) {
-                    return 0.toByte()
-                }
-                if (returnType == Double::class.javaPrimitiveType) {
-                    return 0.0
-                }
-            }
-            return null
-        }
-
-
+        // if we are async, then this will immediately return!
         return try {
-            val result = waitForResponse(responseIdAsInt)
+            val result = responseStorage.waitForReply(allowWaiting, isAsync, rmiObjectId, responseId, responseWaiter, timeoutMillis)
             if (result is Exception) {
                 throw result
             } else {
@@ -324,58 +117,146 @@ class RmiClient(private val connection: Connection_,
             }
         } catch (ex: TimeoutException) {
             throw TimeoutException("Response timed out: ${method.declaringClass.name}.${method.name}")
-        } finally {
-            synchronized(this) {
-                pendingResponses[responseIdAsInt] = false
-                responseTable[responseIdAsInt] = null
-            }
         }
     }
 
-    /**
-     * A timeout of 0 means that we want to disable waiting, otherwise - it waits in milliseconds
-     */
-    @Throws(IOException::class)
-    private fun waitForResponse(responseIdAsInt: Int): Any? {
-        // if timeout == 0, we wait "forever"
-        var remaining: Long
-        val endTime: Long
+    @Suppress("DuplicatedCode")
+    @Throws(Exception::class)
+    override fun invoke(proxy: Any, method: Method, args: Array<Any>?): Any? {
+        if (method.declaringClass == RemoteObject::class.java) {
+            // manage all of the RemoteObject proxy methods
+            when (method) {
+                closeMethod -> {
+                    rmiSupportCache.removeProxyObject(rmiObjectId)
+                    return null
+                }
+                setResponseTimeoutMethod -> {
+                    timeoutMillis = (args!![0] as Int).toLong()
+                    return null
+                }
+                getResponseTimeoutMethod -> {
+                    return timeoutMillis.toInt()
+                }
+                getAsyncMethod -> {
+                    return isAsync
+                }
+                setAsyncMethod -> {
+                    isAsync = args!![0] as Boolean
+                    return null
+                }
+                enableToStringMethod -> {
+                    enableToString = args!![0] as Boolean
+                    return null
+                }
+                getLastResponseIdMethod -> {
+                    // only ASYNC can wait for responses
+                    check(isAsync) { "This RemoteObject is not currently set to ASYNC mode. Unable to manually get the response ID." }
+                    check(allowWaiting) { "This RemoteObject does not allow waiting for responses. You must enable this BEFORE " +
+                            "calling the method that you want to wait for the respose to" }
 
-        if (timeoutMillis != 0) {
-            remaining = timeoutMillis.toLong()
-            endTime = System.currentTimeMillis() + remaining
-        } else {
-            // not forever, but close enough
-            remaining = Long.MAX_VALUE
-            endTime = Long.MAX_VALUE
+                    return previousResponseId
+                }
+                enableWaitingForResponseMethod -> {
+                    allowWaiting = args!![0] as Boolean
+                    return null
+                }
+                waitForLastResponseMethod -> {
+                    // only ASYNC can wait for responses
+                    check(isAsync) { "This RemoteObject is not currently set to ASYNC mode. Unable to manually wait for a response." }
+                    check(allowWaiting) { "This RemoteObject does not allow waiting for responses. You must enable this BEFORE " +
+                            "calling the method that you want to wait for the respose to" }
+
+                    val maybeContinuation = args?.lastOrNull() as Continuation<*>
+
+                    // this is a suspend method, so we don't need extra checks
+                    return invokeSuspendFunction(maybeContinuation) {
+                        rmiSupportCache.getResponseStorage().waitForReplyManually(rmiObjectId, previousResponseId, responseWaiter)
+                    }
+                }
+                waitForResponseMethod -> {
+                    // only ASYNC can wait for responses
+                    check(isAsync) { "This RemoteObject is not currently set to ASYNC mode. Unable to manually wait for a response." }
+                    check(allowWaiting) { "This RemoteObject does not allow waiting for responses. You must enable this BEFORE " +
+                            "calling the method that you want to wait for the respose to" }
+
+                    val maybeContinuation = args?.lastOrNull() as Continuation<*>
+
+                    // this is a suspend method, so we don't need extra checks
+                    return invokeSuspendFunction(maybeContinuation) {
+                        rmiSupportCache.getResponseStorage().waitForReplyManually(rmiObjectId, args[0] as Int, responseWaiter)
+                    }
+                }
+                else -> throw Exception("Invocation handler could not find RemoteObject method for ${method.name}")
+            }
+        } else if (!enableToString && method == toStringMethod) {
+            return proxyString
         }
 
-        // wait for the specified time
-        var methodResponse: MethodResponse?
-        while (remaining > 0) {
-            synchronized(this) {
-                methodResponse = responseTable[responseIdAsInt]
-            }
+        // if a 'suspend' function is called, then our last argument is a 'Continuation' object
+        // We will use this for our coroutine context instead of running on a new coroutine
+        val maybeContinuation = args?.lastOrNull()
 
-
-            if (methodResponse != null) {
-                previousResponseId = 0 // 0 is "no response" or "invalid"
-                return methodResponse!!.result
+        if (isAsync) {
+            // return immediately, without suspends
+            if (maybeContinuation is Continuation<*>) {
+                val argsWithoutContinuation = args.take(args.size - 1)
+                invokeSuspendFunction(maybeContinuation) {
+                    invokeSuspend(method, argsWithoutContinuation.toTypedArray())
+                }
             } else {
-                lock.lock()
-                try {
-                    responseCondition.await(remaining, TimeUnit.MILLISECONDS)
-                } catch (e: InterruptedException) {
-                    Thread.currentThread()
-                            .interrupt()
-                    throw IOException("Response timed out.", e)
-                } finally {
-                    lock.unlock()
+                runBlocking {
+                    invokeSuspend(method, args ?: EMPTY_ARRAY)
                 }
             }
-            remaining = endTime - System.currentTimeMillis()
+
+            // if we are async then we return immediately. If you want the response value, you MUST use
+            // 'waitForLastResponse()' or 'waitForResponse'('getLastResponseID()')
+            val returnType = method.returnType
+            if (returnType.isPrimitive) {
+                return when (returnType) {
+                    Int::class.javaPrimitiveType -> {
+                        0
+                    }
+                    Boolean::class.javaPrimitiveType -> {
+                        java.lang.Boolean.FALSE
+                    }
+                    Float::class.javaPrimitiveType -> {
+                        0.0f
+                    }
+                    Char::class.javaPrimitiveType -> {
+                        0.toChar()
+                    }
+                    Long::class.javaPrimitiveType -> {
+                        0L
+                    }
+                    Short::class.javaPrimitiveType -> {
+                        0.toShort()
+                    }
+                    Byte::class.javaPrimitiveType -> {
+                        0.toByte()
+                    }
+                    Double::class.javaPrimitiveType -> {
+                        0.0
+                    }
+                    else -> {
+                        null
+                    }
+                }
+            }
+            return null
+        } else {
+            // non-async code, so we will be blocking/suspending!
+            return if (maybeContinuation is Continuation<*>) {
+                val argsWithoutContinuation = args.take(args.size - 1)
+                invokeSuspendFunction(maybeContinuation) {
+                    invokeSuspend(method, argsWithoutContinuation.toTypedArray())
+                }
+            } else {
+                runBlocking {
+                    invokeSuspend(method, args ?: EMPTY_ARRAY)
+                }
+            }
         }
-        throw TimeoutException("Response timed out.")
     }
 
     override fun hashCode(): Int {
@@ -395,7 +276,11 @@ class RmiClient(private val connection: Connection_,
         if (javaClass != other.javaClass) {
             return false
         }
-        val other1 = other as RmiClient
-        return rmiObjectId == other1.rmiObjectId
+
+        if (other !is RmiClient) {
+            return false
+        }
+
+        return rmiObjectId == other.rmiObjectId
     }
 }

@@ -39,16 +39,23 @@ import dorkbox.network.rmi.CachedMethod
 /**
  * Internal message to invoke methods remotely.
  */
-class MethodRequest internal constructor() : RmiMessage {
-    // the registered kryo ID for the object
-    var objectId = 0
+class MethodRequest : RmiMessage {
+    // if this object was a global or connection specific object
+    var isGlobal: Boolean = false
 
-    // This class is NOT sent across the wire (but it's contents are!). We use a custom serializer to manage this.
+    // the registered kryo ID for the object
+    // NOTE: this is REALLY a short, but is represented as an int to make life easier. It is also packed with the responseId for serialization
+    var objectId: Int = 0
+
+    // A value of 0 means to not respond, otherwise it is an ID to match requests <-> responses
+    // NOTE: this is REALLY a short, but is represented as an int to make life easier. It is also packed with the objectId for serialization
+    var responseId: Int = 0
+
+    // This field is NOT sent across the wire (but some of it's contents are).
+    // We use a custom serializer to manage this because we have to ALSO be able to serialize the invocation arguments.
+    // NOTE: the info we serialze is REALLY a short, but is represented as an int to make life easier. It is also packed!
     lateinit var cachedMethod: CachedMethod
 
-    // these are the arguments for executing the method
+    // these are the arguments for executing the method (they are serialized using the info from the cachedMethod field
     var args: Array<Any>? = null
-
-    // A value of 0 means to not respond, and the rest is just an ID to match requests <-> responses
-    var responseId: Byte = 0
 }
