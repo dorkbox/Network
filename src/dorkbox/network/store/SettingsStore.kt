@@ -104,7 +104,7 @@ abstract class SettingsStore : AutoCloseable {
 
         // starts with will allow for anonymous inner classes.
         if (callerClass !== callingClass) {
-            val message = "Security violation by: " + (callerClass ?: "???")
+            val message = "Security violation by: $callerClass"
             val logger = LoggerFactory.getLogger(SettingsStore::class.java)
             logger.error(message)
             throw SecurityException(message)
@@ -128,14 +128,10 @@ abstract class SettingsStore : AutoCloseable {
                     .findFirst()
         }.get()
 
-        var ok = false
         // starts with will allow for anonymous inner classes.
-        if (callerClass != null) {
-            ok = callerClass === callingClass1 || callerClass === callingClass2
-        }
-
+        val ok = callerClass === callingClass1 || callerClass === callingClass2
         if (!ok) {
-            val message = "Security violation by: " + (callerClass ?: "???")
+            val message = "Security violation by: $callerClass"
             val logger = LoggerFactory.getLogger(SettingsStore::class.java)
             logger.error(message)
             throw SecurityException(message)
@@ -159,14 +155,10 @@ abstract class SettingsStore : AutoCloseable {
                     .findFirst()
         }.get()
 
-        var ok = false
         // starts with will allow for anonymous inner classes.
-        if (callerClass != null) {
-            ok = callerClass === callingClass1 || callerClass === callingClass2 || callerClass === callingClass3
-        }
-
+       val ok = callerClass === callingClass1 || callerClass === callingClass2 || callerClass === callingClass3
         if (!ok) {
-            val message = "Security violation by: " + (callerClass ?: "???")
+            val message = "Security violation by: $callerClass"
             val logger = LoggerFactory.getLogger(SettingsStore::class.java)
             logger.error(message)
             throw SecurityException(message)
@@ -189,17 +181,15 @@ abstract class SettingsStore : AutoCloseable {
 
         var ok = false
         // starts with will allow for anonymous inner classes.
-        if (callerClass != null) {
-            for (clazz in callingClasses) {
-                if (callerClass === clazz) {
-                    ok = true
-                    break
-                }
+        for (clazz in callingClasses) {
+            if (callerClass === clazz) {
+                ok = true
+                break
             }
         }
 
         if (!ok) {
-            val message = "Security violation by: " + (callerClass ?: "???")
+            val message = "Security violation by: $callerClass"
             val logger = LoggerFactory.getLogger(SettingsStore::class.java)
             logger.error(message)
             throw SecurityException(message)
@@ -225,8 +215,8 @@ abstract class SettingsStore : AutoCloseable {
         }.get()
 
         // starts with will allow for anonymous inner classes.
-        if (callerClass == null || callerClass !== callingClass) {
-            val message = "Security violation by: " + (callerClass ?: "???")
+        if (callerClass !== callingClass) {
+            val message = "Security violation by: $callerClass"
             val logger = LoggerFactory.getLogger(SettingsStore::class.java)
             logger.error(message)
             return false
@@ -252,14 +242,10 @@ abstract class SettingsStore : AutoCloseable {
                     .findFirst()
         }.get()
 
-        var ok = false
         // starts with will allow for anonymous inner classes.
-        if (callerClass != null) {
-            ok = callerClass === callingClass1 || callerClass === callingClass2
-        }
-
+        var ok = callerClass === callingClass1 || callerClass === callingClass2
         if (!ok) {
-            val message = "Security violation by: " + (callerClass ?: "???")
+            val message = "Security violation by: $callerClass"
             val logger = LoggerFactory.getLogger(SettingsStore::class.java)
             logger.error(message)
             return false
@@ -286,14 +272,10 @@ abstract class SettingsStore : AutoCloseable {
                     .findFirst()
         }.get()
 
-        var ok = false
         // starts with will allow for anonymous inner classes.
-        if (callerClass != null) {
-            ok = callerClass === callingClass1 || callerClass === callingClass2 || callerClass === callingClass3
-        }
-
+        val ok = callerClass === callingClass1 || callerClass === callingClass2 || callerClass === callingClass3
         if (!ok) {
-            val message = "Security violation by: " + (callerClass ?: "???")
+            val message = "Security violation by: $callerClass"
             val logger = LoggerFactory.getLogger(SettingsStore::class.java)
             logger.error(message)
             return false
@@ -319,17 +301,15 @@ abstract class SettingsStore : AutoCloseable {
 
         var ok = false
         // starts with will allow for anonymous inner classes.
-        if (callerClass != null) {
-            for (clazz in callingClasses) {
-                if (callerClass === clazz) {
-                    ok = true
-                    break
-                }
+        for (clazz in callingClasses) {
+            if (callerClass === clazz) {
+                ok = true
+                break
             }
         }
 
         if (!ok) {
-            val message = "Security violation by: " + (callerClass ?: "???")
+            val message = "Security violation by: $callerClass"
             val logger = LoggerFactory.getLogger(SettingsStore::class.java)
             logger.error(message)
             return false
