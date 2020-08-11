@@ -139,10 +139,6 @@ public class AeronOutput extends Output {
         return internalBuffer;
     }
 
-    public byte[] toBytesArray () {
-        return toBytes();
-    }
-
     @Override
     public byte[] toBytes () {
         byte[] newBuffer = new byte[position];
