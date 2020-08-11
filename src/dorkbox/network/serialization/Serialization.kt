@@ -15,12 +15,14 @@
  */
 package dorkbox.network.serialization
 
-import com.esotericsoftware.kryo.*
+import com.esotericsoftware.kryo.ClassResolver
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.Serializer
+import com.esotericsoftware.kryo.SerializerFactory
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import com.esotericsoftware.kryo.util.IdentityMap
-import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer
 import dorkbox.network.connection.KryoExtra
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.rmi.CachedMethod
@@ -28,7 +30,8 @@ import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.rmi.messages.*
 import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.PoolableObject
-import dorkbox.util.OS
+import dorkbox.os.OS
+import dorkbox.util.serialization.SerializationDefaults
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import org.agrona.collections.Int2ObjectHashMap
@@ -38,7 +41,6 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.lang.reflect.InvocationHandler
-import java.util.*
 
 /**
  * Threads reading/writing at the same time a single instance of kryo. it is possible to use a single kryo with the use of
@@ -66,26 +68,6 @@ class Serialization(references: Boolean,
 
     companion object {
         const val CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE = 400
-        private val UNMODIFIABLE_COLLECTION_SERIALIZERS: Array<Pair<Class<Any>, Serializer<Any>>>
-
-        init {
-            val unmodSerializers = mutableListOf<Pair<Class<Any>, Serializer<Any>>>()
-
-            // hacky way to register unmodifiable serializers. This MUST be done here, because we ONLY want internal objects created once
-            @Suppress("UNCHECKED_CAST")
-            val kryo: Kryo = object : Kryo() {
-                override fun register(type: Class<*>, serializer: Serializer<*>): Registration {
-                    val type1 = type as Class<Any>
-                    val serializer1 = serializer as Serializer<Any>
-                    unmodSerializers.add(Pair(type1, serializer1))
-                    return super.register(type, serializer)
-                }
-            }
-            UnmodifiableCollectionsSerializer.registerSerializers(kryo)
-
-            UNMODIFIABLE_COLLECTION_SERIALIZERS = unmodSerializers.toTypedArray()
-            // end hack
-        }
 
         /**
          * Additionally, this serialization manager will register the entire class+interface hierarchy for an object. If you want to specify a
@@ -165,55 +147,7 @@ class Serialization(references: Boolean,
                     kryo.references = references
 
                     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
-
-                    // these are registered using the default serializers. We don't customize these, because we don't care about it.
-                    kryo.register(String::class.java)
-                    kryo.register(Array<String>::class.java)
-
-                    kryo.register(IntArray::class.java)
-                    kryo.register(ShortArray::class.java)
-                    kryo.register(FloatArray::class.java)
-                    kryo.register(DoubleArray::class.java)
-                    kryo.register(LongArray::class.java)
-                    kryo.register(ByteArray::class.java)
-                    kryo.register(CharArray::class.java)
-                    kryo.register(BooleanArray::class.java)
-
-                    kryo.register(Array<Int>::class.java)
-                    kryo.register(Array<Short>::class.java)
-                    kryo.register(Array<Float>::class.java)
-                    kryo.register(Array<Double>::class.java)
-                    kryo.register(Array<Long>::class.java)
-                    kryo.register(Array<Byte>::class.java)
-                    kryo.register(Array<Char>::class.java)
-                    kryo.register(Array<Boolean>::class.java)
-
-
-                    kryo.register(Array<Any>::class.java)
-                    kryo.register(Array<Array<Any>>::class.java)
-                    kryo.register(Class::class.java)
-
-                    // necessary for the transport of exceptions.
-                    kryo.register(StackTraceElement::class.java)
-                    kryo.register(Array<StackTraceElement>::class.java)
-
-                    kryo.register(arrayListOf<Any>().javaClass)
-                    kryo.register(hashMapOf<Any, Any>().javaClass)
-                    kryo.register(hashSetOf<Any>().javaClass)
-
-                    kryo.register(emptyList<Any>().javaClass)
-                    kryo.register(emptySet<Any>().javaClass)
-                    kryo.register(emptyMap<Any, Any>().javaClass)
-
-                    kryo.register(Collections.EMPTY_LIST::class.java)
-                    kryo.register(Collections.EMPTY_SET::class.java)
-                    kryo.register(Collections.EMPTY_MAP::class.java)
-                    kryo.register(Collections.emptyNavigableSet<Any>().javaClass)
-                    kryo.register(Collections.emptyNavigableMap<Any, Any>().javaClass)
-
-                    UNMODIFIABLE_COLLECTION_SERIALIZERS.forEach {
-                        kryo.register(it.first, it.second)
-                    }
+                    SerializationDefaults.register(kryo)
 
                     // RMI stuff!
                     kryo.register(GlobalObjectCreateRequest::class.java)
@@ -227,7 +161,6 @@ class Serialization(references: Boolean,
 
                     @Suppress("UNCHECKED_CAST")
                     kryo.register(InvocationHandler::class.java as Class<Any>, objectRequestSerializer)
-
 
                     // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
                     classesToRegister.forEach { registration ->
