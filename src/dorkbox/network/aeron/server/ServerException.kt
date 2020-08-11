@@ -17,4 +17,12 @@ open class ServerException : Exception {
      * @param cause The cause
      */
     constructor(cause: Throwable) : super(cause)
+
+    /**
+     * Create an exception.
+     *
+     * @param message The message
+     *  @param cause The cause
+     */
+    constructor(message: String, cause: Throwable?) : super(message, cause)
 }
