@@ -285,8 +285,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 }
             }
 
-            logger.debug("Next state in logger")
-
             // tell the server our connection handshake is done, and the connection can now listen for data.
             val canFinishConnecting = handshake.handshakeDone(handshakeConnection, connectionTimeoutMS)
             if (canFinishConnecting) {
