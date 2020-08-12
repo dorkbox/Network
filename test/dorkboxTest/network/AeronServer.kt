@@ -1,4 +1,4 @@
-package dorkbox.network
+package dorkboxTest.network
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -6,6 +6,8 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
+import dorkbox.network.Server
+import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory

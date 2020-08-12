@@ -12,11 +12,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.rmi.classes
+package dorkboxTest.network.rmi.classes
 
 import java.util.concurrent.atomic.AtomicInteger
 
-class TestCowImpl : TestCowBaseImpl(), TestCow {
+class TestCowImpl : TestCowBaseImpl(),
+                    TestCow {
 
     companion object {
         // has to start at 1

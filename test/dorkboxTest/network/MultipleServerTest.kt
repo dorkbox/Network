@@ -17,8 +17,10 @@
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package dorkbox.network
+package dorkboxTest.network
 
+import dorkbox.network.Client
+import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.coroutines.runBlocking

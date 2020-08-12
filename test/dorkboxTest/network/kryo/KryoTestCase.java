@@ -17,7 +17,7 @@
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
-package dorkbox.network.kryo;
+package dorkboxTest.network.kryo;
 
 import static com.esotericsoftware.minlog.Log.WARN;
 import static com.esotericsoftware.minlog.Log.warn;
@@ -79,23 +79,28 @@ abstract public class KryoTestCase {
 	/** @param length Pass Integer.MIN_VALUE to disable checking the length. */
 	public <T> T roundTrip (int length, T object1) {
 		T object2 = roundTripWithBufferFactory(length, object1, new BufferFactory() {
-			public Output createOutput (OutputStream os) {
+			@Override
+            public Output createOutput (OutputStream os) {
 				return new Output(os);
 			}
 
-			public Output createOutput (OutputStream os, int size) {
+			@Override
+            public Output createOutput (OutputStream os, int size) {
 				return new Output(os, size);
 			}
 
-			public Output createOutput (int size, int limit) {
+			@Override
+            public Output createOutput (int size, int limit) {
 				return new Output(size, limit);
 			}
 
-			public Input createInput (InputStream os, int size) {
+			@Override
+            public Input createInput (InputStream os, int size) {
 				return new Input(os, size);
 			}
 
-			public Input createInput (byte[] buffer) {
+			@Override
+            public Input createInput (byte[] buffer) {
 				return new Input(buffer);
 			}
 		});
@@ -103,23 +108,28 @@ abstract public class KryoTestCase {
 		if (debug) return object2;
 
 		roundTripWithBufferFactory(length, object1, new BufferFactory() {
-			public Output createOutput (OutputStream os) {
+			@Override
+            public Output createOutput (OutputStream os) {
 				return new ByteBufferOutput(os);
 			}
 
-			public Output createOutput (OutputStream os, int size) {
+			@Override
+            public Output createOutput (OutputStream os, int size) {
 				return new ByteBufferOutput(os, size);
 			}
 
-			public Output createOutput (int size, int limit) {
+			@Override
+            public Output createOutput (int size, int limit) {
 				return new ByteBufferOutput(size, limit);
 			}
 
-			public Input createInput (InputStream os, int size) {
+			@Override
+            public Input createInput (InputStream os, int size) {
 				return new ByteBufferInput(os, size);
 			}
 
-			public Input createInput (byte[] buffer) {
+			@Override
+            public Input createInput (byte[] buffer) {
 				ByteBuffer byteBuffer = ByteBuffer.allocateDirect(buffer.length);
 				byteBuffer.put(buffer).flip();
 				return new ByteBufferInput(byteBuffer);
@@ -127,45 +137,55 @@ abstract public class KryoTestCase {
 		});
 
 		roundTripWithBufferFactory(length, object1, new BufferFactory() {
-			public Output createOutput (OutputStream os) {
+			@Override
+            public Output createOutput (OutputStream os) {
 				return new UnsafeOutput(os);
 			}
 
-			public Output createOutput (OutputStream os, int size) {
+			@Override
+            public Output createOutput (OutputStream os, int size) {
 				return new UnsafeOutput(os, size);
 			}
 
-			public Output createOutput (int size, int limit) {
+			@Override
+            public Output createOutput (int size, int limit) {
 				return new UnsafeOutput(size, limit);
 			}
 
-			public Input createInput (InputStream os, int size) {
+			@Override
+            public Input createInput (InputStream os, int size) {
 				return new UnsafeInput(os, size);
 			}
 
-			public Input createInput (byte[] buffer) {
+			@Override
+            public Input createInput (byte[] buffer) {
 				return new UnsafeInput(buffer);
 			}
 		});
 
 		roundTripWithBufferFactory(length, object1, new BufferFactory() {
-			public Output createOutput (OutputStream os) {
+			@Override
+            public Output createOutput (OutputStream os) {
 				return new UnsafeByteBufferOutput(os);
 			}
 
-			public Output createOutput (OutputStream os, int size) {
+			@Override
+            public Output createOutput (OutputStream os, int size) {
 				return new UnsafeByteBufferOutput(os, size);
 			}
 
-			public Output createOutput (int size, int limit) {
+			@Override
+            public Output createOutput (int size, int limit) {
 				return new UnsafeByteBufferOutput(size, limit);
 			}
 
-			public Input createInput (InputStream os, int size) {
+			@Override
+            public Input createInput (InputStream os, int size) {
 				return new UnsafeByteBufferInput(os, size);
 			}
 
-			public Input createInput (byte[] buffer) {
+			@Override
+            public Input createInput (byte[] buffer) {
 				ByteBuffer byteBuffer = ByteBuffer.allocateDirect(buffer.length);
 				byteBuffer.put(buffer).flip();
 				return new UnsafeByteBufferInput(byteBuffer);

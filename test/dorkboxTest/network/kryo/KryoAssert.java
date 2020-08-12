@@ -1,6 +1,6 @@
-package dorkbox.network.kryo;
+package dorkboxTest.network.kryo;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Junit Assert wrapper methods class

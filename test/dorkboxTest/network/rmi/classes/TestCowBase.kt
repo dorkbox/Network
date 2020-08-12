@@ -12,15 +12,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.rmi.classes
+package dorkboxTest.network.rmi.classes
 
 /**
- *
+ * This is a different interface so we can also test CachedMethod operations
  */
-interface TestCow : TestCowBase {
-    fun moo()
-    fun moo(value: String)
-    fun moo(value: String, delay: Long)
-    fun id(): Int
-    fun slow(): Float
+interface TestCowBase {
+    @Throws(UnsupportedOperationException::class)
+    fun throwException()
 }

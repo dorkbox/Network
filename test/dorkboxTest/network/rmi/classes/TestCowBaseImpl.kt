@@ -12,9 +12,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.rmi.classes
+package dorkboxTest.network.rmi.classes
 
-class MessageWithTestCow(val testCow: TestCow) {
-    var number = 0
-    var text: String? = null
+open class TestCowBaseImpl : TestCowBase {
+    override fun throwException() {
+        System.err.println("The following exception is EXPECTED, but should only be on one log!")
+        throw UnsupportedOperationException("Why would I do that?")
+    }
+
+    open fun id(): Int {
+        return Int.MAX_VALUE
+    }
 }

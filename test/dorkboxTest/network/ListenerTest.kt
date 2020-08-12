@@ -17,9 +17,11 @@
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package dorkbox.network
+package dorkboxTest.network
 
-import dorkbox.network.connection.ConnectionImpl
+import dorkbox.network.Client
+import dorkbox.network.Server
+import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.MediaDriverConnection
 import dorkbox.util.exceptions.InitializationException
@@ -38,24 +40,25 @@ class ListenerTest : BaseTest() {
     var checkFail1 = AtomicBoolean(false)
     var checkFail2 = AtomicBoolean(false)
 
-    var check1 = AtomicBoolean(false)
-    var check2 = AtomicBoolean(false)
-    var check3 = AtomicBoolean(false)
-    var check4 = AtomicBoolean(false)
-    var check5 = AtomicBoolean(false)
-    var check6 = AtomicBoolean(false)
+    var overrideCheck = AtomicBoolean(false)
+    var serverOnMessage = AtomicBoolean(false)
+    var serverConnect = AtomicBoolean(false)
+    var serverDisconnect = AtomicBoolean(false)
+    var clientConnect = AtomicBoolean(false)
+    var clientDisconnect = AtomicBoolean(false)
 
     // quick and dirty test to also test connection sub-classing
-    internal open inner class TestConnectionA(endPointConnection: EndPoint<TestConnectionA>, driverConnection: MediaDriverConnection) : ConnectionImpl(endPointConnection, driverConnection) {
+    internal open inner class TestConnectionA(endPointConnection: EndPoint<TestConnectionA>, driverConnection: MediaDriverConnection) : Connection(endPointConnection, driverConnection) {
         open fun check() {
-            check1.set(true)
+            overrideCheck.set(true)
         }
     }
 
     @Test
     @Throws(SecurityException::class, InitializationException::class, IOException::class, InterruptedException::class)
     fun listener() {
-        val server: Server<TestConnectionA> = object : Server<TestConnectionA>(serverConfig()) {
+        val server: Server<TestConnectionA> = object : Server<TestConnectionA>(
+                serverConfig()) {
             override fun newConnection(endPoint: EndPoint<TestConnectionA>, mediaDriverConnection: MediaDriverConnection): TestConnectionA {
                 return TestConnectionA(endPoint, mediaDriverConnection)
             }
@@ -72,17 +75,17 @@ class ListenerTest : BaseTest() {
         // generic listener
         server.onMessage<Any> { _, _ ->
             // should be called!
-            check2.set(true)
+            serverOnMessage.set(true)
         }
 
         // standard connect check
         server.onConnect {
-            check3.set(true)
+            serverConnect.set(true)
         }
 
         // standard listener disconnect check
         server.onDisconnect {
-            check4.set(true)
+            serverDisconnect.set(true)
         }
 
 
@@ -92,7 +95,8 @@ class ListenerTest : BaseTest() {
 
 
         // ----
-        val client: Client<TestConnectionA> = object : Client<TestConnectionA>(clientConfig()) {
+        val client: Client<TestConnectionA> = object : Client<TestConnectionA>(
+                clientConfig()) {
             override fun newConnection(endPoint: EndPoint<TestConnectionA>, mediaDriverConnection: MediaDriverConnection): TestConnectionA {
                 return TestConnectionA(endPoint, mediaDriverConnection)
             }
@@ -121,13 +125,13 @@ class ListenerTest : BaseTest() {
 
         // standard connect check
         client.onConnect {
-            check5.set(true)
+            clientConnect.set(true)
         }
 
 
         // standard listener disconnect check
         client.onDisconnect {
-            check6.set(true)
+            clientDisconnect.set(true)
         }
 
 
@@ -139,12 +143,12 @@ class ListenerTest : BaseTest() {
 
         // -1 BECAUSE we are `getAndIncrement` for each check earlier
         Assert.assertEquals(limit.toLong(), count.get() - 1.toLong())
-        Assert.assertTrue(check1.get())
-        Assert.assertTrue(check2.get())
-        Assert.assertTrue(check3.get())
-        Assert.assertTrue(check4.get())
-        Assert.assertTrue(check5.get())
-        Assert.assertTrue(check6.get())
+        Assert.assertTrue(overrideCheck.get())
+        Assert.assertTrue(serverOnMessage.get())
+        Assert.assertTrue(serverConnect.get())
+        Assert.assertTrue(serverDisconnect.get())
+        Assert.assertTrue(clientConnect.get())
+        Assert.assertTrue(clientDisconnect.get())
 
         Assert.assertFalse(checkFail1.get())
         Assert.assertFalse(checkFail2.get())

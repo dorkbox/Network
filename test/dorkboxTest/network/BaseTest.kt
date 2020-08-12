@@ -17,7 +17,7 @@
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package dorkbox.network
+package dorkboxTest.network
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -25,8 +25,12 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
+import dorkbox.network.Client
+import dorkbox.network.Configuration
+import dorkbox.network.Server
+import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.EndPoint
-import dorkbox.util.OS
+import dorkbox.os.OS
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException

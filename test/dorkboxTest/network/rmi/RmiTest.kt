@@ -32,15 +32,20 @@
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package dorkbox.network.rmi
+package dorkboxTest.network.rmi
 
-import dorkbox.network.*
+import dorkbox.network.Client
+import dorkbox.network.Configuration
+import dorkbox.network.Server
+import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
-import dorkbox.network.rmi.classes.MessageWithTestCow
-import dorkbox.network.rmi.classes.TestCow
-import dorkbox.network.rmi.classes.TestCowImpl
+import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.util.exceptions.SecurityException
+import dorkboxTest.network.BaseTest
+import dorkboxTest.network.rmi.classes.MessageWithTestCow
+import dorkboxTest.network.rmi.classes.TestCow
+import dorkboxTest.network.rmi.classes.TestCowImpl
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
@@ -76,17 +81,7 @@ class RmiTest : BaseTest() {
             try {
                 test.throwException()
             } catch (ex: UnsupportedOperationException) {
-                System.err.println("\tExpected exception (exception log should ONLY be on the server).")
-                caught = true
-            }
-            Assert.assertTrue(caught)
-
-
-            // can ONLY wait for responses if we are ASYNC!
-            caught = false
-            try {
-                remoteObject.waitForLastResponse()
-            } catch (ex: IllegalStateException) {
+                System.err.println("\tExpected exception (exception log should ONLY be on the object impl side).")
                 caught = true
             }
             Assert.assertTrue(caught)
@@ -113,31 +108,12 @@ class RmiTest : BaseTest() {
             try {
                 test.throwException()
             } catch (ex: IllegalStateException) {
+                System.err.println("\tExpected exception (exception log should ONLY be on the object impl side).")
                 caught = true
             }
             // exceptions are not caught when async = true!
             Assert.assertFalse(caught)
 
-
-            // now enable us to wait for responses
-            // can ONLY wait for responses if we are ASYNC + enabled waiting!!
-            remoteObject.enableWaitingForResponse(true)
-
-
-            test.id()
-            // wait for the response to id()
-            Assert.assertEquals(remoteObjectID, remoteObject.waitForLastResponse())
-
-
-            // wait for the response to id()
-            Assert.assertEquals(0, test.id().toLong())
-            val responseId = remoteObject.lastResponseId
-            Assert.assertEquals(remoteObjectID, remoteObject.waitForResponse(responseId))
-
-
-            // Non-blocking call that errors out
-            test.throwException()
-            Assert.assertEquals(remoteObject.waitForLastResponse()?.javaClass, UnsupportedOperationException::class.java)
 
             // Call will time out if non-blocking isn't working properly
             test.moo("Mooooooooo", 4000)
@@ -241,12 +217,11 @@ class RmiTest : BaseTest() {
 
             // for Server -> Client RMI
             configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
             client.onConnect { connection ->
-                System.err.println("Starting test for: Client -> Server")
-
                 connection.createObject<TestCow> { remoteObject ->
                     System.err.println("Running test for: Client -> Server")
                     runTests(connection, remoteObject, 1)

@@ -1,4 +1,4 @@
-package dorkbox.network
+package dorkboxTest.network
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -6,6 +6,8 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
+import dorkbox.network.Client
+import dorkbox.network.Configuration
 import dorkbox.network.connection.Connection
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
@@ -91,6 +93,9 @@ object AeronClient {
         configuration.publicationPort = 2001
         val client = Client<Connection>(configuration)
 
+
+//        client.filter(IpSubnetFilterRule(IPv4.LOCALHOST, 32, IpFilterRuleType.ACCEPT))
+
         client.filter { connection ->
             println("should this connection be allowed?")
             true
@@ -115,8 +120,8 @@ object AeronClient {
         }
 
         runBlocking {
-//            client.connect("127.0.0.1") // UDP connection via loopback
-            client.connect()  // IPC connection
+            client.connect("127.0.0.1") // UDP connection via loopback
+//            client.connect()  // IPC connection
         }
 
 
@@ -128,7 +133,7 @@ object AeronClient {
         // send - IPC/local
         runBlocking {
             while (!client.isShutdown()) {
-                client.send("ECHO " + java.lang.Long.toUnsignedString(client.secureRandom.nextLong(), 16))
+                client.send("ECHO " + java.lang.Long.toUnsignedString(client.crypto.secureRandom.nextLong(), 16))
             }
         }
 
