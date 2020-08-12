@@ -49,7 +49,7 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
         val maxPortCount = portsPerClient * config.maxClientCount
         portAllocator = PortAllocator(minPort, maxPortCount)
 
-        logger.info("Server connection port range [$minPort - ${minPort + maxPortCount}")
+        logger.info("Server connection port range [$minPort - ${minPort + maxPortCount}]")
     }
 
 
