@@ -358,11 +358,7 @@ internal class RmiSupport(logger: KLogger,
                         result.initCause(null)
                     }
 
-                    // only remove stuff if our logger is NOT on trace (so normal logs will not show extra info, trace will show extra info)
-                    if (!logger.isTraceEnabled) {
-                        ListenerManager.cleanStackTrace(result as Throwable)
-                    }
-
+                    ListenerManager.cleanStackTrace(result as Throwable)
                     logger.error("Error invoking method: ${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}", result)
                 }
 

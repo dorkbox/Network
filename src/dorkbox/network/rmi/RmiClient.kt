@@ -78,7 +78,6 @@ internal class RmiClient(val isGlobal: Boolean,
     // if we are ASYNC, then this method immediately returns
     private suspend fun sendRequest(method: Method, args: Array<Any>): Any? {
 
-
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded
@@ -114,6 +113,28 @@ internal class RmiClient(val isGlobal: Boolean,
                 throw TimeoutException("Response timed out: ${method.declaringClass.name}.${method.name}")
             }
             is Exception -> {
+                // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
+                // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
+
+                val stackTrace = Exception().stackTrace
+                val myClassName = RmiClient::class.java.name
+
+                var newStartIndex = 0
+                for (element in stackTrace) {
+                    newStartIndex++
+
+                    if (element.className == myClassName && element.methodName == "invoke") {
+                        // we do this 1 more time, because we want to remove the proxy invocation off the stack as well.
+                        newStartIndex++
+                        break
+                    }
+                }
+
+                val newStack = Array<StackTraceElement>(result.stackTrace.size + stackTrace.size - newStartIndex) { stackTrace[0] }
+                result.stackTrace.copyInto(newStack)
+                stackTrace.copyInto(newStack, result.stackTrace.size, newStartIndex)
+
+                result.stackTrace = newStack
                 throw result
             }
             else -> {
@@ -252,6 +273,15 @@ internal class RmiClient(val isGlobal: Boolean,
         }
     }
 
+    // trampoline so we can access suspend functions correctly and (if suspend) get the coroutine connection parameter)
+    private fun invokeSuspendFunction(continuation: Continuation<*>, suspendFunction: suspend () -> Any?): Any? {
+        return try {
+            SuspendFunctionAccess.invokeSuspendFunction(suspendFunction, continuation)
+        } catch (e: InvocationTargetException) {
+            throw e.cause!!
+        }
+    }
+
     override fun hashCode(): Int {
         val prime = 31
         var result = 1
@@ -275,13 +305,5 @@ internal class RmiClient(val isGlobal: Boolean,
         }
 
         return rmiObjectId == other.rmiObjectId
-    }
-
-    private fun invokeSuspendFunction(continuation: Continuation<*>, suspendFunction: suspend () -> Any?): Any? {
-        return try {
-            SuspendFunctionAccess.invokeSuspendFunction(suspendFunction, continuation)
-        } catch (e: InvocationTargetException) {
-            throw e.cause!!
-        }
     }
 }

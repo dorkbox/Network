@@ -31,36 +31,25 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          */
         fun cleanStackTrace(throwable: Throwable) {
             // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-            val reversedList = throwable.stackTrace.reversed().toMutableList()
-
-            // we have to remove kotlin stuff from the stacktrace
-            val reverseIter = reversedList.iterator()
-            while (reverseIter.hasNext()) {
-                val stackName = reverseIter.next().className
-                if (stackName.startsWith("kotlinx.coroutines") || stackName.startsWith("kotlin.coroutines")) {
-                    // cleanup the stack elements which create the stacktrace
-                    reverseIter.remove()
-                } else {
-                    // done cleaning up the tail from kotlin
-                    break
+            val stackTrace = throwable.stackTrace
+            var newEndIndex = stackTrace.size - 1
+            for (i in newEndIndex downTo 0) {
+                val stackName = stackTrace[i].className
+                if (i == newEndIndex) {
+                    if (stackName.startsWith("kotlinx.coroutines.") ||
+                        stackName.startsWith("kotlin.coroutines.") ||
+                        stackName.startsWith("dorkbox.network.")) {
+                        newEndIndex--
+                    } else {
+                        break
+                    }
                 }
             }
 
-            // remove dorkbox network stuff
-            while (reverseIter.hasNext()) {
-                val stackName = reverseIter.next().className
-                if (stackName.startsWith("dorkbox.network")) {
-                    // cleanup the stack elements which create the stacktrace
-                    reverseIter.remove()
-                } else {
-                    // done cleaning up the tail from network
-                    break
-                }
-            }
-
-            throwable.stackTrace = reversedList.reversed().toTypedArray()
+            // tailToChopIndex will also remove the VERY LAST CachedMethod or CachedAsmMethod access invocation (because it's offset by 1)
+            // NOTE: we want to do this!
+            throwable.stackTrace = stackTrace.copyOfRange(0, newEndIndex)
         }
-
     }
 
     // initialize a emtpy arrays
