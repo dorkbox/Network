@@ -143,7 +143,7 @@ class RmiGlobalTest : BaseTest() {
             }
         }
 
-        waitForThreads(99999999)
+        waitForThreads()
     }
 
     private open class ConnectionAware {
