@@ -15,10 +15,9 @@
  */
 package dorkbox.network.store
 
-import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.util.bytes.ByteArrayWrapper
-import dorkbox.util.exceptions.SecurityException
 import dorkbox.util.storage.Storage
 import org.agrona.collections.Int2ObjectHashMap
 import java.security.SecureRandom
@@ -64,9 +63,8 @@ class PropertyStore : SettingsStore() {
      * Simple, property based method to getting the private key of the server
      */
     @Synchronized
-    @Throws(SecurityException::class)
     override fun getPrivateKey(): ByteArray? {
-        checkAccess(EndPoint::class.java)
+        checkAccess(CryptoManagement::class.java)
         return servers[DB_Server.IP_SELF]!!.privateKey
     }
 
@@ -74,9 +72,8 @@ class PropertyStore : SettingsStore() {
      * Simple, property based method for saving the private key of the server
      */
     @Synchronized
-    @Throws(SecurityException::class)
     override fun savePrivateKey(serverPrivateKey: ByteArray) {
-        checkAccess(EndPoint::class.java)
+        checkAccess(CryptoManagement::class.java)
         servers[DB_Server.IP_SELF]!!.privateKey = serverPrivateKey
 
         // have to always specify what we are saving
@@ -87,7 +84,6 @@ class PropertyStore : SettingsStore() {
      * Simple, property based method to getting the public key of the server
      */
     @Synchronized
-    @Throws(SecurityException::class)
     override fun getPublicKey(): ByteArray? {
         return servers[DB_Server.IP_SELF]!!.publicKey
     }
@@ -96,9 +92,8 @@ class PropertyStore : SettingsStore() {
      * Simple, property based method for saving the public key of the server
      */
     @Synchronized
-    @Throws(SecurityException::class)
     override fun savePublicKey(serverPublicKey: ByteArray) {
-        checkAccess(EndPoint::class.java)
+        checkAccess(CryptoManagement::class.java)
         servers[DB_Server.IP_SELF]!!.publicKey = serverPublicKey
 
         // have to always specify what we are saving
@@ -134,7 +129,6 @@ class PropertyStore : SettingsStore() {
      * Simple, property based method to getting a connected computer by host IP address
      */
     @Synchronized
-    @Throws(SecurityException::class)
     override fun getRegisteredServerKey(hostAddress: Int): ByteArray? {
         return servers[hostAddress]?.publicKey
     }
@@ -143,7 +137,6 @@ class PropertyStore : SettingsStore() {
      * Saves a connected computer by host IP address and public key
      */
     @Synchronized
-    @Throws(SecurityException::class)
     override fun addRegisteredServerKey(hostAddress: Int, publicKey: ByteArray) {
         // checkAccess(RegistrationWrapper.class);
         var db_server = servers[hostAddress]
@@ -162,7 +155,6 @@ class PropertyStore : SettingsStore() {
      * Deletes a registered computer by host IP address
      */
     @Synchronized
-    @Throws(SecurityException::class)
     override fun removeRegisteredServerKey(hostAddress: Int): Boolean {
         // checkAccess(RegistrationWrapper.class);
         val db_server = servers.remove(hostAddress)
