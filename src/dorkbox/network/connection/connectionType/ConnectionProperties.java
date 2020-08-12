@@ -1,6 +1,6 @@
 package dorkbox.network.connection.connectionType;
 
-import dorkbox.network.connection.registration.UpgradeType;
+import dorkbox.network.handshake.UpgradeType;
 
 /**
  * Used in {@link IpConnectionTypeRule} to decide what kind of connection a matching IP Address should have.

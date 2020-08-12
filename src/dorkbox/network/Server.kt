@@ -80,7 +80,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     /**
      * Maintains a thread-safe collection of rules used to define the connection type with this server.
      */
-    protected val connectionRules = CopyOnWriteArrayList<ConnectionRule>()
+    private val connectionRules = CopyOnWriteArrayList<ConnectionRule>()
 
     init {
         // have to do some basic validation of our configuration

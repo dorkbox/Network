@@ -34,13 +34,14 @@ interface MediaDriverConnection : AutoCloseable {
 /**
  * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER
  */
-class UdpMediaDriverConnection(override val address: String,
-                            override val subscriptionPort: Int,
-                            override val publicationPort: Int,
-                            override val streamId: Int,
-                            override val sessionId: Int,
-                            private val connectionTimeoutMS: Long = 0,
-                            override val isReliable: Boolean = true) : MediaDriverConnection {
+class UdpMediaDriverConnection(
+        override val address: String,
+        override val subscriptionPort: Int,
+        override val publicationPort: Int,
+        override val streamId: Int,
+        override val sessionId: Int,
+        private val connectionTimeoutMS: Long = 0,
+        override val isReliable: Boolean = true) : MediaDriverConnection {
 
     override lateinit var subscription: Subscription
     override lateinit var publication: Publication

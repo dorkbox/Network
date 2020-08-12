@@ -19,7 +19,7 @@ package dorkbox.network.connection
  * Generic types are in place to make sure that users of the application do not
  * accidentally add an incompatible connection type.
  */
-interface Listeners<C> where C : Connection {
+interface Listeners<C : Connection> {
     /**
      * Adds a function that will be called BEFORE a client/server "connects" with
      * each other, and used to determine if a connection should be allowed
@@ -30,7 +30,8 @@ interface Listeners<C> where C : Connection {
      *
      * For a server, this function will be called for ALL clients.
      */
-    fun filter(function: (C) -> Boolean): Listeners<C>
+    fun filter(function: (C) -> Boolean): Int
+
 
     /**
      * Adds a function that will be called when a client/server "connects" with
@@ -38,7 +39,8 @@ interface Listeners<C> where C : Connection {
      *
      * For a server, this function will be called for ALL clients.
      */
-    fun onConnect(function: (C) -> Unit): Listeners<C>
+    fun onConnect(function: (C) -> Unit): Int
+
 
     /**
      * Adds a function that will be called when a client/server "disconnects" with
@@ -50,7 +52,7 @@ interface Listeners<C> where C : Connection {
      * (via connection.addListener), meaning that ONLY that listener attached to
      * the connection is notified on that event (ie, admin type listeners)
      */
-    fun onDisconnect(function: (C) -> Unit): Listeners<C>
+    fun onDisconnect(function: (C) -> Unit): Int
 
 
     /**
@@ -62,7 +64,7 @@ interface Listeners<C> where C : Connection {
      * (via connection.addListener), meaning that ONLY that listener attached to
      * the connection is notified on that event (ie, admin type listeners)
      */
-    fun onError(function: (C, throwable: Throwable) -> Unit): Listeners<C>
+    fun onError(function: (C, throwable: Throwable) -> Unit): Int
 
 
     /**
@@ -74,7 +76,7 @@ interface Listeners<C> where C : Connection {
      * (via connection.addListener), meaning that ONLY that listener attached to
      * the connection is notified on that event (ie, admin type listeners)
      */
-    fun <M : Any> onMessage(function: (C, M) -> Unit): Listeners<C>
+    fun <M : Any> onMessage(function: (C, M) -> Unit): Int
 
 
     /**
@@ -91,18 +93,12 @@ interface Listeners<C> where C : Connection {
      * connection.removeListener), meaning that ONLY that listener attached to
      * the connection is removed
      */
-    fun remove(listener: OnConnected<C>): Listeners<C>
+    fun remove(listenerId: Int)
+
 
     /**
      * Removes all registered listeners from this connection/endpoint to NO
      * LONGER be notified of connect/disconnect/idle/receive(object) events.
      */
-    fun removeAll(): Listeners<C>
-
-    /**
-     * Removes all registered listeners (of the object type) from this
-     * connection/endpoint to NO LONGER be notified of
-     * connect/disconnect/idle/receive(object) events.
-     */
-    fun removeAll(classType: Class<*>): Listeners<C>
+    fun removeAll()
 }

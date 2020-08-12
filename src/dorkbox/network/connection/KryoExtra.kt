@@ -21,7 +21,7 @@ import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.pipeline.AeronInput
 import dorkbox.network.pipeline.AeronOutput
 import dorkbox.network.rmi.CachedMethod
-import dorkbox.util.OS
+import dorkbox.os.OS
 import dorkbox.util.bytes.OptimizeUtilsByteArray
 import dorkbox.util.bytes.OptimizeUtilsByteBuf
 import io.netty.buffer.ByteBuf
@@ -48,8 +48,8 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
 
 
 
-    // volatile to provide object visibility for entire class. This is unique per connection
-    lateinit var connection: Connection_
+    // This is unique per connection. volatile/etc is not necessary because it is set/read in the same thread
+    lateinit var connection: Connection
 
 //    private val secureRandom = SecureRandom()
     private var cipher: Cipher? = null
@@ -104,7 +104,7 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
      * ++++++++++++++++++++++++++
      */
     @Throws(Exception::class)
-    fun write(connection: Connection_, message: Any) {
+    fun write(connection: Connection, message: Any) {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
@@ -135,7 +135,7 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
      * ++++++++++++++++++++++++++
      */
     @Throws(Exception::class)
-    fun read(buffer: DirectBuffer, offset: Int, length: Int, connection: Connection_): Any {
+    fun read(buffer: DirectBuffer, offset: Int, length: Int, connection: Connection): Any {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
@@ -174,7 +174,7 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    private fun write(connection: Connection_, writer: Output, message: Any) {
+    private fun write(connection: Connection, writer: Output, message: Any) {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
@@ -201,7 +201,7 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    private fun read(connection: Connection_, reader: Input): Any {
+    private fun read(connection: Connection, reader: Input): Any {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
@@ -240,9 +240,9 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
             val orig = ByteBufUtil.hexDump(writer.buffer, 0, length)
             val compressed = ByteBufUtil.hexDump(compressOutput, 0, compressedLength)
             logger.error(OS.LINE_SEPARATOR +
-                    "ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +
-                    OS.LINE_SEPARATOR +
-                    "COMPRESSED: (" + compressedLength + ")" + OS.LINE_SEPARATOR + compressed)
+                         "ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +
+                         OS.LINE_SEPARATOR +
+                         "COMPRESSED: (" + compressedLength + ")" + OS.LINE_SEPARATOR + compressed)
         }
 
         // now write the ORIGINAL (uncompressed) length. This is so we can use the FAST decompress version
@@ -263,7 +263,7 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    fun writeCompressed(logger: Logger, connection: Connection_, buffer: ByteBuf, message: Any) {
+    fun writeCompressed(logger: Logger, connection: Connection, buffer: ByteBuf, message: Any) {
         // write the object to a TEMP buffer! this will be compressed later
         write(connection, writer, message)
 
@@ -359,7 +359,7 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    fun readCompressed(logger: Logger, connection: Connection_, buffer: ByteBuf, length: Int): Any {
+    fun readCompressed(logger: Logger, connection: Connection, buffer: ByteBuf, length: Int): Any {
         ////////////////
         // Note: we CANNOT write BACK to the buffer as "temp" storage, since there could be additional data on it!
         ////////////////

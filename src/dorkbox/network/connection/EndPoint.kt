@@ -21,35 +21,25 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.ping.PingMessage
-import dorkbox.network.other.CryptoEccNative
-import dorkbox.network.other.NetworkUtil
+import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiSupport
+import dorkbox.network.rmi.RmiSupportConnection
 import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.NetworkSerializationManager
-import dorkbox.network.store.NullSettingsStore
 import dorkbox.network.store.SettingsStore
+import dorkbox.os.OS
 import dorkbox.util.NamedThreadFactory
-import dorkbox.util.OS
-import dorkbox.util.entropy.Entropy
 import dorkbox.util.exceptions.SecurityException
 import io.aeron.Aeron
 import io.aeron.Publication
 import io.aeron.driver.MediaDriver
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import java.io.File
-import java.security.KeyFactory
-import java.security.PrivateKey
-import java.security.SecureRandom
-import java.security.interfaces.XECPrivateKey
-import java.security.spec.PKCS8EncodedKeySpec
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 
@@ -67,7 +57,7 @@ import java.util.concurrent.CountDownLatch
  *
  * @throws SecurityException if unable to initialize/generate ECC keys
 */
-abstract class EndPoint<C : Connection>
+abstract class EndPoint<CONNECTION: Connection>
 internal constructor(val type: Class<*>, internal val config: Configuration) : AutoCloseable {
     protected constructor(config: Configuration) : this(Client::class.java, config)
     protected constructor(config: ServerConfiguration) : this(Server::class.java, config)
@@ -111,10 +101,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     val logger: KLogger = KotlinLogging.logger(type.simpleName)
 
-    internal val closables = CopyOnWriteArrayList<AutoCloseable>()
+    internal val autoClosableObjects = CopyOnWriteArrayList<AutoCloseable>()
 
     internal val actionDispatch = CoroutineScope(Dispatchers.Default)
-    internal abstract val connectionManager: ConnectionManager<C>
+
+    internal val listenerManager = ListenerManager<CONNECTION>(logger) { message, cause ->
+        newException(message, cause)
+    }
+
+    internal abstract val handshake: ConnectionManager<CONNECTION>
 
     internal val mediaDriverContext: MediaDriver.Context
     internal val mediaDriver: MediaDriver
@@ -127,11 +122,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     private val sendIdleStrategy: CoroutineIdleStrategy
 
-
-    val privateKey: PrivateKey?
-    val publicKey: ByteArray?
-
-    val secureRandom: SecureRandom
+    /**
+     * Crypto and signature management
+     */
+    internal val crypto: CryptoManagement
 
     private val shutdown = atomic(false)
     private val shutdownLatch = CountDownLatch(1)
@@ -139,9 +133,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
 
-    var disableRemoteKeyValidation = false
-
-    val rmiSupport = RmiSupport<C>(logger, actionDispatch, config.serialization)
+    internal val rmiGlobalSupport = RmiSupport(logger, actionDispatch, config.serialization)
 
     /**
      * Checks to see if this client has connected yet or not.
@@ -154,6 +146,17 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
 
     init {
+        runBlocking {
+            // our default onError handler. All error messages go though this
+            listenerManager.onError { throwable ->
+                logger.error("Error processing events", throwable)
+            }
+
+            listenerManager.onError { connection, throwable ->
+                logger.error("Error processing events for connection $connection", throwable)
+            }
+        }
+
         // Aeron configuration
 
         /*
@@ -232,8 +235,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             val baseName = "aeron-" + type.simpleName
             val aeronLogDirectory = File(baseFile, baseName)
             if (aeronLogDirectory.exists()) {
-                logger.error("Aeron log directory already exists! This might not be what you want!")
+                logger.info("Aeron log directory already exists! This might not be what you want!")
             }
+
             logger.debug("Aeron log directory: $aeronLogDirectory")
             config.aeronLogDirectory = aeronLogDirectory
         }
@@ -282,8 +286,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             throw e
         }
 
-        closables.add(aeron)
-        closables.add(mediaDriver)
+        autoClosableObjects.add(aeron)
+        autoClosableObjects.add(mediaDriver)
 
 
         // serialization stuff
@@ -295,105 +299,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         settingsStore.init(serialization, config.settingsStorageSystem.build())
 
         // the storage is closed via this as well
-        closables.add(settingsStore)
+        autoClosableObjects.add(settingsStore)
 
-        secureRandom = SecureRandom(settingsStore.getSalt())
-
-        if (settingsStore !is NullSettingsStore) {
-            // initialize the private/public keys used for negotiating ECC handshakes
-            // these are ONLY used for IP connections. LOCAL connections do not need a handshake!
-            var privateKey = settingsStore.getPrivateKey()
-            var publicKey = settingsStore.getPublicKey()
-
-            if (privateKey == null || publicKey == null) {
-                try {
-                    // seed our RNG based off of this and create our ECC keys
-                    val seedBytes = Entropy.get("There are no ECC keys for the " + type.simpleName + " yet")
-                    logger.debug("Now generating ECC (" + CryptoEccNative.curve25519 + ") keys. Please wait!")
-
-                    secureRandom.nextBytes(seedBytes)
-                    val generateKeyPair = CryptoEccNative.createKeyPair(secureRandom)
-                    privateKey = generateKeyPair.private.encoded
-                    publicKey = generateKeyPair.public.encoded
-
-                    // save to properties file
-                    settingsStore.savePrivateKey(privateKey)
-                    settingsStore.savePublicKey(publicKey)
-                    logger.debug("Done with ECC keys!")
-                } catch (e: Exception) {
-                    val message = "Unable to initialize/generate ECC keys. FORCED SHUTDOWN."
-                    logger.error(message)
-                    throw SecurityException(message)
-                }
-            }
-
-            val keyFactory = KeyFactory.getInstance("XDH")
-
-            this.privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privateKey)) as XECPrivateKey
-            //  keyFactory.generatePublic(X509EncodedKeySpec(publicKey)) as XECPublicKey
-            this.publicKey = publicKey
-        } else {
-            privateKey = null
-            publicKey = null
-        }
+        crypto = CryptoManagement(logger, settingsStore, type, config)
 
         // we are done with initial configuration, now finish serialization
         serialization.finishInit(type)
     }
 
-    /**
-     * Disables remote endpoint public key validation when the connection is established. This is not recommended as it is a security risk
-     */
-    fun disableRemoteKeyValidation() {
-        if (isConnected()) {
-            logger.error("Cannot disable the remote key validation after this endpoint is connected!")
-        } else {
-            logger.info("WARNING: Disabling remote key validation is a security risk!!")
-            disableRemoteKeyValidation = true
-        }
-    }
-
-    /**
-     * If the key does not match AND we have disabled remote key validation, then metachannel.changedRemoteKey = true. OTHERWISE, key validation is REQUIRED!
-     *
-     * @return true if the remote address public key matches the one saved or we disabled remote key validation.
-     */
-    internal fun validateRemoteAddress(remoteAddress: Int, publicKey: ByteArray?): Boolean {
-        if (publicKey == null) {
-            logger.error("Error validating public key for ${NetworkUtil.IP.toString(remoteAddress)}! It was null (and should not have been)")
-            return false
-        }
-
-        try {
-            val savedPublicKey = config.settingsStore.getRegisteredServerKey(remoteAddress)
-            if (savedPublicKey == null) {
-                if (logger.isDebugEnabled) {
-                    logger.debug("Adding new remote IP address key for ${NetworkUtil.IP.toString(remoteAddress)}")
-                }
-
-                config.settingsStore.addRegisteredServerKey(remoteAddress, publicKey)
-            } else {
-                // COMPARE!
-                if (!publicKey.contentEquals(savedPublicKey)) {
-                    return if (!config.enableRemoteSignatureValidation) {
-                        logger.warn("Invalid or non-matching public key from remote connection, their public key has changed. Toggling extra flag in channel to indicate key change. To fix, remove entry for: ${NetworkUtil.IP.toString(remoteAddress)}")
-                        true
-                    } else {
-                        // keys do not match, abort!
-                        logger.error("Invalid or non-matching public key from remote connection, their public key has changed. To fix, remove entry for: ${NetworkUtil.IP.toString(remoteAddress)}")
-                        false
-                    }
-                }
-            }
-        } catch (e: SecurityException) {
-            // keys do not match, abort!
-            logger.error("Error validating public key for ${NetworkUtil.IP.toString(remoteAddress)}!", e)
-            return false
-        }
-
-        return true
-    }
-
+    abstract fun newException(message: String, cause: Throwable? = null): Throwable
 
     /**
      * Returns the property store used by this endpoint. The property store can store via properties,
@@ -414,87 +328,118 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * @return a new network connection
      */
     @Suppress("MemberVisibilityCanBePrivate")
-    open fun newConnection(endPoint: EndPoint<C>, mediaDriverConnection: MediaDriverConnection): C {
+    open fun newConnection(endPoint: EndPoint<CONNECTION>, mediaDriverConnection: MediaDriverConnection): CONNECTION {
         @Suppress("UNCHECKED_CAST")
-        return ConnectionImpl(endPoint, mediaDriverConnection) as C
+        return Connection(endPoint, mediaDriverConnection) as CONNECTION
     }
 
     /**
-     * Adds a function that will be called BEFORE a client/server "connects" with
-     * each other, and used to determine if a connection should be allowed
-     * <p>
+     * Used for the client, because the client only has ONE ever support connection, and it allows us to create connection specific objects
+     * from a "global" context
+     */
+    internal open fun getRmiConnectionSupport() : RmiSupportConnection {
+        return RmiSupportConnection(logger, rmiGlobalSupport, serialization, actionDispatch)
+    }
+
+    /**
+     * Disables remote endpoint public key validation when the connection is established. This is not recommended as it is a security risk
+     */
+    fun disableRemoteKeyValidation() {
+        logger.info("WARNING: Disabling remote key validation is a security risk!!")
+        crypto.disableRemoteKeyValidation = true
+    }
+
+    /**
+     * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
+     *
+     * If there are any IP+subnet added to this list - then ONLY those are permitted (all else are denied)
+     *
+     * If there is nothing added to this list - then ALL are permitted
+     */
+    fun filter(ipFilterRule: IpFilterRule) {
+        actionDispatch.launch {
+            listenerManager.filter(ipFilterRule)
+        }
+    }
+
+    /**
+     * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if a connection
+     * should be allowed
+     *
+     * It is the responsibility of the custom filter to write the error, if there is one
+     *
      * If the function returns TRUE, then the connection will continue to connect.
      * If the function returns FALSE, then the other end of the connection will
      *   receive a connection error
-     * <p>
+     *
      * For a server, this function will be called for ALL clients.
      */
-    fun filter(function: suspend (C) -> Boolean) {
+    fun filter(function: suspend (CONNECTION) -> Boolean) {
         actionDispatch.launch {
-            connectionManager.filter(function)
+            listenerManager.filter(function)
         }
     }
 
     /**
      * Adds a function that will be called when a client/server "connects" with each other
-     * <p>
+     *
      * For a server, this function will be called for ALL clients.
      */
-    fun onConnect(function: suspend (C) -> Unit) {
+    fun onConnect(function: suspend (CONNECTION) -> Unit) {
         actionDispatch.launch {
-            connectionManager.onConnect(function)
+            listenerManager.onConnect(function)
         }
     }
 
     /**
      * Called when the remote end is no longer connected.
-     * <p>
+     *
      * Do not try to send messages! The connection will already be closed, resulting in an error if you attempt to do so.
      */
-    fun onDisconnect(function: suspend (C) -> Unit) {
+    fun onDisconnect(function: suspend (CONNECTION) -> Unit) {
         actionDispatch.launch {
-            connectionManager.onDisconnect(function)
+            listenerManager.onDisconnect(function)
         }
     }
 
     /**
      * Called when there is an error for a specific connection
-     * <p>
+     *
      * The error is also sent to an error log before this method is called.
      */
-    fun onError(function: suspend (C, Throwable) -> Unit) {
+    fun onError(function: suspend (CONNECTION, Throwable) -> Unit) {
         actionDispatch.launch {
-            connectionManager.onError(function)
+            listenerManager.onError(function)
         }
     }
 
     /**
      * Called when there is an error in general
-     * <p>
+     *
      * The error is also sent to an error log before this method is called.
      */
     fun onError(function: suspend (Throwable) -> Unit) {
         actionDispatch.launch {
-            connectionManager.onError(function)
+            listenerManager.onError(function)
         }
     }
 
     /**
      * Called when an object has been received from the remote end of the connection.
-     * <p>
+     *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    fun <M : Any> onMessage(function: suspend (C, M) -> Unit) {
+    fun <Message : Any> onMessage(function: suspend (CONNECTION, Message) -> Unit) {
         actionDispatch.launch {
-            connectionManager.onMessage(function)
+            listenerManager.onMessage(function)
         }
     }
 
     /**
      * Runs an action for each connection inside of a read-lock
      */
-    suspend fun forEachConnection(function: suspend (connection: C) -> Unit) {
-        connectionManager.forEachConnectionDoRead(function)
+    suspend fun forEachConnection(function: suspend (connection: CONNECTION) -> Unit) {
+        handshake.forEachConnectionDoRead(function)
     }
 
     internal suspend fun writeHandshakeMessage(publication: Publication, message: Any) {
@@ -524,8 +469,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                logger.error("Error sending message. ${errorCodeName(result)}")
-
+                listenerManager.notifyError(newException("Error sending message. ${errorCodeName(result)}"))
                 return
             }
         } catch (e: Exception) {
@@ -558,7 +502,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         return null
     }
 
-    suspend fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection_) {
+    // This is on the action dispatch!
+    suspend fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection) {
         // The sessionId is globally unique, and is assigned by the server.
         val sessionId = header.sessionId()
 
@@ -580,7 +525,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             message = kryo.read(buffer, offset, length, connection)
             logger.debug("[{}] received: {}", sessionId, message)
         } catch (e: Exception) {
-            logger.error("[${sessionId}] Error de-serializing message", e)
+            listenerManager.notifyError(newException("[${sessionId}] Error de-serializing message", e))
         } finally {
             serialization.returnKryo(kryo)
         }
@@ -605,11 +550,11 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             is RmiMessage -> {
                 // if we are an RMI message/registration, we have very specific, defined behavior.
                 // We do not use the "normal" listener callback pattern because this require special functionality
-                @Suppress("UNCHECKED_CAST")
-                rmiSupport.manage(this as EndPoint<Connection_>, connection, message, logger)
+                rmiGlobalSupport.manage(this, connection, message, logger)
             }
             is Any -> {
-                connectionManager.notifyOnMessage(connection, message)
+                @Suppress("UNCHECKED_CAST")
+                listenerManager.notifyOnMessage(connection as CONNECTION, message)
             }
             else -> {
                 // do nothing, there were problems with the message
@@ -644,8 +589,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     override fun hashCode(): Int {
         val prime = 31
         var result = 1
-        result = prime * result + (privateKey?.hashCode() ?: 0)
-        result = prime * result + (publicKey?.hashCode() ?: 0)
+        result = prime * result + (crypto.hashCode())
         return result
     }
 
@@ -660,27 +604,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             return false
         }
 
-        val other1 = other as EndPoint<*>
-        if (privateKey == null) {
-            if (other1.privateKey != null) {
-                return false
-            }
-        } else if (other1.privateKey == null) {
-            return false
-        } else if (!privateKey.encoded.contentEquals(other1.privateKey.encoded)) {
-            return false
-        }
-        if (publicKey == null) {
-            if (other1.publicKey != null) {
-                return false
-            }
-        } else if (other1.publicKey == null) {
-            return false
-        } else if (!publicKey.contentEquals(other1.publicKey)) {
-            return false
-        }
-
-        return true
+        other as EndPoint<CONNECTION>
+        return crypto == other.crypto
     }
 
     /**
@@ -700,10 +625,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     override fun close() {
         if (shutdown.compareAndSet(expect = false, update = true)) {
-            closables.forEach {
+            autoClosableObjects.forEach {
                 it.close()
             }
-            closables.clear()
+            autoClosableObjects.clear()
 
             actionDispatch.cancel()
             shutdownLatch.countDown()

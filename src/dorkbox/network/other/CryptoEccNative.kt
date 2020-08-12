@@ -5,6 +5,8 @@ import java.security.*
 import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
 import java.security.spec.*
+import javax.crypto.Cipher
+
 
 
 /**
@@ -31,6 +33,9 @@ object CryptoEccNative {
     // https://github.com/nelenkov/ecdh-kx/blob/master/src/org/nick/ecdhkx/Crypto.java
     // http://nelenkov.blogspot.com/2011/12/using-ecdh-on-android.html
     // http://www.secg.org/collateral/sec1_final.pdf
+
+    // More info about 25519 key types (ed25519 and X25519)
+    // https://blog.filippo.io/using-ed25519-keys-for-encryption/
 
 
     fun createKeyPair(secureRandom: SecureRandom): KeyPair {
@@ -205,9 +210,12 @@ object CryptoEccNative {
     @Throws(GeneralSecurityException::class)
     @JvmStatic
     fun main(args: Array<String>) {
+        val cryptoText = "i23j4jh234kjh234kjh23lkjnfa9s8egfuypuh325"
+
         // NOTE: THIS IS NOT 25519!!
         println("Generate ECPublicKey from PrivateKey (String) for curve secp256k1 (final)")
         println("Check keys with https://gobittest.appspot.com/Address")
+
         // https://gobittest.appspot.com/Address
         val privateKey = "D12D2FACA9AD92828D89683778CB8DFCCDBD6C9E92F6AB7D6065E8AACC1FF6D6"
         val publicKeyExpected = "04661BA57FED0D115222E30FE7E9509325EE30E7E284D3641E6FB5E67368C2DB185ADA8EFC5DC43AF6BF474A41ED6237573DC4ED693D49102C42FFC88510500799"
@@ -255,5 +263,18 @@ object CryptoEccNative {
         println("ecPublicKeyKey   : $publicKeyNativeKey")
         println("publicKeyExpected: $publicKeyExpected")
         println("publicKeys match : " + publicKeyNativeKey.contentEquals(publicKeyExpected))
+
+
+        // encrypt
+        val encryptCipher: Cipher = Cipher.getInstance("RSA")
+        encryptCipher.init(Cipher.ENCRYPT_MODE, ecPublicKeyNative)
+        val cipherText: ByteArray = encryptCipher.doFinal(cryptoText.toByteArray())
+
+        // decrypt
+        val decryptCipher = Cipher.getInstance("RSA");
+        decryptCipher.init(Cipher.DECRYPT_MODE, ecPrivateKeyNative);
+
+        val outputBytes = decryptCipher.doFinal(cipherText)
+        println("Crypto round passed: ${String(outputBytes) == cryptoText}")
     }
 }

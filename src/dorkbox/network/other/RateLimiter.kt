@@ -4,9 +4,7 @@ import org.agrona.collections.Hashing
 import org.agrona.collections.Long2ObjectHashMap
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import java.time.Clock
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.sqrt
@@ -36,16 +34,15 @@ class RateLimiter(private val logger: Logger,
 
         init {
             val listOfTimedInsertions = mutableListOf<Pair<Instant, Long>>()
-            val IpToAccessMap = Long2ObjectHashMap<Pair<Int, Instant>>(32, Hashing.DEFAULT_LOAD_FACTOR, false)
+            val ipToAccessMap = Long2ObjectHashMap<Pair<Int, Instant>>(32, Hashing.DEFAULT_LOAD_FACTOR, false)
 
-            val clock = Clock.systemUTC()
-            val expirationTime = clock.instant().plus(10L, ChronoUnit.SECONDS)
+            val expirationTime = Instant.now().plusSeconds(10L)
 
             val ipAddress = 52L
             val accessCount = 2
 
             listOfTimedInsertions.add(Pair(expirationTime, ipAddress))
-            IpToAccessMap.putIfAbsent(ipAddress, Pair(accessCount, expirationTime))
+            ipToAccessMap.putIfAbsent(ipAddress, Pair(accessCount, expirationTime))
 
 
             // reset all login rate limiting at midnight
