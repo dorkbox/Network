@@ -350,64 +350,22 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 //        return connection!!.idAsHex()
 //    }
 
+
+
+
+
+
+
     /**
-     * Tells the remote connection to create a new global object that implements the specified interface.
-     *
-     * The methods on the returned object will remotely execute on the (remotely) created object
-     * The callback will be notified when the remote object has been created.
-     *
-     * If you want to create a connection specific remote object, call [Connection.create(Int, RemoteObjectCallback<Iface>)] on a connection
-     * The callback will be notified when the remote object has been created.
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     *
-     * If one wishes to change the remote object behavior, cast the object [RemoteObject] to access the different methods, for example:
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
+     * Fetches the connection used by the client, this is only valid after the client has connected
      */
-    suspend inline fun <reified Iface> createObject(noinline callback: suspend (Iface) -> Unit) {
-        val classId = serialization.getClassId(Iface::class.java)
-        rmiSupport.createGlobalRemoteObject(getConnection(), classId, callback)
+    fun getConnection(): CONNECTION {
+        return connection as CONNECTION
     }
 
     /**
-     * Gets a global remote object via the ID.
-     *
-     * Global remote objects are accessible to ALL connections, where as a connection specific remote object is only accessible/visible
-     * to the connection.
-     *
-     * If you want to access a connection specific remote object, call [Connection.get(Int, RemoteObjectCallback<Iface>)] on a connection
-     * The callback will be notified when the remote object has been created.
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
+     * @throws ClientException when a message cannot be sent
      */
-    fun <Iface> getObject(objectId: Int, interfaceClass: Class<Iface>): Iface {
-        return rmiSupport.getGlobalRemoteObject(getConnection(), this, objectId, interfaceClass)
-    }
-
-    /**
-     * Fetches the connection used by the client.
-     *
-     *
-     * Make **sure** that you only call this **after** the client connects!
-     *
-     *
-     * This is preferred to [EndPoint.getConnections], as it properly does some error checking
-     */
-    fun getConnection(): C {
-        return connection as C
-    }
-
-    @Throws(ClientException::class)
     suspend fun send(message: Any) {
         val c = connection
         if (c != null) {
@@ -417,7 +375,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
     }
 
-    @Throws(ClientException::class)
+    /**
+     * @throws ClientException when a message cannot be sent
+     */
     suspend fun send(message: Any, priority: Byte) {
         val c = connection
         if (c != null) {
@@ -427,7 +387,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
     }
 
-    @Throws(ClientException::class)
+    /**
+     * @throws ClientException when a ping cannot be sent
+     */
     suspend fun ping(): Ping {
         val c = connection
         if (c != null) {
@@ -443,7 +405,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         if (savedPublicKey != null) {
             val logger2 = logger
             if (logger2.isDebugEnabled) {
-                logger2.debug("Deleting remote IP address key ${NetworkUtil.IP.toString(hostAddress)}")
+                logger2.debug("Deleting remote IP address key ${IPv4.toString(hostAddress)}")
             }
             settingsStore.removeRegisteredServerKey(hostAddress)
         }
@@ -534,4 +496,209 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 //        // make sure we're not waiting on registration
 ////        stopRegistration()
 //    }
+
+    override fun close() {
+        val con = connection
+        connection = null
+        if (con != null) {
+            handshake.removeConnection(con)
+        }
+
+        super.close()
+    }
+
+
+    // RMI notes (in multiple places, copypasta, because this is confusing if not written down
+    //
+    // only server can create a global object (in itself, via save)
+    // server
+    //  -> saveGlobal (global)
+    //
+    // client
+    //  -> save (connection)
+    //  -> get (connection)
+    //  -> create (connection)
+    //  -> saveGlobal (global)
+    //  -> getGlobal (global)
+    //
+    // connection
+    //  -> save (connection)
+    //  -> get (connection)
+    //  -> getGlobal (global)
+    //  -> create (connection)
+
+
+    //
+    //
+    // RMI - connection
+    //
+    //
+
+    /**
+     * Tells us to save an an already created object in the CONNECTION scope, so a remote connection can get it via [Connection.getObject]
+     *
+     * - This object is NOT THREAD SAFE, and is meant to ONLY be used from a single thread!
+     *
+     * Methods that return a value will throw [TimeoutException] if the response is not received with the
+     * response timeout [RemoteObject.responseTimeout].
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     *
+     * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
+     *
+     * @see RemoteObject
+     */
+    fun saveObject(`object`: Any): Int {
+        return rmiConnectionSupport.saveImplObject(`object`)
+    }
+
+    /**
+     * Tells us to save an an already created object in the CONNECTION scope using the specified ID, so a remote connection can get it via [Connection.getObject]
+     *
+     *
+     * Methods that return a value will throw [TimeoutException] if the response is not received with the
+     * response timeout [RemoteObject.responseTimeout].
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     * @return true if the object was successfully saved for the specified ID. If false, an error log will be emitted
+     *
+     * @see RemoteObject
+     */
+    fun saveObject(`object`: Any, objectId: Int): Boolean {
+        return rmiConnectionSupport.saveImplObject(`object`, objectId)
+    }
+
+    /**
+     * Get a CONNECTION scope REMOTE object via the ID.
+     *
+     * Global remote objects are accessible to ALL connections, where as a connection specific remote object is only accessible/visible
+     * to the connection.
+     *
+     * If you want to access a connection specific remote object, call [Connection.get(Int, RemoteObjectCallback<Iface>)] on a connection
+     * The callback will be notified when the remote object has been created.
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     * @see RemoteObject
+     */
+    inline fun <reified Iface> getObject(objectId: Int): Iface {
+        // NOTE: It's not possible to have reified inside a virtual function
+        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
+        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
+        return rmiConnectionSupport.getRemoteObject(getConnection(), this, objectId, Iface::class.java)
+    }
+
+    /**
+     * Tells the remote connection to create a new proxy object that implements the specified interface in the CONNECTION scope.
+     *
+     * The methods on this object "map" to an object that is created remotely.
+     *
+     * The callback will be notified when the remote object has been created.
+     *
+     * Methods that return a value will throw [TimeoutException] if the response is not received with the
+     * response timeout [RemoteObject.responseTimeout].
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     * @see RemoteObject
+     */
+    suspend inline fun <reified Iface> createObject(noinline callback: suspend (Iface) -> Unit) {
+        // NOTE: It's not possible to have reified inside a virtual function
+        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
+        val classId = serialization.getClassId(Iface::class.java)
+
+        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
+        rmiConnectionSupport.createRemoteObject(getConnection(), classId, callback)
+    }
+
+    //
+    //
+    // RMI - global
+    //
+    //
+
+    /**
+     * Tells us to save an an already created object in the GLOBAL scope, so a remote connection can get it via [Connection.getGlobalObject]
+     *
+     *
+     * Methods that return a value will throw [TimeoutException] if the response is not received with the
+     * response timeout [RemoteObject.responseTimeout].
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     *
+     * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
+     *
+     * @see RemoteObject
+     */
+    fun saveGlobalObject(`object`: Any): Int {
+        return rmiGlobalSupport.saveImplObject(`object`)
+    }
+
+    /**
+     * Tells us to save an an already created object in the GLOBAL scope using the specified ID, so a remote connection can get it via [Connection.getGlobalObject]
+     *
+     *
+     * Methods that return a value will throw [TimeoutException] if the response is not received with the
+     * response timeout [RemoteObject.responseTimeout].
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     * @return true if the object was successfully saved for the specified ID. If false, an error log will be emitted
+     *
+     * @see RemoteObject
+     */
+    fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
+        return rmiGlobalSupport.saveImplObject(`object`, objectId)
+    }
+
+    /**
+     * Get a GLOBAL scope remote object via the ID.
+     *
+     * Global remote objects are accessible to ALL connections, where as a connection specific remote object is only accessible/visible
+     * to the connection.
+     *
+     * If you want to access a connection specific remote object, call [Connection.get(Int, RemoteObjectCallback<Iface>)] on a connection
+     * The callback will be notified when the remote object has been created.
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     * @see RemoteObject
+     */
+    inline fun <reified Iface> getGlobalObject(objectId: Int): Iface {
+        // NOTE: It's not possible to have reified inside a virtual function
+        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
+        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
+        return rmiGlobalSupport.getGlobalRemoteObject(getConnection(), this, objectId, Iface::class.java)
+    }
 }

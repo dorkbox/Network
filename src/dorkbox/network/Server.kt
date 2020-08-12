@@ -464,4 +464,77 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 //        }
 //        return STATE.CONTINUE
 //    }
+
+
+
+    // RMI notes (in multiple places, copypasta, because this is confusing if not written down
+    //
+    // only server can create a global object (in itself, via save)
+    // server
+    //  -> saveGlobal (global)
+    //
+    // client
+    //  -> save (connection)
+    //  -> get (connection)
+    //  -> create (connection)
+    //  -> saveGlobal (global)
+    //  -> getGlobal (global)
+    //
+    // connection
+    //  -> save (connection)
+    //  -> get (connection)
+    //  -> getGlobal (global)
+    //  -> create (connection)
+
+
+    //
+    //
+    // RMI
+    //
+    //
+
+
+
+    /**
+     * Tells us to save an an already created object, GLOBALLY, so a remote connection can get it via [Connection.getObject]
+     *
+     * FOR REMOTE CONNECTIONS:
+     * Methods that return a value will throw [TimeoutException] if the response is not received with the
+     * response timeout [RemoteObject.responseTimeout].
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     *
+     * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
+     *
+     * @see RemoteObject
+     */
+    fun saveGlobalObject(`object`: Any): Int {
+        return rmiGlobalSupport.saveImplObject(logger, `object`)
+    }
+
+    /**
+     * Tells us to save an an already created object, GLOBALLY using the specified ID, so a remote connection can get it via [Connection.getObject]
+     *
+     * FOR REMOTE CONNECTIONS:
+     * Methods that return a value will throw [TimeoutException] if the response is not received with the
+     * response timeout [RemoteObject.responseTimeout].
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     * @return true if the object was successfully saved for the specified ID. If false, an error log will be emitted
+     *
+     * @see RemoteObject
+     */
+    fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
+        return rmiGlobalSupport.saveImplObject(logger, `object`, objectId)
+    }
 }
