@@ -13,13 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.registration
+package dorkbox.network.handshake
 
 /**
  * Internal message to handle the connection registration process
  */
-class Registration private constructor() {
-    // used to keep track and associate TCP/UDP/etc sessions. This is always defined by the server
+class Message private constructor() {
+    // the public key is used to encrypt the data in the handshake
+    var publicKey: ByteArray? = null
+
+
+    // used to keep track and associate UDP/etc sessions. This is always defined by the server
     // a sessionId if '0', means we are still figuring it out.
     var oneTimePad = 0
 
@@ -27,12 +31,13 @@ class Registration private constructor() {
     var state = INVALID
 
     var errorMessage: String? = null
+
     var publicationPort = 0
     var subscriptionPort = 0
     var sessionId = 0
     var streamId = 0
 
-    var publicKey: ByteArray? = null
+
 
     // by default, this will be a reliable connection. When the client connects to the server, the client will specify if the new connection
     // is a reliable/unreliable connection when setting up the MediaDriverConnection
@@ -48,18 +53,22 @@ class Registration private constructor() {
 
     // > 0 when we are ready to setup the connection (hasMore will always be false if this is >0). 0 when we are ready to connect
     // ALSO used if there are fragmented frames for registration data (since we have to split it up to fit inside a single UDP packet without fragmentation)
-    var upgradeType = 0.toByte()
+//    var upgradeType = 0.toByte()
 
     // true when we are fully upgraded
-    var upgraded = false
+//    var upgraded = false
+
+
 
     companion object {
         const val INVALID = -1
         const val HELLO = 0
         const val HELLO_ACK = 1
+        const val DONE = 2
+        const val DONE_ACK = 3
 
-        fun hello(oneTimePad: Int, publicKey: ByteArray, registrationData: ByteArray): Registration {
-            val hello = Registration()
+        fun helloFromClient(oneTimePad: Int, publicKey: ByteArray, registrationData: ByteArray): Message {
+            val hello = Message()
             hello.state = HELLO
             hello.oneTimePad = oneTimePad
             hello.publicKey = publicKey
@@ -67,18 +76,35 @@ class Registration private constructor() {
             return hello
         }
 
-        fun helloAck(oneTimePad: Int): Registration {
-            val hello = Registration()
+        fun helloAckToClient(sessionId: Int): Message {
+            val hello = Message()
             hello.state = HELLO_ACK
-            hello.oneTimePad = oneTimePad
+            hello.sessionId = sessionId // has to be the same as before (the client expects this)
             return hello
         }
 
-        fun error(errorMessage: String?): Registration {
-            val error = Registration()
+        fun doneFromClient(): Message {
+            val hello = Message()
+            hello.state = DONE
+            return hello
+        }
+
+        fun doneToClient(sessionId: Int): Message {
+            val hello = Message()
+            hello.state = DONE_ACK
+            hello.sessionId = sessionId
+            return hello
+        }
+
+        fun error(errorMessage: String?): Message {
+            val error = Message()
             error.state = INVALID
             error.errorMessage = errorMessage
             return error
         }
+    }
+
+    override fun toString(): String {
+        return "Message(oneTimePad=$oneTimePad, state=$state)"
     }
 }

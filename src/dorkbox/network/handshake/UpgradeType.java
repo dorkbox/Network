@@ -1,4 +1,4 @@
-package dorkbox.network.connection.registration;
+package dorkbox.network.handshake;
 
 public
 class UpgradeType {

@@ -15,21 +15,24 @@
  */
 package dorkbox.network
 
+import dorkbox.netUtil.IPv4
 import dorkbox.network.aeron.server.ServerException
-import dorkbox.network.connection.*
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.IpcMediaDriverConnection
+import dorkbox.network.connection.UdpMediaDriverConnection
 import dorkbox.network.connection.connectionType.ConnectionProperties
 import dorkbox.network.connection.connectionType.ConnectionRule
-import dorkbox.network.ipFilter.IpFilterRule
-import dorkbox.network.ipFilter.IpFilterRuleType
-import dorkbox.network.other.NetUtil
-import dorkbox.network.other.NetworkUtil
+import dorkbox.network.handshake.ServerHandshake
+import dorkbox.network.rmi.RemoteObject
+import dorkbox.network.rmi.RemoteObjectStorage
+import dorkbox.network.rmi.TimeoutException
 import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
 import kotlinx.coroutines.launch
 import org.agrona.DirectBuffer
 import java.net.InetSocketAddress
-import java.util.*
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -42,12 +45,12 @@ import java.util.concurrent.CopyOnWriteArrayList
  *
  * To put it bluntly, ONLY have the server do work inside of a listener!
  */
-open class Server<C : Connection>(config: ServerConfiguration = ServerConfiguration()) : EndPoint<C>(config) {
+open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerConfiguration()) : EndPoint<CONNECTION>(config) {
     companion object {
         /**
          * Gets the version number.
          */
-        const val version = "4.1"
+        const val version = "5.0"
 
         /**
          * Checks to see if a server (using the specified configuration) is running.
@@ -72,12 +75,7 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
     private var bindAlreadyCalled = false
 
 
-    override val connectionManager = ConnectionManagerServer<C>(logger, config)
-
-    /**
-     * Maintains a thread-safe collection of rules to allow/deny connectivity to this server.
-     */
-    protected val ipFilterRules = CopyOnWriteArrayList<IpFilterRule>()
+    override val handshake = ServerHandshake(logger, config, listenerManager)
 
     /**
      * Maintains a thread-safe collection of rules used to define the connection type with this server.
@@ -90,10 +88,10 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
 
         // localhost/loopback IP might not always be 127.0.0.1 or ::1
         when (config.listenIpAddress) {
-            "loopback", "localhost", "lo" -> config.listenIpAddress = NetUtil.LOCALHOST.hostAddress
+            "loopback", "localhost", "lo" -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
             else -> when {
-                config.listenIpAddress.startsWith("127.") -> config.listenIpAddress = NetUtil.LOCALHOST.hostAddress
-                config.listenIpAddress.startsWith("::1") -> config.listenIpAddress = NetUtil.LOCALHOST6.hostAddress
+                config.listenIpAddress.startsWith("127.") -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
+                config.listenIpAddress.startsWith("::1") -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
                 else -> config.listenIpAddress = "0.0.0.0" // we set this to "0.0.0.0" so that it is clear that we are trying to bind to that address.
             }
         }
@@ -107,21 +105,24 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
         }
 
         if (config.listenIpAddress == "0.0.0.0") {
-            // fixup windows!
-            config.listenIpAddress = NetworkUtil.WILDCARD_IPV4
+            // this will also fixup windows!
+            config.listenIpAddress = IPv4.WILDCARD
         }
 
 
-        if (config.publicationPort <= 0) { throw ServerException("configuration port must be > 0") }
-        if (config.publicationPort >= 65535) { throw ServerException("configuration port must be < 65535") }
+        if (config.publicationPort <= 0) { throw newException("configuration port must be > 0") }
+        if (config.publicationPort >= 65535) { throw newException("configuration port must be < 65535") }
 
-        if (config.subscriptionPort <= 0) { throw ServerException("configuration controlPort must be > 0") }
-        if (config.subscriptionPort >= 65535) { throw ServerException("configuration controlPort must be < 65535") }
+        if (config.subscriptionPort <= 0) { throw newException("configuration controlPort must be > 0") }
+        if (config.subscriptionPort >= 65535) { throw newException("configuration controlPort must be < 65535") }
 
-        if (config.networkMtuSize <= 0) { throw ServerException("configuration networkMtuSize must be > 0") }
-        if (config.networkMtuSize >= 9 * 1024) { throw ServerException("configuration networkMtuSize must be < ${9 * 1024}") }
+        if (config.networkMtuSize <= 0) { throw newException("configuration networkMtuSize must be > 0") }
+        if (config.networkMtuSize >= 9 * 1024) { throw newException("configuration networkMtuSize must be < ${9 * 1024}") }
 
-        closables.add(connectionManager)
+        autoClosableObjects.add(handshake)
+    }
+    override fun newException(message: String, cause: Throwable?): Throwable {
+        return ServerException(message, cause)
     }
 
     /**
@@ -182,7 +183,7 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
          */
         val initialConnectionHandler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             actionDispatch.launch {
-                connectionManager.receiveHandshakeMessageServer(handshakePublication, buffer, offset, length, header, this@Server)
+                handshake.receiveHandshakeMessageServer(handshakePublication, buffer, offset, length, header, this@Server)
             }
         })
         val ipcInitialConnectionHandler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
@@ -200,13 +201,13 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
                     pollCount = 0
 
                     // this checks to see if there are NEW clients
-//                    pollCount += handshakeSubscription.poll(initialConnectionHandler, 100)
+                    pollCount += handshakeSubscription.poll(initialConnectionHandler, 100)
 
                     // this checks to see if there are NEW clients via IPC
-                    pollCount += ipcHandshakeSubscription.poll(ipcInitialConnectionHandler, 100)
+//                    pollCount += ipcHandshakeSubscription.poll(ipcInitialConnectionHandler, 100)
 
                     // this manages existing clients (for cleanup + connection polling)
-//                    pollCount += connectionManager.poll()
+                    pollCount += handshake.poll()
 
 
                     // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
@@ -229,18 +230,7 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
     }
 
 
-    /**
-     * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
-     *
-     *
-     * If there are any IP+subnet added to this list - then ONLY those are permitted (all else are denied)
-     *
-     *
-     * If there is nothing added to this list - then ALL are permitted
-     */
-    fun addIpFilterRule(vararg rules: IpFilterRule?) {
-        ipFilterRules.addAll(listOf(*rules))
-    }
+
 
     /**
      * Adds an IP+subnet rule that defines what type of connection this IP+subnet should have.
@@ -256,8 +246,8 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
      * Compress   :       6.210 micros/op;  629.0 MB/s (output: 55.4%)
      * Uncompress :       0.641 micros/op; 6097.9 MB/s
      */
-    fun addConnectionRules(vararg rules: ConnectionRule?) {
-        connectionRules.addAll(Arrays.asList(*rules))
+    fun addConnectionRules(vararg rules: ConnectionRule) {
+        connectionRules.addAll(listOf(*rules))
     }
 
 
@@ -290,7 +280,7 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
      * @return true if we are connected, false otherwise.
      */
     override fun isConnected(): Boolean {
-        return connectionManager.connectionCount() > 0
+        return handshake.connectionCount() > 0
     }
 
 
@@ -298,7 +288,7 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
      * Safely sends objects to a destination
      */
     suspend fun send(message: Any) {
-        connectionManager.send(message)
+        handshake.send(message)
     }
 
     /**
@@ -365,8 +355,8 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
      *
      * @param connection the connection to add
      */
-    fun add(connection: C) {
-        connectionManager.addConnection(connection)
+    fun addConnection(connection: CONNECTION) {
+        handshake.addConnection(connection)
     }
 
     /**
@@ -378,33 +368,11 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
      *
      * @param connection the connection to remove
      */
-    fun remove(connection: C) {
-        connectionManager.removeConnection(connection)
+    fun removeConnection(connection: CONNECTION) {
+        handshake.removeConnection(connection)
     }
 
-    // if no rules, then always yes
-    // if rules, then default no unless a rule says yes. ACCEPT rules take precedence over REJECT (so if you have both rules, ACCEPT will happen)
-    fun acceptRemoteConnection(remoteAddress: InetSocketAddress): Boolean {
-        val size = ipFilterRules.size
-        if (size == 0) {
-            return true
-        }
-        val address = remoteAddress.address
 
-        // it's possible for a remote address to match MORE than 1 rule.
-        var isAllowed = false
-        for (i in 0 until size) {
-            val rule = ipFilterRules[i] ?: continue
-            if (isAllowed) {
-                break
-            }
-            if (rule.matches(remoteAddress)) {
-                isAllowed = rule.ruleType() == IpFilterRuleType.ACCEPT
-            }
-        }
-        logger.debug("Validating {}  Connection allowed: {}", address, isAllowed)
-        return isAllowed
-    }
 
     /**
      * Checks to see if a server (using the specified configuration) is running.
@@ -434,7 +402,7 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
 
         // if it's unknown, then by default we encrypt the traffic
         var connectionType = ConnectionProperties.COMPRESS_AND_ENCRYPT
-        if (size == 0 && address == NetUtil.LOCALHOST) {
+        if (size == 0 && address == IPv4.LOCALHOST) {
             // if nothing is specified, then by default localhost is compression and everything else is encrypted
             connectionType = ConnectionProperties.COMPRESS
         }
@@ -449,9 +417,12 @@ open class Server<C : Connection>(config: ServerConfiguration = ServerConfigurat
         return connectionType.type
     }
 
-    enum class STATE {
-        ERROR, WAIT, CONTINUE
-    }
+
+
+
+//    enum class STATE {
+//        ERROR, WAIT, CONTINUE
+//    }
 
 //    fun verifyClassRegistration(metaChannel: MetaChannel, registration: Registration): STATE {
 //        if (registration.upgradeType == UpgradeType.FRAGMENTED) {
