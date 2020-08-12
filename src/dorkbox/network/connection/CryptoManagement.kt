@@ -67,7 +67,7 @@ internal class CryptoManagement(val logger: KLogger,
             try {
                 // seed our RNG based off of this and create our ECC keys
                 val seedBytes = Entropy.get("There are no ECC keys for the " + type.simpleName + " yet")
-                logger.debug("Now generating ECC (" + CryptoEccNative.curve25519 + ") keys. Please wait!")
+                logger.info("Now generating ECC (" + CryptoEccNative.curve25519 + ") keys. Please wait!")
 
                 secureRandom.nextBytes(seedBytes)
                 val generateKeyPair = createKeyPair(secureRandom)
