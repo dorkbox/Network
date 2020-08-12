@@ -37,7 +37,6 @@ internal data class RmiWaiter(val id: Int) {
     }
 
     suspend fun doNotify() {
-        println("notified waiter")
         try {
             channel.send(Unit)
         } catch (ignored: Exception) {
@@ -45,7 +44,6 @@ internal data class RmiWaiter(val id: Int) {
     }
 
     suspend fun doWait() {
-        println("waiting waiter")
         try {
             channel.receive()
         } catch (ignored: Exception) {
@@ -53,7 +51,6 @@ internal data class RmiWaiter(val id: Int) {
     }
 
     fun cancel() {
-        println("delay is cancelling suspending coroutine")
         try {
             channel.cancel()
         } catch (ignored: Exception) {
@@ -109,8 +106,6 @@ internal class RmiResponseStorage(private val actionDispatch: CoroutineScope) {
 
         val pendingId = RmiUtils.packShorts(objectId, responseId)
 
-        println("pending result received")
-
         val previous = pendingLock.write { pending.put(pendingId, result) }
 
         // if NULL, since either we don't exist, or it was cancelled
@@ -162,8 +157,7 @@ internal class RmiResponseStorage(private val actionDispatch: CoroutineScope) {
             // check if we have a result or not
             val maybeResult = pendingLock.read { pending[pendingId] }
             if (maybeResult is RmiWaiter) {
-                System.err.println("TIMEOUT $pendingId")
-//                maybeResult.cancel()
+                maybeResult.cancel()
             }
         }
 
