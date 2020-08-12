@@ -15,8 +15,8 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.Connection_
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager
 import dorkbox.network.rmi.messages.*
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.util.classes.ClassHelper
@@ -26,10 +26,9 @@ import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
 
-class RmiSupport<C : Connection>(logger: KLogger,
-                                 actionDispatch: CoroutineScope,
-                                 internal val serialization: NetworkSerializationManager) : RmiSupportCache(logger, actionDispatch)
-{
+internal class RmiSupport(logger: KLogger,
+                          actionDispatch: CoroutineScope,
+                          internal val serialization: NetworkSerializationManager) : RmiSupportCache(logger, actionDispatch) {
     companion object {
         /**
          * Returns a proxy object that implements the specified interface, and the methods invoked on the proxy object will be invoked
@@ -127,7 +126,7 @@ class RmiSupport<C : Connection>(logger: KLogger,
         /**
          * called on "client"
          */
-        private fun onGenericObjectResponse(endPoint: EndPoint<Connection_>, connection: Connection_, logger: KLogger,
+        private fun onGenericObjectResponse(endPoint: EndPoint<*>, connection: Connection, logger: KLogger,
                                             isGlobal: Boolean, rmiId: Int, callback: suspend (Any) -> Unit,
                                             rmiSupportCache: RmiSupportCache, serialization: NetworkSerializationManager) {
 
@@ -162,20 +161,80 @@ class RmiSupport<C : Connection>(logger: KLogger,
     // this is used for all connection specific ones as well.
     private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
 
+
+
+
     internal fun <Iface> registerCallback(callback: suspend (Iface) -> Unit): Int {
         return remoteObjectCreationCallbacks.register(callback)
     }
 
     private fun removeCallback(callbackId: Int): suspend (Any) -> Unit {
-        return remoteObjectCreationCallbacks.remove(callbackId)
+        // callback's area always correct, because we track them ourselves.
+        return remoteObjectCreationCallbacks.remove(callbackId)!!
     }
 
     /**
-     * Get's the implementation object based on if it is global, or not global
+     * @return the implementation object based on if it is global, or not global
      */
-    fun getImplObject(isGlobal: Boolean, rmiObjectId: Int, connection: Connection_): Any {
-        return if (isGlobal) getImplObject(rmiObjectId) else connection.rmiSupport().getImplObject(rmiObjectId)
+    fun <T> getImplObject(isGlobal: Boolean, rmiObjectId: Int, connection: Connection): T? {
+        return if (isGlobal) getImplObject(rmiObjectId) else connection.rmiConnectionSupport.getImplObject(rmiObjectId)
     }
+
+    /**
+     * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
+     */
+    fun saveImplObject(logger: KLogger, `object`: Any): Int {
+        val rmiId = saveImplObject(`object`)
+
+        if (rmiId != RemoteObjectStorage.INVALID_RMI) {
+            // this means we could register this object.
+
+            // next, scan this object to see if there are any RMI fields
+            scanImplForRmiFields(logger, `object`) {
+                saveImplObject(it)
+            }
+        } else {
+            logger.error("Trying to create an RMI object with the INVALID_RMI id!!")
+        }
+
+        return rmiId
+    }
+
+    /**
+     * @return the true if it was a success saving this object. False means it was invalid (an error log will be emitted)
+     */
+    fun saveImplObject(logger: KLogger, `object`: Any, objectId: Int): Boolean {
+        val rmiSuccess = saveImplObject(`object`, objectId)
+
+        if (rmiSuccess) {
+            // this means we could register this object.
+
+            // next, scan this object to see if there are any RMI fields
+            scanImplForRmiFields(logger, `object`) {
+                saveImplObject(it)
+            }
+        } else {
+            logger.error("Trying to save an RMI object ${`object`.javaClass} with invalid id $objectId")
+        }
+
+        return rmiSuccess
+    }
+
+    /**
+     * @return the removed object. If null, an error log will be emitted
+     */
+    fun <T> removeImplObject(logger: KLogger, objectId: Int): T? {
+        val success = removeImplObject<Any>(objectId)
+        if (success == null) {
+            logger.error("Error trying to remove an RMI impl object id $objectId.")
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        return success as T?
+    }
+
+
+
 
     override fun close() {
         super.close()
@@ -183,9 +242,9 @@ class RmiSupport<C : Connection>(logger: KLogger,
     }
 
     /**
-     * on the "client" to get a global remote object (that exists on the server)
+     * on the connection+client to get a global remote object (that exists on the server)
      */
-    fun <Iface> getGlobalRemoteObject(connection: C, endPoint: EndPoint<C>, objectId: Int, interfaceClass: Class<Iface>): Iface {
+    fun <Iface> getGlobalRemoteObject(connection: Connection, endPoint: EndPoint<*>, objectId: Int, interfaceClass: Class<Iface>): Iface {
         // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
 
         // so we can just instantly create the proxy object (or get the cached one)
@@ -200,34 +259,16 @@ class RmiSupport<C : Connection>(logger: KLogger,
     }
 
     /**
-     * on the "client" to create a global remote object (that exists on the server)
-     */
-    suspend fun <Iface> createGlobalRemoteObject(connection: Connection, interfaceClassId: Int, callback: suspend (Iface) -> Unit) {
-        val callbackId = registerCallback(callback)
-
-        // There is no rmiID yet, because we haven't created it!
-        val message = GlobalObjectCreateRequest(RmiUtils.packShorts(interfaceClassId, callbackId))
-
-        // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
-        // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
-
-        // this means we are creating a NEW object on the server
-        connection.send(message)
-    }
-
-
-
-    /**
      * Manages ALL OF THE RMI stuff!
      */
     @Throws(IllegalArgumentException::class)
-    suspend fun manage(endPoint: EndPoint<Connection_>, connection: Connection_, message: Any, logger: KLogger) {
+    suspend fun manage(endPoint: EndPoint<*>, connection: Connection, message: Any, logger: KLogger) {
         when (message) {
             is ConnectionObjectCreateRequest -> {
                 /**
                  * called on "server"
                  */
-                connection.rmiSupport().onConnectionObjectCreateRequest(endPoint, connection, message, logger)
+                connection.rmiConnectionSupport.onConnectionObjectCreateRequest(endPoint, connection, message, logger)
             }
             is ConnectionObjectCreateResponse -> {
                 /**
@@ -265,7 +306,19 @@ class RmiSupport<C : Connection>(logger: KLogger,
                 val isGlobal: Boolean = message.isGlobal
                 val cachedMethod = message.cachedMethod
 
-                val implObject = getImplObject(isGlobal, objectId, connection)
+                val implObject = getImplObject<Any>(isGlobal, objectId, connection)
+
+                if (implObject == null) {
+                    logger.error("Unable to resolve implementation object for [global=$isGlobal, objectID=$objectId, connection=$connection")
+
+                    val invokeMethodResult = MethodResponse()
+                    invokeMethodResult.objectId = objectId
+                    invokeMethodResult.responseId = message.responseId
+                    invokeMethodResult.result = NullPointerException("Remote object for proxy [global=$isGlobal, objectID=$objectId] does not exist.")
+
+                    connection.send(invokeMethodResult)
+                    return
+                }
 
                 logger.trace {
                     var argString = ""
@@ -295,8 +348,6 @@ class RmiSupport<C : Connection>(logger: KLogger,
                     // args!! is safe to do here (even though it doesn't make sense)
                     result = cachedMethod.invoke(connection, implObject, message.args!!)
                 } catch (ex: Exception) {
-                    logger.error("Error invoking method: ${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}", ex)
-
                     result = ex.cause
                     // added to prevent a stack overflow when references is false, (because 'cause' == "this").
                     // See:
@@ -306,6 +357,13 @@ class RmiSupport<C : Connection>(logger: KLogger,
                     } else {
                         result.initCause(null)
                     }
+
+                    // only remove stuff if our logger is NOT on trace (so normal logs will not show extra info, trace will show extra info)
+                    if (!logger.isTraceEnabled) {
+                        ListenerManager.cleanStackTrace(result as Throwable)
+                    }
+
+                    logger.error("Error invoking method: ${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}", result)
                 }
 
                 val invokeMethodResult = MethodResponse()
@@ -325,28 +383,13 @@ class RmiSupport<C : Connection>(logger: KLogger,
     /**
      * called on "server"
      */
-    private suspend fun onGlobalObjectCreateRequest(
-            endPoint: EndPoint<Connection_>, connection: Connection_, message: GlobalObjectCreateRequest, logger: KLogger) {
-
+    private suspend fun onGlobalObjectCreateRequest(endPoint: EndPoint<*>, connection: Connection, message: GlobalObjectCreateRequest, logger: KLogger) {
         val interfaceClassId = RmiUtils.unpackLeft(message.packedIds)
         val callbackId = RmiUtils.unpackRight(message.packedIds)
 
         // We have to lookup the iface, since the proxy object requires it
         val implObject = endPoint.serialization.createRmiObject(interfaceClassId)
-        val rmiId = registerImplObject(implObject)
-
-        if (rmiId != RemoteObjectStorage.INVALID_RMI) {
-            // this means we could register this object.
-
-            // next, scan this object to see if there are any RMI fields
-            scanImplForRmiFields(logger, implObject) {
-                registerImplObject(implObject)
-            }
-        } else {
-            logger.error {
-                "Trying to create an RMI object with the INVALID_RMI id!!"
-            }
-        }
+        val rmiId = saveImplObject(logger, implObject)
 
         // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
         connection.send(GlobalObjectCreateResponse(RmiUtils.packShorts(rmiId, callbackId)))

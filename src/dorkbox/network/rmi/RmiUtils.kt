@@ -64,8 +64,7 @@ object RmiUtils {
         }
 
         for (i in argTypes1.indices) {
-            diff = argTypes1[i].name
-                    .compareTo(argTypes2[i].name)
+            diff = argTypes1[i].name.compareTo(argTypes2[i].name)
             if (diff != 0) {
                 return@Comparator diff
             }
@@ -371,7 +370,7 @@ object RmiUtils {
                     try {
                         serializerClass.getConstructor(Class::class.java).newInstance(superClass)
                     } catch (ex3: NoSuchMethodException) {
-                        serializerClass.newInstance()
+                        serializerClass.getDeclaredConstructor().newInstance()
                     }
                 }
             }

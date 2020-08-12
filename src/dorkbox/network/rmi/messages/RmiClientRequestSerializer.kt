@@ -40,6 +40,6 @@ class RmiClientRequestSerializer : Serializer<Any>() {
         kryo as KryoExtra
 
         val connection = kryo.connection
-        return connection.endPoint().rmiSupport.getImplObject(isGlobal, objectId, connection)
+        return connection.endPoint().rmiGlobalSupport.getImplObject(isGlobal, objectId, connection)
     }
 }

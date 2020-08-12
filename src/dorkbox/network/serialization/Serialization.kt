@@ -25,6 +25,7 @@ import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import com.esotericsoftware.kryo.util.IdentityMap
 import dorkbox.network.connection.KryoExtra
 import dorkbox.network.connection.ping.PingMessage
+import dorkbox.network.handshake.Message
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.rmi.messages.*
@@ -93,7 +94,7 @@ class Serialization(references: Boolean,
             // TODO: fix kryo to work the way we want, so we can register interfaces + serializers with kryo
 //            serialization.register(XECPublicKey::class.java, XECPublicKeySerializer())
 //            serialization.register(XECPrivateKey::class.java, XECPrivateKeySerializer())
-            serialization.register(dorkbox.network.connection.registration.Registration::class.java) // must use full package name!
+            serialization.register(Message::class.java) // must use full package name!
 
             return serialization
         }

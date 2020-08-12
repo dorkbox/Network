@@ -216,9 +216,10 @@ class RemoteObjectStorage(val logger: KLogger) {
      * Registers an object to allow a remote connection access to this object via the specified ID
      *
      * @param objectId Must not be <= 0 or > 65535
+     *
      * @return true if successful, false if there was an error
      */
-    fun register(objectId: Int, `object`: Any): Boolean {
+    fun register(`object`: Any, objectId: Int): Boolean {
         validate(objectId)
 
         objectMap.put(objectId, `object`)
@@ -231,12 +232,13 @@ class RemoteObjectStorage(val logger: KLogger) {
     }
 
     /**
-     * Removes an object. The remote connection will no longer be able to access it.
+     * Removes an object. The remote connection will no longer be able to access it. This object may, or may not exist
      */
-    fun <T> remove(objectId: Int): T {
+    fun <T> remove(objectId: Int): T? {
         validate(objectId)
 
-        val rmiObject = objectMap.remove(objectId) as T
+        @Suppress("UNCHECKED_CAST")
+        val rmiObject = objectMap.remove(objectId) as T?
         returnId(objectId)
 
         logger.trace {
@@ -264,9 +266,11 @@ class RemoteObjectStorage(val logger: KLogger) {
     }
 
     /**
+     * This object may, or may not exist
+     *
      * @return the object registered with the specified ID.
      */
-    operator fun get(objectId: Int): Any {
+    operator fun get(objectId: Int): Any? {
         validate(objectId)
 
         return objectMap[objectId]

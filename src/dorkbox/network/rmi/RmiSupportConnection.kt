@@ -1,7 +1,6 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.Connection_
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
@@ -9,21 +8,21 @@ import dorkbox.network.serialization.NetworkSerializationManager
 import kotlinx.coroutines.CoroutineScope
 import mu.KLogger
 
-class RmiSupportConnection<C: Connection>(logger: KLogger,
-                                          private val rmiGlobalSupport: RmiSupport<out Connection>,
-                                          private val serialization: NetworkSerializationManager,
-                                          actionDispatch: CoroutineScope) : RmiSupportCache(logger, actionDispatch) {
+internal class RmiSupportConnection(logger: KLogger,
+                           val rmiGlobalSupport: RmiSupport,
+                           private val serialization: NetworkSerializationManager,
+                           actionDispatch: CoroutineScope) : RmiSupportCache(logger, actionDispatch) {
 
-    /**
-     * on the "client" to get a connection-specific remote object (that exists on the server)
-     */
-    fun <Iface> getRemoteObject(connection: Connection, endPoint: EndPoint<Connection_>, objectId: Int, interfaceClass: Class<Iface>): Iface {
-        // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
+    private fun <Iface> createProxyObject(isGlobalObject: Boolean,
+                                  connection: Connection,
+                                  endPoint: EndPoint<*>,
+                                  objectId: Int,
+                                  interfaceClass: Class<Iface>) : Iface {
 
         // so we can just instantly create the proxy object (or get the cached one)
         var proxyObject = getProxyObject(objectId)
         if (proxyObject == null) {
-            proxyObject = RmiSupport.createProxyObject(false, connection, serialization, rmiGlobalSupport, endPoint.type.simpleName, objectId, interfaceClass)
+            proxyObject = RmiSupport.createProxyObject(isGlobalObject, connection, serialization, rmiGlobalSupport, endPoint.type.simpleName, objectId, interfaceClass)
             saveProxyObject(objectId, proxyObject)
         }
 
@@ -31,11 +30,19 @@ class RmiSupportConnection<C: Connection>(logger: KLogger,
         return proxyObject as Iface
     }
 
+    /**
+     * on the connection+client to get a connection-specific remote object (that exists on the server/client)
+     */
+    fun <Iface> getRemoteObject(connection: Connection, endPoint: EndPoint<*>, objectId: Int, interfaceClass: Class<Iface>): Iface {
+        // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
+        return createProxyObject(false, connection, endPoint, objectId, interfaceClass)
+    }
+
 
     /**
      * on the "client" to create a connection-specific remote object (that exists on the server)
      */
-    suspend fun <Iface> createRemoteObject(connection: C, interfaceClassId: Int, callback: suspend (Iface) -> Unit) {
+    suspend fun <Iface> createRemoteObject(connection: Connection, interfaceClassId: Int, callback: suspend (Iface) -> Unit) {
         val callbackId = rmiGlobalSupport.registerCallback(callback)
 
         // There is no rmiID yet, because we haven't created it!
@@ -51,22 +58,21 @@ class RmiSupportConnection<C: Connection>(logger: KLogger,
     /**
      * called on "server"
      */
-    internal suspend fun onConnectionObjectCreateRequest(
-            endPoint: EndPoint<Connection_>, connection: Connection_, message: ConnectionObjectCreateRequest, logger: KLogger) {
+    internal suspend fun onConnectionObjectCreateRequest(endPoint: EndPoint<*>, connection: Connection, message: ConnectionObjectCreateRequest, logger: KLogger) {
 
         val interfaceClassId = RmiUtils.unpackLeft(message.packedIds)
         val callbackId = RmiUtils.unpackRight(message.packedIds)
 
         // We have to lookup the iface, since the proxy object requires it
         val implObject = endPoint.serialization.createRmiObject(interfaceClassId)
-        val rmiId = registerImplObject(implObject)
+        val rmiId = saveImplObject(implObject)
 
         if (rmiId != RemoteObjectStorage.INVALID_RMI) {
             // this means we could register this object.
 
             // next, scan this object to see if there are any RMI fields
             RmiSupport.scanImplForRmiFields(logger, implObject) {
-                registerImplObject(implObject)
+                saveImplObject(it)
             }
         } else {
             logger.error {

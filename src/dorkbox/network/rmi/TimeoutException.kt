@@ -32,39 +32,25 @@
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package dorkbox.network.rmi;
+package dorkbox.network.rmi
 
-import java.io.IOException;
+import java.io.IOException
 
 /**
- * Thrown when a method with a return value is invoked on a remote object and the response is not received with the {@link
- * RemoteObject#setResponseTimeout(int) response timeout}.
+ * Thrown when a method with a return value is invoked on a remote object and the response is not received with the [RemoteObject.responseTimeout].
  *
- * @author Nathan Sweet <misc@n4te.com>
- * @see dorkbox.network.connection.Connection#getRemoteObject(int, RemoteObjectCallback)
- * @see dorkbox.network.connection.Connection#createRemoteObject(Class, RemoteObjectCallback)
+ * @author Nathan Sweet
+ *
+ * @see dorkbox.network.connection.Connection.getObject
+ * @see dorkbox.network.connection.Connection.createObject
  */
-public
-class TimeoutException extends IOException {
-    private static final long serialVersionUID = -3526277240277423682L;
+class TimeoutException : IOException {
+    constructor() : super() {}
+    constructor(message: String?, cause: Throwable?) : super(message, cause) {}
+    constructor(message: String?) : super(message) {}
+    constructor(cause: Throwable?) : super(cause) {}
 
-    public
-    TimeoutException() {
-        super();
-    }
-
-    public
-    TimeoutException(String message, Throwable cause) {
-        super(message, cause);
-    }
-
-    public
-    TimeoutException(String message) {
-        super(message);
-    }
-
-    public
-    TimeoutException(Throwable cause) {
-        super(cause);
+    companion object {
+        private const val serialVersionUID = -3526277240277423682L
     }
 }

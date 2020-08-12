@@ -58,4 +58,9 @@ class MethodRequest : RmiMessage {
 
     // these are the arguments for executing the method (they are serialized using the info from the cachedMethod field
     var args: Array<Any>? = null
+
+
+    override fun toString(): String {
+        return "MethodRequest(isGlobal=$isGlobal, objectId=$objectId, responseId=$responseId, cachedMethod=$cachedMethod, args=${args?.contentToString()})"
+    }
 }

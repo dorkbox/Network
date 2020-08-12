@@ -55,6 +55,6 @@ open class CachedMethod(val method: Method, val methodIndex: Int, val methodClas
     }
 
     override fun toString(): String {
-        return "CachedMethod{" + method.name + ", methodClassId=" + methodClassId + ", methodIndex=" + methodIndex + '}'
+        return "CachedMethod{name:" + method.name + ", methodClassId=" + methodClassId + ", methodIndex=" + methodIndex + '}'
     }
 }

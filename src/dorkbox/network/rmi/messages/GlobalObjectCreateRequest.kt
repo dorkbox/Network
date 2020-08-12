@@ -22,3 +22,4 @@ package dorkbox.network.rmi.messages
  * @param callbackId (RIGHT) to know which callback to use when the object is created
  */
 data class GlobalObjectCreateRequest(val packedIds: Int) : RmiMessage
+//a asd

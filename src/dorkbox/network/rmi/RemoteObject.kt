@@ -47,12 +47,7 @@ interface RemoteObject {
     var responseTimeout: Int
 
     /**
-     * @return the ID of response for the last method invocation.
-     */
-    val lastResponseId: Int
-
-    /**
-     * Sets the behavior when invoking a remote method. Default is false.
+     * Sets the behavior when invoking a remote method. DEFAULT is false.
      *
      * If true, the invoking thread will not wait for a response. The method will return immediately and the return value
      *    should be ignored.
@@ -60,50 +55,33 @@ interface RemoteObject {
      * If false, the invoking thread will wait (if called via suspend, then it will use coroutines) for the remote method to return or
      * timeout.
      *
-     * The return value or any thrown exception can later be retrieved with [RemoteObject.waitForLastResponse] or [RemoteObject.waitForResponse].
-     *  The responses will be stored until retrieved, so each method call should have a matching retrieve.
+     * If the return value or exception needs to be retrieved, then DO NOT set async, and change the response timeout
      */
     var async: Boolean
 
     /**
      * Permits calls to [Object.toString] to actually return the `toString()` method on the object.
      *
-     * @param enableDetailedToString  If false, calls to [Object.toString] will return "<proxy #id>" (where `id` is the remote object ID)
+     * @param enabled  If false, calls to [Object.toString] will return "<proxy #id>" (where `id` is the remote object ID)
      *      instead of invoking the remote `toString()` method on the object.
      */
-    fun enableToString(enableDetailedToString: Boolean)
+    fun enableToString(enabled: Boolean)
 
     /**
-     * Permits calls to [RemoteObject.waitForLastResponse] and [RemoteObject.waitForResponse] to actually wait for a response.
+     * Permits calls to [Object.hashCode] to actually return the `hashCode()` method on the object.
      *
-     * You must be in ASYNC mode already for this to work. There will be undefined errors if you do not enable waiting
-     * BEFORE calling the method you want to wait for
-     *
-     * @param enableWaiting if true, you want wait for the method results. If false, undefined errors can happen while waiting
+     * @param enabled  If false, calls to [Object.hashCode] will return "id" (where `id` is the remote object ID)
+     *      instead of invoking the remote `hashCode()` method on the object.
      */
-    fun enableWaitingForResponse(enableWaiting: Boolean)
+    fun enableHashCode(enabled: Boolean)
 
     /**
-     * Waits for the response to the last method invocation to be received or the response timeout to be reached.
+     * Permits calls to [Object.equals] to actually return the `equals()` method on the object.
      *
-     * You must be in ASYNC mode + enabled waiting for this to work. There will be undefined errors if you do not enable waiting BEFORE
-     * calling the method you want to wait for
-     *
-     * @return the response of the last method invocation
+     * @param enabled  If false, calls to [Object.equals] will compare the "id" (where `id` is the remote object ID)
+     *      instead of invoking the remote `equals()` method on the object.
      */
-    suspend fun waitForLastResponse(): Any?
-
-    /**
-     * Waits for the specified method invocation response to be received or the response timeout to be reached.
-     *
-     * You must be in ASYNC mode + enabled waiting for this to work. There will be undefined errors if you do not enable waiting BEFORE
-     * calling the method you want to wait for
-     *
-     * @param responseId usually this is the response ID obtained via [RemoteObject.lastResponseId]
-     *
-     * @return the response of the last method invocation
-     */
-    suspend fun waitForResponse(responseId: Int): Any?
+    fun enableEquals(enabled: Boolean)
 
     /**
      * Causes this RemoteObject to stop listening to the connection for method invocation response messages.

@@ -16,66 +16,69 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.other.SuspendWaiter
-import dorkbox.network.other.invokeSuspendFunction
+import dorkbox.network.other.SuspendFunctionAccess
 import dorkbox.network.rmi.messages.MethodRequest
 import kotlinx.coroutines.runBlocking
 import java.lang.reflect.InvocationHandler
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.util.*
 import kotlin.coroutines.Continuation
 
 
 /**
- * Handles network communication when methods are invoked on a proxy. For NON-BLOCKING performance, the interface
- * must have the 'suspend' keyword added. If it is not present, then all method invocation will be BLOCKING.
+ * Handles network communication when methods are invoked on a proxy.
  *
+ * For NON-BLOCKING performance, the RMI interface must have the 'suspend' keyword added. If this keyword is not
+ * present, then all method invocation will be BLOCKING.
  *
- *
- * @param connection this is really the network client -- there is ONLY ever 1 connection
- * @param rmiSupport is used to provide RMI support
+ * @param isGlobal true if this is a global object, or false if it is connection specific
  * @param rmiObjectId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
+ * @param connection this is really the network client -- there is ONLY ever 1 connection
+ * @param proxyString this is the name assigned to the proxy [toString] method
+ * @param rmiSupportCache is used to provide RMI support
  * @param cachedMethods this is the methods available for the specified class
 */
-class RmiClient(val isGlobal: Boolean,
-                val rmiObjectId: Int,
-                private val connection: Connection,
-                private val proxyString: String,
-                private val rmiSupportCache: RmiSupportCache,
-                private val cachedMethods: Array<CachedMethod>) : InvocationHandler {
+internal class RmiClient(val isGlobal: Boolean,
+                         val rmiObjectId: Int,
+                         private val connection: Connection,
+                         private val proxyString: String,
+                         private val rmiSupportCache: RmiSupportCache,
+                         private val cachedMethods: Array<CachedMethod>) : InvocationHandler {
 
     companion object {
         private val methods = RmiUtils.getMethods(RemoteObject::class.java)
 
         private val closeMethod = methods.find { it.name == "close" }
+        private val toStringMethod = methods.find { it.name == "toString" }
+        private val hashCodeMethod = methods.find { it.name == "hashCode" }
+        private val equalsMethod = methods.find { it.name == "equals" }
+
+        private val enableToStringMethod = methods.find { it.name == "enableToString" }
+        private val enableHashCodeMethod = methods.find { it.name == "enableHashCode" }
+        private val enableEqualsMethod = methods.find { it.name == "enableEquals" }
+
+
         private val setResponseTimeoutMethod = methods.find { it.name == "setResponseTimeout" }
         private val getResponseTimeoutMethod = methods.find { it.name == "getResponseTimeout" }
         private val setAsyncMethod = methods.find { it.name == "setAsync" }
         private val getAsyncMethod = methods.find { it.name == "getAsync" }
-        private val enableToStringMethod = methods.find { it.name == "enableToString" }
-        private val enableWaitingForResponseMethod = methods.find { it.name == "enableWaitingForResponse" }
-        private val waitForLastResponseMethod = methods.find { it.name == "waitForLastResponse" }
-        private val getLastResponseIdMethod = methods.find { it.name == "getLastResponseId" }
-        private val waitForResponseMethod = methods.find { it.name == "waitForResponse" }
-        private val toStringMethod = methods.find { it.name == "toString" }
 
         @Suppress("UNCHECKED_CAST")
         private val EMPTY_ARRAY: Array<Any> = Collections.EMPTY_LIST.toTypedArray() as Array<Any>
     }
 
-    private val responseWaiter = SuspendWaiter()
-
     private var timeoutMillis: Long = 3000
     private var isAsync = false
-    private var allowWaiting = false
+
     private var enableToString = false
+    private var enableHashCode = false
+    private var enableEquals = false
 
-    // this is really a a short!
-    @Volatile
-    private var previousResponseId: Int = 0
+    // if we are ASYNC, then this method immediately returns
+    private suspend fun sendRequest(method: Method, args: Array<Any>): Any? {
 
 
-    private suspend fun invokeSuspend(method: Method, args: Array<Any>): Any? {
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded
@@ -87,18 +90,14 @@ class RmiClient(val isGlobal: Boolean,
 
         val responseStorage = rmiSupportCache.getResponseStorage()
 
-        // If we are async, we ignore the response.... FOR NOW. The response, even if there is NOT one (ie: not void) will always return
-        // a thing (so we will know when to stop blocking).
-        val responseId = responseStorage.prep(rmiObjectId, responseWaiter)
-
-        // so we can query for async, if we want to necessary
-        previousResponseId = responseId
-
+        // If we are async, we ignore the response....
+        // The response, even if there is NOT one (ie: not void) will always return a thing (so we will know when to stop blocking).
+        val rmiWaiter = responseStorage.prep(rmiObjectId)
 
         val invokeMethod = MethodRequest()
         invokeMethod.isGlobal = isGlobal
         invokeMethod.objectId = rmiObjectId
-        invokeMethod.responseId = responseId
+        invokeMethod.responseId = rmiWaiter.id
         invokeMethod.args = args
 
         // which method do we access? We always want to access the IMPLEMENTATION (if available!). we know that this will always succeed
@@ -107,21 +106,26 @@ class RmiClient(val isGlobal: Boolean,
 
         connection.send(invokeMethod)
 
-        // if we are async, then this will immediately return!
-        return try {
-            val result = responseStorage.waitForReply(allowWaiting, isAsync, rmiObjectId, responseId, responseWaiter, timeoutMillis)
-            if (result is Exception) {
-                throw result
-            } else {
-                result
+
+        // if we are async, then this will immediately return
+        val result = responseStorage.waitForReply(isAsync, rmiObjectId, rmiWaiter, timeoutMillis)
+        when (result) {
+            RmiResponseStorage.TIMEOUT_EXCEPTION -> {
+                throw TimeoutException("Response timed out: ${method.declaringClass.name}.${method.name}")
             }
-        } catch (ex: TimeoutException) {
-            throw TimeoutException("Response timed out: ${method.declaringClass.name}.${method.name}")
+            is Exception -> {
+                throw result
+            }
+            else -> {
+                return result
+            }
         }
     }
 
     @Suppress("DuplicatedCode")
-    @Throws(Exception::class)
+    /**
+     * @throws Exception
+     */
     override fun invoke(proxy: Any, method: Method, args: Array<Any>?): Any? {
         if (method.declaringClass == RemoteObject::class.java) {
             // manage all of the RemoteObject proxy methods
@@ -130,6 +134,7 @@ class RmiClient(val isGlobal: Boolean,
                     rmiSupportCache.removeProxyObject(rmiObjectId)
                     return null
                 }
+
                 setResponseTimeoutMethod -> {
                     timeoutMillis = (args!![0] as Int).toLong()
                     return null
@@ -137,6 +142,7 @@ class RmiClient(val isGlobal: Boolean,
                 getResponseTimeoutMethod -> {
                     return timeoutMillis.toInt()
                 }
+
                 getAsyncMethod -> {
                     return isAsync
                 }
@@ -144,52 +150,39 @@ class RmiClient(val isGlobal: Boolean,
                     isAsync = args!![0] as Boolean
                     return null
                 }
+
                 enableToStringMethod -> {
                     enableToString = args!![0] as Boolean
                     return null
                 }
-                getLastResponseIdMethod -> {
-                    // only ASYNC can wait for responses
-                    check(isAsync) { "This RemoteObject is not currently set to ASYNC mode. Unable to manually get the response ID." }
-                    check(allowWaiting) { "This RemoteObject does not allow waiting for responses. You must enable this BEFORE " +
-                            "calling the method that you want to wait for the respose to" }
-
-                    return previousResponseId
-                }
-                enableWaitingForResponseMethod -> {
-                    allowWaiting = args!![0] as Boolean
+                enableHashCodeMethod -> {
+                    enableHashCode = args!![0] as Boolean
                     return null
                 }
-                waitForLastResponseMethod -> {
-                    // only ASYNC can wait for responses
-                    check(isAsync) { "This RemoteObject is not currently set to ASYNC mode. Unable to manually wait for a response." }
-                    check(allowWaiting) { "This RemoteObject does not allow waiting for responses. You must enable this BEFORE " +
-                            "calling the method that you want to wait for the respose to" }
-
-                    val maybeContinuation = args?.lastOrNull() as Continuation<*>
-
-                    // this is a suspend method, so we don't need extra checks
-                    return invokeSuspendFunction(maybeContinuation) {
-                        rmiSupportCache.getResponseStorage().waitForReplyManually(rmiObjectId, previousResponseId, responseWaiter)
-                    }
+                enableEqualsMethod -> {
+                    enableEquals = args!![0] as Boolean
+                    return null
                 }
-                waitForResponseMethod -> {
-                    // only ASYNC can wait for responses
-                    check(isAsync) { "This RemoteObject is not currently set to ASYNC mode. Unable to manually wait for a response." }
-                    check(allowWaiting) { "This RemoteObject does not allow waiting for responses. You must enable this BEFORE " +
-                            "calling the method that you want to wait for the respose to" }
 
-                    val maybeContinuation = args?.lastOrNull() as Continuation<*>
-
-                    // this is a suspend method, so we don't need extra checks
-                    return invokeSuspendFunction(maybeContinuation) {
-                        rmiSupportCache.getResponseStorage().waitForReplyManually(rmiObjectId, args[0] as Int, responseWaiter)
-                    }
-                }
                 else -> throw Exception("Invocation handler could not find RemoteObject method for ${method.name}")
             }
-        } else if (!enableToString && method == toStringMethod) {
-            return proxyString
+        } else  {
+            when (method) {
+                toStringMethod -> if (!enableToString) return proxyString  // otherwise, the RMI round trip logic is done for toString()
+                hashCodeMethod -> if (!enableHashCode) return rmiObjectId  // otherwise, the RMI round trip logic is done for hashCode()
+                equalsMethod   -> {
+                    val other = args!![0]
+                    if (other !is RmiClient) {
+                        return false
+                    }
+
+                    if (!enableEquals) {
+                        return rmiObjectId == other.rmiObjectId
+                    }
+
+                    // otherwise, the RMI round trip logic is done for equals()
+                }
+            }
         }
 
         // if a 'suspend' function is called, then our last argument is a 'Continuation' object
@@ -201,11 +194,11 @@ class RmiClient(val isGlobal: Boolean,
             if (maybeContinuation is Continuation<*>) {
                 val argsWithoutContinuation = args.take(args.size - 1)
                 invokeSuspendFunction(maybeContinuation) {
-                    invokeSuspend(method, argsWithoutContinuation.toTypedArray())
+                    sendRequest(method, argsWithoutContinuation.toTypedArray())
                 }
             } else {
                 runBlocking {
-                    invokeSuspend(method, args ?: EMPTY_ARRAY)
+                    sendRequest(method, args ?: EMPTY_ARRAY)
                 }
             }
 
@@ -249,11 +242,11 @@ class RmiClient(val isGlobal: Boolean,
             return if (maybeContinuation is Continuation<*>) {
                 val argsWithoutContinuation = args.take(args.size - 1)
                 invokeSuspendFunction(maybeContinuation) {
-                    invokeSuspend(method, argsWithoutContinuation.toTypedArray())
+                    sendRequest(method, argsWithoutContinuation.toTypedArray())
                 }
             } else {
                 runBlocking {
-                    invokeSuspend(method, args ?: EMPTY_ARRAY)
+                    sendRequest(method, args ?: EMPTY_ARRAY)
                 }
             }
         }
@@ -282,5 +275,13 @@ class RmiClient(val isGlobal: Boolean,
         }
 
         return rmiObjectId == other.rmiObjectId
+    }
+
+    private fun invokeSuspendFunction(continuation: Continuation<*>, suspendFunction: suspend () -> Any?): Any? {
+        return try {
+            SuspendFunctionAccess.invokeSuspendFunction(suspendFunction, continuation)
+        } catch (e: InvocationTargetException) {
+            throw e.cause!!
+        }
     }
 }

@@ -49,4 +49,9 @@ class MethodResponse : RmiMessage {
 
     // this is the result of the invoked method
     var result: Any? = null
+
+
+    override fun toString(): String {
+        return "MethodResponse(isGlobal=$isGlobal, objectId=$objectId, responseId=$responseId, result=$result)"
+    }
 }
