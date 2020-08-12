@@ -80,8 +80,9 @@ class RmiTest : BaseTest() {
             var caught = false
             try {
                 test.throwException()
-            } catch (ex: UnsupportedOperationException) {
-                System.err.println("\tExpected exception (exception log should ONLY be on the object impl side).")
+            } catch (e: UnsupportedOperationException) {
+                System.err.println("\tExpected exception (exception log should also be on the object impl side).")
+                e.printStackTrace()
                 caught = true
             }
             Assert.assertTrue(caught)
@@ -107,8 +108,9 @@ class RmiTest : BaseTest() {
             caught = false
             try {
                 test.throwException()
-            } catch (ex: IllegalStateException) {
-                System.err.println("\tExpected exception (exception log should ONLY be on the object impl side).")
+            } catch (e: IllegalStateException) {
+                System.err.println("\tExpected exception (exception log should also be on the object impl side).")
+                e.printStackTrace()
                 caught = true
             }
             // exceptions are not caught when async = true!
