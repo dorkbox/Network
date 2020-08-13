@@ -45,10 +45,8 @@ import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.util.Util;
 
-import io.netty.buffer.ByteBuf;
-
 /**
- * An {@link InputStream} which reads data from a {@link ByteBuf}.
+ * An {@link InputStream} which reads data from a {@link DirectBuffer}.
  * <p/>
  * A read operation against this stream will occur at the {@code readerIndex}
  * of its underlying buffer and the {@code readerIndex} will increase during

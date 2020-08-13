@@ -44,10 +44,8 @@ import org.agrona.concurrent.UnsafeBuffer;
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Output;
 
-import io.netty.buffer.ByteBuf;
-
 /**
- * An {@link OutputStream} which writes data to a {@link ByteBuf}.
+ * An {@link OutputStream} which writes data to a {@link MutableDirectBuffer}.
  * <p>
  * A write operation against this stream will occur at the {@code writerIndex}
  * of its underlying buffer and the {@code writerIndex} will increase during
