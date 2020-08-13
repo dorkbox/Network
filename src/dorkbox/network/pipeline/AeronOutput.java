@@ -99,6 +99,16 @@ public class AeronOutput extends Output {
         capacity = internalBuffer.capacity();
     }
 
+    /**
+     * Creates a new Output for writing to a DirectBuffer.
+     */
+    public
+    AeronOutput(final MutableDirectBuffer buffer) {
+        internalBuffer = buffer;
+        position = 0;
+        capacity = internalBuffer.capacity();
+    }
+
 
     @Override
     public OutputStream getOutputStream () {
