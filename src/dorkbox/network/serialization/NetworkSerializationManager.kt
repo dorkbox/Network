@@ -125,18 +125,16 @@ interface NetworkSerializationManager : SerializationManager<DirectBuffer> {
     /**
      * There is additional overhead to using RMI.
      *
-     * Specifically, It costs at least 2 bytes more to use remote method invocation than just sending the parameters. If the method has a
-     * return value which is not [ignored][dorkbox.network.rmi.RemoteObject.setAsync], an extra byte is written.
-     * If the type of a parameter is not final (primitives are final) then an extra byte is written for that parameter.
+     * - This is for the side where the object lives
      *
-     *
-     * Enable a "remote endpoint" to access methods and create objects (RMI) for this endpoint.
+     * This enables a us, the "server" to send objects to a "remote endpoint"
      *
      * This is NOT bi-directional, and this endpoint cannot access or create remote objects on the "remote client".
      *
      * @throws IllegalArgumentException if the iface/impl have previously been overridden
      */
     fun <Iface, Impl : Iface> registerRmi(ifaceClass: Class<Iface>, implClass: Class<Impl>): NetworkSerializationManager
+
 
     /**
      * Gets the cached methods for the specified class ID

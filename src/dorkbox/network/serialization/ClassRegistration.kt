@@ -34,9 +34,9 @@ internal open class ClassRegistration(var clazz: Class<*>) {
 
     fun getInfoArray(): Array<Any> {
         return if (serializer != null) {
-            arrayOf(id, clazz::class.java.name, serializer!!::class.java.name)
+            arrayOf(id, clazz.name, serializer!!::class.java.name)
         } else {
-            arrayOf(id, clazz::class.java.name, "")
+            arrayOf(id, clazz.name, "")
         }
     }
 }

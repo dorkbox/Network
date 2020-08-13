@@ -35,7 +35,6 @@ import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.PoolableObject
 import dorkbox.os.OS
 import dorkbox.util.serialization.SerializationDefaults
-import io.netty.buffer.Unpooled
 import org.agrona.DirectBuffer
 import org.agrona.MutableDirectBuffer
 import org.agrona.collections.Int2ObjectHashMap
@@ -72,8 +71,6 @@ class Serialization(references: Boolean,
 
 
     companion object {
-        const val CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE = 400
-
         /**
          * Additionally, this serialization manager will register the entire class+interface hierarchy for an object. If you want to specify a
          * serialization scheme for a specific class in an objects hierarchy, you must register that first.
@@ -364,25 +361,12 @@ class Serialization(references: Boolean,
             mergedRegistrations.sortBy { it.id }
 
 
-            // TODO? is this next part necessary?
-            // next, go through all of the registrations and see WHICH ones are actually for RMI (and need the remote-object-serializer) and
-            // which ones do not need RMI stuff.
-            // We know this 2 ways:
-            //  1) the class will be registered via "ClassRegistrationIfaceAndImpl"
-            //  2) the class will be an interface with NO DEFINED serializer
-//            val interfaceOnlyRegistrations = mergedRegistrations.filter { it.clazz.isInterface && it.serializer == null }
-//            mergedRegistrations.forEach { classRegistration ->
-//
-//            }
-
             // now all of the registrations are IN ORDER and MERGED (save back to original array)
 
 
             // set 'classesToRegister' to our mergedRegistrations, because this is now the correct order
             classesToRegister.clear()
             classesToRegister.addAll(mergedRegistrations)
-
-
 
 
             // now create the registration details, used to validate that the client/server have the EXACT same class registration setup
@@ -416,18 +400,18 @@ class Serialization(references: Boolean,
             }
 
             // save this as a byte array (so class registration validation during connection handshake is faster)
-            val buffer = Unpooled.buffer(CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE)
+            val output = AeronOutput()
 
             try {
-                kryo.writeCompressed(logger, buffer, registrationDetails.toTypedArray())
+                kryo.writeCompressed(logger, output, registrationDetails.toTypedArray())
             } catch (e: Exception) {
                 logger.error("Unable to write compressed data for registration details", e)
             }
 
-            val length = buffer.readableBytes()
+            val length = output.position()
             savedRegistrationDetails = ByteArray(length)
-            buffer.getBytes(0, savedRegistrationDetails, 0, length)
-            buffer.release()
+            output.toBytes().copyInto(savedRegistrationDetails, 0, 0, length)
+            output.close()
         } finally {
             kryoPool.put(kryo)
         }
@@ -459,52 +443,89 @@ class Serialization(references: Boolean,
             return true
         }
 
+        // RMI details might be one reason the arrays are different
+
         // now we need to figure out WHAT was screwed up so we know what to fix
         // NOTE: it could just be that the byte arrays are different, because java has a non-deterministic iteration of hash maps.
         val kryo = takeKryo()
-        val byteBuf = Unpooled.wrappedBuffer(clientBytes)
+        val input = AeronInput(clientBytes)
+
         try {
             var success = true
             @Suppress("UNCHECKED_CAST")
-            val clientClassRegistrations = kryo.readCompressed(logger, byteBuf, clientBytes.size) as Array<Array<Any>>
+            val clientClassRegistrations = kryo.readCompressed(logger, input, clientBytes.size) as Array<Array<Any>>
             val lengthServer = classesToRegister.size
             val lengthClient = clientClassRegistrations.size
             var index = 0
 
             // list all of the registrations that are mis-matched between the server/client
-            while (index < lengthServer) {
+            for (i in 0 until lengthServer) {
+                index = i
                 val classServer = classesToRegister[index]
-                if (index < lengthClient) {
-                    val classClient = clientClassRegistrations[index]
-                    val idClient = classClient[0] as Int
-                    val nameClient = classClient[1] as String
-                    val serializerClient = classClient[2] as String
-                    val idServer = classServer.id
-                    val nameServer = classServer.clazz.name
-                    val serializerServer = classServer.serializer?.javaClass?.name ?: ""
 
-                    if (idClient != idServer || nameServer != nameClient || !serializerClient.equals(serializerServer, ignoreCase = true)) {
+                if (index >= lengthClient) {
+                    success = false
+                    logger.error("Missing client registration for {} -> {}", classServer.id, classServer.clazz.name)
+                    continue
+                }
+
+
+                val classClient = clientClassRegistrations[index]
+
+                val idClient = classClient[0] as Int
+                val nameClient = classClient[1] as String
+                val serializerClient = classClient[2] as String
+
+                val idServer = classServer.id
+                val nameServer = classServer.clazz.name
+                val serializerServer = classServer.serializer?.javaClass?.name ?: ""
+
+                // JUST MAYBE this is a serializer for RMI. The client doesn't have to register for RMI stuff
+                //  this logic is unwrapped, and seemingly complex in order to specifically check for this in a performant way
+                val idMatches = idClient == idServer
+                if (!idMatches) {
+                    success = false
+                    logger.error("Registration {} Client -> {} ({})", idClient, nameClient, serializerClient)
+                    logger.error("Registration {} Server -> {} ({})", idServer, nameServer, serializerServer)
+                    continue
+                }
+
+
+                val nameMatches = nameServer == nameClient
+                if (!nameMatches) {
+                    success = false
+                    logger.error("Registration {} Client -> {} ({})", idClient, nameClient, serializerClient)
+                    logger.error("Registration {} Server -> {} ({})", idServer, nameServer, serializerServer)
+                    continue
+                }
+
+
+                val serializerMatches = serializerServer == serializerClient
+                if (!serializerMatches) {
+                    // JUST MAYBE this is a serializer for RMI. The client doesn't have to register for RMI stuff
+
+                    if (serializerServer == objectResponseSerializer::class.java.name && serializerClient.isEmpty()) {
+                        // this is for RMI!
+                    } else {
                         success = false
                         logger.error("Registration {} Client -> {} ({})", idClient, nameClient, serializerClient)
                         logger.error("Registration {} Server -> {} ({})", idServer, nameServer, serializerServer)
                     }
-                } else {
-                    success = false
-                    logger.error("Missing client registration for {} -> {}", classServer.id, classServer.clazz.name)
                 }
-                index++
             }
+
+            // +1 because we are going from index -> length
+            index++
 
             // list all of the registrations that are missing on the server
             if (index < lengthClient) {
                 success = false
-                while (index < lengthClient) {
-                    val holderClass = clientClassRegistrations[index]
+                for (i in index - 1 until lengthClient) {
+                    val holderClass = clientClassRegistrations[i]
                     val id = holderClass[0] as Int
                     val name = holderClass[1] as String
                     val serializer = holderClass[2] as String
                     logger.error("Missing server registration : {} -> {} ({})", id, name, serializer)
-                    index++
                 }
             }
 
@@ -514,7 +535,7 @@ class Serialization(references: Boolean,
             logger.error("Error [{}] during registration validation", e.message)
         } finally {
             returnKryo(kryo)
-            byteBuf.release()
+            input.close()
         }
         return false
     }
