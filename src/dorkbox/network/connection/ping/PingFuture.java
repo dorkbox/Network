@@ -15,21 +15,18 @@
  */
 package dorkbox.network.connection.ping;
 
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import dorkbox.network.connection.Connection;
 import dorkbox.network.connection.Ping;
 import dorkbox.network.connection.PingListener;
-import io.netty.util.concurrent.GenericFutureListener;
-import io.netty.util.concurrent.Promise;
 
 public
 class PingFuture implements Ping {
 
     private static final AtomicInteger pingCounter = new AtomicInteger(0);
 
-    private final Promise<PingTuple<? extends Connection>> promise;
+    // private final Promise<PingTuple<? extends Connection>> promise;
 
     private final int id;
     private final long sentTime;
@@ -39,19 +36,21 @@ class PingFuture implements Ping {
      */
     @SuppressWarnings("unused")
     PingFuture() {
-        this(null);
+        // this(null);
+        id = -1;
+        sentTime = -2;
     }
 
-    public
-    PingFuture(Promise<PingTuple<? extends Connection>> promise) {
-        this.promise = promise;
-        this.id = pingCounter.getAndIncrement();
-        this.sentTime = System.currentTimeMillis();
-
-        if (this.id == Integer.MAX_VALUE) {
-            pingCounter.set(0);
-        }
-    }
+    // public
+    // PingFuture(Promise<PingTuple<? extends Connection>> promise) {
+    //     this.promise = promise;
+    //     this.id = pingCounter.getAndIncrement();
+    //     this.sentTime = System.currentTimeMillis();
+    //
+    //     if (this.id == Integer.MAX_VALUE) {
+    //         pingCounter.set(0);
+    //     }
+    // }
 
     /**
      * Wait for the ping to return, and returns the ping response time in MS or -1 if it failed.
@@ -59,15 +58,15 @@ class PingFuture implements Ping {
     @Override
     public
     int getResponse() {
-        try {
-            PingTuple<? extends Connection> entry = this.promise.syncUninterruptibly()
-                                                                .get();
-            if (entry != null) {
-                return entry.responseTime;
-            }
-        } catch (InterruptedException e) {
-        } catch (ExecutionException e) {
-        }
+        // try {
+        //     PingTuple<? extends Connection> entry = this.promise.syncUninterruptibly()
+        //                                                         .get();
+        //     if (entry != null) {
+        //         return entry.responseTime;
+        //     }
+        // } catch (InterruptedException e) {
+        // } catch (ExecutionException e) {
+        // }
         return -1;
     }
 
@@ -79,7 +78,7 @@ class PingFuture implements Ping {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public
     <C extends Connection> void add(PingListener<C> listener) {
-        this.promise.addListener((GenericFutureListener) listener);
+        // this.promise.addListener((GenericFutureListener) listener);
     }
 
     /**
@@ -90,7 +89,7 @@ class PingFuture implements Ping {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public
     <C extends Connection> void remove(PingListener<C> listener) {
-        this.promise.removeListener((GenericFutureListener) listener);
+        // this.promise.removeListener((GenericFutureListener) listener);
     }
 
     /**
@@ -99,7 +98,7 @@ class PingFuture implements Ping {
     @Override
     public
     void cancel() {
-        this.promise.tryFailure(new PingCanceledException());
+        // this.promise.tryFailure(new PingCanceledException());
     }
 
     /**
@@ -107,20 +106,21 @@ class PingFuture implements Ping {
      */
     public
     <C extends Connection> void setSuccess(C connection, PingMessage ping) {
-        if (ping.id == this.id) {
-            long longTime = System.currentTimeMillis() - this.sentTime;
-            if (longTime < Integer.MAX_VALUE) {
-                this.promise.setSuccess(new PingTuple<C>(connection, (int) longTime));
-            }
-            else {
-                this.promise.setSuccess(new PingTuple<C>(connection, Integer.MAX_VALUE));
-            }
-        }
+        // if (ping.id == this.id) {
+        //     long longTime = System.currentTimeMillis() - this.sentTime;
+        //     if (longTime < Integer.MAX_VALUE) {
+        //         this.promise.setSuccess(new PingTuple<C>(connection, (int) longTime));
+        //     }
+        //     else {
+        //         this.promise.setSuccess(new PingTuple<C>(connection, Integer.MAX_VALUE));
+        //     }
+        // }
     }
 
     public
     boolean isSuccess() {
-        return this.promise.isSuccess();
+        // return this.promise.isSuccess();
+        return false;
     }
 
     /**
