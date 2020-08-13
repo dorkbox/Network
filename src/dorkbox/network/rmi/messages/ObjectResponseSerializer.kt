@@ -49,6 +49,7 @@ import dorkbox.network.connection.KryoExtra
  */
 class ObjectResponseSerializer(private val rmiImplToIface: IdentityMap<Class<*>, Class<*>>) : Serializer<Any>(false) {
     override fun write(kryo: Kryo, output: Output, `object`: Any) {
+        println(" FIX ObjectResponseSerializer ")
         val kryoExtra = kryo as KryoExtra
 //        val id = kryoExtra.rmiSupport.getRegisteredId(`object`) //
 //        output.writeInt(id, true)
@@ -56,6 +57,7 @@ class ObjectResponseSerializer(private val rmiImplToIface: IdentityMap<Class<*>,
     }
 
     override fun read(kryo: Kryo, input: Input, implementationType: Class<*>): Any? {
+        println(" FIX ObjectResponseSerializer ")
         val kryoExtra = kryo as KryoExtra
         val objectID = input.readInt(true)
 
@@ -66,3 +68,5 @@ class ObjectResponseSerializer(private val rmiImplToIface: IdentityMap<Class<*>,
         return null
     }
 }
+
+// TODO: FIX THIS CLASS MAYBE!

@@ -238,7 +238,9 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
      */
     suspend fun send(message: Any) {
         // The sessionId is globally unique, and is assigned by the server.
-        logger.debug("[{}] send: {}", publication.sessionId(), message)
+        logger.trace {
+            "[${publication.sessionId()}] send: $message"
+        }
 
         val kryo: KryoExtra = serialization.takeKryo()
         try {
@@ -780,10 +782,37 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
      *
      * @see RemoteObject
      */
-    suspend fun <Iface> createObject(callback: suspend (Iface) -> Unit) {
-        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 0)
+    suspend fun <Iface> createObject(vararg objectParameters: Any?, callback: suspend (Int, Iface) -> Unit) {
+        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 1)
         val interfaceClassId = endPoint.serialization.getClassId(iFaceClass)
 
-        rmiConnectionSupport.createRemoteObject(this, interfaceClassId, callback)
+        @Suppress("UNCHECKED_CAST")
+        objectParameters as Array<Any?>
+
+        rmiConnectionSupport.createRemoteObject(this, interfaceClassId, objectParameters, callback)
+    }
+
+    /**
+     * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
+     * to an object that is created remotely.
+     *
+     * The callback will be notified when the remote object has been created.
+     *
+     * Methods that return a value will throw [TimeoutException] if the response is not received with the
+     * response timeout [RemoteObject.responseTimeout].
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     * @see RemoteObject
+     */
+    suspend fun <Iface> createObject(callback: suspend (Int, Iface) -> Unit) {
+        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 1)
+        val interfaceClassId = endPoint.serialization.getClassId(iFaceClass)
+
+        rmiConnectionSupport.createRemoteObject(this, interfaceClassId, null, callback)
     }
 }

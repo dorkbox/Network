@@ -127,7 +127,7 @@ internal class RmiSupport(logger: KLogger,
          * called on "client"
          */
         private fun onGenericObjectResponse(endPoint: EndPoint<*>, connection: Connection, logger: KLogger,
-                                            isGlobal: Boolean, rmiId: Int, callback: suspend (Any) -> Unit,
+                                            isGlobal: Boolean, rmiId: Int, callback: suspend (Int, Any) -> Unit,
                                             rmiSupportCache: RmiSupportCache, serialization: NetworkSerializationManager) {
 
             // we only create the proxy + execute the callback if the RMI id is valid!
@@ -138,7 +138,7 @@ internal class RmiSupport(logger: KLogger,
                 return
             }
 
-            val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 0)
+            val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 1)
 
             // create the client-side proxy object, if possible
             var proxyObject = rmiSupportCache.getProxyObject(rmiId)
@@ -150,7 +150,7 @@ internal class RmiSupport(logger: KLogger,
             // this should be executed on a NEW coroutine!
             endPoint.actionDispatch.launch {
                 try {
-                    callback(proxyObject)
+                    callback(rmiId, proxyObject)
                 } catch (e: Exception) {
                     logger.error("Error getting or creating the remote object $interfaceClass", e)
                 }
@@ -164,11 +164,11 @@ internal class RmiSupport(logger: KLogger,
 
 
 
-    internal fun <Iface> registerCallback(callback: suspend (Iface) -> Unit): Int {
+    internal fun <Iface> registerCallback(callback: suspend (Int, Iface) -> Unit): Int {
         return remoteObjectCreationCallbacks.register(callback)
     }
 
-    private fun removeCallback(callbackId: Int): suspend (Any) -> Unit {
+    private fun removeCallback(callbackId: Int): suspend (Int, Any) -> Unit {
         // callback's area always correct, because we track them ourselves.
         return remoteObjectCreationCallbacks.remove(callbackId)!!
     }
@@ -382,12 +382,25 @@ internal class RmiSupport(logger: KLogger,
     private suspend fun onGlobalObjectCreateRequest(endPoint: EndPoint<*>, connection: Connection, message: GlobalObjectCreateRequest, logger: KLogger) {
         val interfaceClassId = RmiUtils.unpackLeft(message.packedIds)
         val callbackId = RmiUtils.unpackRight(message.packedIds)
+        val objectParameters = message.objectParameters
+
 
         // We have to lookup the iface, since the proxy object requires it
-        val implObject = endPoint.serialization.createRmiObject(interfaceClassId)
-        val rmiId = saveImplObject(logger, implObject)
+        val implObject = endPoint.serialization.createRmiObject(interfaceClassId, objectParameters)
 
-        // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
-        connection.send(GlobalObjectCreateResponse(RmiUtils.packShorts(rmiId, callbackId)))
+        val response = if (implObject is Exception) {
+            // whoops!
+            logger.error("Unable to create remote object!", implObject)
+
+            // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
+            GlobalObjectCreateResponse(RmiUtils.packShorts(RemoteObjectStorage.INVALID_RMI, callbackId))
+        } else {
+            val rmiId = saveImplObject(logger, implObject)
+
+            // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
+            GlobalObjectCreateResponse(RmiUtils.packShorts(rmiId, callbackId))
+        }
+
+        connection.send(response)
     }
 }

@@ -191,7 +191,7 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    private fun read(reader: Input): Any {
+    fun read(reader: Input): Any {
         return readClassAndObject(reader)
     }
 

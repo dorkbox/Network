@@ -42,11 +42,11 @@ internal class RmiSupportConnection(logger: KLogger,
     /**
      * on the "client" to create a connection-specific remote object (that exists on the server)
      */
-    suspend fun <Iface> createRemoteObject(connection: Connection, interfaceClassId: Int, callback: suspend (Iface) -> Unit) {
+    suspend fun <Iface> createRemoteObject(connection: Connection, interfaceClassId: Int, objectParameters: Array<Any?>?, callback: suspend (Int, Iface) -> Unit) {
         val callbackId = rmiGlobalSupport.registerCallback(callback)
 
         // There is no rmiID yet, because we haven't created it!
-        val message = ConnectionObjectCreateRequest(RmiUtils.packShorts(interfaceClassId, callbackId))
+        val message = ConnectionObjectCreateRequest(RmiUtils.packShorts(interfaceClassId, callbackId), objectParameters)
 
         // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
@@ -62,25 +62,37 @@ internal class RmiSupportConnection(logger: KLogger,
 
         val interfaceClassId = RmiUtils.unpackLeft(message.packedIds)
         val callbackId = RmiUtils.unpackRight(message.packedIds)
+        val objectParameters = message.objectParameters
 
         // We have to lookup the iface, since the proxy object requires it
-        val implObject = endPoint.serialization.createRmiObject(interfaceClassId)
-        val rmiId = saveImplObject(implObject)
+        val implObject = endPoint.serialization.createRmiObject(interfaceClassId, objectParameters)
 
-        if (rmiId != RemoteObjectStorage.INVALID_RMI) {
-            // this means we could register this object.
+        val response = if (implObject is Exception) {
+            // whoops!
+            logger.error("Unable to create remote object!", implObject)
 
-            // next, scan this object to see if there are any RMI fields
-            RmiSupport.scanImplForRmiFields(logger, implObject) {
-                saveImplObject(it)
-            }
+            // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
+            ConnectionObjectCreateResponse(RmiUtils.packShorts(RemoteObjectStorage.INVALID_RMI, callbackId))
         } else {
-            logger.error {
-                "Trying to create an RMI object with the INVALID_RMI id!!"
+            val rmiId = saveImplObject(implObject)
+
+            if (rmiId != RemoteObjectStorage.INVALID_RMI) {
+                // this means we could register this object.
+
+                // next, scan this object to see if there are any RMI fields
+                RmiSupport.scanImplForRmiFields(logger, implObject) {
+                    saveImplObject(it)
+                }
+            } else {
+                logger.error {
+                    "Trying to create an RMI object with the INVALID_RMI id!!"
+                }
             }
+
+            // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
+            ConnectionObjectCreateResponse(RmiUtils.packShorts(rmiId, callbackId))
         }
 
-        // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
-        connection.send(ConnectionObjectCreateResponse(RmiUtils.packShorts(rmiId, callbackId)))
+        connection.send(response)
     }
 }

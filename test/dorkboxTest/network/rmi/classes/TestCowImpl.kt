@@ -14,18 +14,10 @@
  */
 package dorkboxTest.network.rmi.classes
 
-import java.util.concurrent.atomic.AtomicInteger
-
-class TestCowImpl : TestCowBaseImpl(),
-                    TestCow {
-
-    companion object {
-        // has to start at 1
-        val ID_COUNTER = AtomicInteger(1)
-    }
+class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
 
     private var moos = 0
-    private val id = ID_COUNTER.getAndIncrement()
+
     override fun moo() {
         moos++
         println("Moo! $moos")

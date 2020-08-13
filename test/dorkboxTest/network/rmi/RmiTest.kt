@@ -68,7 +68,7 @@ class RmiTest : BaseTest() {
             Assert.assertFalse(s == remoteObject.toString())
             test.moo()
             test.moo("Cow")
-            Assert.assertEquals(remoteObjectID.toLong(), test.id().toLong())
+            Assert.assertEquals(remoteObjectID, test.id())
 
             // Test that RMI correctly waits for the remotely invoked method to exit
             remoteObject.responseTimeout = 5000
@@ -135,6 +135,7 @@ class RmiTest : BaseTest() {
             m.number = 678
             m.text = "sometext"
             connection.send(m)
+
             println("Finished tests")
         }
 
@@ -150,20 +151,12 @@ class RmiTest : BaseTest() {
     @Throws(SecurityException::class, IOException::class, InterruptedException::class)
     fun rmiNetworkGlobal() {
         rmiGlobal()
-
-        // have to reset the object ID counter
-        TestCowImpl.ID_COUNTER.set(1)
-        Thread.sleep(2000L)
     }
 
     @Test
     @Throws(SecurityException::class, IOException::class, InterruptedException::class)
     fun rmiNetworkConnection() {
         rmi()
-
-        // have to reset the object ID counter
-        TestCowImpl.ID_COUNTER.set(1)
-        Thread.sleep(2000L)
     }
 
     @Test
@@ -174,10 +167,6 @@ class RmiTest : BaseTest() {
                 configuration.listenIpAddress = LOOPBACK
             }
         }
-
-        // have to reset the object ID counter
-        TestCowImpl.ID_COUNTER.set(1)
-        Thread.sleep(2000L)
     }
 
     @Throws(SecurityException::class, IOException::class)
@@ -199,14 +188,14 @@ class RmiTest : BaseTest() {
                 System.err.println("Received finish signal for test for: Client -> Server")
                 val `object` = m.testCow
                 val id = `object`.id()
-                Assert.assertEquals(1, id.toLong())
+                Assert.assertEquals(23, id.toLong())
                 System.err.println("Finished test for: Client -> Server")
-                System.err.println("Starting test for: Server -> Client")
 
-                // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
-                connection.createObject<TestCow> { remoteObject ->
+
+                System.err.println("Starting test for: Server -> Client")
+                connection.createObject<TestCow>(123) { rmiId, remoteObject ->
                     System.err.println("Running test for: Server -> Client")
-                    runTests(connection, remoteObject, 2)
+                    runTests(connection, remoteObject, 123)
                     System.err.println("Done with test for: Server -> Client")
                 }
             }
@@ -224,9 +213,9 @@ class RmiTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect { connection ->
-                connection.createObject<TestCow> { remoteObject ->
+                connection.createObject<TestCow>(23) { rmiId, remoteObject ->
                     System.err.println("Running test for: Client -> Server")
-                    runTests(connection, remoteObject, 1)
+                    runTests(connection, remoteObject, 23)
                     System.err.println("Done with test for: Client -> Server")
                 }
             }
@@ -235,7 +224,7 @@ class RmiTest : BaseTest() {
                 System.err.println("Received finish signal for test for: Client -> Server")
                 val `object` = m.testCow
                 val id = `object`.id()
-                Assert.assertEquals(2, id.toLong())
+                Assert.assertEquals(123, id.toLong())
                 System.err.println("Finished test for: Client -> Server")
                 stopEndPoints(2000)
             }
@@ -269,14 +258,14 @@ class RmiTest : BaseTest() {
                 val `object` = m.testCow
                 val id = `object`.id()
 
-                Assert.assertEquals(1, id.toLong())
+                Assert.assertEquals(44, id.toLong())
 
                 System.err.println("Finished test for: Client -> Server")
 
                 // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
-                connection.createObject<TestCow> { remoteObject ->
+                connection.createObject<TestCow>(4) { rmiId, remoteObject ->
                     System.err.println("Running test for: Server -> Client")
-                    runTests(connection, remoteObject, 2)
+                    runTests(connection, remoteObject, 4)
                     System.err.println("Done with test for: Server -> Client")
                 }
             }
@@ -296,7 +285,7 @@ class RmiTest : BaseTest() {
                 System.err.println("Received finish signal for test for: Client -> Server")
                 val `object` = m.testCow
                 val id = `object`.id()
-                Assert.assertEquals(2, id.toLong())
+                Assert.assertEquals(4, id.toLong())
                 System.err.println("Finished test for: Client -> Server")
                 stopEndPoints(2000)
             }
@@ -307,9 +296,9 @@ class RmiTest : BaseTest() {
                 System.err.println("Starting test for: Client -> Server")
 
                 // this creates a GLOBAL object on the server (instead of a connection specific object)
-                client.createObject<TestCow> { remoteObject ->
+                client.createObject<TestCow>(44) { rmiId, remoteObject ->
                     System.err.println("Running test for: Client -> Server")
-                    runTests(client.getConnection(), remoteObject, 1)
+                    runTests(client.getConnection(), remoteObject, 44)
                     System.err.println("Done with test for: Client -> Server")
                 }
             }

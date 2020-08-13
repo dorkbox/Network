@@ -100,14 +100,14 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     init {
         // have to do some basic validation of our configuration
-        if (config.publicationPort <= 0) { throw newException("configuration port must be > 0") }
-        if (config.publicationPort >= 65535) { throw newException("configuration port must be < 65535") }
+        if (config.publicationPort <= 0) { throw ClientException("configuration port must be > 0") }
+        if (config.publicationPort >= 65535) { throw ClientException("configuration port must be < 65535") }
 
-        if (config.subscriptionPort <= 0) { throw newException("configuration controlPort must be > 0") }
-        if (config.subscriptionPort >= 65535) { throw newException("configuration controlPort must be < 65535") }
+        if (config.subscriptionPort <= 0) { throw ClientException("configuration controlPort must be > 0") }
+        if (config.subscriptionPort >= 65535) { throw ClientException("configuration controlPort must be < 65535") }
 
-        if (config.networkMtuSize <= 0) { throw newException("configuration networkMtuSize must be > 0") }
-        if (config.networkMtuSize >= 9 * 1024) { throw newException("configuration networkMtuSize must be < ${9 * 1024}") }
+        if (config.networkMtuSize <= 0) { throw ClientException("configuration networkMtuSize must be > 0") }
+        if (config.networkMtuSize >= 9 * 1024) { throw ClientException("configuration networkMtuSize must be < ${9 * 1024}") }
 
         autoClosableObjects.add(handshake)
     }
@@ -618,13 +618,43 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
-    suspend inline fun <reified Iface> createObject(noinline callback: suspend (Iface) -> Unit) {
+    suspend inline fun <reified Iface> createObject(vararg objectParameters: Any?, noinline callback: suspend (Int, Iface) -> Unit) {
+        // NOTE: It's not possible to have reified inside a virtual function
+        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
+        val classId = serialization.getClassId(Iface::class.java)
+
+        @Suppress("UNCHECKED_CAST")
+        objectParameters as Array<Any?>
+
+        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
+        rmiConnectionSupport.createRemoteObject(getConnection(), classId, objectParameters, callback)
+    }
+
+    /**
+     * Tells the remote connection to create a new proxy object that implements the specified interface in the CONNECTION scope.
+     *
+     * The methods on this object "map" to an object that is created remotely.
+     *
+     * The callback will be notified when the remote object has been created.
+     *
+     * Methods that return a value will throw [TimeoutException] if the response is not received with the
+     * response timeout [RemoteObject.responseTimeout].
+     *
+     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
+     * will have the proxy object replaced with the registered (non-proxy) object.
+     *
+     * If one wishes to change the default behavior, cast the object to access the different methods.
+     * ie:  `val remoteObject = test as RemoteObject`
+     *
+     * @see RemoteObject
+     */
+    suspend inline fun <reified Iface> createObject(noinline callback: suspend (Int, Iface) -> Unit) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
         val classId = serialization.getClassId(Iface::class.java)
 
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        rmiConnectionSupport.createRemoteObject(getConnection(), classId, callback)
+        rmiConnectionSupport.createRemoteObject(getConnection(), classId, null, callback)
     }
 
     //

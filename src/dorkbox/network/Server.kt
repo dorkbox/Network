@@ -110,14 +110,14 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         }
 
 
-        if (config.publicationPort <= 0) { throw newException("configuration port must be > 0") }
-        if (config.publicationPort >= 65535) { throw newException("configuration port must be < 65535") }
+        if (config.publicationPort <= 0) { throw ServerException("configuration port must be > 0") }
+        if (config.publicationPort >= 65535) { throw ServerException("configuration port must be < 65535") }
 
-        if (config.subscriptionPort <= 0) { throw newException("configuration controlPort must be > 0") }
-        if (config.subscriptionPort >= 65535) { throw newException("configuration controlPort must be < 65535") }
+        if (config.subscriptionPort <= 0) { throw ServerException("configuration controlPort must be > 0") }
+        if (config.subscriptionPort >= 65535) { throw ServerException("configuration controlPort must be < 65535") }
 
-        if (config.networkMtuSize <= 0) { throw newException("configuration networkMtuSize must be > 0") }
-        if (config.networkMtuSize >= 9 * 1024) { throw newException("configuration networkMtuSize must be < ${9 * 1024}") }
+        if (config.networkMtuSize <= 0) { throw ServerException("configuration networkMtuSize must be > 0") }
+        if (config.networkMtuSize >= 9 * 1024) { throw ServerException("configuration networkMtuSize must be < ${9 * 1024}") }
 
         autoClosableObjects.add(handshake)
     }

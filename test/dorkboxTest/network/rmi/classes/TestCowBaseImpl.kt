@@ -16,7 +16,6 @@ package dorkboxTest.network.rmi.classes
 
 open class TestCowBaseImpl : TestCowBase {
     override fun throwException() {
-        System.err.println("The following exception is EXPECTED, but should only be on one log!")
         throw UnsupportedOperationException("Why would I do that?")
     }
 

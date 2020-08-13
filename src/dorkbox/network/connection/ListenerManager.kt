@@ -175,7 +175,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    suspend fun <M : Any> onMessage(function: suspend (CONNECTION, M) -> Unit) {
+    suspend fun <MESSAGE : Any> onMessage(function: suspend (CONNECTION, MESSAGE) -> Unit) {
         onMessageMutex.withLock {
             // we have to follow the single-writer principle!
 

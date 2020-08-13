@@ -26,6 +26,8 @@ import com.esotericsoftware.kryo.util.IdentityMap
 import dorkbox.network.connection.KryoExtra
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.handshake.Message
+import dorkbox.network.pipeline.AeronInput
+import dorkbox.network.pipeline.AeronOutput
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.rmi.messages.*
@@ -33,14 +35,16 @@ import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.PoolableObject
 import dorkbox.os.OS
 import dorkbox.util.serialization.SerializationDefaults
-import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
+import org.agrona.DirectBuffer
+import org.agrona.MutableDirectBuffer
 import org.agrona.collections.Int2ObjectHashMap
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.StdInstantiatorStrategy
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.IOException
+import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationHandler
 
 /**
@@ -549,8 +553,47 @@ class Serialization(references: Boolean,
      *
      * @return the corresponding implementation object
      */
-    override fun createRmiObject(interfaceClassId: Int): Any {
-        return rmiIfaceToInstantiator[interfaceClassId].newInstance()
+    override fun createRmiObject(interfaceClassId: Int, objectParameters: Array<Any?>?): Any {
+        try {
+            if (objectParameters == null) {
+                return rmiIfaceToInstantiator[interfaceClassId].newInstance()
+            }
+
+            val size = objectParameters.size
+
+            // we have to get the constructor for this object.
+            val clazz = getRmiImpl(getClassFromId(interfaceClassId))
+            val constructors = clazz.declaredConstructors
+
+            // now have to find the closest match.
+            val matchedBySize = constructors.filter { it.parameterCount == size }
+
+            if (matchedBySize.size == 1) {
+                // this is our only option
+                return matchedBySize[0].newInstance(*objectParameters)
+            }
+
+            // have to match by type
+            val matchedByType = mutableListOf<Pair<Int, Constructor<*>>>()
+            objectParameters.forEachIndexed { index, any ->
+                if (any != null) {
+                    matchedBySize.forEach { singleConstructor ->
+                        var matchCount = 0
+                        if (singleConstructor.parameterTypes[index] == any::class.java) {
+                            matchCount++
+                        }
+
+                        matchedByType.add(Pair(matchCount, singleConstructor))
+                    }
+                }
+            }
+
+            // find the constructor with the highest match
+            matchedByType.sortByDescending { it.first }
+            return matchedByType[0].second.newInstance(*objectParameters)
+        } catch(e: Exception) {
+            return e
+        }
     }
 
 
@@ -583,14 +626,14 @@ class Serialization(references: Boolean,
      * There is a small speed penalty if there were no kryo's available to use.
      */
     @Throws(IOException::class)
-    override fun write(buffer: ByteBuf, message: Any) {
-//        val kryo = kryoPool.take()
-//        try {
-//            kryo.writeClassAndObject(buffer, message)
-//            kryo.write(NOP_CONNECTION, message)
-//        } finally {
-//            kryoPool.put(kryo)
-//        }
+    override fun write(buffer: DirectBuffer, message: Any) {
+        val kryo = kryoPool.take()
+        try {
+            val output = AeronOutput(buffer as MutableDirectBuffer)
+            kryo.writeClassAndObject(output, message)
+        } finally {
+            kryoPool.put(kryo)
+        }
     }
 
     /**
@@ -602,22 +645,14 @@ class Serialization(references: Boolean,
      * @param length should ALWAYS be the length of the expected object!
      */
     @Throws(IOException::class)
-    override fun read(buffer: ByteBuf, length: Int): Any? {
-//        val kryo = kryoPool.take()
-//        return try {
-//            if (wireReadLogger.isTraceEnabled) {
-//                val start = buffer.readerIndex()
-//                val `object` = kryo.read(buffer)
-//                val end = buffer.readerIndex()
-//                wireReadLogger.trace(ByteBufUtil.hexDump(buffer, start, end - start))
-//                `object`
-//            } else {
-//                kryo.read(NOP_CONNECTION, buffer)
-//            }
-//        } finally {
-//            kryoPool.put(kryo)
-//        }
-        return null
+    override fun read(buffer: DirectBuffer, length: Int): Any? {
+        val kryo = kryoPool.take()
+        return try {
+            val input = AeronInput(buffer)
+            kryo.readClassAndObject(input)
+        } finally {
+            kryoPool.put(kryo)
+        }
     }
 
     /**

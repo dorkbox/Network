@@ -444,7 +444,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     internal suspend fun writeHandshakeMessage(publication: Publication, message: Any) {
         // The sessionId is globally unique, and is assigned by the server.
-        logger.debug("[{}] send: {}", publication.sessionId(), message)
+        logger.trace {
+            "[${publication.sessionId()}] send: $message"
+        }
 
         val kryo: KryoExtra = serialization.takeKryo()
         try {
@@ -491,7 +493,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         val kryo: KryoExtra = serialization.takeKryo()
         try {
             val message = kryo.read(buffer, offset, length)
-            logger.debug("[{}] received: {}", header.sessionId(), message)
+            logger.trace {
+                "[${header.sessionId()}] received: $message"
+            }
+
             return message
         } catch (e: Exception) {
             logger.error("Error de-serializing message on connection ${header.sessionId()}!", e)
@@ -523,7 +528,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         val kryo: KryoExtra = serialization.takeKryo()
         try {
             message = kryo.read(buffer, offset, length, connection)
-            logger.debug("[{}] received: {}", sessionId, message)
+            logger.trace {
+                "[${sessionId}] received: ${message}"
+            }
         } catch (e: Exception) {
             listenerManager.notifyError(newException("[${sessionId}] Error de-serializing message", e))
         } finally {

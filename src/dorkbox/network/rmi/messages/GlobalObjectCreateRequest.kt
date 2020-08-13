@@ -20,6 +20,6 @@ package dorkbox.network.rmi.messages
  *
  * @param interfaceClassId (LEFT) the Kryo interface class ID to create
  * @param callbackId (RIGHT) to know which callback to use when the object is created
+ * @param objectParameters the constructor parameters to create the object with
  */
-data class GlobalObjectCreateRequest(val packedIds: Int) : RmiMessage
-//a asd
+data class GlobalObjectCreateRequest(val packedIds: Int, val objectParameters: Array<Any?>?) : RmiMessage

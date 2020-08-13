@@ -19,59 +19,9 @@ import com.esotericsoftware.kryo.Serializer
 import dorkbox.network.connection.KryoExtra
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.util.serialization.SerializationManager
+import org.agrona.DirectBuffer
 
-interface NetworkSerializationManager : SerializationManager {
-//    /**
-//     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
-//     *
-//     *
-//     * There is a small speed penalty if there were no kryo's available to use.
-//     */
-//    @Throws(IOException::class)
-//    fun write(connection: Connection_, message: Any)
-
-//    /**
-//     * Reads an object from the buffer.
-//     *
-//     * @param length should ALWAYS be the length of the expected object!
-//     */
-//    @Throws(IOException::class)
-//    fun read(connection: Connection_, length: Int): Any
-//
-//    /**
-//     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
-//     *
-//     *
-//     * There is a small speed penalty if there were no kryo's available to use.
-//     */
-//    @Throws(IOException::class)
-//    fun writeWithCompression(connection: Connection_, message: Any)
-//
-//    /**
-//     * Reads an object from the buffer.
-//     *
-//     * @param length should ALWAYS be the length of the expected object!
-//     */
-//    @Throws(IOException::class)
-//    fun readWithCompression(connection: Connection_, length: Int): Any
-
-//    /**
-//     * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
-//     *
-//     *
-//     * There is a small speed penalty if there were no kryo's available to use.
-//     */
-//    @Throws(IOException::class)
-//    fun writeWithCrypto(connection: Connection_, message: Any)
-//
-//    /**
-//     * Reads an object from the buffer.
-//     *
-//     * @param length should ALWAYS be the length of the expected object!
-//     */
-//    @Throws(IOException::class)
-//    fun readWithCrypto(connection: Connection_, length: Int): Any
-
+interface NetworkSerializationManager : SerializationManager<DirectBuffer> {
     /**
      * Registers the class using the lowest, next available integer ID and the [default serializer][Kryo.getDefaultSerializer].
      * If the class is already registered, the existing entry is updated with the new serializer.
@@ -153,7 +103,7 @@ interface NetworkSerializationManager : SerializationManager {
      *
      * @return the corresponding implementation object
      */
-    fun createRmiObject(interfaceClassId: Int): Any
+    fun createRmiObject(interfaceClassId: Int, objectParameters: Array<Any?>?): Any
 
     /**
      * Returns the Kryo class registration ID
