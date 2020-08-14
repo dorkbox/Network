@@ -27,7 +27,7 @@ class PortAllocator(basePort: Int, numberOfPortsToAllocate: Int) {
         }
 
         minPort = basePort
-        maxPort = basePort + (numberOfPortsToAllocate - 1)
+        maxPort = Math.max(basePort+1, basePort + (numberOfPortsToAllocate - 1))
 
         if (maxPort !in (basePort + 1)..65535) {
             throw IllegalArgumentException("Uppermost port $maxPort must be in the range [$basePort, 65535]")
