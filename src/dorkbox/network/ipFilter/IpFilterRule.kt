@@ -13,24 +13,24 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package dorkbox.network.ipFilter;
+package dorkbox.network.ipFilter
 
-import java.net.InetSocketAddress;
+import java.net.InetSocketAddress
 
 /**
  * Implement this interface to create new rules.
  */
-public interface IpFilterRule {
+interface IpFilterRule {
     /**
      * @return This method should return true if remoteAddress is valid according to your criteria. False otherwise.
      */
-    boolean matches(InetSocketAddress remoteAddress);
+    fun matches(remoteAddress: InetSocketAddress): Boolean
 
     /**
-     * @return This method should return {@link IpFilterRuleType#ACCEPT} if all
-     * {@link IpFilterRule#matches(InetSocketAddress)} for which {@link #matches(InetSocketAddress)}
+     * @return This method should return [IpFilterRuleType.ACCEPT] if all
+     * [IpFilterRule.matches] for which [.matches]
      * returns true should the accepted. If you want to exclude all of those IP addresses then
-     * {@link IpFilterRuleType#REJECT} should be returned.
+     * [IpFilterRuleType.REJECT] should be returned.
      */
-    IpFilterRuleType ruleType();
+    fun ruleType(): IpFilterRuleType
 }

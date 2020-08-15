@@ -21,8 +21,9 @@ import java.math.BigInteger
 import java.net.*
 
 /**
- * Use this class to create rules for [RuleBasedIpFilter] that group IP addresses into subnets.
- * Supports both, IPv4 and IPv6.
+ * Use this class to create rules that group IP addresses into subnets.
+ *
+ * Supports both IPv4 and IPv6.
  */
 class IpSubnetFilterRule : IpFilterRule {
     companion object {
@@ -70,7 +71,7 @@ class IpSubnetFilterRule : IpFilterRule {
     }
 
     private class FakeSubnetFilterRule() : IpFilterRule {
-        override fun matches(remoteAddress: InetSocketAddress?): Boolean {
+        override fun matches(remoteAddress: InetSocketAddress): Boolean {
             return true
         }
 

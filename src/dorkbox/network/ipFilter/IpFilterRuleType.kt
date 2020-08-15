@@ -13,12 +13,11 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package dorkbox.network.ipFilter;
+package dorkbox.network.ipFilter
 
 /**
- * Used in {@link IpFilterRule} to decide if a matching IP Address should be allowed or denied to connect.
+ * Used in [IpFilterRule] to decide if a matching IP Address should be allowed or denied to connect.
  */
-public enum IpFilterRuleType {
-    ACCEPT,
-    REJECT
+enum class IpFilterRuleType {
+    ACCEPT, REJECT
 }
