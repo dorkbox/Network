@@ -271,8 +271,6 @@ class RemoteObjectStorage(val logger: KLogger) {
      * @return the object registered with the specified ID.
      */
     operator fun get(objectId: Int): Any? {
-        validate(objectId)
-
         return objectMap[objectId]
     }
 

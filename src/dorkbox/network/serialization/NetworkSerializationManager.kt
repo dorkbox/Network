@@ -16,7 +16,6 @@
 package dorkbox.network.serialization
 
 import com.esotericsoftware.kryo.Serializer
-import dorkbox.network.connection.KryoExtra
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.util.serialization.SerializationManager
 import org.agrona.DirectBuffer
@@ -81,17 +80,17 @@ interface NetworkSerializationManager : SerializationManager<DirectBuffer> {
     /**
      * @return takes a kryo instance from the pool.
      */
-    fun takeKryo(): KryoExtra
+    suspend fun takeKryo(): KryoExtra
 
     /**
      * Returns a kryo instance to the pool.
      */
-    fun returnKryo(kryo: KryoExtra)
+    suspend fun returnKryo(kryo: KryoExtra)
 
     /**
      * @return true if the remote kryo registration are the same as our own
      */
-    fun verifyKryoRegistration(clientBytes: ByteArray): Boolean
+    suspend fun verifyKryoRegistration(clientBytes: ByteArray): Boolean
 
     /**
      * @return the details of all registration IDs -> Class name used by kryo
@@ -145,7 +144,7 @@ interface NetworkSerializationManager : SerializationManager<DirectBuffer> {
     /**
      * Called when initialization is complete. This is to prevent (and recognize) out-of-order class/serializer registration.
      */
-    fun finishInit(endPointClass: Class<*>)
+    suspend fun finishInit(endPointClass: Class<*>)
 
     /**
      * @return true if our initialization is complete. Some registrations (in the property store, for example) always register for client

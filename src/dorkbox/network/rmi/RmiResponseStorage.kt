@@ -1,6 +1,5 @@
 package dorkbox.network.rmi
 
-import com.conversantmedia.util.concurrent.MultithreadConcurrentQueue
 import dorkbox.network.rmi.messages.MethodResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -30,8 +29,8 @@ internal data class RmiWaiter(val id: Int) {
      * this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
      */
     fun prep() {
+        @Suppress("EXPERIMENTAL_API_USAGE")
         if (channel.isClosedForReceive && channel.isClosedForSend) {
-            println("renew waiter")
             channel = Channel(0)
         }
     }
@@ -74,17 +73,20 @@ internal class RmiResponseStorage(private val actionDispatch: CoroutineScope) {
     // Response ID's are for ALL in-flight RMI on the network stack. instead of limited to (originally) 64, we are now limited to 65,535
     // these are just looped around in a ring buffer.
     // These are stored here as int, however these are REALLY shorts and are int-packed when transferring data on the wire
-    // 32,000 IN FLIGHT RMI method invocations is PLENTY
-    private val maxValuesInCache = Short.MAX_VALUE.toInt()
-
-    private val rmiWaiterCache = MultithreadConcurrentQueue<RmiWaiter>(maxValuesInCache)
+    // 64,000 IN FLIGHT RMI method invocations is PLENTY
+    private val maxValuesInCache = (Short.MAX_VALUE.toInt() * 2) - 1 // -1 because 0 is reserved
+    private val rmiWaiterCache = Channel<RmiWaiter>(maxValuesInCache)
 
     private val pendingLock = ReentrantReadWriteLock()
     private val pending = Int2NullableObjectHashMap<Any>(32, Hashing.DEFAULT_LOAD_FACTOR, true)
 
+
     init {
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
         val ids = IntArrayList(maxValuesInCache, Integer.MIN_VALUE)
+        for (id in Short.MIN_VALUE..-1) {
+            ids.addInt(id)
+        }
         // ZERO is special, and is never added!
         for (id in 1..Short.MAX_VALUE) {
             ids.addInt(id)
@@ -114,15 +116,15 @@ internal class RmiResponseStorage(private val actionDispatch: CoroutineScope) {
             previous.doNotify()
 
             // since this was the FIRST one to trigger, return it to the cache.
-            rmiWaiterCache.offer(previous)
+            rmiWaiterCache.send(previous)
         }
     }
 
     /**
      * gets the RmiWaiter (id + waiter)
      */
-    internal fun prep(rmiObjectId: Int): RmiWaiter {
-        val responseRmi = rmiWaiterCache.poll()
+    internal suspend fun prep(rmiObjectId: Int): RmiWaiter {
+        val responseRmi = rmiWaiterCache.receive()
 
         // this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
         responseRmi.prep()
@@ -175,7 +177,7 @@ internal class RmiResponseStorage(private val actionDispatch: CoroutineScope) {
         val resultOrWaiter = pendingLock.write { pending.remove(pendingId) }
         if (resultOrWaiter is RmiWaiter) {
             // since this was the FIRST one to trigger, return it to the cache.
-            rmiWaiterCache.offer(resultOrWaiter)
+            rmiWaiterCache.send(resultOrWaiter)
             return TIMEOUT_EXCEPTION
         }
 
@@ -183,7 +185,7 @@ internal class RmiResponseStorage(private val actionDispatch: CoroutineScope) {
     }
 
     fun close() {
-        rmiWaiterCache.clear()
+        rmiWaiterCache.close()
         pendingLock.write { pending.clear() }
     }
 }

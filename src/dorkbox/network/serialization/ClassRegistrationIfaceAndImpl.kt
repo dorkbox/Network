@@ -15,9 +15,8 @@
  */
 package dorkbox.network.serialization
 
-import dorkbox.network.connection.KryoExtra
 import dorkbox.network.rmi.messages.ObjectResponseSerializer
-import org.slf4j.Logger
+import mu.KLogger
 
 internal class ClassRegistrationIfaceAndImpl(ifaceClass: Class<*>, val implClass: Class<*>, objectResponseSerializer: ObjectResponseSerializer) : ClassRegistration(ifaceClass) {
 
@@ -29,7 +28,9 @@ internal class ClassRegistrationIfaceAndImpl(ifaceClass: Class<*>, val implClass
         id = kryo.register(clazz, serializer).id
     }
 
-    override fun log(logger: Logger) {
-        logger.trace("Registered {} -> (RMI) {}", id, implClass.name)
+    override fun log(logger: KLogger) {
+        logger.trace {
+            "Registered $id -> (RMI) ${implClass.name}"
+        }
     }
 }

@@ -23,25 +23,31 @@ import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import com.esotericsoftware.kryo.util.IdentityMap
-import dorkbox.network.connection.KryoExtra
 import dorkbox.network.connection.ping.PingMessage
-import dorkbox.network.handshake.Message
-import dorkbox.network.pipeline.AeronInput
-import dorkbox.network.pipeline.AeronOutput
+import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
-import dorkbox.network.rmi.messages.*
-import dorkbox.objectPool.ObjectPool
-import dorkbox.objectPool.PoolableObject
+import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
+import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
+import dorkbox.network.rmi.messages.GlobalObjectCreateRequest
+import dorkbox.network.rmi.messages.GlobalObjectCreateResponse
+import dorkbox.network.rmi.messages.MethodRequest
+import dorkbox.network.rmi.messages.MethodRequestSerializer
+import dorkbox.network.rmi.messages.MethodResponse
+import dorkbox.network.rmi.messages.MethodResponseSerializer
+import dorkbox.network.rmi.messages.ObjectResponseSerializer
+import dorkbox.network.rmi.messages.RmiClientRequestSerializer
 import dorkbox.os.OS
 import dorkbox.util.serialization.SerializationDefaults
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.runBlocking
+import mu.KLogger
+import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.MutableDirectBuffer
 import org.agrona.collections.Int2ObjectHashMap
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.StdInstantiatorStrategy
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationHandler
@@ -66,8 +72,8 @@ import java.lang.reflect.InvocationHandler
  *                an object's type. Default is [ReflectionSerializerFactory] with [FieldSerializer]. @see
  *                Kryo#newDefaultSerializer(Class)
  */
-class Serialization(references: Boolean,
-                    factory: SerializerFactory<*>?) : NetworkSerializationManager {
+class Serialization(private val references: Boolean,
+                    private val factory: SerializerFactory<*>?) : NetworkSerializationManager {
 
 
     companion object {
@@ -86,7 +92,6 @@ class Serialization(references: Boolean,
         fun DEFAULT(references: Boolean = true, factory: SerializerFactory<*>? = null): Serialization {
             val serialization = Serialization(references, factory)
 
-            serialization.register(ControlMessage::class.java)
             serialization.register(PingMessage::class.java) // TODO this is built into aeron!??!?!?!
 
             // TODO: this is for diffie hellmen handshake stuff!
@@ -95,16 +100,16 @@ class Serialization(references: Boolean,
             // TODO: fix kryo to work the way we want, so we can register interfaces + serializers with kryo
 //            serialization.register(XECPublicKey::class.java, XECPublicKeySerializer())
 //            serialization.register(XECPrivateKey::class.java, XECPrivateKeySerializer())
-            serialization.register(Message::class.java) // must use full package name!
+//            serialization.register(Message::class.java) // must use full package name!
 
             return serialization
         }
     }
 
-    private lateinit var logger: Logger
+    private lateinit var logger: KLogger
 
     private var initialized = false
-    private val kryoPool: ObjectPool<KryoExtra>
+    private val kryoPool: Channel<KryoExtra>
     lateinit var classResolver: ClassResolver
 
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class)
@@ -137,47 +142,48 @@ class Serialization(references: Boolean,
     // reflectASM doesn't work on android
     private val useAsm = !OS.isAndroid()
 
+    private val KRYO_COUNT = 32
     init {
-        kryoPool = ObjectPool.NonBlockingSoftReference(object : PoolableObject<KryoExtra>() {
-            override fun create(): KryoExtra {
-                synchronized(this@Serialization) {
-
-                    // we HAVE to pre-allocate the KRYOs
-                    val kryo = KryoExtra(methodCache)
-
-                    kryo.instantiatorStrategy = instantiatorStrategy
-                    kryo.references = references
-
-                    // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
-                    SerializationDefaults.register(kryo)
-
-                    // RMI stuff!
-                    kryo.register(GlobalObjectCreateRequest::class.java)
-                    kryo.register(GlobalObjectCreateResponse::class.java)
-
-                    kryo.register(ConnectionObjectCreateRequest::class.java)
-                    kryo.register(ConnectionObjectCreateResponse::class.java)
-
-                    kryo.register(MethodRequest::class.java, methodRequestSerializer)
-                    kryo.register(MethodResponse::class.java, methodResponseSerializer)
-
-                    @Suppress("UNCHECKED_CAST")
-                    kryo.register(InvocationHandler::class.java as Class<Any>, objectRequestSerializer)
-
-                    // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
-                    classesToRegister.forEach { registration ->
-                        registration.register(kryo)
-                    }
-
-                    if (factory != null) {
-                        kryo.setDefaultSerializer(factory)
-                    }
-
-                    return kryo
-                }
-            }
-        })
+        // reasonable size of available kryo's before coroutines are suspended during read/write
+        kryoPool = Channel(KRYO_COUNT)
     }
+
+    @Synchronized
+    private fun initKryo(): KryoExtra {
+        val kryo = KryoExtra(methodCache)
+
+        kryo.instantiatorStrategy = instantiatorStrategy
+        kryo.references = references
+
+        // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
+        SerializationDefaults.register(kryo)
+
+        // RMI stuff!
+        kryo.register(HandshakeMessage::class.java)
+        kryo.register(GlobalObjectCreateRequest::class.java)
+        kryo.register(GlobalObjectCreateResponse::class.java)
+
+        kryo.register(ConnectionObjectCreateRequest::class.java)
+        kryo.register(ConnectionObjectCreateResponse::class.java)
+
+        kryo.register(MethodRequest::class.java, methodRequestSerializer)
+        kryo.register(MethodResponse::class.java, methodResponseSerializer)
+
+        @Suppress("UNCHECKED_CAST")
+        kryo.register(InvocationHandler::class.java as Class<Any>, objectRequestSerializer)
+
+        // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
+        classesToRegister.forEach { registration ->
+            registration.register(kryo)
+        }
+
+        if (factory != null) {
+            kryo.setDefaultSerializer(factory)
+        }
+
+        return kryo
+    }
+
 
 
     /**
@@ -321,16 +327,15 @@ class Serialization(references: Boolean,
      * is already in use by a different type, an exception is thrown.
      */
     @Synchronized
-    override fun finishInit(endPointClass: Class<*>) {
-        val name = endPointClass.simpleName
-
-        this.logger = LoggerFactory.getLogger("$name.SERIAL")
+    override suspend fun finishInit(endPointClass: Class<*>) {
+        this.logger = KotlinLogging.logger(endPointClass.simpleName)
 
         initialized = true
 
         // initialize the kryo pool with at least 1 kryo instance. This ALSO makes sure that all of our class registration is done
         // correctly and (if not) we are are notified on the initial thread (instead of on the network update thread)
-        val kryo = kryoPool.take()
+        val kryo = takeKryo()
+
         // save off the class-resolver, so we can lookup the class <-> id relationships
         classResolver = kryo.classResolver
 
@@ -413,7 +418,7 @@ class Serialization(references: Boolean,
             output.toBytes().copyInto(savedRegistrationDetails, 0, 0, length)
             output.close()
         } finally {
-            kryoPool.put(kryo)
+            returnKryo(kryo)
         }
     }
 
@@ -435,7 +440,7 @@ class Serialization(references: Boolean,
      *
      * @return true if kryo registration is required for all classes sent over the wire
      */
-    override fun verifyKryoRegistration(clientBytes: ByteArray): Boolean {
+    override suspend fun verifyKryoRegistration(clientBytes: ByteArray): Boolean {
         // verify the registration IDs if necessary with our own. The CLIENT does not verify anything, only the server!
         val kryoRegistrationDetails = savedRegistrationDetails
         val equals = kryoRegistrationDetails.contentEquals(clientBytes)
@@ -505,7 +510,9 @@ class Serialization(references: Boolean,
                     // JUST MAYBE this is a serializer for RMI. The client doesn't have to register for RMI stuff
 
                     if (serializerServer == objectResponseSerializer::class.java.name && serializerClient.isEmpty()) {
-                        // this is for RMI!
+                        // this is for SERVER RMI!
+                    } else if (serializerClient == objectResponseSerializer::class.java.name && serializerServer.isEmpty()) {
+                        // this is for CLIENT RMI!
                     } else {
                         success = false
                         logger.error("Registration {} Client -> {} ({})", idClient, nameClient, serializerClient)
@@ -543,15 +550,16 @@ class Serialization(references: Boolean,
     /**
      * @return takes a kryo instance from the pool.
      */
-    override fun takeKryo(): KryoExtra {
-        return kryoPool.take()
+    override suspend fun takeKryo(): KryoExtra {
+        // ALWAYS get as many as needed. Recycle them to prevent too many getting created
+        return kryoPool.poll() ?: initKryo()
     }
 
     /**
-     * Returns a kryo instance to the pool.
+     * Returns a kryo instance to the pool for use later on
      */
-    override fun returnKryo(kryo: KryoExtra) {
-        kryoPool.put(kryo)
+    override suspend fun returnKryo(kryo: KryoExtra) {
+        kryoPool.send(kryo)
     }
 
     /**
@@ -638,83 +646,90 @@ class Serialization(references: Boolean,
     }
 
     /**
+     * # BLOCKING
+     *
      * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
-     *
-     *
-     * No crypto and no sequence number
-     *
-     *
-     * There is a small speed penalty if there were no kryo's available to use.
      */
     @Throws(IOException::class)
     override fun write(buffer: DirectBuffer, message: Any) {
-        val kryo = kryoPool.take()
-        try {
-            val output = AeronOutput(buffer as MutableDirectBuffer)
-            kryo.writeClassAndObject(output, message)
-        } finally {
-            kryoPool.put(kryo)
+        runBlocking {
+            val kryo = takeKryo()
+            try {
+                val output = AeronOutput(buffer as MutableDirectBuffer)
+                kryo.writeClassAndObject(output, message)
+            } finally {
+                returnKryo(kryo)
+            }
         }
     }
 
     /**
+     * # BLOCKING
+     *
      * Reads an object from the buffer.
-     *
-     *
-     * No crypto and no sequence number
      *
      * @param length should ALWAYS be the length of the expected object!
      */
     @Throws(IOException::class)
     override fun read(buffer: DirectBuffer, length: Int): Any? {
-        val kryo = kryoPool.take()
-        return try {
-            val input = AeronInput(buffer)
-            kryo.readClassAndObject(input)
-        } finally {
-            kryoPool.put(kryo)
+        return runBlocking {
+            val kryo = takeKryo()
+            try {
+                val input = AeronInput(buffer)
+                kryo.readClassAndObject(input)
+            } finally {
+                returnKryo(kryo)
+            }
         }
     }
 
     /**
+     * # BLOCKING
+     *
      * Writes the class and object using an available kryo instance
      */
     @Throws(IOException::class)
     override fun writeFullClassAndObject(output: Output, value: Any) {
-        val kryo = kryoPool.take()
-        var prev = false
-        try {
-            prev = kryo.isRegistrationRequired
-            kryo.isRegistrationRequired = false
-            kryo.writeClassAndObject(output, value)
-        } catch (ex: Exception) {
-            val msg = "Unable to serialize buffer"
-            logger.error(msg, ex)
-            throw IOException(msg, ex)
-        } finally {
-            kryo.isRegistrationRequired = prev
-            kryoPool.put(kryo)
+        runBlocking {
+            val kryo = takeKryo()
+            var prev = false
+            try {
+                prev = kryo.isRegistrationRequired
+                kryo.isRegistrationRequired = false
+                kryo.writeClassAndObject(output, value)
+            } catch (ex: Exception) {
+                val msg = "Unable to serialize buffer"
+                logger.error(msg, ex)
+                throw IOException(msg, ex)
+            } finally {
+                kryo.isRegistrationRequired = prev
+                returnKryo(kryo)
+            }
         }
     }
 
     /**
+     * # BLOCKING
+     *
      * Returns a class read from the input
      */
     @Throws(IOException::class)
     override fun readFullClassAndObject(input: Input): Any {
-        val kryo = kryoPool.take()
-        var prev = false
-        return try {
-            prev = kryo.isRegistrationRequired
-            kryo.isRegistrationRequired = false
-            kryo.readClassAndObject(input)
-        } catch (ex: Exception) {
-            val msg = "Unable to deserialize buffer"
-            logger.error(msg, ex)
-            throw IOException(msg, ex)
-        } finally {
-            kryo.isRegistrationRequired = prev
-            kryoPool.put(kryo)
+        return runBlocking {
+            val kryo = takeKryo()
+            var prev = false
+            try {
+                prev = kryo.isRegistrationRequired
+                kryo.isRegistrationRequired = false
+                kryo.readClassAndObject(input)
+            } catch (ex: Exception) {
+                val msg = "Unable to deserialize buffer"
+                logger.error(msg, ex)
+                throw IOException(msg, ex)
+            } finally {
+                kryo.isRegistrationRequired = prev
+                returnKryo(kryo)
+            }
         }
     }
 

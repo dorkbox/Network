@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection
+package dorkbox.network.serialization
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
-import dorkbox.network.pipeline.AeronInput
-import dorkbox.network.pipeline.AeronOutput
+import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.os.OS
 import dorkbox.util.Sys
@@ -29,7 +28,6 @@ import org.agrona.DirectBuffer
 import org.agrona.collections.Int2ObjectHashMap
 import org.slf4j.Logger
 import java.io.IOException
-import javax.crypto.Cipher
 
 /**
  * Nothing in this class is thread safe
@@ -50,7 +48,7 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
     lateinit var connection: Connection
 
 //    private val secureRandom = SecureRandom()
-    private var cipher: Cipher? = null
+//    private var cipher: Cipher? = null
     private val compressor = factory.fastCompressor()
     private val decompressor = factory.fastDecompressor()
 
@@ -69,13 +67,13 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
         private const val IV_LENGTH_BYTE = 12
     }
 
-    init {
-        cipher = try {
-            Cipher.getInstance(ALGORITHM)
-        } catch (e: Exception) {
-            throw IllegalStateException("could not get cipher instance", e)
-        }
-    }
+//    init {
+//        cipher = try {
+//            Cipher.getInstance(ALGORITHM)
+//        } catch (e: Exception) {
+//            throw IllegalStateException("could not get cipher instance", e)
+//        }
+//    }
 
     fun getMethods(classId: Int): Array<CachedMethod> {
         return methodCache[classId]

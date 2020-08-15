@@ -39,8 +39,8 @@ import com.esotericsoftware.kryo.KryoException
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
-import dorkbox.network.connection.KryoExtra
 import dorkbox.network.rmi.RmiUtils
+import dorkbox.network.serialization.KryoExtra
 import java.lang.reflect.Method
 
 /**

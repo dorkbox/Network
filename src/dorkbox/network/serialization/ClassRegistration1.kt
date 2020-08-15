@@ -15,8 +15,7 @@
  */
 package dorkbox.network.serialization
 
-import dorkbox.network.connection.KryoExtra
-import org.slf4j.Logger
+import mu.KLogger
 
 internal class ClassRegistration1(clazz: Class<*>, id: Int) : ClassRegistration(clazz) {
     init {
@@ -27,7 +26,9 @@ internal class ClassRegistration1(clazz: Class<*>, id: Int) : ClassRegistration(
         kryo.register(clazz, id)
     }
 
-    override fun log(logger: Logger) {
-        logger.trace("Registered {} -> (specified) {}", id, clazz.name)
+    override fun log(logger: KLogger) {
+        logger.trace {
+            "Registered $id -> (specified) ${clazz.name}"
+        }
     }
 }
