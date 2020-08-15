@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.store
+package dorkbox.network.storage
 
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.util.exceptions.SecurityException
