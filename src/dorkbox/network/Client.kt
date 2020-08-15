@@ -18,17 +18,23 @@ package dorkbox.network
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.client.ClientException
+import dorkbox.network.aeron.client.ClientRejectedException
 import dorkbox.network.aeron.client.ClientTimedOutException
-import dorkbox.network.aeron.server.ClientRejectedException
-import dorkbox.network.connection.*
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.IpcMediaDriverConnection
+import dorkbox.network.connection.Ping
+import dorkbox.network.connection.PublicKeyValidationState
+import dorkbox.network.connection.UdpMediaDriverConnection
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.RmiSupportConnection
 import dorkbox.network.rmi.TimeoutException
 import dorkbox.util.exceptions.SecurityException
-import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
@@ -40,37 +46,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
          * Gets the version number.
          */
         const val version = "5.0"
-
-        /**
-         * Split array into chunks, max of 256 chunks.
-         * byte[0] = chunk ID
-         * byte[1] = total chunks (0-255) (where 0->1, 2->3, 127->127 because this is indexed by a byte)
-         */
-        private fun divideArray(source: ByteArray, chunksize: Int): Array<ByteArray>? {
-            val fragments = Math.ceil(source.size / chunksize.toDouble()).toInt()
-            if (fragments > 127) {
-                // cannot allow more than 127
-                return null
-            }
-
-            // pre-allocate the memory
-            val splitArray = Array(fragments) { ByteArray(chunksize + 2) }
-            var start = 0
-            for (i in splitArray.indices) {
-                var length: Int
-                length = if (start + chunksize > source.size) {
-                    source.size - start
-                } else {
-                    chunksize
-                }
-                splitArray[i] = ByteArray(length + 2)
-                splitArray[i][0] = i.toByte() // index
-                splitArray[i][1] = fragments.toByte() // total number of fragments
-                System.arraycopy(source, start, splitArray[i], 2, length)
-                start += chunksize
-            }
-            return splitArray
-        }
     }
 
     /**
@@ -85,7 +60,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      */
     private var remoteAddress = ""
 
-    private val isConnected = atomic(false)
+    @Volatile
+    private var isConnected = false
 
     // is valid when there is a connection to the server, otherwise it is null
     private var connection: CONNECTION? = null
@@ -95,7 +71,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     private val previousClosedConnectionActivity: Long = 0
 
-    override val handshake = ClientHandshake(logger, config, listenerManager, crypto)
+    private val handshake = ClientHandshake(logger, config, crypto, listenerManager)
     private val rmiConnectionSupport = RmiSupportConnection(logger, rmiGlobalSupport, serialization, actionDispatch)
 
     init {
@@ -108,8 +84,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         if (config.networkMtuSize <= 0) { throw ClientException("configuration networkMtuSize must be > 0") }
         if (config.networkMtuSize >= 9 * 1024) { throw ClientException("configuration networkMtuSize must be < ${9 * 1024}") }
-
-        autoClosableObjects.add(handshake)
     }
 
     override fun newException(message: String, cause: Throwable?): Throwable {
@@ -124,26 +98,29 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     }
 
     /**
-     * Will attempt to connect to the server, with a default 30 second connection timeout and will BLOCK until completed
+     * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
      *
-     * For a network address, it can be:
-     * - a network name ("localhost", "loopback", "lo", "bob.example.org")
-     * - an IP address ("127.0.0.1", "123.123.123.123", "::1")
+     * Default connection is to localhost
      *
-     * For the IPC (Inter-Process-Communication) address. it must be:
+     * ### For a network address, it can be:
+     *  - a network name ("localhost", "loopback", "lo", "bob.example.org")
+     *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
+     *
+     * ### For the IPC (Inter-Process-Communication) address. it must be:
      * - the IPC integer ID, "0x1337c0de", "0x12312312", etc.
      *
-     * Note: Case does not matter, and "localhost" is the default. IPC address must be in HEX notation (starting with '0x')
-     *
+     * ### Case does not matter, and "localhost" is the default. IPC address must be in HEX notation (starting with '0x')
      *
      * @param remoteAddress The network or IPC address for the client to connect to
-     * @param connectionTimeout wait for x milliseconds. 0 will wait indefinitely
+     * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely
      * @param reliable true if we want to create a reliable connection. IPC connections are always reliable
      *
+     * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
+     * @throws ClientRejectedException if the client connection is rejected
      */
-    suspend fun connect(remoteAddress: String = "", connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
-        if (isConnected.value) {
+    suspend fun connect(remoteAddress: String = IPv4.LOCALHOST.hostAddress, connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
+        if (isConnected) {
             logger.error("Unable to connect when already connected!")
             return
         }
@@ -151,25 +128,32 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         this.connectionTimeoutMS = connectionTimeoutMS
         // localhost/loopback IP might not always be 127.0.0.1 or ::1
         when (remoteAddress) {
-            "loopback", "localhost", "lo" -> this.remoteAddress = IPv4.LOCALHOST.hostAddress
+            "loopback", "localhost", "lo", "" -> this.remoteAddress = IPv4.LOCALHOST.hostAddress
             else -> when {
-                remoteAddress.startsWith("127.") -> this.remoteAddress = IPv4.LOCALHOST.hostAddress
-                remoteAddress.startsWith("::1") -> this.remoteAddress = IPv6.LOCALHOST.hostAddress
-                else -> this.remoteAddress = remoteAddress
+                IPv4.isLoopback(remoteAddress) -> this.remoteAddress = IPv4.LOCALHOST.hostAddress
+                IPv6.isLoopback(remoteAddress) -> this.remoteAddress = IPv6.LOCALHOST.hostAddress
+                else -> this.remoteAddress = remoteAddress // might be IPC address!
             }
         }
 
-        // if we are IPv6, the IP must be in '[]'
-        if (this.remoteAddress.count { it == ':' } > 1 &&
-            this.remoteAddress.count { it == '[' } < 1 &&
-            this.remoteAddress.count { it == ']' } < 1) {
 
-            this.remoteAddress = """[${this.remoteAddress}]"""
-        }
-
+        // if we are IPv4 wildcard
         if (this.remoteAddress == "0.0.0.0") {
             throw IllegalArgumentException("0.0.0.0 is an invalid address to connect to!")
         }
+
+
+        if (IPv6.isValid(this.remoteAddress)) {
+            // "[" and "]" are valid for ipv6 addresses... we want to make sure it is so
+
+            // if we are IPv6, the IP must be in '[]'
+            if (this.remoteAddress.count { it == '[' } < 1 &&
+                this.remoteAddress.count { it == ']' } < 1) {
+
+                this.remoteAddress = """[${this.remoteAddress}]"""
+            }
+        }
+
 
         handshake.init(this)
 
@@ -178,8 +162,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             // When conducting IPC transfers, we MUST use the same aeron configuration as the server!
 //            config.aeronLogDirectory
-
-
 
 
             // stream IDs are flipped for a client because we operate from the perspective of the server
@@ -209,20 +191,17 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             // THIS IS A NETWORK ADDRESS
 
             // initially we only connect to the handshake connect ports. Ports are flipped because they are in the perspective of the SERVER
-            val handshakeConnection = UdpMediaDriverConnection(
-                    address = this.remoteAddress,
-                    subscriptionPort = config.publicationPort,
-                    publicationPort = config.subscriptionPort,
-                    streamId = UDP_HANDSHAKE_STREAM_ID,
-                    sessionId = RESERVED_SESSION_ID_INVALID,
-                    connectionTimeoutMS = connectionTimeoutMS,
-                    isReliable = reliable)
-
-            autoClosableObjects.add(handshakeConnection)
+            val handshakeConnection = UdpMediaDriverConnection(address = this.remoteAddress,
+                                                               publicationPort = config.subscriptionPort,
+                                                               subscriptionPort = config.publicationPort,
+                                                               streamId = UDP_HANDSHAKE_STREAM_ID,
+                                                               sessionId = RESERVED_SESSION_ID_INVALID,
+                                                               connectionTimeoutMS = connectionTimeoutMS,
+                                                               isReliable = reliable)
 
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
             handshakeConnection.buildClient(aeron)
-            logger.debug(handshakeConnection.clientInfo())
+            logger.info(handshakeConnection.clientInfo())
 
 
             // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
@@ -232,19 +211,22 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
 
             // we are now connected, so we can connect to the NEW client-specific ports
-            val reliableClientConnection = UdpMediaDriverConnection(
-                    address = handshakeConnection.address,
-                    subscriptionPort = connectionInfo.subscriptionPort,
-                    publicationPort = connectionInfo.publicationPort,
-                    streamId = connectionInfo.streamId,
-                    sessionId = connectionInfo.sessionId,
-                    connectionTimeoutMS = connectionTimeoutMS,
-                    isReliable = handshakeConnection.isReliable)
+            val reliableClientConnection = UdpMediaDriverConnection(address = handshakeConnection.address,
+                                                                    // NOTE: pub/sub must be switched!
+                                                                    publicationPort = connectionInfo.subscriptionPort,
+                                                                    subscriptionPort = connectionInfo.publicationPort,
+                                                                    streamId = connectionInfo.streamId,
+                                                                    sessionId = connectionInfo.sessionId,
+                                                                    connectionTimeoutMS = connectionTimeoutMS,
+                                                                    isReliable = handshakeConnection.isReliable)
 
             // VALIDATE:: check to see if the remote connection's public key has changed!
-            if (!crypto.validateRemoteAddress(IPv4.toInt(this.remoteAddress), connectionInfo.publicKey)) {
-                listenerManager.notifyError(ClientRejectedException("Connection to $remoteAddress not allowed! Public key mismatch."))
-                return
+            val validateRemoteAddress = crypto.validateRemoteAddress(IPv4.toInt(this.remoteAddress), connectionInfo.publicKey)
+            if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
+                handshakeConnection.close()
+                val exception = ClientRejectedException("Connection to $remoteAddress not allowed! Public key mismatch.")
+                listenerManager.notifyError(exception)
+                throw exception
             }
 
             // VALIDATE:: If the the serialization DOES NOT match between the client/server, then the server will emit a log, and the
@@ -256,21 +238,22 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             // does not need to do anything
             //
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server-assigned client ports
-            logger.debug(reliableClientConnection.clientInfo())
+            logger.info(reliableClientConnection.clientInfo())
 
-            val newConnection = newConnection(this, reliableClientConnection)
-            autoClosableObjects.add(newConnection)
+            val newConnection = newConnection(ConnectionParams(this, reliableClientConnection, validateRemoteAddress))
 
             // VALIDATE are we allowed to connect to this server (now that we have the initial server information)
             @Suppress("UNCHECKED_CAST")
             val permitConnection = listenerManager.notifyFilter(newConnection)
             if (!permitConnection) {
-                listenerManager.notifyError(ClientRejectedException("Connection to $remoteAddress was not permitted!"))
-                return
+                handshakeConnection.close()
+                val exception = ClientRejectedException("Connection to $remoteAddress was not permitted!")
+                listenerManager.notifyError(exception)
+                throw exception
             }
 
             connection = newConnection
-            handshake.addConnection(newConnection)
+            connections.add(newConnection)
 
             // have to make a new thread to listen for incoming data!
             // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
@@ -287,22 +270,23 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             // tell the server our connection handshake is done, and the connection can now listen for data.
             val canFinishConnecting = handshake.handshakeDone(handshakeConnection, connectionTimeoutMS)
+
+            // no longer necessary to hold this connection open
+            handshakeConnection.close()
+
             if (canFinishConnecting) {
-                isConnected.lazySet(true)
-                listenerManager.notifyConnect(newConnection)
+                isConnected = true
+
+                actionDispatch.launch {
+                    listenerManager.notifyConnect(newConnection)
+                }
             } else {
                 close()
+                val exception = ClientRejectedException("Unable to connect with server ${handshakeConnection.clientInfo()}")
+                listenerManager.notifyError(exception)
+                throw exception
             }
         }
-    }
-
-    /**
-     * Checks to see if this client has connected yet or not.
-     *
-     * @return true if we are connected, false otherwise.
-     */
-    override fun isConnected(): Boolean {
-        return isConnected.value
     }
 
 //    override fun hasRemoteKeyChanged(): Boolean {
@@ -374,18 +358,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     }
 
     /**
-     * @throws ClientException when a message cannot be sent
-     */
-    suspend fun send(message: Any, priority: Byte) {
-        val c = connection
-        if (c != null) {
-            c.send(message, priority)
-        } else {
-            throw ClientException("Cannot send a message when there is no connection!")
-        }
-    }
-
-    /**
      * @throws ClientException when a ping cannot be sent
      */
     suspend fun ping(): Ping {
@@ -409,104 +381,24 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
     }
 
-//    fun initClassRegistration(channel: Channel, registration: Registration): Boolean {
-//        val details = serialization.getKryoRegistrationDetails()
-//        val length = details.size
-//        if (length > Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE) {
-//            // it is too large to send in a single packet
-//
-//            // child arrays have index 0 also as their 'index' and 1 is the total number of fragments
-//            val fragments = divideArray(details, Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE)
-//            if (fragments == null) {
-//                logger.error("Too many classes have been registered for Serialization. Please report this issue")
-//                return false
-//            }
-//            val allButLast = fragments.size - 1
-//            for (i in 0 until allButLast) {
-//                val fragment = fragments[i]
-//                val fragmentedRegistration = Registration.hello(registration.oneTimePad, config.settingsStore.getPublicKey())
-//                fragmentedRegistration.payload = fragment
-//
-//                // tell the server we are fragmented
-//                fragmentedRegistration.upgradeType = UpgradeType.FRAGMENTED
-//
-//                // tell the server we are upgraded (it will bounce back telling us to connect)
-//                fragmentedRegistration.upgraded = true
-//                channel.writeAndFlush(fragmentedRegistration)
-//            }
-//
-//            // now tell the server we are done with the fragments
-//            val fragmentedRegistration = Registration.hello(registration.oneTimePad, config.settingsStore.getPublicKey())
-//            fragmentedRegistration.payload = fragments[allButLast]
-//
-//            // tell the server we are fragmented
-//            fragmentedRegistration.upgradeType = UpgradeType.FRAGMENTED
-//
-//            // tell the server we are upgraded (it will bounce back telling us to connect)
-//            fragmentedRegistration.upgraded = true
-//            channel.writeAndFlush(fragmentedRegistration)
-//        } else {
-//            registration.payload = details
-//
-//            // tell the server we are upgraded (it will bounce back telling us to connect)
-//            registration.upgraded = true
-//            channel.writeAndFlush(registration)
-//        }
-//        return true
-//    }
-
-    // /**
-    //  * Closes all connections ONLY (keeps the client running).  To STOP the client, use stop().
-    //  * <p/>
-    //  * This is used, for example, when reconnecting to a server.
-    //  */
-    // protected
-    // void closeConnection() {
-    //     if (isConnected.get()) {
-    //         // make sure we're not waiting on registration
-    //         stopRegistration();
-    //
-    //         // for the CLIENT only, we clear these connections! (the server only clears them on shutdown)
-    //
-    //         // stop does the same as this + more.  Only keep the listeners for connections IF we are the client. If we remove listeners as a client,
-    //         // ALL of the client logic will be lost. The server is reactive, so listeners are added to connections as needed (instead of before startup)
-    //         connectionManager.closeConnections(true);
-    //
-    //         // Sometimes there might be "lingering" connections (ie, halfway though registration) that need to be closed.
-    //         registrationWrapper.clearSessions();
-    //
-    //
-    //         closeConnections(true);
-    //         shutdownAllChannels();
-    //         // shutdownEventLoops();  we don't do this here!
-    //
-    //         connection = null;
-    //         isConnected.set(false);
-    //
-    //         previousClosedConnectionActivity = System.nanoTime();
-    //     }
-    // }
-//    /**
-//     * Internal call to abort registration if the shutdown command is issued during channel registration.
-//     */
-//    @Suppress("unused")
-//    fun abortRegistration() {
-//        // make sure we're not waiting on registration
-////        stopRegistration()
-//    }
-
     override fun close() {
         val con = connection
         connection = null
         if (con != null) {
-            handshake.removeConnection(con)
+            connections.remove(con)
+
+            runBlocking {
+                con.close()
+                listenerManager.notifyDisconnect(con)
+            }
         }
 
         super.close()
+        isConnected = false
     }
 
 
-    // RMI notes (in multiple places, copypasta, because this is confusing if not written down
+    // RMI notes (in multiple places, copypasta, because this is confusing if not written down)
     //
     // only server can create a global object (in itself, via save)
     // server

@@ -16,6 +16,7 @@
 package dorkbox.network
 
 import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.server.ServerException
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
@@ -36,9 +37,6 @@ import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * NOTE: when using "server.publish(A)", this will go to ALL CLIENTS! add this to aeron via "publication.addDestination" so aeron manages it
- *
- *
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
  * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
  *
@@ -75,7 +73,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     private var bindAlreadyCalled = false
 
 
-    override val handshake = ServerHandshake(logger, config, listenerManager)
+    private val handshake = ServerHandshake(logger, config, listenerManager)
 
     /**
      * Maintains a thread-safe collection of rules used to define the connection type with this server.
@@ -90,23 +88,27 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         when (config.listenIpAddress) {
             "loopback", "localhost", "lo" -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
             else -> when {
-                config.listenIpAddress.startsWith("127.") -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
-                config.listenIpAddress.startsWith("::1") -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
+                IPv4.isLoopback(config.listenIpAddress) -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
+                IPv6.isLoopback(config.listenIpAddress) -> config.listenIpAddress = IPv6.LOCALHOST.hostAddress
                 else -> config.listenIpAddress = "0.0.0.0" // we set this to "0.0.0.0" so that it is clear that we are trying to bind to that address.
             }
         }
 
-        // if we are IPv6, the IP must be in '[]'
-        if (config.listenIpAddress.count { it == ':' } > 1 &&
-            config.listenIpAddress.count { it == '[' } < 1 &&
-            config.listenIpAddress.count { it == ']' } < 1) {
-
-            config.listenIpAddress = """[${config.listenIpAddress}]"""
-        }
-
+        // if we are IPv4 wildcard
         if (config.listenIpAddress == "0.0.0.0") {
             // this will also fixup windows!
             config.listenIpAddress = IPv4.WILDCARD
+        }
+
+        if (IPv6.isValid(config.listenIpAddress)) {
+            // "[" and "]" are valid for ipv6 addresses... we want to make sure it is so
+
+            // if we are IPv6, the IP must be in '[]'
+            if (config.listenIpAddress.count { it == '[' } < 1 &&
+                config.listenIpAddress.count { it == ']' } < 1) {
+
+                config.listenIpAddress = """[${config.listenIpAddress}]"""
+            }
         }
 
 
@@ -119,8 +121,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         if (config.networkMtuSize <= 0) { throw ServerException("configuration networkMtuSize must be > 0") }
         if (config.networkMtuSize >= 9 * 1024) { throw ServerException("configuration networkMtuSize must be < ${9 * 1024}") }
 
-        autoClosableObjects.add(handshake)
+        if (config.maxConnectionsPerIpAddress == 0) { config.maxConnectionsPerIpAddress = config.maxClientCount}
     }
+
     override fun newException(message: String, cause: Throwable?): Throwable {
         return ServerException(message, cause)
     }
@@ -145,20 +148,18 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         // setup the "HANDSHAKE" ports, for initial clients to connect.
         // The is how clients then get the new ports to connect to + other configuration options
 
-        val handshakeDriver = UdpMediaDriverConnection(
-                address = config.listenIpAddress,
-                subscriptionPort = config.subscriptionPort,
-                publicationPort = config.publicationPort,
-                streamId = UDP_HANDSHAKE_STREAM_ID,
-                sessionId = RESERVED_SESSION_ID_INVALID)
+        val handshakeDriver = UdpMediaDriverConnection(address = config.listenIpAddress,
+                                                       publicationPort = config.publicationPort,
+                                                       subscriptionPort = config.subscriptionPort,
+                                                       streamId = UDP_HANDSHAKE_STREAM_ID,
+                                                       sessionId = RESERVED_SESSION_ID_INVALID)
 
         handshakeDriver.buildServer(aeron)
 
         val handshakePublication = handshakeDriver.publication
         val handshakeSubscription = handshakeDriver.subscription
 
-        logger.debug(handshakeDriver.serverInfo())
-        logger.debug("Server listening for incoming clients on ${handshakePublication.localSocketAddresses()}")
+        logger.info(handshakeDriver.serverInfo())
 
 
         val ipcHandshakeDriver = IpcMediaDriverConnection(
@@ -197,7 +198,11 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
             try {
                 var pollCount: Int
+
                 while (!isShutdown()) {
+                    // Get the current time, used to cleanup connections
+                    val now = System.currentTimeMillis()
+
                     pollCount = 0
 
                     // this checks to see if there are NEW clients
@@ -206,8 +211,38 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     // this checks to see if there are NEW clients via IPC
 //                    pollCount += ipcHandshakeSubscription.poll(ipcInitialConnectionHandler, 100)
 
+
                     // this manages existing clients (for cleanup + connection polling)
-                    pollCount += handshake.poll()
+                    connections.forEachWithCleanup({ connection ->
+                        // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
+                        var shouldCleanupConnection = false
+
+                        if (connection.isExpired(now)) {
+                            logger.debug("[{}] connection expired", connection.sessionId)
+                            shouldCleanupConnection = true
+                        }
+
+                        if (connection.isClosed()) {
+                            logger.debug("[{}] connection closed", connection.sessionId)
+                            shouldCleanupConnection = true
+                        }
+                        if (shouldCleanupConnection) {
+                            true
+                        }
+                        else {
+                            // Otherwise, poll the duologue for activity.
+                            pollCount += connection.pollSubscriptions()
+                            false
+                        }
+                    }, { connectionToClean ->
+                        logger.debug("[{}] deleted connection", connectionToClean.sessionId)
+
+                        // have to free up resources!
+                        handshake.cleanup(connectionToClean)
+
+                        connectionToClean.close()
+                        listenerManager.notifyDisconnect(connectionToClean)
+                    })
 
 
                     // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
@@ -229,7 +264,14 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         }
     }
 
+    internal suspend fun poll(): Int {
 
+        var pollCount = 0
+
+
+
+        return pollCount
+    }
 
 
     /**
@@ -250,45 +292,11 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         connectionRules.addAll(listOf(*rules))
     }
 
-
-
-
-
-
-    // verify the class ID registration details.
-    // the client will send their class registration data. VERIFY IT IS CORRECT!
-
-    // verify the class ID registration details.
-    // the client will send their class registration data. VERIFY IT IS CORRECT!
-//    var state: dorkbox.network.connection.RegistrationWrapper.STATE = registrationWrapper.verifyClassRegistration(metaChannel, registration)
-//    if (state == RegistrationWrapper.STATE.ERROR)
-//    {
-//        // abort! There was an error
-//        shutdown(channel, 0)
-//        return
-//    } else if (state == RegistrationWrapper.STATE.WAIT)
-//    {
-//        return
-//    }
-
-
-
-
-    /**
-     * Checks to seeOnce a server has connected to ANY client, it will always return true until server.close() is called
-     *
-     * @return true if we are connected, false otherwise.
-     */
-    override fun isConnected(): Boolean {
-        return handshake.connectionCount() > 0
-    }
-
-
     /**
      * Safely sends objects to a destination
      */
     suspend fun send(message: Any) {
-        handshake.send(message)
+        connections.send(message)
     }
 
     /**
@@ -348,6 +356,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
 
     /**
+     * TODO: when adding a "custom" connection, it's super important to not have to worry about the sessionID (which is what we key off of)
      * Adds a custom connection to the server.
      *
      * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
@@ -356,10 +365,11 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * @param connection the connection to add
      */
     fun addConnection(connection: CONNECTION) {
-        handshake.addConnection(connection)
+        connections.add(connection)
     }
 
     /**
+     * TODO: when adding a "custom" connection, it's super important to not have to worry about the sessionID (which is what we key off of)
      * Removes a custom connection to the server.
      *
      *
@@ -369,9 +379,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * @param connection the connection to remove
      */
     fun removeConnection(connection: CONNECTION) {
-        handshake.removeConnection(connection)
+        connections.remove(connection)
     }
-
 
 
     /**
@@ -467,7 +476,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
 
 
-    // RMI notes (in multiple places, copypasta, because this is confusing if not written down
+    // RMI notes (in multiple places, copypasta, because this is confusing if not written down)
     //
     // only server can create a global object (in itself, via save)
     // server

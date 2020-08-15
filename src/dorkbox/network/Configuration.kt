@@ -20,12 +20,14 @@ import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.network.serialization.Serialization
-import dorkbox.network.store.PropertyStore
-import dorkbox.network.store.SettingsStore
+import dorkbox.network.storage.PropertyStore
+import dorkbox.network.storage.SettingsStore
+import dorkbox.os.OS
 import dorkbox.util.storage.StorageBuilder
 import dorkbox.util.storage.StorageSystem
 import io.aeron.driver.Configuration
 import io.aeron.driver.ThreadingMode
+import mu.KLogger
 import java.io.File
 
 class ServerConfiguration : dorkbox.network.Configuration() {
@@ -34,11 +36,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      * the hostname (or IP) to bind to.
      */
     var listenIpAddress = "*"
-
-    /**
-     * The starting port for clients to use. The upper bound of this value is limited by the maximum number of clients allowed.
-     */
-    var clientStartPort = 0
 
     /**
      * The maximum number of clients allowed for a server
@@ -55,6 +52,8 @@ open class Configuration {
 
     /**
      * When connecting to a remote client/server, should connections be allowed if the remote machine signature has changed?
+     *
+     * Setting this to false is not recommended as it is a security risk
      */
     var enableRemoteSignatureValidation: Boolean = true
 
@@ -103,8 +102,8 @@ open class Configuration {
      * The idle strategy used when polling the Media Driver for new messages. BackOffIdleStrategy is the DEFAULT.
      *
      * There are a couple strategies of importance to understand.
-     *  * BusySpinIdleStrategy uses a busy spin as an idle and will eat up CPU by default.
-     *  * BackOffIdleStrategy uses a backoff strategy of spinning, yielding, and parking to be kinder to the CPU, but to be less
+     *  - BusySpinIdleStrategy uses a busy spin as an idle and will eat up CPU by default.
+     *  - BackOffIdleStrategy uses a backoff strategy of spinning, yielding, and parking to be kinder to the CPU, but to be less
      *          responsive to activity when idle for a little while.
      *
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
@@ -116,8 +115,8 @@ open class Configuration {
      * The idle strategy used when polling the Media Driver for new messages. BackOffIdleStrategy is the DEFAULT.
      *
      * There are a couple strategies of importance to understand.
-     *  * BusySpinIdleStrategy uses a busy spin as an idle and will eat up CPU by default.
-     *  * BackOffIdleStrategy uses a backoff strategy of spinning, yielding, and parking to be kinder to the CPU, but to be less
+     *  - BusySpinIdleStrategy uses a busy spin as an idle and will eat up CPU by default.
+     *  - BackOffIdleStrategy uses a backoff strategy of spinning, yielding, and parking to be kinder to the CPU, but to be less
      *          responsive to activity when idle for a little while.
      *
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
@@ -126,26 +125,22 @@ open class Configuration {
     var sendIdleStrategy: CoroutineIdleStrategy = CoroutineSleepingMillisIdleStrategy(sleepPeriodMs = 100)
 
     /**
-     * A Media Driver, whether being run embedded or not, needs 1-3 threads to perform its operation.
+     * ## A Media Driver, whether being run embedded or not, needs 1-3 threads to perform its operation.
      *
      *
      * There are three main Agents in the driver:
-     *
-     *
-     * Conductor: Responsible for reacting to client requests and house keeping duties as well as detecting loss, sending NAKs,
+     * - Conductor: Responsible for reacting to client requests and house keeping duties as well as detecting loss, sending NAKs,
      * rotating buffers, etc.
-     * Sender: Responsible for shovelling messages from publishers to the network.
-     * Receiver: Responsible for shovelling messages from the network to subscribers.
+     * - Sender: Responsible for shovelling messages from publishers to the network.
+     * - Receiver: Responsible for shovelling messages from the network to subscribers.
      *
      *
      * This value can be one of:
-     *
-     *
-     * INVOKER: No threads. The client is responsible for using the MediaDriver.Context.driverAgentInvoker() to invoke the duty
+     * - INVOKER: No threads. The client is responsible for using the MediaDriver.Context.driverAgentInvoker() to invoke the duty
      * cycle directly.
-     * SHARED: All Agents share a single thread. 1 thread in total.
-     * SHARED_NETWORK: Sender and Receiver shares a thread, conductor has its own thread. 2 threads in total.
-     * DEDICATED: The default and dedicates one thread per Agent. 3 threads in total.
+     * - SHARED: All Agents share a single thread. 1 thread in total.
+     * - SHARED_NETWORK: Sender and Receiver shares a thread, conductor has its own thread. 2 threads in total.
+     * - DEDICATED: The default and dedicates one thread per Agent. 3 threads in total.
      *
      *
      * For performance, it is recommended to use DEDICATED as long as the number of busy threads is less than or equal to the number of
@@ -217,4 +212,31 @@ open class Configuration {
      * A value of 0 will 'auto-configure' this setting.
      */
     var receiveBufferSize = 0
+
+    /**
+     * Depending on the OS, different base locations for the Aeron log directory are preferred.
+     */
+    fun suggestAeronLogLocation(logger: KLogger): File {
+        return when {
+            OS.isMacOsX() -> {
+                // does the recommended location exist??
+                val suggestedLocation = File("/Volumes/DevShm")
+                if (suggestedLocation.exists()) {
+                    suggestedLocation
+                }
+                else {
+                    logger.info("It is recommended to create a RAM drive for best performance. For example\n" + "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`\n" + "\t After this, set config.aeronLogDirectory = \"/Volumes/DevShm\"")
+
+                    File(System.getProperty("java.io.tmpdir"))
+                }
+            }
+            OS.isLinux() -> {
+                // this is significantly faster for linux than using the temp dir
+                File("/dev/shm/")
+            }
+            else -> {
+                File(System.getProperty("java.io.tmpdir"))
+            }
+        }
+    }
 }

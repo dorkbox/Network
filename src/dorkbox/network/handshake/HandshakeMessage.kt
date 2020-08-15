@@ -18,7 +18,7 @@ package dorkbox.network.handshake
 /**
  * Internal message to handle the connection registration process
  */
-class Message private constructor() {
+internal class HandshakeMessage private constructor() {
     // the public key is used to encrypt the data in the handshake
     var publicKey: ByteArray? = null
 
@@ -67,8 +67,8 @@ class Message private constructor() {
         const val DONE = 2
         const val DONE_ACK = 3
 
-        fun helloFromClient(oneTimePad: Int, publicKey: ByteArray, registrationData: ByteArray): Message {
-            val hello = Message()
+        fun helloFromClient(oneTimePad: Int, publicKey: ByteArray, registrationData: ByteArray): HandshakeMessage {
+            val hello = HandshakeMessage()
             hello.state = HELLO
             hello.oneTimePad = oneTimePad
             hello.publicKey = publicKey
@@ -76,28 +76,28 @@ class Message private constructor() {
             return hello
         }
 
-        fun helloAckToClient(sessionId: Int): Message {
-            val hello = Message()
+        fun helloAckToClient(sessionId: Int): HandshakeMessage {
+            val hello = HandshakeMessage()
             hello.state = HELLO_ACK
             hello.sessionId = sessionId // has to be the same as before (the client expects this)
             return hello
         }
 
-        fun doneFromClient(): Message {
-            val hello = Message()
+        fun doneFromClient(): HandshakeMessage {
+            val hello = HandshakeMessage()
             hello.state = DONE
             return hello
         }
 
-        fun doneToClient(sessionId: Int): Message {
-            val hello = Message()
+        fun doneToClient(sessionId: Int): HandshakeMessage {
+            val hello = HandshakeMessage()
             hello.state = DONE_ACK
             hello.sessionId = sessionId
             return hello
         }
 
-        fun error(errorMessage: String?): Message {
-            val error = Message()
+        fun error(errorMessage: String): HandshakeMessage {
+            val error = HandshakeMessage()
             error.state = INVALID
             error.errorMessage = errorMessage
             return error
@@ -105,6 +105,22 @@ class Message private constructor() {
     }
 
     override fun toString(): String {
-        return "Message(oneTimePad=$oneTimePad, state=$state)"
+        val stateStr = when(state) {
+            INVALID -> "INVALID"
+            HELLO -> "HELLO"
+            HELLO_ACK -> "HELLO_ACK"
+            DONE -> "DONE"
+            DONE_ACK -> "DONE_ACK"
+            else -> "ERROR. THIS SHOULD NEVER HAPPEN FOR STATE!"
+        }
+
+        val errorMsg = if (errorMessage == null) {
+            ""
+        } else {
+            ", Error: $errorMessage"
+        }
+
+
+        return "HandshakeMessage(oneTimePad=$oneTimePad, sid= $sessionId $stateStr$errorMsg)"
     }
 }
