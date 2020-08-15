@@ -25,9 +25,9 @@ import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiSupport
 import dorkbox.network.rmi.RmiSupportConnection
 import dorkbox.network.rmi.messages.RmiMessage
+import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.NetworkSerializationManager
-import dorkbox.network.store.SettingsStore
-import dorkbox.os.OS
+import dorkbox.network.storage.SettingsStore
 import dorkbox.util.NamedThreadFactory
 import dorkbox.util.exceptions.SecurityException
 import io.aeron.Aeron
@@ -35,13 +35,19 @@ import io.aeron.Publication
 import io.aeron.driver.MediaDriver
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.actor
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
+
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
 // it results in severe UDP packet loss and contention.
@@ -61,6 +67,19 @@ abstract class EndPoint<CONNECTION: Connection>
 internal constructor(val type: Class<*>, internal val config: Configuration) : AutoCloseable {
     protected constructor(config: Configuration) : this(Client::class.java, config)
     protected constructor(config: ServerConfiguration) : this(Server::class.java, config)
+
+
+    fun CoroutineScope.connectionActor() = actor<ActorMessage<CONNECTION>> {
+        var counter = 0
+
+        for (message in channel) {
+            when(message) {
+                is ActorMessage.AddConnection -> println("add")
+                is ActorMessage.RemoveConnection -> println("del")
+//                is ActorMessage.GetValue -> message.deferred.complete(counter)
+            }
+        }
+    }
 
     companion object {
         /**
@@ -82,10 +101,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         const val IPC_HANDSHAKE_STREAM_ID_PUB: Int = 0x1337c0de
         const val IPC_HANDSHAKE_STREAM_ID_SUB: Int = 0x1337c0d3
 
-        init {
-            println("THIS IS ONLY IPV4 AT THE MOMENT. IPV6 is in progress!")
-        }
-
         fun errorCodeName(result: Long): String {
             return when (result) {
                 Publication.NOT_CONNECTED -> "Not connected"
@@ -104,12 +119,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val autoClosableObjects = CopyOnWriteArrayList<AutoCloseable>()
 
     internal val actionDispatch = CoroutineScope(Dispatchers.Default)
+//    internal val connectionActor = actionDispatch.connectionActor()
 
-    internal val listenerManager = ListenerManager<CONNECTION>(logger) { message, cause ->
-        newException(message, cause)
-    }
-
-    internal abstract val handshake: ConnectionManager<CONNECTION>
+    internal val listenerManager = ListenerManager<CONNECTION>(logger)
+    internal val connections = ConnectionManager<CONNECTION>(logger, config)
 
     internal val mediaDriverContext: MediaDriver.Context
     internal val mediaDriver: MediaDriver
@@ -135,17 +148,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     internal val rmiGlobalSupport = RmiSupport(logger, actionDispatch, config.serialization)
 
-    /**
-     * Checks to see if this client has connected yet or not.
-     *
-     * Once a server has connected to ANY client, it will always return true until server.close() is called
-     *
-     * @return true if we are connected, false otherwise.
-     */
-    abstract fun isConnected(): Boolean
-
-
     init {
+        logger.error("NETWORK STACK IS ONLY IPV4 AT THE MOMENT. IPV6 is in progress!")
+
         runBlocking {
             // our default onError handler. All error messages go though this
             listenerManager.onError { throwable ->
@@ -215,31 +220,18 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
          *
          * After this command is executed the new disk will be mounted under /Volumes/DevShm.
          */
+        var aeronDirAlreadyExists = false
         if (config.aeronLogDirectory == null) {
-            val baseFile = when {
-                OS.isMacOsX() -> {
-                    logger.info("It is recommended to create a RAM drive for best performance. For example\n" +
-                            "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`\n" +
-                            "\t After this, set config.aeronLogDirectory = \"/Volumes/DevShm\"")
-                    File(System.getProperty("java.io.tmpdir"))
-                }
-                OS.isLinux() -> {
-                    // this is significantly faster for linux than using the temp dir
-                    File(System.getProperty("/dev/shm/"))
-                }
-                else -> {
-                    File(System.getProperty("java.io.tmpdir"))
-                }
-            }
+            val baseFileLocation = config.suggestAeronLogLocation(logger)
 
-            val baseName = "aeron-" + type.simpleName
-            val aeronLogDirectory = File(baseFile, baseName)
-            if (aeronLogDirectory.exists()) {
-                logger.info("Aeron log directory already exists! This might not be what you want!")
-            }
-
-            logger.debug("Aeron log directory: $aeronLogDirectory")
+            val aeronLogDirectory = File(baseFileLocation, "aeron-" + type.simpleName)
+            aeronDirAlreadyExists = aeronLogDirectory.exists()
             config.aeronLogDirectory = aeronLogDirectory
+        }
+
+        logger.info("Aeron log directory: ${config.aeronLogDirectory}")
+        if (aeronDirAlreadyExists) {
+            logger.info("Aeron log directory already exists! This might not be what you want!")
         }
 
         val threadFactory = NamedThreadFactory("Aeron", false)
@@ -254,7 +246,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         mediaDriverContext = MediaDriver.Context()
                 .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
                 .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
-                .dirDeleteOnStart(true) // TODO: FOR NOW?
+                .dirDeleteOnStart(true)
                 .dirDeleteOnShutdown(true)
                 .conductorThreadFactory(threadFactory)
                 .receiverThreadFactory(threadFactory)
@@ -304,7 +296,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         crypto = CryptoManagement(logger, settingsStore, type, config)
 
         // we are done with initial configuration, now finish serialization
-        serialization.finishInit(type)
+        runBlocking {
+            serialization.finishInit(type)
+        }
     }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
@@ -313,7 +307,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * Returns the property store used by this endpoint. The property store can store via properties,
      * a database, etc, or can be a "null" property store, which does nothing
      */
-    fun <S : SettingsStore> getPropertyStore(): S {
+    fun <S : SettingsStore> getStorage(): S {
         @Suppress("UNCHECKED_CAST")
         return settingsStore as S
     }
@@ -321,16 +315,16 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     /**
      * This method allows the connections used by the client/server to be subclassed (with custom implementations).
      *
-     * As this is for the network stack, the new connection MUST subclass [ConnectionImpl]
+     * As this is for the network stack, the new connection MUST subclass [Connection]
      *
      * The parameters are ALL NULL when getting the base class, as this instance is just thrown away.
      *
      * @return a new network connection
      */
     @Suppress("MemberVisibilityCanBePrivate")
-    open fun newConnection(endPoint: EndPoint<CONNECTION>, mediaDriverConnection: MediaDriverConnection): CONNECTION {
+    open fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION {
         @Suppress("UNCHECKED_CAST")
-        return Connection(endPoint, mediaDriverConnection) as CONNECTION
+        return Connection(connectionParameters) as CONNECTION
     }
 
     /**
@@ -339,14 +333,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     internal open fun getRmiConnectionSupport() : RmiSupportConnection {
         return RmiSupportConnection(logger, rmiGlobalSupport, serialization, actionDispatch)
-    }
-
-    /**
-     * Disables remote endpoint public key validation when the connection is established. This is not recommended as it is a security risk
-     */
-    fun disableRemoteKeyValidation() {
-        logger.info("WARNING: Disabling remote key validation is a security risk!!")
-        crypto.disableRemoteKeyValidation = true
     }
 
     /**
@@ -439,7 +425,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * Runs an action for each connection inside of a read-lock
      */
     suspend fun forEachConnection(function: suspend (connection: CONNECTION) -> Unit) {
-        handshake.forEachConnectionDoRead(function)
+        connections.forEach {
+            function(it)
+        }
     }
 
     internal suspend fun writeHandshakeMessage(publication: Publication, message: Any) {
@@ -475,7 +463,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 return
             }
         } catch (e: Exception) {
-            logger.error("Error serializing message $message", e)
+            listenerManager.notifyError(newException("Error serializing message $message", e))
         } finally {
             sendIdleStrategy.reset()
             serialization.returnKryo(kryo)
@@ -489,12 +477,12 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * @return A string
      */
-    internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
+    internal suspend fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
         val kryo: KryoExtra = serialization.takeKryo()
         try {
             val message = kryo.read(buffer, offset, length)
             logger.trace {
-                "[${header.sessionId()}] received: $message"
+                "[${header.sessionId()}] received handshake: $message"
             }
 
             return message
@@ -529,17 +517,13 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         try {
             message = kryo.read(buffer, offset, length, connection)
             logger.trace {
-                "[${sessionId}] received: ${message}"
+                "[${sessionId}] received: $message"
             }
         } catch (e: Exception) {
             listenerManager.notifyError(newException("[${sessionId}] Error de-serializing message", e))
         } finally {
             serialization.returnKryo(kryo)
         }
-
-
-        val data = ByteArray(length)
-        buffer.getBytes(offset, data)
 
         when (message) {
             is PingMessage -> {
@@ -561,33 +545,20 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
             is Any -> {
                 @Suppress("UNCHECKED_CAST")
-                listenerManager.notifyOnMessage(connection as CONNECTION, message)
+                var hasListeners = listenerManager.notifyOnMessage(connection as CONNECTION, message)
+
+                // each connection registers, and is polled INDEPENDENTLY for messages.
+                hasListeners = hasListeners or connection.notifyOnMessage(message)
+
+                if (!hasListeners) {
+                    listenerManager.notifyError(connection, MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}"))
+                }
             }
             else -> {
                 // do nothing, there were problems with the message
             }
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     override fun toString(): String {
         return "EndPoint [${type.simpleName}]"
@@ -611,7 +582,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             return false
         }
 
-        other as EndPoint<CONNECTION>
+        other as EndPoint<*>
         return crypto == other.crypto
     }
 
@@ -637,6 +608,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
             autoClosableObjects.clear()
 
+            runBlocking {
+                // don't need anything fast or fancy here, because this method will only be called once
+                connections.forEach {
+                    it.close()
+                    listenerManager.notifyDisconnect(it)
+                }
+            }
+
+            connections.close()
             actionDispatch.cancel()
             shutdownLatch.countDown()
         }

@@ -34,14 +34,13 @@ interface MediaDriverConnection : AutoCloseable {
 /**
  * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER
  */
-class UdpMediaDriverConnection(
-        override val address: String,
-        override val subscriptionPort: Int,
-        override val publicationPort: Int,
-        override val streamId: Int,
-        override val sessionId: Int,
-        private val connectionTimeoutMS: Long = 0,
-        override val isReliable: Boolean = true) : MediaDriverConnection {
+class UdpMediaDriverConnection(override val address: String,
+                               override val publicationPort: Int,
+                               override val subscriptionPort: Int,
+                               override val streamId: Int,
+                               override val sessionId: Int,
+                               private val connectionTimeoutMS: Long = 0,
+                               override val isReliable: Boolean = true) : MediaDriverConnection {
 
     override lateinit var subscription: Subscription
     override lateinit var publication: Publication
@@ -152,7 +151,7 @@ class UdpMediaDriverConnection(
         return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
             "Connecting to $address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
-            "Connecting to $address [$subscriptionPort|$publicationPort] [$streamId] (reliable:$isReliable)"
+            "Connecting to $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
         }
     }
 
@@ -160,7 +159,7 @@ class UdpMediaDriverConnection(
         return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
             "Listening on $address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
-            "Listening on $address [$subscriptionPort|$publicationPort] [$streamId] (reliable:$isReliable)"
+            "Listening on $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
         }
     }
 

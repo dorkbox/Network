@@ -22,6 +22,7 @@ import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.TimeoutException
+import dorkbox.network.serialization.KryoExtra
 import dorkbox.util.classes.ClassHelper
 import io.aeron.FragmentAssembler
 import io.aeron.Publication
@@ -29,6 +30,7 @@ import io.aeron.Subscription
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.getAndUpdate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.agrona.BitUtil
@@ -43,15 +45,31 @@ import javax.crypto.SecretKey
 /**
  * This connection is established once the registration information is validated, and the various connect/filter checks have passed
  */
-open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDriverConnection) : AutoCloseable {
+open class Connection(connectionParameters: ConnectionParams<*>) {
     private val subscription: Subscription
     private val publication: Publication
 
     /**
      * The publication port (used by aeron) for this connection. This is from the perspective of the server!
      */
-    val subscriptionPort: Int
-    val publicationPort: Int
+    internal val subscriptionPort: Int
+    internal val publicationPort: Int
+
+    /**
+     * the stream id of this connection.
+     */
+    internal val streamId: Int
+
+    /**
+     * the session id of this connection. This value is UNIQUE
+     */
+    internal val sessionId: Int
+
+    /**
+     * the id of this connection. This value is UNIQUE
+     */
+    val id: Int
+        get() = sessionId
 
     /**
      * the remote address, as a string.
@@ -63,15 +81,10 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
      */
     val remoteAddressInt: Int
 
-    /**
-     * the stream id of this connection.
-     */
-    val streamId: Int
 
-    /**
-     * the session id of this connection. This value is UNIQUE
-     */
-    val sessionId: Int
+
+
+
 
     /**
      * @return true if this connection is established on the loopback interface
@@ -105,6 +118,9 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
             return pingFuture2?.response ?: -1
         }
 
+    private val endPoint = connectionParameters.endPoint
+    private val listenerManager = atomic<ListenerManager<Connection>?>(null)
+
     private val serialization = endPoint.config.serialization
     private val sendIdleStrategy = endPoint.config.sendIdleStrategy.clone()
 
@@ -132,7 +148,7 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
 //    private var localListenerManager: ConnectionManager<*>? = null
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
-    private var remoteKeyChanged = false
+    private var remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
 
     // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
     // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
@@ -152,6 +168,8 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
 
 
     init {
+        val mediaDriverConnection = connectionParameters.mediaDriverConnection
+
         // we have to construct how the connection will communicate!
         if (endPoint is Server<*>) {
             mediaDriverConnection.buildServer(endPoint.aeron)
@@ -161,7 +179,9 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
             }
         }
 
-        logger.debug("creating new connection $mediaDriverConnection")
+        logger.trace {
+            "Creating new connection $mediaDriverConnection"
+        }
 
         // can only get this AFTER we have built the sub/pub
         subscription = mediaDriverConnection.subscription
@@ -172,7 +192,7 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
         remoteAddress = mediaDriverConnection.address
         remoteAddressInt = IPv4.toInt(remoteAddress)
         streamId = mediaDriverConnection.streamId // NOTE: this is UNIQUE per server!
-        sessionId = mediaDriverConnection.sessionId
+        sessionId = mediaDriverConnection.sessionId // NOTE: this is UNIQUE per server!
 
         messageHandler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads
@@ -278,34 +298,6 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
     }
 
     /**
-     * Safely sends objects to a destination with the specified priority.
-     *
-     *
-     * A priority of 255 (highest) will always be sent immediately.
-     *
-     *
-     * A priority of 0-254 will be sent (0, the lowest, will be last) if there is no backpressure from the MediaDriver.
-     */
-    suspend fun send(message: Any, priority: Byte) {
-        TODO("SEND PRIO NOT IMPL YET")
-
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    /**
      * Updates the ping times for this connection (called when this connection gets a REPLY ping message).
      */
     fun updatePingResponse(ping: PingMessage?) {
@@ -381,67 +373,15 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    override fun close() {
+    internal suspend fun close() {
         if (isClosed.compareAndSet(expect = false, update = true)) {
             subscription.close()
             publication.close()
+
+            // a connection might have also registered for disconnect events
+            notifyDisconnect()
         }
-
-        // only close if we aren't already in the middle of closing.
-//        if (closeInProgress.compareAndSet(false, true)) {
-//            val idleTimeoutMs = 2000
-//
-//            // if we are in the middle of a message, hold off.
-////            synchronized(messageInProgressLock) {
-////                // while loop is to prevent spurious wakeups!
-////                while (messageInProgress.get()) {
-////                    try {
-//////                        messageInProgressLock.wait(idleTimeoutMs.toLong())
-////                    } catch (ignored: InterruptedException) {
-////                    }
-////                }
-////            }
-//
-//
-//            // close out the ping future
-//            val pingFuture2 = pingFuture
-//            pingFuture2?.cancel()
-//            pingFuture = null
-//
-////            synchronized(channelIsClosed) {
-////                if (!channelIsClosed.get()) {
-////                    // this will have netty call "channelInactive()"
-//////                    channelWrapper.close(this, sessionManager, false)
-////
-////                    // want to wait for the "channelInactive()" method to FINISH ALL TYPES before allowing our current thread to continue!
-////                    try {
-////                        closeLatch!!.await(idleTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
-////                    } catch (ignored: InterruptedException) {
-////                    }
-////                }
-////            }
-//
-//            // remove all listeners AFTER we close the channel.
-//            if (!keepListeners) {
-//                removeAll()
-//            }
-//
-//
-//            // remove all RMI listeners
-//            rmiSupport!!.close()
-//        }
-
-        // remove all listeners AFTER we close the channel.
-//        if (!keepListeners) {
-//        removeAll()
-//        }
-
-
-        // remove all RMI listeners
-//        rmiSupport.close() // TODO
     }
-
-
 
     /**
      * Adds a function that will be called when a client/server "disconnects" with
@@ -453,160 +393,39 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
      * (via connection.addListener), meaning that ONLY that listener attached to
      * the connection is notified on that event (ie, admin type listeners)
      */
-    fun onDisconnect(function: (C: Connection) -> Unit): Int {
-        TODO("Not yet implemented")
-    }
-
-
-    /**
-     * Adds a function that will be called when a client/server encounters an error
-     *
-     * For a server, this function will be called for ALL clients.
-     *
-     * It is POSSIBLE to add a server CONNECTION only (ie, not global) listener
-     * (via connection.addListener), meaning that ONLY that listener attached to
-     * the connection is notified on that event (ie, admin type listeners)
-     */
-    fun onError(function: (C: Connection, throwable: Throwable) -> Unit): Int {
-        TODO("Not yet implemented")
-    }
-
-
-    /**
-     * Adds a function that will be called when a client/server receives a message
-     *
-     * For a server, this function will be called for ALL clients.
-     *
-     * It is POSSIBLE to add a server CONNECTION only (ie, not global) listener
-     * (via connection.addListener), meaning that ONLY that listener attached to
-     * the connection is notified on that event (ie, admin type listeners)
-     */
-    fun <M : Any> onMessage(function: (C: Connection, M) -> Unit): Int {
-        TODO("Not yet implemented")
-    }
-
-
-
-
-
-    /**
-     * Adds a listener to this connection/endpoint to be notified of
-     * connect/disconnect/idle/receive(object) events.
-     *
-     *
-     * If the listener already exists, it is not added again.
-     *
-     *
-     * When called by a server, NORMALLY listeners are added at the GLOBAL level
-     * (meaning, I add one listener, and ALL connections are notified of that
-     * listener.
-     *
-     *
-     * It is POSSIBLE to add a server connection ONLY (ie, not global) listener
-     * (via connection.addListener), meaning that ONLY that listener attached to
-     * the connection is notified on that event (ie, admin type listeners)
-     */
-//    override fun add(listener: OnConnected<Connection>): Listeners<Connection> {
-//        if (endPoint is EndPointServer) {
-//            // when we are a server, NORMALLY listeners are added at the GLOBAL level
-//            // meaning --
-//            //   I add one listener, and ALL connections are notified of that listener.
-//            //
-//            // HOWEVER, it is also POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
-//            // that listener is notified on that event (ie, admin type listeners)
-//
-//            // synchronized because this should be VERY uncommon, and we want to make sure that when the manager
-//            // is empty, we can remove it from this connection.
-////            synchronized(this) {
-////                if (localListenerManager == null) {
-////                    localListenerManager = endPoint.addListenerManager(this)
-////                }
-////                localListenerManager!!.add(listener)
-////            }
-//        } else {
-////            endPoint.listeners()
-////                    .add(listener)
-//        }
-//        return this
-//    }
-
-
-
-    /**
-     * Removes a listener from this connection/endpoint to NO LONGER be notified
-     * of connect/disconnect/idle/receive(object) events.
-     *
-     *
-     * When called by a server, NORMALLY listeners are added at the GLOBAL level
-     * (meaning, I add one listener, and ALL connections are notified of that
-     * listener.
-     *
-     *
-     * It is POSSIBLE to remove a server-connection 'non-global' listener (via
-     * connection.removeListener), meaning that ONLY that listener attached to
-     * the connection is removed
-     */
-    fun removeListener(listenerId: Int) {
-        if (endPoint is Server<*>) {
-            // when we are a server, NORMALLY listeners are added at the GLOBAL level
-            // meaning --
-            //   I add one listener, and ALL connections are notified of that listener.
-            //
-            // HOWEVER, it is also POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
-            // that listener is notified on that event (ie, admin type listeners)
-
-            // synchronized because this should be uncommon, and we want to make sure that when the manager
-            // is empty, we can remove it from this connection.
-//            synchronized(this) {
-//                val local = localListenerManager
-//                if (local != null) {
-//                    local.remove(listener)
-//                    if (!local.hasListeners()) {
-//                        endPoint.removeListenerManager(this)
-//                    }
-//                }
-//            }
-        } else {
-//            endPoint.listeners()
-//                    .remove(listener)
+    suspend fun onDisconnect(function: suspend (Connection) -> Unit) {
+        // make sure we atomically create the listener manager, if necessary
+        listenerManager.getAndUpdate { origManager ->
+            origManager ?: ListenerManager(logger)
         }
 
-        TODO("Not yet implemented")
+        listenerManager.value!!.onDisconnect(function)
     }
 
-
     /**
-     * Removes all registered listeners from this connection/endpoint to NO
-     * LONGER be notified of connect/disconnect/idle/receive(object) events.
-     *
-     * This includes all proxy listeners
+     * Adds a function that will be called only for this connection, when a client/server receives a message
      */
-    fun removeAllListeners() {
-        //        rmiSupport.removeAllListeners() // TODO
-
-        if (endPoint is Server<*>) {
-            // when we are a server, NORMALLY listeners are added at the GLOBAL level
-            // meaning --
-            //   I add one listener, and ALL connections are notified of that listener.
-            //
-            // HOWEVER, it is also POSSIBLE to add a local listener (via connection.addListener), meaning that ONLY
-            // that listener is notified on that event (ie, admin type listeners)
-
-            // synchronized because this should be uncommon, and we want to make sure that when the manager
-            // is empty, we can remove it from this connection.
-//            synchronized(this) {
-//                if (localListenerManager != null) {
-//                    localListenerManager?.removeAll()
-//                    localListenerManager = null
-//                    endPoint.removeListenerManager(this)
-//                }
-//            }
-        } else {
-//            endPoint.listeners()
-//                    .removeAll()
+    suspend fun <MESSAGE> onMessage(function: suspend (Connection, MESSAGE) -> Unit) {
+        // make sure we atomically create the listener manager, if necessary
+        listenerManager.getAndUpdate { origManager ->
+            origManager ?: ListenerManager(logger)
         }
 
-        TODO("Not yet implemented")
+        listenerManager.value!!.onMessage(function)
+    }
+
+    /**
+     * Invoked when a connection is disconnected from the remote endpoint
+     */
+    internal suspend fun notifyDisconnect() {
+        listenerManager.value?.notifyDisconnect(this)
+    }
+
+    /**
+     * Invoked when a message object was received from a remote peer.
+     */
+    internal suspend fun notifyOnMessage(message: Any): Boolean {
+        return listenerManager.value?.notifyOnMessage(this, message) ?: false
     }
 
 
@@ -639,7 +458,7 @@ open class Connection(val endPoint: EndPoint<*>, mediaDriverConnection: MediaDri
     }
 
 
-    // RMI notes (in multiple places, copypasta, because this is confusing if not written down
+    // RMI notes (in multiple places, copypasta, because this is confusing if not written down)
     //
     // only server can create a global object (in itself, via save)
     // server

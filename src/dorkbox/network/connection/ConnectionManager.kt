@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 dorkbox, llc
+ * Copyright 2020 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,32 +16,25 @@
 package dorkbox.network.connection
 
 import dorkbox.network.Configuration
-import kotlinx.coroutines.runBlocking
+import dorkbox.util.collections.ConcurrentEntry
+import dorkbox.util.collections.ConcurrentIterator
+import dorkbox.util.collections.ConcurrentIterator.headREF
 import mu.KLogger
-import java.util.concurrent.locks.ReentrantReadWriteLock
-import kotlin.concurrent.read
-import kotlin.concurrent.write
-
-// Because all of our callbacks are in response to network communication, and there CANNOT be CPU race conditions over a network...
-// we specifically use atomic references to set/get all of the callbacks. This ensures that these objects are visible when accessed
-// from different coroutines (because, ultimately, we want to use multiple threads on the box for processing data, and if we use
-// coroutines, we can ensure maximum thread output)
 
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
-internal open class ConnectionManager<CONNECTION: Connection>(val logger: KLogger, val config: Configuration, val listenerManager: ListenerManager<CONNECTION>) : AutoCloseable {
+@Suppress("UNCHECKED_CAST")
+internal open class ConnectionManager<CONNECTION: Connection>(val logger: KLogger, val config: Configuration) {
 
-    private val connectionLock = ReentrantReadWriteLock()
-    private val connections = mutableListOf<CONNECTION>()
+    private val connections = ConcurrentIterator<CONNECTION>()
+
 
     /**
      * Invoked when aeron successfully connects to a remote address.
      *
      * @param connection the connection to add
      */
-    fun addConnection(connection: CONNECTION) {
-        connectionLock.write {
-            connections.add(connection)
-        }
+    fun add(connection: CONNECTION) {
+        connections.add(connection)
     }
 
     /**
@@ -53,149 +46,69 @@ internal open class ConnectionManager<CONNECTION: Connection>(val logger: KLogge
      *
      * @param connection the connection to remove
      */
-    fun removeConnection(connection: CONNECTION) {
-        connectionLock.write {
-            connections.remove(connection)
-        }
+    fun remove(connection: CONNECTION) {
+        connections.remove(connection)
     }
 
     /**
-     * Performs an action on each connection in the list inside a read lock
+     * Performs an action on each connection in the list.
      */
-    suspend fun forEachConnectionDoRead(function: suspend (connection: CONNECTION) -> Unit) {
-        connectionLock.read {
-            connections.forEach {
-                function(it)
-            }
+    inline fun forEach(function: (connection: CONNECTION) -> Unit) {
+        // access a snapshot (single-writer-principle)
+        val head = headREF.get(connections) as ConcurrentEntry<CONNECTION>?
+        var current: ConcurrentEntry<CONNECTION>? = head
+
+        var connection: CONNECTION
+        while (current != null) {
+            // Concurrent iteration...
+            connection = current.value
+            current = current.next()
+
+            function(connection)
         }
     }
 
     /**
      * Performs an action on each connection in the list.
      */
-    private val connectionsToRemove = mutableListOf<CONNECTION>()
-    internal suspend fun forEachConnectionCleanup(function: suspend (connection: CONNECTION) -> Boolean,
-                                                  cleanup: suspend (connection: CONNECTION) -> Unit) {
-        connectionLock.write {
-            connections.forEach {
-                if (function(it)) {
-                    try {
-                        it.close()
-                    } finally {
-                        connectionsToRemove.add(it)
-                    }
-                }
-            }
+    internal inline fun forEachWithCleanup(function: (connection: CONNECTION) -> Boolean,
+                                           cleanup: (connection: CONNECTION) -> Unit) {
 
-            if (connectionsToRemove.size > 0) {
-                connectionsToRemove.forEach {
-                    cleanup(it)
-                }
-                connectionsToRemove.clear()
+        val head = headREF.get(connections) as ConcurrentEntry<CONNECTION>?
+        var current: ConcurrentEntry<CONNECTION>? = head
+
+        var connection: CONNECTION
+        while (current != null) {
+            connection = current.value
+            current = current.next()
+
+            function(connection)
+            if (function(connection)) {
+                // Concurrent iteration...
+                connections.remove(connection)
+                cleanup(connection)
             }
         }
     }
 
     fun connectionCount(): Int {
-        return connections.size
+        return connections.size()
     }
-
-
-//    fun addListenerManager(connection: C): ConnectionManager<C> {
-//        // when we are a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections
-//        // are notified of that listener.
-//
-//        // it is POSSIBLE to add a connection-specific listener (via connection.addListener), meaning that ONLY
-//        // that listener is notified on that event (ie, admin type listeners)
-//        var created = false
-//        var manager = localManagers[connection]
-//        if (manager == null) {
-//            created = true
-//            manager = ConnectionManager<C>("$loggerName-$connection Specific", actionDispatchScope)
-//            localManagers.put(connection, manager)
-//        }
-//        if (created) {
-//            val logger2 = logger
-//            if (logger2.isTraceEnabled) {
-//                logger2.trace("Connection specific Listener Manager added for connection: {}", connection)
-//            }
-//        }
-//        return manager
-//    }
-
-//    fun removeListenerManager(connection: C) {
-//        var wasRemoved = false
-//        val removed = localManagers.remove(connection)
-//        if (removed != null) {
-//            wasRemoved = true
-//        }
-//        if (wasRemoved) {
-//            val logger2 = logger
-//            if (logger2.isTraceEnabled) {
-//                logger2.trace("Connection specific Listener Manager removed for connection: {}", connection)
-//            }
-//        }
-//    }
 
     /**
      * Closes all associated resources/threads/connections
      */
-    override fun close() {
-        connectionLock.write {
-            // runBlocking because we don't want to progress until we are 100% done closing all connections
-            runBlocking {
-                // don't need anything fast or fancy here, because this method will only be called once
-                connections.forEach {
-                    it.close()
-                }
-
-                connections.forEach {
-                    listenerManager.notifyDisconnect(it)
-                }
-
-                connections.clear()
-            }
-        }
+    fun close() {
+        connections.clear()
     }
-
-
-
-    /**
-     * Exposes methods to send the object to all server connections (except the specified one) over the network. (or via LOCAL when it's a
-     * local channel).
-     */
-    // @Override
-    // public
-    // ConnectionExceptSpecifiedBridgeServer except() {
-    //     return this;
-    // }
-    // /**
-    //  * Sends the message to other listeners INSIDE this endpoint for EVERY connection. It does not send it to a remote address.
-    //  */
-    // @Override
-    // public
-    // ConnectionPoint self(final Object message) {
-    //     ConcurrentEntry<ConnectionImpl> current = connectionsREF.get(this);
-    //     ConnectionImpl c;
-    //     while (current != null) {
-    //         c = current.getValue();
-    //         current = current.next();
-    //
-    //         onMessage(c, message);
-    //     }
-    //     return this;
-    // }
 
     /**
      * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
      * is available to use.
      */
-    suspend fun send(message: Any) {
-        TODO("NOT IMPL YET. going to use aeron for this functionality since it's a lot faster")
-        // TODO: USE AERON add.dataPublisher thingy, so it's areon pushing messages out (way, WAY faster than if we are to iterate over
-        //  the connections
-//        for (connection in connections) {
-//            connection.send(message)
-//        }
+    suspend inline fun send(message: Any) {
+        forEach {
+            it.send(message)
+        }
     }
 }

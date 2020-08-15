@@ -15,7 +15,7 @@ import net.jodah.typetools.TypeResolver
 /**
  * Manages all of the different connect/disconnect/etc listeners
  */
-internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogger, private val exceptionGetter: (String, Throwable?) -> Throwable) {
+internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogger) {
     companion object {
         /**
          * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
@@ -175,7 +175,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    suspend fun <MESSAGE : Any> onMessage(function: suspend (CONNECTION, MESSAGE) -> Unit) {
+    suspend fun <MESSAGE> onMessage(function: suspend (CONNECTION, MESSAGE) -> Unit) {
         onMessageMutex.withLock {
             // we have to follow the single-writer principle!
 
@@ -264,8 +264,6 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
 //            return true
 //        }
 
-
-//
 //
 //        for (i in 0 until size) {
 //            val rule = ipFilterRules[i] ?: continue
@@ -299,38 +297,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             try {
                 it(connection)
             } catch (t: Throwable) {
-                //  // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                //                    val throwable = result as Throwable
-                //                    val reversedList = throwable.stackTrace.reversed().toMutableList()
-                //
-                //                    // we have to remove kotlin stuff from the stacktrace
-                //                    var reverseIter = reversedList.iterator()
-                //                    while (reverseIter.hasNext()) {
-                //                        val stackName = reverseIter.next().className
-                //                        if (stackName.startsWith("kotlinx.coroutines") || stackName.startsWith("kotlin.coroutines")) {
-                //                            // cleanup the stack elements which create the stacktrace
-                //                            reverseIter.remove()
-                //                        } else {
-                //                            // done cleaning up the tail from kotlin
-                //                            break
-                //                        }
-                //                    }
-                //
-                //                    // remove dorkbox network stuff
-                //                    reverseIter = reversedList.iterator()
-                //                    while (reverseIter.hasNext()) {
-                //                        val stackName = reverseIter.next().className
-                //                        if (stackName.startsWith("dorkbox.network")) {
-                //                            // cleanup the stack elements which create the stacktrace
-                //                            reverseIter.remove()
-                //                        } else {
-                //                            // done cleaning up the tail from network
-                //                            break
-                //                        }
-                //                    }
-                //
-                //                    throwable.stackTrace = reversedList.reversed().toTypedArray()
-
+                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                cleanStackTrace(t)
                 notifyError(connection, t)
             }
         }
@@ -343,8 +311,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         onDisconnectList.value.forEach {
             try {
                 it(connection)
-            } catch (e: Throwable) {
-                notifyError(connection, exceptionGetter("Error during notifyDisconnect", e))
+            } catch (t: Throwable) {
+                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                cleanStackTrace(t)
+                notifyError(connection, t)
             }
         }
     }
@@ -371,12 +341,12 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         }
     }
 
-
-
     /**
      * Invoked when a message object was received from a remote peer.
+     *
+     * @return true if there were listeners assigned for this message type
      */
-    suspend fun notifyOnMessage(connection: CONNECTION, message: Any) {
+    suspend fun notifyOnMessage(connection: CONNECTION, message: Any): Boolean {
         val messageClass: Class<*> = message.javaClass
 
         // have to save the types + hierarchy (note: duplicates are OK, since they will just be overwritten)
@@ -394,8 +364,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         // this is EXPLICITLY listed as a "Don't" via the documentation. The ****ONLY**** reason this is actually OK is because
         // we are following the "single-writer principle", so only ONE THREAD can modify this at a time.
 
-        // cache the lookup (because we don't care about race conditions, since the object hierarchy will be ALREADY established at this
-        // exact moment
+        // cache the lookup
+        //   we don't care about race conditions, since the object hierarchy will be ALREADY established at this exact moment
         val tempMap = onMessageMap.value
         var hasListeners = false
         hierarchy.forEach { clazz ->
@@ -413,207 +383,6 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             }
         }
 
-
-//         foundListener |= onMessageReceivedManager.notifyReceived((C) connection, message, shutdown);
-
-        // now have to account for additional connection listener managers (non-global).
-        // access a snapshot of the managers (single-writer-principle)
-//        val localManager = localManagers[connection as C]
-//        if (localManager != null) {
-//            // if we found a listener during THIS method call, we need to let the NEXT method call know,
-//            // so it doesn't spit out error for not handling a message (since that message MIGHT have
-//            // been found in this method).
-//            foundListener = foundListener or localManager.notifyOnMessage0(connection, message, foundListener)
-//        }
-
-        if (!hasListeners) {
-            logger.error("----------- MESSAGE CALLBACK NOT REGISTERED FOR {}", messageClass.simpleName)
-        }
+        return hasListeners
     }
-
-
-
-
-
-
-
-
-
-
-
-//
-//    override fun remove(listener: OnConnected<C>): Listeners<C> {
-//        return this
-//    }
-
-
-    // /**
-    //  * Adds a listener to this connection/endpoint to be notified of connect/disconnect/idle/receive(object) events.
-    //  * <p/>
-    //  * When called by a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections are
-    //  * notified of that listener.
-    //  * <p/>
-    //  * It is POSSIBLE to add a server connection ONLY (ie, not global) listener (via connection.addListener), meaning that ONLY that
-    //  * listener attached to the connection is notified on that event (ie, admin type listeners)
-    //  *
-    //  *
-    //  * // TODO: When converting to kotlin, use reified! to get the listener types
-    //  * https://kotlinlang.org/docs/reference/inline-functions.html
-    //  */
-    // @Override
-    // public final
-    // Listeners add(final Listener listener) {
-    //     if (listener == null) {
-    //         throw new IllegalArgumentException("listener cannot be null.");
-    //     }
-    //
-//         // this is the connection generic parameter for the listener, works for lambda expressions as well
-//         Class<?> genericClass = ClassHelper.getGenericParameterAsClassForSuperClass(Listener.class, listener.getClass(), 0);
-    //
-//         // if we are null, it means that we have no generics specified for our listener!
-//         if (genericClass == this.baseClass || genericClass == TypeResolver.Unknown.class || genericClass == null) {
-//             // we are the base class, so we are fine.
-//             addListener0(listener);
-//             return this;
-//
-//         }
-//         else if (ClassHelper.hasInterface(Connection.class, genericClass) && !ClassHelper.hasParentClass(this.baseClass, genericClass)) {
-//             // now we must make sure that the PARENT class is NOT the base class. ONLY the base class is allowed!
-//             addListener0(listener);
-//             return this;
-//         }
-//
-//         // didn't successfully add the listener.
-//         throw new IllegalArgumentException("Unable to add incompatible connection type as a listener! : " + this.baseClass);
-    // }
-    //
-    // /**
-    //  * INTERNAL USE ONLY
-    //  */
-    // private
-    // void addListener0(final Listener listener) {
-    //     boolean found = false;
-    //     if (listener instanceof OnConnected) {
-    //         onConnectedManager.add((Listener.OnConnected<C>) listener);
-    //         found = true;
-    //     }
-    //     if (listener instanceof Listener.OnDisconnected) {
-    //         onDisconnectedManager.add((Listener.OnDisconnected<C>) listener);
-    //         found = true;
-    //     }
-    //
-    //     if (listener instanceof Listener.OnMessageReceived) {
-    //         onMessageReceivedManager.add((Listener.OnMessageReceived) listener);
-    //         found = true;
-    //     }
-    //
-    //     if (found) {
-    //         hasAtLeastOneListener.set(true);
-    //
-    //         if (logger.isTraceEnabled()) {
-    //             logger.trace("listener added: {}",
-    //                          listener.getClass()
-    //                                  .getName());
-    //         }
-    //     }
-    //     else {
-    //         logger.error("No matching listener types. Unable to add listener: {}",
-    //                      listener.getClass()
-    //                              .getName());
-    //     }
-    // }
-    //
-    // /**
-    //  * Removes a listener from this connection/endpoint to NO LONGER be notified of connect/disconnect/idle/receive(object) events.
-    //  * <p/>
-    //  * When called by a server, NORMALLY listeners are added at the GLOBAL level (meaning, I add one listener, and ALL connections are
-    //  * notified of that listener.
-    //  * <p/>
-    //  * It is POSSIBLE to remove a server-connection 'non-global' listener (via connection.removeListener), meaning that ONLY that listener
-    //  * attached to the connection is removed
-    //  */
-    // @Override
-    // public final
-    // Listeners remove(final Listener listener) {
-    //     if (listener == null) {
-    //         throw new IllegalArgumentException("listener cannot be null.");
-    //     }
-    //
-    //     if (logger.isTraceEnabled()) {
-    //         logger.trace("listener removed: {}",
-    //                      listener.getClass()
-    //                              .getName());
-    //     }
-    //
-    //     boolean found = false;
-    //     int remainingListeners = 0;
-    //
-    //     if (listener instanceof Listener.OnConnected) {
-    //         int size = onConnectedManager.removeWithSize((OnConnected<C>) listener);
-    //         if (size >= 0) {
-    //             remainingListeners += size;
-    //             found = true;
-    //         }
-    //     }
-    //     if (listener instanceof Listener.OnDisconnected) {
-    //         int size = onDisconnectedManager.removeWithSize((Listener.OnDisconnected<C>) listener);
-    //         if (size >= 0) {
-    //             remainingListeners += size;
-    //             found |= true;
-    //         }
-    //     }
-    //     if (listener instanceof Listener.OnMessageReceived) {
-    //         int size =  onMessageReceivedManager.removeWithSize((Listener.OnMessageReceived) listener);
-    //         if (size >= 0) {
-    //             remainingListeners += size;
-    //             found |= true;
-    //         }
-    //     }
-    //
-    //     if (found) {
-    //         if (remainingListeners == 0) {
-    //             hasAtLeastOneListener.set(false);
-    //         }
-    //     }
-    //     else {
-    //         logger.error("No matching listener types. Unable to remove listener: {}",
-    //                      listener.getClass()
-    //                              .getName());
-    //
-    //     }
-    //
-    //     return this;
-    // }
-//    /**
-//     * Removes all registered listeners from this connection/endpoint to NO LONGER be notified of connect/disconnect/idle/receive(object)
-//     * events.
-//     */
-//    override fun removeAll(): Listeners<C> {
-//        // onConnectedManager.clear();
-//        // onDisconnectedManager.clear();
-//        // onMessageReceivedManager.clear();
-//        logger.error("ALL listeners removed !!")
-//        return this
-//    }
-
-//    /**
-//     * Removes all registered listeners (of the object type) from this
-//     * connection/endpoint to NO LONGER be notified of
-//     * connect/disconnect/idle/receive(object) events.
-//     */
-//    override fun removeAll(classType: Class<*>): Listeners<C> {
-//        val logger2 = logger
-//        // if (onMessageReceivedManager.removeAll(classType)) {
-//        //     if (logger2.isTraceEnabled()) {
-//        //         logger2.trace("All listeners removed for type: {}",
-//        //                       classType.getClass()
-//        //                                .getName());
-//        //     }
-//        // } else {
-//        //     logger2.warn("No listeners found to remove for type: {}",
-//        //                   classType.getClass()
-//        //                            .getName());
-//        // }
-//        return this
-//    }
 }

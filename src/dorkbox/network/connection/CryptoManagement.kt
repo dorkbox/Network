@@ -6,13 +6,20 @@ import dorkbox.netUtil.IPv4
 import dorkbox.network.Configuration
 import dorkbox.network.handshake.ClientConnectionInfo
 import dorkbox.network.other.CryptoEccNative
-import dorkbox.network.pipeline.AeronInput
-import dorkbox.network.pipeline.AeronOutput
-import dorkbox.network.store.SettingsStore
+import dorkbox.network.serialization.AeronInput
+import dorkbox.network.serialization.AeronOutput
+import dorkbox.network.storage.SettingsStore
+import dorkbox.util.Sys
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.exceptions.SecurityException
 import mu.KLogger
-import java.security.*
+import java.security.KeyFactory
+import java.security.KeyPair
+import java.security.KeyPairGenerator
+import java.security.MessageDigest
+import java.security.PrivateKey
+import java.security.PublicKey
+import java.security.SecureRandom
 import java.security.interfaces.XECPrivateKey
 import java.security.interfaces.XECPublicKey
 import java.security.spec.NamedParameterSpec
@@ -24,7 +31,6 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 
-
 /**
  * Management for all of the crypto stuff used
  */
@@ -32,31 +38,30 @@ internal class CryptoManagement(val logger: KLogger,
                                 private val settingsStore: SettingsStore,
                                 type: Class<*>,
                                 config: Configuration) {
+
     private val keyFactory = KeyFactory.getInstance("X25519")
     private val keyAgreement = KeyAgreement.getInstance("XDH")
     private val aesCipher = Cipher.getInstance("AES/GCM/PKCS5Padding")
     private val hash = MessageDigest.getInstance("SHA-256");
 
     companion object {
-        val AES_KEY_SIZE = 256
-        val GCM_IV_LENGTH = 12
-        val GCM_TAG_LENGTH = 16
+        const val AES_KEY_SIZE = 256
+        const val GCM_IV_LENGTH = 12
+        const val GCM_TAG_LENGTH = 16
     }
-
-
-
 
     val privateKey: PrivateKey
     val publicKey: PublicKey
     val publicKeyBytes: ByteArray
 
-    val secureRandom: SecureRandom
+    val secureRandom = SecureRandom(settingsStore.getSalt())
 
-    val enableRemoteSignatureValidation = config.enableRemoteSignatureValidation
-    var disableRemoteKeyValidation = false
+    private val enableRemoteSignatureValidation = config.enableRemoteSignatureValidation
 
     init {
-        secureRandom = SecureRandom(settingsStore.getSalt())
+        if (!enableRemoteSignatureValidation) {
+            logger.warn("WARNING: Disabling remote key validation is a security risk!!")
+        }
 
         // initialize the private/public keys used for negotiating ECC handshakes
         // these are ONLY used for IP connections. LOCAL connections do not need a handshake!
@@ -77,8 +82,6 @@ internal class CryptoManagement(val logger: KLogger,
                 // save to properties file
                 settingsStore.savePrivateKey(privateKeyBytes)
                 settingsStore.savePublicKey(publicKeyBytes)
-
-                logger.debug("Done with ECC keys!")
             } catch (e: Exception) {
                 val message = "Unable to initialize/generate ECC keys. FORCED SHUTDOWN."
                 logger.error(message, e)
@@ -86,86 +89,62 @@ internal class CryptoManagement(val logger: KLogger,
             }
         }
 
+        logger.info("ECC public key: ${Sys.bytesToHex(publicKeyBytes)}")
+
         this.privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privateKeyBytes)) as XECPrivateKey
         this.publicKey = keyFactory.generatePublic(X509EncodedKeySpec(publicKeyBytes)) as XECPublicKey
         this.publicKeyBytes = publicKeyBytes!!
     }
 
-    fun createKeyPair(secureRandom: SecureRandom): KeyPair {
+    private fun createKeyPair(secureRandom: SecureRandom): KeyPair {
         val kpg: KeyPairGenerator = KeyPairGenerator.getInstance("XDH")
         kpg.initialize(NamedParameterSpec.X25519, secureRandom)
         return kpg.generateKeyPair()
     }
 
+
+
     /**
      * If the key does not match AND we have disabled remote key validation, then metachannel.changedRemoteKey = true. OTHERWISE, key validation is REQUIRED!
      *
-     * @return true if the remote address public key matches the one saved or we disabled remote key validation.
+     * @return true if all is OK (the remote address public key matches the one saved or we disabled remote key validation.)
+     *         false if we should abort
      */
-    internal fun validateRemoteAddress(remoteAddress: Int, publicKey: ByteArray?): Boolean {
+    internal fun validateRemoteAddress(remoteAddress: Int, publicKey: ByteArray?): PublicKeyValidationState {
         if (publicKey == null) {
             logger.error("Error validating public key for ${IPv4.toString(remoteAddress)}! It was null (and should not have been)")
-            return false
+            return PublicKeyValidationState.INVALID
         }
 
         try {
             val savedPublicKey = settingsStore.getRegisteredServerKey(remoteAddress)
             if (savedPublicKey == null) {
-                if (logger.isDebugEnabled) {
-                    logger.debug("Adding new remote IP address key for ${IPv4.toString(remoteAddress)}")
-                }
+                logger.info("Adding new remote IP address key for ${IPv4.toString(remoteAddress)} : ${Sys.bytesToHex(publicKey)}")
 
                 settingsStore.addRegisteredServerKey(remoteAddress, publicKey)
             } else {
                 // COMPARE!
                 if (!publicKey.contentEquals(savedPublicKey)) {
-                    return if (!enableRemoteSignatureValidation) {
-                        logger.warn("Invalid or non-matching public key from remote connection, their public key has changed. Toggling extra flag in channel to indicate key change. To fix, remove entry for: ${IPv4.toString(remoteAddress)}")
-                        true
-                    } else {
+                    return if (enableRemoteSignatureValidation) {
                         // keys do not match, abort!
-                        logger.error("Invalid or non-matching public key from remote connection, their public key has changed. To fix, remove entry for: ${IPv4.toString(remoteAddress)}")
-                        false
+                        logger.error("The public key for remote connection ${IPv4.toString(remoteAddress)} does not match. Denying connection attempt")
+                        PublicKeyValidationState.INVALID
+                    }
+                    else {
+                        logger.warn("The public key for remote connection ${IPv4.toString(remoteAddress)} does not match. Permitting connection attempt.")
+                        PublicKeyValidationState.TAMPERED
                     }
                 }
             }
         } catch (e: SecurityException) {
             // keys do not match, abort!
             logger.error("Error validating public key for ${IPv4.toString(remoteAddress)}!", e)
-            return false
+            return PublicKeyValidationState.INVALID
         }
 
-        return true
+        return PublicKeyValidationState.VALID
     }
 
-    override fun hashCode(): Int {
-        val prime = 31
-        var result = 1
-        result = prime * result + publicKeyBytes.hashCode()
-        return result
-    }
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) {
-            return true
-        }
-        if (other == null) {
-            return false
-        }
-        if (javaClass != other.javaClass) {
-            return false
-        }
-
-        val other1 = other as CryptoManagement
-        if (!privateKey.encoded!!.contentEquals(other1.privateKey.encoded)) {
-            return false
-        }
-        if (!publicKeyBytes.contentEquals(other1.publicKeyBytes)) {
-            return false
-        }
-
-        return true
-    }
 
     fun encrypt(publicationPort: Int,
                 subscriptionPort: Int,
@@ -246,9 +225,37 @@ internal class CryptoManagement(val logger: KLogger,
         // now read data off
         return ClientConnectionInfo(sessionId = data.readInt(),
                                     streamId = data.readInt(),
-                                    // NOTE: pub/sub must be switched!
-                                    subscriptionPort = data.readInt(),
                                     publicationPort = data.readInt(),
-                                    publicKey = publicKeyBytes)
+                                    subscriptionPort = data.readInt(),
+                                    publicKey = serverPublicKeyBytes)
+    }
+
+    override fun hashCode(): Int {
+        val prime = 31
+        var result = 1
+        result = prime * result + publicKeyBytes.hashCode()
+        return result
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) {
+            return true
+        }
+        if (other == null) {
+            return false
+        }
+        if (javaClass != other.javaClass) {
+            return false
+        }
+
+        val other1 = other as CryptoManagement
+        if (!privateKey.encoded!!.contentEquals(other1.privateKey.encoded)) {
+            return false
+        }
+        if (!publicKeyBytes.contentEquals(other1.publicKeyBytes)) {
+            return false
+        }
+
+        return true
     }
 }
