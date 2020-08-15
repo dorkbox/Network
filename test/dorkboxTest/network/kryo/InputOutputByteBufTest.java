@@ -36,8 +36,8 @@ import com.esotericsoftware.kryo.Registration;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import dorkbox.network.pipeline.AeronInput;
-import dorkbox.network.pipeline.AeronOutput;
+import dorkbox.network.serialization.AeronInput;
+import dorkbox.network.serialization.AeronOutput;
 
 /** @author Nathan Sweet */
 @SuppressWarnings("all")
