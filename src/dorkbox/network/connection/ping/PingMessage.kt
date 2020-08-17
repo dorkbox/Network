@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.ping;
+package dorkbox.network.connection.ping
 
 /**
  * Internal message to determine round trip time.
  */
-public
 class PingMessage {
-    public int id;
-    public boolean isReply;
+    var id = 0
+    var isReply = false
 }

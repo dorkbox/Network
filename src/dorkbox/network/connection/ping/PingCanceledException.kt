@@ -13,17 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.ping;
+package dorkbox.network.connection.ping
 
-import java.io.IOException;
+import java.io.IOException
 
-public
-class PingCanceledException extends IOException {
-
-    private static final long serialVersionUID = 9045461384091038605L;
-
-    public
-    PingCanceledException() {
-        super("Ping request has been canceled.");
-    }
+object PingCanceledException : IOException() {
+    private const val serialVersionUID = 9045461384091038605L
 }

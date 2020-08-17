@@ -13,34 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.ping;
+package dorkbox.network.connection.ping
 
-import java.util.concurrent.atomic.AtomicInteger;
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.Ping
+import dorkbox.network.connection.PingListener
+import java.util.concurrent.atomic.AtomicInteger
 
-import dorkbox.network.connection.Connection;
-import dorkbox.network.connection.Ping;
-import dorkbox.network.connection.PingListener;
-
-public
-class PingFuture implements Ping {
-
-    private static final AtomicInteger pingCounter = new AtomicInteger(0);
-
-    // private final Promise<PingTuple<? extends Connection>> promise;
-
-    private final int id;
-    private final long sentTime;
-
+class PingFuture internal constructor() : Ping {
     /**
-     * Protected constructor for when we are completely overriding this class. (Used by the "local" connection for instant pings)
+     * @return the ID of this ping future
      */
-    @SuppressWarnings("unused")
-    PingFuture() {
-        // this(null);
-        id = -1;
-        sentTime = -2;
-    }
-
+    // private final Promise<PingTuple<? extends Connection>> promise;
+    val id: Int
+    private val sentTime: Long
     // public
     // PingFuture(Promise<PingTuple<? extends Connection>> promise) {
     //     this.promise = promise;
@@ -50,15 +36,20 @@ class PingFuture implements Ping {
     //     if (this.id == Integer.MAX_VALUE) {
     //         pingCounter.set(0);
     //     }
+    // }// try {
+    //     PingTuple<? extends Connection> entry = this.promise.syncUninterruptibly()
+    //                                                         .get();
+    //     if (entry != null) {
+    //         return entry.responseTime;
+    //     }
+    // } catch (InterruptedException e) {
+    // } catch (ExecutionException e) {
     // }
-
     /**
      * Wait for the ping to return, and returns the ping response time in MS or -1 if it failed.
      */
-    @Override
-    public
-    int getResponse() {
-        // try {
+    override val response: Int
+        get() =// try {
         //     PingTuple<? extends Connection> entry = this.promise.syncUninterruptibly()
         //                                                         .get();
         //     if (entry != null) {
@@ -66,18 +57,14 @@ class PingFuture implements Ping {
         //     }
         // } catch (InterruptedException e) {
         // } catch (ExecutionException e) {
-        // }
-        return -1;
-    }
+                // }
+            -1
 
     /**
      * Adds the specified listener to this future. The specified listener is notified when this future is done. If this future is already
      * completed, the specified listener is notified immediately.
      */
-    @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    public
-    <C extends Connection> void add(PingListener<C> listener) {
+    override fun <C : Connection> add(listener: PingListener<C>) {
         // this.promise.addListener((GenericFutureListener) listener);
     }
 
@@ -85,27 +72,21 @@ class PingFuture implements Ping {
      * Removes the specified listener from this future. The specified listener is no longer notified when this future is done. If the
      * specified listener is not associated with this future, this method does nothing and returns silently.
      */
-    @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    public
-    <C extends Connection> void remove(PingListener<C> listener) {
+    override fun <C : Connection> remove(listener: PingListener<C>) {
         // this.promise.removeListener((GenericFutureListener) listener);
     }
 
     /**
      * Cancel this Ping.
      */
-    @Override
-    public
-    void cancel() {
+    override fun cancel() {
         // this.promise.tryFailure(new PingCanceledException());
     }
 
     /**
      * This is when the endpoint that ORIGINALLY sent the ping, finally receives a response.
      */
-    public
-    <C extends Connection> void setSuccess(C connection, PingMessage ping) {
+    fun <C : Connection?> setSuccess(connection: C, ping: PingMessage?) {
         // if (ping.id == this.id) {
         //     long longTime = System.currentTimeMillis() - this.sentTime;
         //     if (longTime < Integer.MAX_VALUE) {
@@ -117,17 +98,21 @@ class PingFuture implements Ping {
         // }
     }
 
-    public
-    boolean isSuccess() {
-        // return this.promise.isSuccess();
-        return false;
+    // return this.promise.isSuccess();
+    val isSuccess: Boolean
+        get() =// return this.promise.isSuccess();
+            false
+
+    companion object {
+        private val pingCounter = AtomicInteger(0)
     }
 
     /**
-     * @return the ID of this ping future
+     * Protected constructor for when we are completely overriding this class. (Used by the "local" connection for instant pings)
      */
-    public
-    int getId() {
-        return this.id;
+    init {
+        // this(null);
+        id = -1
+        sentTime = -2
     }
 }

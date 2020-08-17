@@ -13,17 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.ping;
+package dorkbox.network.connection.ping
 
+import dorkbox.network.connection.Connection
 
-import dorkbox.network.connection.Connection;
-
-public class PingTuple<C extends Connection> {
-    public C connection;
-    public int responseTime;
-
-    public PingTuple(C connection, int responseTime) {
-        this.connection = connection;
-        this.responseTime = responseTime;
-    }
-}
+class PingTuple<C : Connection?>(var connection: C, var responseTime: Int) 
