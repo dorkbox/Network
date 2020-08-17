@@ -32,23 +32,26 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         fun cleanStackTrace(throwable: Throwable) {
             // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
             val stackTrace = throwable.stackTrace
-            var newEndIndex = stackTrace.size - 1
-            for (i in newEndIndex downTo 0) {
-                val stackName = stackTrace[i].className
-                if (i == newEndIndex) {
-                    if (stackName.startsWith("kotlinx.coroutines.") ||
-                        stackName.startsWith("kotlin.coroutines.") ||
-                        stackName.startsWith("dorkbox.network.")) {
-                        newEndIndex--
-                    } else {
-                        break
+            var newEndIndex = Math.max(0, stackTrace.size - 1)
+
+            if (newEndIndex > 0) {
+                for (i in newEndIndex downTo 0) {
+                    val stackName = stackTrace[i].className
+                    if (i == newEndIndex) {
+                        if (stackName.startsWith("kotlinx.coroutines.") ||
+                            stackName.startsWith("kotlin.coroutines.") ||
+                            stackName.startsWith("dorkbox.network.")) {
+                            newEndIndex--
+                        } else {
+                            break
+                        }
                     }
                 }
-            }
 
-            // tailToChopIndex will also remove the VERY LAST CachedMethod or CachedAsmMethod access invocation (because it's offset by 1)
-            // NOTE: we want to do this!
-            throwable.stackTrace = stackTrace.copyOfRange(0, newEndIndex)
+                // tailToChopIndex will also remove the VERY LAST CachedMethod or CachedAsmMethod access invocation (because it's offset by 1)
+                // NOTE: we want to do this!
+                throwable.stackTrace = stackTrace.copyOfRange(0, newEndIndex)
+            }
         }
     }
 
@@ -237,10 +240,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
 
         // first run through the IP connection filters, THEN run through the "custom" filters
 
-        val address = connection.remoteAddressInt
+//        val address = connection.remoteAddressInt
 
         // it's possible for a remote address to match MORE than 1 rule.
-        var isAllowed = false
+//        var isAllowed = false
 
         // these are the IP filters (optimized checking based on simple IP rules)
         onConnectIpFilterList.value.forEach {
