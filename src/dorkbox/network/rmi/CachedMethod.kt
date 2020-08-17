@@ -49,8 +49,7 @@ open class CachedMethod(val method: Method, val methodIndex: Int, val methodClas
     var overriddenMethod: Method? = null
 
 
-    @Throws(Exception::class)
-    open operator fun invoke(connection: Connection, target: Any, args: Array<Any>): Any? {
+    open fun invoke(connection: Connection, target: Any, args: Array<Any>): Any? {
         return method.invoke(target, *args)
     }
 

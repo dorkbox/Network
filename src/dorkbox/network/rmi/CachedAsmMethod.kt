@@ -46,4 +46,8 @@ class CachedAsmMethod(val methodAccessIndex: Int, val methodAccess: MethodAccess
     override fun invoke(connection: Connection, target: Any, args: Array<Any>): Any? {
         return methodAccess.invoke(target, methodAccessIndex, *args)
     }
+
+    override fun toString(): String {
+        return "CachedAsmMethod{name:" + method.name + ", methodClassId=" + methodClassId + ", methodIndex=" + methodIndex + '}'
+    }
 }
