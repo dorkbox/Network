@@ -38,7 +38,6 @@ import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.actor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
@@ -68,18 +67,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     protected constructor(config: Configuration) : this(Client::class.java, config)
     protected constructor(config: ServerConfiguration) : this(Server::class.java, config)
 
-
-    fun CoroutineScope.connectionActor() = actor<ActorMessage<CONNECTION>> {
-        var counter = 0
-
-        for (message in channel) {
-            when(message) {
-                is ActorMessage.AddConnection -> println("add")
-                is ActorMessage.RemoveConnection -> println("del")
-//                is ActorMessage.GetValue -> message.deferred.complete(counter)
-            }
-        }
-    }
 
     companion object {
         /**
@@ -609,6 +596,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             autoClosableObjects.clear()
 
             runBlocking {
+                rmiGlobalSupport.close()
+
                 // don't need anything fast or fancy here, because this method will only be called once
                 connections.forEach {
                     it.close()
