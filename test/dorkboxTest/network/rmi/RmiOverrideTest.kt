@@ -28,7 +28,7 @@ import org.junit.Test
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
-class RmiSendObjectOverrideMethodTest : BaseTest() {
+class RmiOverrideTest : BaseTest() {
 
     companion object {
         private val idCounter = AtomicInteger()
@@ -43,7 +43,7 @@ class RmiSendObjectOverrideMethodTest : BaseTest() {
     @Test
     @Throws(SecurityException::class, IOException::class)
     fun rmiIPC() {
-        TODO("DO IPC STUFF!")
+//        TODO("DO IPC STUFF!")
         // rmi(new Config() {
         //     @Override
         //     public
@@ -92,7 +92,6 @@ class RmiSendObjectOverrideMethodTest : BaseTest() {
 
             server.onMessage<OtherObject> { connection, message ->
                 // The test is complete when the client sends the OtherObject instance.
-
                 // this 'object' is the REAL object, not a proxy, because this object is created within this connection.
                 if (message.value() == 12.34f) {
                     stopEndPoints()
@@ -118,36 +117,27 @@ class RmiSendObjectOverrideMethodTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect { connection ->
-                // if this is called in the dispatch thread, it will block network comms while waiting for a response and it won't work...
-//                connection.create(TestObject::class.java, object : RemoteObjectCallback<TestObject> {
-//                    override suspend fun created(remoteObject: TestObject) {
-//                        // MUST run on a separate thread because remote object method invocations are blocking
-//                        object : Thread() {
-//                            override fun run() {
-//                                remoteObject.setOther(43.21f)
-//
-//                                // Normal remote method call.
-//                                Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
-//
-//                                // Make a remote method call that returns another remote proxy object.
-//                                // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
-//                                //  here we have a proxy to both of them.
-//                                val otherObject = remoteObject.getOtherObject()
-//
-//                                // Normal remote method call on the second object.
-//                                otherObject.setValue(12.34f)
-//                                val value = otherObject.value()
-//                                Assert.assertEquals(12.34f, value, .0001f)
-//
-//                                // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
-//                                // that is where that object actually exists.
-//                                runBlocking {
-//                                    connection.send(otherObject)
-//                                }
-//                            }
-//                        }.start()
-//                    }
-//                })
+                connection.createObject<TestObject>() { rmiId, remoteObject ->
+                    println("Starting test")
+                    remoteObject.setOther(43.21f)
+
+                    // Normal remote method call.
+                    Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
+
+                    // Make a remote method call that returns another remote proxy object.
+                    // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
+                    //  here we have a proxy to both of them.
+                    val otherObject = remoteObject.getOtherObject()
+
+                    // Normal remote method call on the second object.
+                    otherObject.setValue(12.34f)
+                    val value = otherObject.value()
+                    Assert.assertEquals(12.34f, value, .0001f)
+
+                    // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                    // that is where that object actually exists.
+                    connection.send(otherObject)
+                }
             }
 
             runBlocking {
@@ -158,7 +148,7 @@ class RmiSendObjectOverrideMethodTest : BaseTest() {
     }
 
     private interface TestObject {
-        fun setOther(aFloat: Float)
+        suspend fun setOther(aFloat: Float)
         fun other(): Float
         fun getOtherObject(): OtherObject
     }
@@ -176,11 +166,12 @@ class RmiSendObjectOverrideMethodTest : BaseTest() {
         private val otherObject: OtherObject = OtherObjectImpl()
 
         private var aFloat = 0f
-        override fun setOther(aFloat: Float) {
+        override suspend fun setOther(aFloat: Float) {
             throw RuntimeException("Whoops!")
         }
 
-        fun setOther(connection: Connection, aFloat: Float) {
+        suspend fun setOther(connection: Connection, aFloat: Float) {
+            println("receiving")
             this.aFloat = aFloat
         }
 
