@@ -427,16 +427,15 @@ object RmiUtils {
         return allClasses
     }
 
-    private const val RIGHT = 0xFFFF
     fun packShorts(left: Int, right: Int): Int {
-        return left shl 16 or (right and RIGHT)
+        return left shl 16 or (right and 0xFFFF)
     }
 
     fun unpackLeft(packedInt: Int): Int {
-        return packedInt ushr 16 // >>> operator 0-fills from left
-
+        return packedInt shr 16
     }
+
     fun unpackRight(packedInt: Int): Int {
-        return packedInt and RIGHT
+        return packedInt.toShort().toInt()
     }
 }
