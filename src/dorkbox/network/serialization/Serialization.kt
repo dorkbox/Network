@@ -29,6 +29,7 @@ import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
+import dorkbox.network.rmi.messages.ContinuationSerializer
 import dorkbox.network.rmi.messages.GlobalObjectCreateRequest
 import dorkbox.network.rmi.messages.GlobalObjectCreateResponse
 import dorkbox.network.rmi.messages.MethodRequest
@@ -51,6 +52,7 @@ import org.objenesis.strategy.StdInstantiatorStrategy
 import java.io.IOException
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationHandler
+import kotlin.coroutines.Continuation
 
 /**
  * Threads reading/writing at the same time a single instance of kryo. it is possible to use a single kryo with the use of
@@ -132,6 +134,7 @@ class Serialization(private val references: Boolean,
     private val methodResponseSerializer = MethodResponseSerializer()
     private val objectRequestSerializer = RmiClientRequestSerializer()
     private val objectResponseSerializer = ObjectResponseSerializer(rmiImplToIface)
+    private val continuationRequestSerializer = ContinuationSerializer()
 
 
 
@@ -171,6 +174,8 @@ class Serialization(private val references: Boolean,
 
         @Suppress("UNCHECKED_CAST")
         kryo.register(InvocationHandler::class.java as Class<Any>, objectRequestSerializer)
+
+        kryo.register(Continuation::class.java, continuationRequestSerializer)
 
         // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
         classesToRegister.forEach { registration ->
