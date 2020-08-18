@@ -555,7 +555,7 @@ class Serialization(private val references: Boolean,
     /**
      * @return takes a kryo instance from the pool.
      */
-    override suspend fun takeKryo(): KryoExtra {
+    override fun takeKryo(): KryoExtra {
         // ALWAYS get as many as needed. Recycle them to prevent too many getting created
         return kryoPool.poll() ?: initKryo()
     }
@@ -563,8 +563,9 @@ class Serialization(private val references: Boolean,
     /**
      * Returns a kryo instance to the pool for use later on
      */
-    override suspend fun returnKryo(kryo: KryoExtra) {
-        kryoPool.send(kryo)
+    override fun returnKryo(kryo: KryoExtra) {
+        // return as much as we can. don't suspend if the pool is full, we just throw it away.
+        kryoPool.offer(kryo)
     }
 
     /**

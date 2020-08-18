@@ -80,12 +80,12 @@ interface NetworkSerializationManager : SerializationManager<DirectBuffer> {
     /**
      * @return takes a kryo instance from the pool.
      */
-    suspend fun takeKryo(): KryoExtra
+    fun takeKryo(): KryoExtra
 
     /**
      * Returns a kryo instance to the pool.
      */
-    suspend fun returnKryo(kryo: KryoExtra)
+    fun returnKryo(kryo: KryoExtra)
 
     /**
      * @return true if the remote kryo registration are the same as our own
