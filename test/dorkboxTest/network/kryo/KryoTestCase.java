@@ -47,6 +47,7 @@ import com.esotericsoftware.kryo.unsafe.UnsafeOutput;
 
 /** Convenience methods for round tripping objects.
  * @author Nathan Sweet */
+@SuppressWarnings("unchecked")
 abstract public class KryoTestCase {
 	// When true, roundTrip will only do a single write/read to make debugging easier (breaks some tests).
 	static private final boolean debug = false;

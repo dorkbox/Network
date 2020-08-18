@@ -946,6 +946,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 		kryo.writeClassAndObject(byteBufferOutput, "Test string");
 	}
 
+    @SuppressWarnings("unchecked")
 	@Test
 	public void testFlushRoundTrip () throws Exception {
 		Kryo kryo = new Kryo();
@@ -974,7 +975,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 		AeronOutput output = new AeronOutput(-1);
 		assertNotNull(output);
 
-		output.setBuffer(new byte[bufferSize], maxBufferSize);
+		output.setBuffer(new byte[bufferSize]);
 	}
 
 	@Test
