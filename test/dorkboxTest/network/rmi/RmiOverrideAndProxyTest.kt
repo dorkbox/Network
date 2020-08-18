@@ -12,25 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Copyright (c) 2008, Nathan Sweet
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
- * conditions are met:
- *
- * - Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
- * disclaimer in the documentation and/or other materials provided with the distribution.
- * - Neither the name of Esoteric Software nor the names of its contributors may be used to endorse or promote products derived
- * from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
- * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
- * SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package dorkboxTest.network.rmi
 
@@ -47,7 +28,12 @@ import org.junit.Test
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
-class RmiSendObjectTest : BaseTest() {
+class RmiOverrideAndProxyTest : BaseTest() {
+
+    companion object {
+        private val idCounter = AtomicInteger()
+    }
+
     @Test
     @Throws(SecurityException::class, IOException::class)
     fun rmiNetwork() {
@@ -57,6 +43,7 @@ class RmiSendObjectTest : BaseTest() {
     @Test
     @Throws(SecurityException::class, IOException::class)
     fun rmiIPC() {
+//        TODO("DO IPC STUFF!")
         // rmi(new Config() {
         //     @Override
         //     public
@@ -67,8 +54,28 @@ class RmiSendObjectTest : BaseTest() {
     }
 
     /**
-     * In this test the server has two objects in an object space. The client
-     * uses the first remote object to get the second remote object.
+     * In this test the server has two objects in an object space.
+     *
+     * The client uses the first remote object to get the second remote object.
+     *
+     *
+     * The MAJOR difference in this version, is that we use an interface to override the methods, so that we can have the RMI system pass
+     * in the connection object.
+     *
+     * Specifically, from CachedMethod.java
+     *
+     * In situations where we want to pass in the Connection (to an RMI method), we have to be able to override method A, with method B.
+     * This is to support calling RMI methods from an interface (that does pass the connection reference) to
+     * an implType, that DOES pass the connection reference. The remote side (that initiates the RMI calls), MUST use
+     * the interface, and the implType may override the method, so that we add the connection as the first in
+     * the list of parameters.
+     *
+     * for example:
+     * Interface: foo(String x)
+     * Impl: foo(Connection c, String x)
+     *
+     * The implType (if it exists, with the same name, and with the same signature + connection parameter) will be called from the interface
+     * instead of the method that would NORMALLY be called.
      */
     @Throws(SecurityException::class, IOException::class)
     fun rmi(config: (Configuration) -> Unit = {}) {
@@ -82,17 +89,21 @@ class RmiSendObjectTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind(false)
 
-            server.onMessage<OtherObjectImpl> { connection, message ->
+            server.onMessage<OtherObject> { connection, message ->
                 // The test is complete when the client sends the OtherObject instance.
+                // this 'object' is the REAL object, not a proxy, because this object is created within this connection.
                 if (message.value() == 12.34f) {
                     stopEndPoints()
                 } else {
                     Assert.fail("Incorrect object value")
                 }
             }
+
+
+            server.bind(false)
         }
+
 
         run {
             val configuration = clientConfig()
@@ -104,45 +115,47 @@ class RmiSendObjectTest : BaseTest() {
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
+
             client.onConnect { connection ->
-//                connection.create(TestObject::class.java, object : RemoteObjectCallback<TestObject> {
-//                    override suspend fun created(remoteObject: TestObject) {
-//                        // MUST run on a separate thread because remote object method invocations are blocking
-//                        object : Thread() {
-//                            override fun run() {
-//                                remoteObject.setOther(43.21f)
-//
-//                                // Normal remote method call.
-//                                Assert.assertEquals(43.21f, remoteObject.other(), 0.0001f)
-//
-//                                // Make a remote method call that returns another remote proxy object.
-//                                val otherObject = remoteObject.getOtherObject()
-//
-//                                // Normal remote method call on the second object.
-//                                otherObject.setValue(12.34f)
-//                                val value = otherObject.value()
-//                                Assert.assertEquals(12.34f, value, 0.0001f)
-//
-//                                // When a remote proxy object is sent, the other side receives its actual remote object.
-//                                runBlocking {
-//                                    connection.send(otherObject)
-//                                }
-//                            }
-//                        }.start()
-//                    }
-//                })
+                connection.createObject<TestObject>() { rmiId, remoteObject ->
+                    println("Starting test")
+                    remoteObject.setValue(43.21f)
+
+                    // Normal remote method call.
+                    Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
+
+                    // Make a remote method call that returns another remote proxy object.
+                    // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
+                    //  here we have a proxy to both of them.
+                    val otherObject = remoteObject.getOtherObject()
+
+                    // Normal remote method call on the second object.
+                    otherObject.setValue(12.34f)
+                    val value = otherObject.value()
+                    Assert.assertEquals(12.34f, value, .0001f)
+
+
+                    // make sure the "local" object and the "remote" object have the same values
+                    Assert.assertEquals(12.34f, remoteObject.getOtherValue(), .0001f)
+
+
+                    // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                    // that is where that object actually exists.
+                    connection.send(otherObject)
+                }
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                client.connect(LOOPBACK, 5000)
             }
         }
-
         waitForThreads()
     }
 
     private interface TestObject {
-        fun setOther(aFloat: Float)
+        suspend fun setValue(aFloat: Float)
+        suspend fun setOtherValue(aFloat: Float)
+        suspend fun getOtherValue(): Float
         fun other(): Float
         fun getOtherObject(): OtherObject
     }
@@ -160,16 +173,36 @@ class RmiSendObjectTest : BaseTest() {
         private val otherObject: OtherObject = OtherObjectImpl()
 
         private var aFloat = 0f
+        override suspend fun setValue(aFloat: Float) {
+            throw RuntimeException("Whoops!")
+        }
 
-        override fun setOther(aFloat: Float) {
+        suspend fun setValue(connection: Connection, aFloat: Float) {
+            println("receiving")
             this.aFloat = aFloat
         }
 
+        override suspend fun setOtherValue(aFloat: Float) {
+            otherObject.setValue(aFloat)
+        }
+
+        override suspend fun getOtherValue(): Float {
+            return otherObject.value()
+        }
+
         override fun other(): Float {
+            throw RuntimeException("Whoops!")
+        }
+
+        fun other(connection: Connection): Float {
             return aFloat
         }
 
         override fun getOtherObject(): OtherObject {
+            throw RuntimeException("Whoops!")
+        }
+
+        fun getOtherObject(connection: Connection): OtherObject {
             return otherObject
         }
 
@@ -178,11 +211,10 @@ class RmiSendObjectTest : BaseTest() {
         }
     }
 
-    private class OtherObjectImpl : OtherObject {
+    class OtherObjectImpl : OtherObject {
         @Transient
         private val ID = idCounter.getAndIncrement()
         private var aFloat = 0f
-
         override fun setValue(aFloat: Float) {
             this.aFloat = aFloat
         }
@@ -194,9 +226,5 @@ class RmiSendObjectTest : BaseTest() {
         override fun hashCode(): Int {
             return ID
         }
-    }
-
-    companion object {
-        private val idCounter = AtomicInteger()
     }
 }
