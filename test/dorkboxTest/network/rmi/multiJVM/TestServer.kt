@@ -30,11 +30,12 @@ object TestServer {
         setup()
 
         val configuration = BaseTest.serverConfig()
+
         RmiTest.register(configuration.serialization)
         configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+        configuration.enableRemoteSignatureValidation = false
 
         val server = Server<Connection>(configuration)
-        server.disableRemoteKeyValidation()
 
         server.bind(false)
     }

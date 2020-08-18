@@ -64,9 +64,9 @@ object TestClient {
         val configuration = BaseTest.clientConfig()
         RmiTest.register(configuration.serialization)
         configuration.serialization.register(TestCow::class.java)
+        configuration.enableRemoteSignatureValidation = false
 
         val client = Client<Connection>(configuration)
-        client.disableRemoteKeyValidation()
 
         client.onConnect { connection ->
             System.err.println("Starting test for: Client -> Server")
@@ -74,6 +74,10 @@ object TestClient {
             connection.createObject<TestCow>(124123) { _, remoteObject ->
                 RmiTest.runTests(connection, remoteObject, 124123)
                 System.err.println("DONE")
+
+                // now send this remote object ACROSS the wire to the server.
+                connection.send(remoteObject)
+
                 client.close()
             }
         }
