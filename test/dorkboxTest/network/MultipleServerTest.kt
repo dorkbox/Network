@@ -51,7 +51,6 @@ class MultipleServerTest : BaseTest() {
             val configuration = serverConfig()
             configuration.subscriptionPort += offset
             configuration.publicationPort += offset
-            configuration.clientStartPort += configuration.maxClientCount * offset
             configuration.aeronLogDirectory = serverAeronDir
 
             val server: Server<Connection> = Server(configuration)
@@ -64,6 +63,7 @@ class MultipleServerTest : BaseTest() {
 
                 didReceive[count].set(true)
                 if (received.incrementAndGet() == total) {
+                    println("Done, stopping endpoints")
                     stopEndPoints()
                 }
             }

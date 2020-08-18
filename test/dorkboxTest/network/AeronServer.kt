@@ -63,7 +63,6 @@ object AeronServer {
         configuration.listenIpAddress = "127.0.0.1"
         configuration.subscriptionPort = 2000
         configuration.publicationPort = 2001
-        configuration.clientStartPort = 2500
         configuration.maxClientCount = 5
         configuration.maxConnectionsPerIpAddress = 5
 

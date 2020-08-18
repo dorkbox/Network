@@ -22,8 +22,7 @@ package dorkboxTest.network
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.MediaDriverConnection
+import dorkbox.network.connection.ConnectionParams
 import dorkbox.util.exceptions.InitializationException
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.coroutines.runBlocking
@@ -42,13 +41,15 @@ class ListenerTest : BaseTest() {
 
     var overrideCheck = AtomicBoolean(false)
     var serverOnMessage = AtomicBoolean(false)
+    var serverConnectionOnMessage = AtomicBoolean(false)
+    var serverDisconnectMessage = AtomicBoolean(false)
     var serverConnect = AtomicBoolean(false)
     var serverDisconnect = AtomicBoolean(false)
     var clientConnect = AtomicBoolean(false)
     var clientDisconnect = AtomicBoolean(false)
 
     // quick and dirty test to also test connection sub-classing
-    internal open inner class TestConnectionA(endPointConnection: EndPoint<TestConnectionA>, driverConnection: MediaDriverConnection) : Connection(endPointConnection, driverConnection) {
+    internal open inner class TestConnectionA(connectionParameters: ConnectionParams<TestConnectionA>) : Connection(connectionParameters) {
         open fun check() {
             overrideCheck.set(true)
         }
@@ -59,8 +60,8 @@ class ListenerTest : BaseTest() {
     fun listener() {
         val server: Server<TestConnectionA> = object : Server<TestConnectionA>(
                 serverConfig()) {
-            override fun newConnection(endPoint: EndPoint<TestConnectionA>, mediaDriverConnection: MediaDriverConnection): TestConnectionA {
-                return TestConnectionA(endPoint, mediaDriverConnection)
+            override fun newConnection(connectionParameters: ConnectionParams<TestConnectionA>): TestConnectionA {
+                return TestConnectionA(connectionParameters)
             }
         }
         addEndPoint(server)
@@ -79,8 +80,15 @@ class ListenerTest : BaseTest() {
         }
 
         // standard connect check
-        server.onConnect {
+        server.onConnect { connection ->
             serverConnect.set(true)
+            connection.onMessage<Any> {_, _ ->
+                serverConnectionOnMessage.set(true)
+            }
+
+            connection.onDisconnect { _ ->
+                serverDisconnectMessage.set(true)
+            }
         }
 
         // standard listener disconnect check
@@ -97,8 +105,8 @@ class ListenerTest : BaseTest() {
         // ----
         val client: Client<TestConnectionA> = object : Client<TestConnectionA>(
                 clientConfig()) {
-            override fun newConnection(endPoint: EndPoint<TestConnectionA>, mediaDriverConnection: MediaDriverConnection): TestConnectionA {
-                return TestConnectionA(endPoint, mediaDriverConnection)
+            override fun newConnection(connectionParameters: ConnectionParams<TestConnectionA>): TestConnectionA {
+                return TestConnectionA(connectionParameters)
             }
         }
         addEndPoint(client)
@@ -145,6 +153,8 @@ class ListenerTest : BaseTest() {
         Assert.assertEquals(limit.toLong(), count.get() - 1.toLong())
         Assert.assertTrue(overrideCheck.get())
         Assert.assertTrue(serverOnMessage.get())
+        Assert.assertTrue(serverConnectionOnMessage.get())
+        Assert.assertTrue(serverDisconnectMessage.get())
         Assert.assertTrue(serverConnect.get())
         Assert.assertTrue(serverDisconnect.get())
         Assert.assertTrue(clientConnect.get())
