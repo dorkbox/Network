@@ -25,7 +25,8 @@ import java.lang.reflect.Proxy
 
 /**
  * this is to manage serializing proxy object objects across the wire...
- * SO the server sends an RMI object, and the client reads an RMI object
+ *
+ * SO the "rmi client" sends an RMI proxy object, and the "rmi server" reads an actual object
  */
 class RmiClientRequestSerializer : Serializer<Any>() {
     override fun write(kryo: Kryo, output: Output, proxyObject: Any) {
@@ -37,8 +38,8 @@ class RmiClientRequestSerializer : Serializer<Any>() {
     override fun read(kryo: Kryo, input: Input, type: Class<*>?): Any? {
         val isGlobal = input.readBoolean()
         val objectId = input.readInt(true)
-        kryo as KryoExtra
 
+        kryo as KryoExtra
         val connection = kryo.connection
         return connection.endPoint().rmiGlobalSupport.getImplObject(isGlobal, objectId, connection)
     }
