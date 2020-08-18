@@ -123,13 +123,9 @@ class AeronInput extends Input {
         throw new UnsupportedOperationException("This input does not use a byte[], see #getInternalBuffer().");
     }
 
-    /**
-     * Throws {@link UnsupportedOperationException} because this input uses a DirectBuffer, not a byte[].
-     * @deprecated
-     * @see #setBuffer(DirectBuffer, int, int)
-     */
+    /** Sets a new buffer. The offset is 0 and the count is the buffer's length.
+     * @see #setBuffer(byte[], int, int) */
     @Override
-    @Deprecated
     public void setBuffer (byte[] bytes) {
         setBuffer(bytes, 0, bytes.length);
     }
