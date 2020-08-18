@@ -14,6 +14,8 @@
  */
 package dorkboxTest.network.rmi.classes
 
+import kotlinx.coroutines.delay
+
 class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
 
     private var moos = 0
@@ -50,6 +52,17 @@ class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
             e.printStackTrace()
         }
         return 123.0f
+    }
+
+    override suspend fun withSuspend(value: String, v2: Int) {
+        println("Suspending!")
+        delay(2000)
+    }
+
+    override suspend fun withSuspendAndReturn(value: String, v2: Int): Int {
+        println("Suspending with return!")
+        delay(2000)
+        return v2
     }
 
     override fun equals(other: Any?): Boolean {

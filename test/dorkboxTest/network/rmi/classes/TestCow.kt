@@ -23,4 +23,7 @@ interface TestCow : TestCowBase {
     fun moo(value: String, delay: Long)
     fun id(): Int
     fun slow(): Float
+
+    suspend fun withSuspend(value: String, v2: Int)
+    suspend fun withSuspendAndReturn(value: String, v2: Int): Int
 }

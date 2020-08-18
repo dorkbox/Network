@@ -37,7 +37,6 @@ package dorkboxTest.network.rmi
 import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
-import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.serialization.NetworkSerializationManager
@@ -55,12 +54,18 @@ class RmiTest : BaseTest() {
 
     companion object {
         suspend fun runTests(connection: Connection, test: TestCow, remoteObjectID: Int) {
+            var caught = false
             val remoteObject = test as RemoteObject
 
             // Default behavior. RMI is transparent, method calls behave like normal
             // (return values and exceptions are returned, call is synchronous)
             System.err.println("hashCode: " + test.hashCode())
             System.err.println("toString: $test")
+
+            test.withSuspend("test", 32)
+            val s1 = test.withSuspendAndReturn("test", 32)
+            Assert.assertEquals(s1, 32)
+
 
             // see what the "remote" toString() method is
             val s = remoteObject.toString()
@@ -77,7 +82,6 @@ class RmiTest : BaseTest() {
             remoteObject.responseTimeout = 3000
 
             // Try exception handling
-            var caught = false
             try {
                 test.throwException()
             } catch (e: UnsupportedOperationException) {
@@ -91,7 +95,7 @@ class RmiTest : BaseTest() {
             // Non-blocking call tests
             // Non-blocking call tests
             // Non-blocking call tests
-            System.err.println("I'm currently async: ${remoteObject.async}")
+            System.err.println("I'm currently async: ${remoteObject.async}. Now testing ASYNC")
 
             remoteObject.async = true
 
@@ -148,26 +152,24 @@ class RmiTest : BaseTest() {
     }
 
     @Test
-    @Throws(SecurityException::class, IOException::class, InterruptedException::class)
     fun rmiNetworkGlobal() {
         rmiGlobal()
     }
 
     @Test
-    @Throws(SecurityException::class, IOException::class, InterruptedException::class)
     fun rmiNetworkConnection() {
         rmi()
     }
-
-    @Test
-    @Throws(SecurityException::class, IOException::class, InterruptedException::class)
-    fun rmiIPC() {
-        rmi { configuration ->
-            if (configuration is ServerConfiguration) {
-                configuration.listenIpAddress = LOOPBACK
-            }
-        }
-    }
+//
+//    @Test
+//    @Throws(SecurityException::class, IOException::class, InterruptedException::class)
+//    fun rmiIPC() {
+//        rmi { configuration ->
+//            if (configuration is ServerConfiguration) {
+//                configuration.listenIpAddress = LOOPBACK
+//            }
+//        }
+//    }
 
     @Throws(SecurityException::class, IOException::class)
     fun rmi(config: (Configuration) -> Unit = {}) {
@@ -234,7 +236,7 @@ class RmiTest : BaseTest() {
             }
         }
 
-        waitForThreads()
+        waitForThreads(99999999)
     }
 
     @Throws(SecurityException::class, IOException::class)
