@@ -16,11 +16,10 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.other.SuspendFunctionAccess
+import dorkbox.network.other.coroutines.SuspendFunctionTrampoline
 import dorkbox.network.rmi.messages.MethodRequest
 import kotlinx.coroutines.runBlocking
 import java.lang.reflect.InvocationHandler
-import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.util.*
 import kotlin.coroutines.Continuation
@@ -36,14 +35,14 @@ import kotlin.coroutines.Continuation
  * @param rmiObjectId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
  * @param connection this is really the network client -- there is ONLY ever 1 connection
  * @param proxyString this is the name assigned to the proxy [toString] method
- * @param rmiSupportCache is used to provide RMI support
+ * @param rmiObjectCache is used to provide RMI support
  * @param cachedMethods this is the methods available for the specified class
 */
 internal class RmiClient(val isGlobal: Boolean,
                          val rmiObjectId: Int,
                          private val connection: Connection,
                          private val proxyString: String,
-                         private val rmiSupportCache: RmiSupportCache,
+                         private val rmiObjectCache: RmiObjectCache,
                          private val cachedMethods: Array<CachedMethod>) : InvocationHandler {
 
     companion object {
@@ -77,7 +76,6 @@ internal class RmiClient(val isGlobal: Boolean,
 
     // if we are ASYNC, then this method immediately returns
     private suspend fun sendRequest(method: Method, args: Array<Any>): Any? {
-
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded
@@ -87,17 +85,24 @@ internal class RmiClient(val isGlobal: Boolean,
         // response (even if it is a void response). This simplifies our response mask, and lets us use more bits for storing the
         // response ID
 
-        val responseStorage = rmiSupportCache.getResponseStorage()
+        val responseStorage = rmiObjectCache.getResponseStorage()
+
+        // NOTE: we ALWAYS send a response from the remote end.
+        //
+        // 'async' -> DO NOT WAIT
+        // 'timeout > 0' -> WAIT
+        // 'timeout == 0' -> same as async (DO NOT WAIT)
+        val isAsync = isAsync || timeoutMillis <= 0L
+
 
         // If we are async, we ignore the response....
-        // The response, even if there is NOT one (ie: not void) will always return a thing (so we will know when to stop blocking).
-        val rmiWaiter = responseStorage.prep(rmiObjectId)
+        // The response, even if there is NOT one (ie: not void) will always return a thing (so our code excution is in lockstep
+        val rmiWaiter = responseStorage.prep(isAsync)
 
         val invokeMethod = MethodRequest()
         invokeMethod.isGlobal = isGlobal
-        invokeMethod.objectId = rmiObjectId
-        invokeMethod.responseId = rmiWaiter.id
-        invokeMethod.args = args
+        invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, rmiWaiter.id)
+        invokeMethod.args = args // if this is a kotlin suspend function, the suspend arg will NOT be here!
 
         // which method do we access? We always want to access the IMPLEMENTATION (if available!). we know that this will always succeed
         // this should be accessed via the KRYO class ID + method index (both are SHORT, and can be packed)
@@ -107,10 +112,12 @@ internal class RmiClient(val isGlobal: Boolean,
 
 
         // if we are async, then this will immediately return
-        val result = responseStorage.waitForReply(isAsync, rmiObjectId, rmiWaiter, timeoutMillis)
+        @Suppress("MoveVariableDeclarationIntoWhen")
+        val result = responseStorage.waitForReply(isAsync, rmiWaiter, timeoutMillis)
         when (result) {
-            RmiResponseStorage.TIMEOUT_EXCEPTION -> {
-                throw TimeoutException("Response timed out: ${method.declaringClass.name}.${method.name}")
+            RmiResponseManager.TIMEOUT_EXCEPTION -> {
+                // TODO: from top down, clean up the coroutine stack
+                throw TimeoutException("Response timed out: ${method.declaringClass.name}.${method.name}(${method.parameterTypes.map{it.simpleName}})")
             }
             is Exception -> {
                 // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
@@ -152,7 +159,7 @@ internal class RmiClient(val isGlobal: Boolean,
             // manage all of the RemoteObject proxy methods
             when (method) {
                 closeMethod -> {
-                    rmiSupportCache.removeProxyObject(rmiObjectId)
+                    rmiObjectCache.removeProxyObject(rmiObjectId)
                     return null
                 }
 
@@ -210,76 +217,62 @@ internal class RmiClient(val isGlobal: Boolean,
         // We will use this for our coroutine context instead of running on a new coroutine
         val maybeContinuation = args?.lastOrNull()
 
-        if (isAsync) {
-            // return immediately, without suspends
-            if (maybeContinuation is Continuation<*>) {
-                val argsWithoutContinuation = args.take(args.size - 1)
-                invokeSuspendFunction(maybeContinuation) {
-                    sendRequest(method, argsWithoutContinuation.toTypedArray())
-                }
-            } else {
-                runBlocking {
-                    sendRequest(method, args ?: EMPTY_ARRAY)
-                }
+        // async will return immediately
+        val returnValue = if (maybeContinuation is Continuation<*>) {
+            invokeSuspendFunction(maybeContinuation) {
+                sendRequest(method, args)
             }
-
-            // if we are async then we return immediately. If you want the response value, you MUST use
-            // 'waitForLastResponse()' or 'waitForResponse'('getLastResponseID()')
-            val returnType = method.returnType
-            if (returnType.isPrimitive) {
-                return when (returnType) {
-                    Int::class.javaPrimitiveType -> {
-                        0
-                    }
-                    Boolean::class.javaPrimitiveType -> {
-                        java.lang.Boolean.FALSE
-                    }
-                    Float::class.javaPrimitiveType -> {
-                        0.0f
-                    }
-                    Char::class.javaPrimitiveType -> {
-                        0.toChar()
-                    }
-                    Long::class.javaPrimitiveType -> {
-                        0L
-                    }
-                    Short::class.javaPrimitiveType -> {
-                        0.toShort()
-                    }
-                    Byte::class.javaPrimitiveType -> {
-                        0.toByte()
-                    }
-                    Double::class.javaPrimitiveType -> {
-                        0.0
-                    }
-                    else -> {
-                        null
-                    }
-                }
-            }
-            return null
         } else {
-            // non-async code, so we will be blocking/suspending!
-            return if (maybeContinuation is Continuation<*>) {
-                val argsWithoutContinuation = args.take(args.size - 1)
-                invokeSuspendFunction(maybeContinuation) {
-                    sendRequest(method, argsWithoutContinuation.toTypedArray())
+            runBlocking {
+                sendRequest(method, args ?: EMPTY_ARRAY)
+            }
+        }
+
+
+        if (!isAsync) {
+            return returnValue
+        }
+
+        // if we are async then we return immediately.
+        // If you want the response value, disable async!
+        val returnType = method.returnType
+        if (returnType.isPrimitive) {
+            return when (returnType) {
+                Int::class.javaPrimitiveType -> {
+                    0
                 }
-            } else {
-                runBlocking {
-                    sendRequest(method, args ?: EMPTY_ARRAY)
+                Boolean::class.javaPrimitiveType -> {
+                    java.lang.Boolean.FALSE
+                }
+                Float::class.javaPrimitiveType -> {
+                    0.0f
+                }
+                Char::class.javaPrimitiveType -> {
+                    0.toChar()
+                }
+                Long::class.javaPrimitiveType -> {
+                    0L
+                }
+                Short::class.javaPrimitiveType -> {
+                    0.toShort()
+                }
+                Byte::class.javaPrimitiveType -> {
+                    0.toByte()
+                }
+                Double::class.javaPrimitiveType -> {
+                    0.0
+                }
+                else -> {
+                    null
                 }
             }
         }
+        return null
     }
 
     // trampoline so we can access suspend functions correctly and (if suspend) get the coroutine connection parameter)
-    private fun invokeSuspendFunction(continuation: Continuation<*>, suspendFunction: suspend () -> Any?): Any? {
-        return try {
-            SuspendFunctionAccess.invokeSuspendFunction(suspendFunction, continuation)
-        } catch (e: InvocationTargetException) {
-            throw e.cause!!
-        }
+    private fun invokeSuspendFunction(continuation: Continuation<*>, suspendFunction: suspend () -> Any?): Any {
+        return SuspendFunctionTrampoline.invoke(continuation, suspendFunction) as Any
     }
 
     override fun hashCode(): Int {

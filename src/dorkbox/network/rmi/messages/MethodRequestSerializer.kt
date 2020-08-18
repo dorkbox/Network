@@ -48,27 +48,14 @@ import java.lang.reflect.Method
  */
 @Suppress("ConstantConditionIf")
 class MethodRequestSerializer : Serializer<MethodRequest>() {
-    companion object {
-        private const val DEBUG = false
-    }
-
     override fun write(kryo: Kryo, output: Output, methodRequest: MethodRequest) {
         val method = methodRequest.cachedMethod
 
-        if (DEBUG) {
-            System.err.println("WRITING")
-            System.err.println(":: isGlobal ${methodRequest.isGlobal}")
-            System.err.println(":: objectID ${methodRequest.objectId}")
-            System.err.println(":: methodClassID ${method.methodClassId}")
-            System.err.println(":: methodIndex ${method.methodIndex}")
-        }
-
         // we pack objectId + responseId into the same "int", since they are both really shorts (but are represented as ints to make
         // working with them a lot easier
-        output.writeInt(RmiUtils.packShorts(methodRequest.objectId, methodRequest.responseId), true)
+        output.writeInt(methodRequest.packedId)
         output.writeInt(RmiUtils.packShorts(method.methodClassId, method.methodIndex), true)
         output.writeBoolean(methodRequest.isGlobal)
-
 
 
         val serializers = method.serializers
@@ -87,24 +74,11 @@ class MethodRequestSerializer : Serializer<MethodRequest>() {
 
     @Suppress("UNCHECKED_CAST")
     override fun read(kryo: Kryo, input: Input, type: Class<out MethodRequest>): MethodRequest {
-        val objectIdRmiId = input.readInt(true)
-        val objectId = RmiUtils.unpackLeft(objectIdRmiId)
-        val responseId = RmiUtils.unpackRight(objectIdRmiId)
-
-
+        val packedId = input.readInt()
         val methodInfo = input.readInt(true)
         val methodClassId = RmiUtils.unpackLeft(methodInfo)
         val methodIndex = RmiUtils.unpackRight(methodInfo)
-
         val isGlobal = input.readBoolean()
-
-        if (DEBUG) {
-            System.err.println("READING")
-            System.err.println(":: isGlobal $isGlobal")
-            System.err.println(":: objectID $objectId")
-            System.err.println(":: methodClassID $methodClassId")
-            System.err.println(":: methodIndex $methodIndex")
-        }
 
         (kryo as KryoExtra)
 
@@ -138,15 +112,24 @@ class MethodRequestSerializer : Serializer<MethodRequest>() {
 
         val parameterTypes = method.parameterTypes
 
+        var isCoroutine = false
+
         // we don't start at 0 for the arguments, in case we have an overwritten method, in which case, the 1st arg is always "Connection.class"
         var index = 0
         val size = serializers.size
         var argStart = argStartIndex
 
+
         while (index < size) {
             val serializer = serializers[index]
             if (serializer != null) {
-                args[argStart] = kryo.readObjectOrNull(input, parameterTypes[index], serializer)
+                if (serializer is ContinuationSerializer) {
+                    isCoroutine = true
+                    // have to check if it's a coroutine or not!
+                    args[argStart] = ContinuationSerializer::class.java
+                } else {
+                    args[argStart] = kryo.readObjectOrNull(input, parameterTypes[index], serializer)
+                }
             } else {
                 args[argStart] = kryo.readClassAndObject(input)
             }
@@ -157,10 +140,10 @@ class MethodRequestSerializer : Serializer<MethodRequest>() {
 
         val invokeMethod = MethodRequest()
         invokeMethod.isGlobal = isGlobal
-        invokeMethod.objectId = objectId
+        invokeMethod.isCoroutine = isCoroutine
+        invokeMethod.packedId = packedId
         invokeMethod.cachedMethod = cachedMethod
         invokeMethod.args = args
-        invokeMethod.responseId = responseId
 
         return invokeMethod
     }

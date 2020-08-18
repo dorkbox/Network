@@ -22,8 +22,8 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.ipFilter.IpFilterRule
-import dorkbox.network.rmi.RmiSupport
-import dorkbox.network.rmi.RmiSupportConnection
+import dorkbox.network.rmi.RmiManagerForConnections
+import dorkbox.network.rmi.RmiMessageManager
 import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.NetworkSerializationManager
@@ -133,7 +133,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
 
-    internal val rmiGlobalSupport = RmiSupport(logger, actionDispatch, config.serialization)
+    internal val rmiGlobalSupport = RmiMessageManager(logger, actionDispatch, config.serialization)
 
     init {
         logger.error("NETWORK STACK IS ONLY IPV4 AT THE MOMENT. IPV6 is in progress!")
@@ -318,8 +318,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * Used for the client, because the client only has ONE ever support connection, and it allows us to create connection specific objects
      * from a "global" context
      */
-    internal open fun getRmiConnectionSupport() : RmiSupportConnection {
-        return RmiSupportConnection(logger, rmiGlobalSupport, serialization, actionDispatch)
+    internal open fun getRmiConnectionSupport() : RmiManagerForConnections {
+        return RmiManagerForConnections(logger, rmiGlobalSupport, serialization, actionDispatch)
     }
 
     /**
@@ -595,9 +595,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
             autoClosableObjects.clear()
 
-            runBlocking {
-                rmiGlobalSupport.close()
+            rmiGlobalSupport.close()
 
+            runBlocking {
                 // don't need anything fast or fancy here, because this method will only be called once
                 connections.forEach {
                     it.close()

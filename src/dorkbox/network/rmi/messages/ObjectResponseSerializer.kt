@@ -39,9 +39,13 @@ import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import com.esotericsoftware.kryo.util.IdentityMap
-import dorkbox.network.connection.KryoExtra
+import dorkbox.network.serialization.KryoExtra
 
 /**
+ * this is to manage serializing proxy object objects across the wire...
+ *
+ * SO the "rmi client" sends an RMI proxy object, and the "rmi server" reads an actual object
+ *
  * Serializes an object registered with the RmiBridge so the receiving side gets a [RemoteObject] proxy rather than the bytes for the
  * serialized object.
  *
@@ -69,4 +73,4 @@ class ObjectResponseSerializer(private val rmiImplToIface: IdentityMap<Class<*>,
     }
 }
 
-// TODO: FIX THIS CLASS MAYBE!
+/// TODO: FIX THIS CLASS MAYBE!

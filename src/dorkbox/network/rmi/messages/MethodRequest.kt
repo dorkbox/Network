@@ -35,25 +35,31 @@
 package dorkbox.network.rmi.messages
 
 import dorkbox.network.rmi.CachedMethod
+import dorkbox.network.rmi.RmiUtils
 
 /**
  * Internal message to invoke methods remotely.
  */
 class MethodRequest : RmiMessage {
-    // if this object was a global or connection specific object
+
+    /**
+     * true if this method is invoked on a global object, false if it is connection scoped
+     */
     var isGlobal: Boolean = false
 
-    // the registered kryo ID for the object
-    // NOTE: this is REALLY a short, but is represented as an int to make life easier. It is also packed with the responseId for serialization
-    var objectId: Int = 0
+    /**
+     * true if this method is a suspend function (with coroutine) or a normal method
+     */
+    var isCoroutine: Boolean = false
 
-    // A value of 0 means to not respond, otherwise it is an ID to match requests <-> responses
-    // NOTE: this is REALLY a short, but is represented as an int to make life easier. It is also packed with the objectId for serialization
-    var responseId: Int = 0
+    // this is packed
+    // LEFT -> rmiObjectId   (the registered rmi ID)
+    // RIGHT -> rmiId  (ID to match requests <-> responses)
+    var packedId: Int = 0
 
     // This field is NOT sent across the wire (but some of it's contents are).
     // We use a custom serializer to manage this because we have to ALSO be able to serialize the invocation arguments.
-    // NOTE: the info we serialze is REALLY a short, but is represented as an int to make life easier. It is also packed!
+    // NOTE: the info we serialize is REALLY a short, but is represented as an int to make life easier. It is also packed!
     lateinit var cachedMethod: CachedMethod
 
     // these are the arguments for executing the method (they are serialized using the info from the cachedMethod field
@@ -61,6 +67,6 @@ class MethodRequest : RmiMessage {
 
 
     override fun toString(): String {
-        return "MethodRequest(isGlobal=$isGlobal, objectId=$objectId, responseId=$responseId, cachedMethod=$cachedMethod, args=${args?.contentToString()})"
+        return "MethodRequest(isGlobal=$isGlobal, rmiObjectId=${RmiUtils.unpackLeft(packedId)}, rmiId=${RmiUtils.unpackRight(packedId)}, cachedMethod=$cachedMethod, args=${args?.contentToString()})"
     }
 }

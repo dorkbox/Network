@@ -17,7 +17,12 @@ package dorkbox.network.rmi
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
-import dorkbox.network.rmi.messages.*
+import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
+import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
+import dorkbox.network.rmi.messages.GlobalObjectCreateRequest
+import dorkbox.network.rmi.messages.GlobalObjectCreateResponse
+import dorkbox.network.rmi.messages.MethodRequest
+import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.util.classes.ClassHelper
 import kotlinx.coroutines.CoroutineScope
@@ -26,10 +31,11 @@ import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
 
-internal class RmiSupport(logger: KLogger,
-                          actionDispatch: CoroutineScope,
-                          internal val serialization: NetworkSerializationManager) : RmiSupportCache(logger, actionDispatch) {
+internal class RmiMessageManager(logger: KLogger,
+                                 actionDispatch: CoroutineScope,
+                                 internal val serialization: NetworkSerializationManager) : RmiObjectCache(logger, actionDispatch) {
     companion object {
+
         /**
          * Returns a proxy object that implements the specified interface, and the methods invoked on the proxy object will be invoked
          * remotely.
@@ -47,7 +53,7 @@ internal class RmiSupport(logger: KLogger,
          */
         internal fun createProxyObject(isGlobalObject: Boolean,
                                        connection: Connection, serialization: NetworkSerializationManager,
-                                       rmiSupportCache: RmiSupportCache, namePrefix: String,
+                                       rmiObjectCache: RmiObjectCache, namePrefix: String,
                                        rmiId: Int, interfaceClass: Class<*>): RemoteObject {
 
             require(interfaceClass.isInterface) { "iface must be an interface." }
@@ -62,12 +68,12 @@ internal class RmiSupport(logger: KLogger,
             // the ACTUAL proxy is created in the connection impl. Our proxy handler MUST BE suspending because of:
             //  1) how we send data on the wire
             //  2) how we must (sometimes) wait for a response
-            val proxyObject = RmiClient(isGlobalObject, rmiId, connection, name, rmiSupportCache, cachedMethods)
+            val proxyObject = RmiClient(isGlobalObject, rmiId, connection, name, rmiObjectCache, cachedMethods)
 
             // This is the interface inheritance by the proxy object
             val interfaces: Array<Class<*>> = arrayOf(RemoteObject::class.java, interfaceClass)
 
-            return Proxy.newProxyInstance(RmiSupport::class.java.classLoader, interfaces, proxyObject) as RemoteObject
+            return Proxy.newProxyInstance(RmiMessageManager::class.java.classLoader, interfaces, proxyObject) as RemoteObject
         }
 
         /**
@@ -128,7 +134,7 @@ internal class RmiSupport(logger: KLogger,
          */
         private fun onGenericObjectResponse(endPoint: EndPoint<*>, connection: Connection, logger: KLogger,
                                             isGlobal: Boolean, rmiId: Int, callback: suspend (Int, Any) -> Unit,
-                                            rmiSupportCache: RmiSupportCache, serialization: NetworkSerializationManager) {
+                                            rmiObjectCache: RmiObjectCache, serialization: NetworkSerializationManager) {
 
             // we only create the proxy + execute the callback if the RMI id is valid!
             if (rmiId == RemoteObjectStorage.INVALID_RMI) {
@@ -141,10 +147,10 @@ internal class RmiSupport(logger: KLogger,
             val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 1)
 
             // create the client-side proxy object, if possible
-            var proxyObject = rmiSupportCache.getProxyObject(rmiId)
+            var proxyObject = rmiObjectCache.getProxyObject(rmiId)
             if (proxyObject == null) {
-                proxyObject = createProxyObject(isGlobal, connection, serialization, rmiSupportCache, endPoint.type.simpleName, rmiId, interfaceClass)
-                rmiSupportCache.saveProxyObject(rmiId, proxyObject)
+                proxyObject = createProxyObject(isGlobal, connection, serialization, rmiObjectCache, endPoint.type.simpleName, rmiId, interfaceClass)
+                rmiObjectCache.saveProxyObject(rmiId, proxyObject)
             }
 
             // this should be executed on a NEW coroutine!
@@ -162,8 +168,6 @@ internal class RmiSupport(logger: KLogger,
     private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
 
 
-
-
     internal fun <Iface> registerCallback(callback: suspend (Int, Iface) -> Unit): Int {
         return remoteObjectCreationCallbacks.register(callback)
     }
@@ -176,8 +180,8 @@ internal class RmiSupport(logger: KLogger,
     /**
      * @return the implementation object based on if it is global, or not global
      */
-    fun <T> getImplObject(isGlobal: Boolean, rmiObjectId: Int, connection: Connection): T? {
-        return if (isGlobal) getImplObject(rmiObjectId) else connection.rmiConnectionSupport.getImplObject(rmiObjectId)
+    fun <T> getImplObject(isGlobal: Boolean, rmiId: Int, connection: Connection): T? {
+        return if (isGlobal) getImplObject(rmiId) else connection.rmiConnectionSupport.getImplObject(rmiId)
     }
 
     /**
@@ -233,9 +237,6 @@ internal class RmiSupport(logger: KLogger,
         return success as T?
     }
 
-
-
-
     override fun close() {
         super.close()
         remoteObjectCreationCallbacks.close()
@@ -261,6 +262,7 @@ internal class RmiSupport(logger: KLogger,
     /**
      * Manages ALL OF THE RMI stuff!
      */
+    @Suppress("DuplicatedCode")
     @Throws(IllegalArgumentException::class)
     suspend fun manage(endPoint: EndPoint<*>, connection: Connection, message: Any, logger: KLogger) {
         when (message) {
@@ -302,36 +304,40 @@ internal class RmiSupport(logger: KLogger,
                  *
                  * The remote side of this connection requested the invocation.
                  */
-                val objectId: Int = message.objectId
-                val isGlobal: Boolean = message.isGlobal
+                val isGlobal = message.isGlobal
+                val isCoroutine = message.isCoroutine
+                val rmiObjectId = RmiUtils.unpackLeft(message.packedId)
+                val rmiId = RmiUtils.unpackRight(message.packedId)
                 val cachedMethod = message.cachedMethod
+                val args = message.args
+                val sendResponse = rmiId != 1 // async is always with a '1', and we should NOT send a message back if it is '1'
 
-                val implObject = getImplObject<Any>(isGlobal, objectId, connection)
+                logger.trace { "RMI received: $rmiId" }
+
+                val implObject = getImplObject<Any>(isGlobal, rmiObjectId, connection)
 
                 if (implObject == null) {
-                    logger.error("Unable to resolve implementation object for [global=$isGlobal, objectID=$objectId, connection=$connection")
+                    logger.error("Unable to resolve implementation object for [global=$isGlobal, objectID=$rmiObjectId, connection=$connection")
 
-                    val invokeMethodResult = MethodResponse()
-                    invokeMethodResult.objectId = objectId
-                    invokeMethodResult.responseId = message.responseId
-                    invokeMethodResult.result = NullPointerException("Remote object for proxy [global=$isGlobal, objectID=$objectId] does not exist.")
-
-                    connection.send(invokeMethodResult)
+                    if (sendResponse) {
+                        returnRmiMessage(connection,
+                                         message,
+                                         NullPointerException("Remote object for proxy [global=$isGlobal, rmiObjectID=$rmiObjectId] does not exist."),
+                                         logger)
+                    }
                     return
                 }
 
                 logger.trace {
                     var argString = ""
-                    if (message.args != null) {
-                        argString = Arrays.deepToString(message.args)
+                    if (args != null) {
+                        argString = Arrays.deepToString(args)
                         argString = argString.substring(1, argString.length - 1)
                     }
 
                     val stringBuilder = StringBuilder(128)
-                    stringBuilder.append(connection.toString())
-                            .append(" received: ")
-                            .append(implObject.javaClass.simpleName)
-                    stringBuilder.append(":").append(objectId)
+                    stringBuilder.append(connection.toString()).append(" received: ").append(implObject.javaClass.simpleName)
+                    stringBuilder.append(":").append(rmiObjectId)
                     stringBuilder.append("#").append(cachedMethod.method.name)
                     stringBuilder.append("(").append(argString).append(")")
 
@@ -342,38 +348,98 @@ internal class RmiSupport(logger: KLogger,
                     stringBuilder.toString()
                 }
 
-
                 var result: Any?
-                try {
-                    // args!! is safe to do here (even though it doesn't make sense)
-                    result = cachedMethod.invoke(connection, implObject, message.args!!)
-                } catch (ex: Exception) {
-                    result = ex.cause
-                    // added to prevent a stack overflow when references is false, (because 'cause' == "this").
-                    // See:
-                    // https://groups.google.com/forum/?fromgroups=#!topic/kryo-users/6PDs71M1e9Y
-                    if (result == null) {
-                        result = ex
-                    } else {
-                        result.initCause(null)
+
+                if (isCoroutine) {
+                    // https://stackoverflow.com/questions/47654537/how-to-run-suspend-method-via-reflection
+                    // https://discuss.kotlinlang.org/t/calling-coroutines-suspend-functions-via-reflection/4672
+
+                    var suspendResult = kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn<Any?> { cont ->
+                        // if we are a coroutine, we have to replace the LAST arg with the coroutine object
+                        // we KNOW this is OK, because a continuation arg will always be there!
+                        args!![args.size - 1] = cont
+
+                        var insideResult: Any?
+                        try {
+                            // args!! is safe to do here (even though it doesn't make sense)
+                            insideResult = cachedMethod.invoke(connection, implObject, args)
+                        } catch (ex: Exception) {
+                            insideResult = ex.cause
+                            // added to prevent a stack overflow when references is false, (because 'cause' == "this").
+                            // See:
+                            // https://groups.google.com/forum/?fromgroups=#!topic/kryo-users/6PDs71M1e9Y
+                            if (insideResult == null) {
+                                insideResult = ex
+                            }
+                            else {
+                                insideResult.initCause(null)
+                            }
+
+                            ListenerManager.cleanStackTrace(insideResult as Throwable)
+                            logger.error("Error invoking method: ${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}",
+                                         insideResult)
+                        }
+                        insideResult
                     }
 
-                    ListenerManager.cleanStackTrace(result as Throwable)
-                    logger.error("Error invoking method: ${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}", result)
+
+                    if (suspendResult === kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
+                        // we were suspending, and the stack will resume when possible, then it will call the response below
+                    }
+                    else {
+                        if (suspendResult === Unit) {
+                            // kotlin suspend returns, that DO NOT have a return value, REALLY return kotlin.Unit. This means there is no
+                            // return value!
+                            suspendResult = null
+                        }
+
+                        if (sendResponse) {
+                            returnRmiMessage(connection, message, suspendResult, logger)
+                        }
+                    }
                 }
+                else {
+                    // not a suspend (coroutine) call
+                    try {
+                        // args!! is safe to do here (even though it doesn't make sense)
+                        result = cachedMethod.invoke(connection, implObject, message.args!!)
+                    } catch (ex: Exception) {
+                        result = ex.cause
+                        // added to prevent a stack overflow when references is false, (because 'cause' == "this").
+                        // See:
+                        // https://groups.google.com/forum/?fromgroups=#!topic/kryo-users/6PDs71M1e9Y
+                        if (result == null) {
+                            result = ex
+                        }
+                        else {
+                            result.initCause(null)
+                        }
 
-                val invokeMethodResult = MethodResponse()
-                invokeMethodResult.objectId = objectId
-                invokeMethodResult.responseId = message.responseId
-                invokeMethodResult.result = result
+                        ListenerManager.cleanStackTrace(result as Throwable)
+                        logger.error("Error invoking method: ${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}",
+                                     result)
+                    }
 
-                connection.send(invokeMethodResult)
+                    if (sendResponse) {
+                        returnRmiMessage(connection, message, result, logger)
+                    }
+                }
             }
             is MethodResponse -> {
                 // notify the pending proxy requests that we have a response!
                 getResponseStorage().onMessage(message)
             }
         }
+    }
+
+    private suspend fun returnRmiMessage(connection: Connection, message: MethodRequest, result: Any?, logger: KLogger) {
+        logger.trace { "RMI returned: ${RmiUtils.unpackRight(message.packedId)}" }
+
+        val rmiMessage = MethodResponse()
+        rmiMessage.packedId = message.packedId
+        rmiMessage.result = result
+
+        connection.send(rmiMessage)
     }
 
     /**

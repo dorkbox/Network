@@ -1,4 +1,4 @@
-package dorkbox.network.other;
+package dorkbox.network.other.coroutines;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -13,11 +13,15 @@ import kotlin.jvm.functions.Function1;
  * discarded at compile time.
  */
 public
-class SuspendFunctionAccess {
+class SuspendFunctionTrampoline {
+
+    /**
+     * trampoline so we can access suspend functions correctly using reflection
+     */
     @SuppressWarnings("unchecked")
     @Nullable
     public static
-    Object invokeSuspendFunction(@NotNull final Object suspendFunction, @NotNull final Continuation<?> continuation) {
+    Object invoke(@NotNull final Continuation<?> continuation, @NotNull final Object suspendFunction) throws Throwable {
         Function1<? super Continuation<? super Object>, ?> suspendFunction1 = (Function1<? super Continuation<? super Object>, ?>) suspendFunction;
         return suspendFunction1.invoke((Continuation<? super Object>) continuation);
     }

@@ -10,9 +10,9 @@ import mu.KLogger
  * The impl/proxy objects CANNOT be stored in the same data structure, because their IDs are not tied to the same ID source (and there
  * would be conflicts in the data structure)
  */
-internal open class RmiSupportCache(logger: KLogger, actionDispatch: CoroutineScope) {
+internal open class RmiObjectCache(logger: KLogger, actionDispatch: CoroutineScope) {
 
-    private val responseStorage = RmiResponseStorage(actionDispatch)
+    private val responseStorage = RmiResponseManager(logger, actionDispatch)
     private val implObjects = RemoteObjectStorage(logger)
     private val proxyObjects = LockFreeIntMap<RemoteObject>()
 
@@ -48,13 +48,13 @@ internal open class RmiSupportCache(logger: KLogger, actionDispatch: CoroutineSc
         proxyObjects.put(rmiId, remoteObject)
     }
 
-    fun getResponseStorage(): RmiResponseStorage {
+    fun getResponseStorage(): RmiResponseManager {
         return responseStorage
     }
 
     open fun close() {
+        responseStorage.close()
         implObjects.close()
         proxyObjects.clear()
-        responseStorage.close()
     }
 }

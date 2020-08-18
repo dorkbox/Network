@@ -48,7 +48,6 @@ class MethodResponse : RmiMessage {
     // this is the result of the invoked method
     var result: Any? = null
 
-
     override fun toString(): String {
         return "MethodResponse(rmiObjectId=${RmiUtils.unpackLeft(packedId)}, rmiId=${RmiUtils.unpackRight(packedId)}, result=$result)"
     }

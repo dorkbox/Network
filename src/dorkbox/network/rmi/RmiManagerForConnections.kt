@@ -8,10 +8,10 @@ import dorkbox.network.serialization.NetworkSerializationManager
 import kotlinx.coroutines.CoroutineScope
 import mu.KLogger
 
-internal class RmiSupportConnection(logger: KLogger,
-                           val rmiGlobalSupport: RmiSupport,
-                           private val serialization: NetworkSerializationManager,
-                           actionDispatch: CoroutineScope) : RmiSupportCache(logger, actionDispatch) {
+internal class RmiManagerForConnections(logger: KLogger,
+                                        val rmiGlobalSupport: RmiMessageManager,
+                                        private val serialization: NetworkSerializationManager,
+                                        actionDispatch: CoroutineScope) : RmiObjectCache(logger, actionDispatch) {
 
     private fun <Iface> createProxyObject(isGlobalObject: Boolean,
                                   connection: Connection,
@@ -22,7 +22,7 @@ internal class RmiSupportConnection(logger: KLogger,
         // so we can just instantly create the proxy object (or get the cached one)
         var proxyObject = getProxyObject(objectId)
         if (proxyObject == null) {
-            proxyObject = RmiSupport.createProxyObject(isGlobalObject, connection, serialization, rmiGlobalSupport, endPoint.type.simpleName, objectId, interfaceClass)
+            proxyObject = RmiMessageManager.createProxyObject(isGlobalObject, connection, serialization, rmiGlobalSupport, endPoint.type.simpleName, objectId, interfaceClass)
             saveProxyObject(objectId, proxyObject)
         }
 
@@ -80,7 +80,7 @@ internal class RmiSupportConnection(logger: KLogger,
                 // this means we could register this object.
 
                 // next, scan this object to see if there are any RMI fields
-                RmiSupport.scanImplForRmiFields(logger, implObject) {
+                RmiMessageManager.scanImplForRmiFields(logger, implObject) {
                     saveImplObject(it)
                 }
             } else {
