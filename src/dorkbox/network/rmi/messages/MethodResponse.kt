@@ -34,24 +34,22 @@
  */
 package dorkbox.network.rmi.messages
 
+import dorkbox.network.rmi.RmiUtils
+
 /**
  * Internal message to return the result of a remotely invoked method.
  */
 class MethodResponse : RmiMessage {
-    // if this object was a global or connection specific object
-    var isGlobal: Boolean = false
-
-    // the registered kryo ID for the object
-    var objectId: Int = 0
-
-    // ID to match requests <-> responses
-    var responseId: Int = 0
+    // this is packed
+    // LEFT -> rmiObjectId   (the registered rmi ID)
+    // RIGHT -> rmiId  (ID to match requests <-> responses)
+    var packedId: Int = 0
 
     // this is the result of the invoked method
     var result: Any? = null
 
 
     override fun toString(): String {
-        return "MethodResponse(isGlobal=$isGlobal, objectId=$objectId, responseId=$responseId, result=$result)"
+        return "MethodResponse(rmiObjectId=${RmiUtils.unpackLeft(packedId)}, rmiId=${RmiUtils.unpackRight(packedId)}, result=$result)"
     }
 }
