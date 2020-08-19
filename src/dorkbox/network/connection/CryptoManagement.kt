@@ -1,5 +1,18 @@
-@file:Suppress("DuplicatedCode")
-
+/*
+ * Copyright 2020 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package dorkbox.network.connection
 
 import dorkbox.netUtil.IPv4
@@ -145,14 +158,11 @@ internal class CryptoManagement(val logger: KLogger,
         return PublicKeyValidationState.VALID
     }
 
-
-    fun encrypt(publicationPort: Int,
-                subscriptionPort: Int,
-                connectionSessionId: Int,
-                connectionStreamId: Int,
-                clientPublicKeyBytes: ByteArray): ByteArray {
-
-        val clientPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(clientPublicKeyBytes)) as XECPublicKey
+    /**
+     * Generate the AES key based on ECDH
+     */
+    private fun generateAesKey(remotePublicKeyBytes: ByteArray, bytesA: ByteArray, bytesB: ByteArray): SecretKeySpec {
+        val clientPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(remotePublicKeyBytes)) as XECPublicKey
 
         keyAgreement.init(privateKey)
         keyAgreement.doPhase(clientPublicKey, true)
@@ -161,15 +171,23 @@ internal class CryptoManagement(val logger: KLogger,
         // Derive a key from the shared secret and both public keys
         hash.reset()
         hash.update(sharedSecret)
-        hash.update(clientPublicKeyBytes)
-        hash.update(publicKeyBytes)
+        hash.update(bytesA)
+        hash.update(bytesB)
 
-        val keyBytes = hash.digest()
-        val secretKeySpec = SecretKeySpec(keyBytes, "AES")
+        return SecretKeySpec(hash.digest(), "AES")
+    }
 
+    fun encrypt(publicationPort: Int,
+                subscriptionPort: Int,
+                connectionSessionId: Int,
+                connectionStreamId: Int,
+                clientPublicKeyBytes: ByteArray): ByteArray {
+
+        val secretKeySpec = generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, publicKeyBytes)
 
         val iv = ByteArray(GCM_IV_LENGTH)
         secureRandom.nextBytes(iv);
+
         val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, iv)
         aesCipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, gcmParameterSpec)
 
@@ -190,21 +208,7 @@ internal class CryptoManagement(val logger: KLogger,
             return null
         }
 
-        val serverPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(serverPublicKeyBytes)) as XECPublicKey
-
-        keyAgreement.init(privateKey)
-        keyAgreement.doPhase(serverPublicKey, true)
-        val sharedSecret = keyAgreement.generateSecret()
-
-        // Derive a key from the shared secret and both public keys
-        hash.reset()
-        hash.update(sharedSecret)
-        hash.update(publicKeyBytes)
-        hash.update(serverPublicKeyBytes)
-
-        val keyBytes = hash.digest()
-        val secretKeySpec = SecretKeySpec(keyBytes, "AES")
-
+        val secretKeySpec = generateAesKey(serverPublicKeyBytes, publicKeyBytes, serverPublicKeyBytes)
 
         // now read the encrypted data
         val iv = ByteArray(GCM_IV_LENGTH)
