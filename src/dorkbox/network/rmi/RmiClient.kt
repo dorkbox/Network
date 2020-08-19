@@ -16,6 +16,7 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ListenerManager
 import dorkbox.network.other.coroutines.SuspendFunctionTrampoline
 import dorkbox.network.rmi.messages.MethodRequest
 import kotlinx.coroutines.runBlocking
@@ -112,39 +113,27 @@ internal class RmiClient(val isGlobal: Boolean,
 
 
         // if we are async, then this will immediately return
-        @Suppress("MoveVariableDeclarationIntoWhen")
         val result = responseStorage.waitForReply(isAsync, rmiWaiter, timeoutMillis)
         when (result) {
             RmiResponseManager.TIMEOUT_EXCEPTION -> {
-                // TODO: from top down, clean up the coroutine stack
-                throw TimeoutException("Response timed out: ${method.declaringClass.name}.${method.name}(${method.parameterTypes.map{it.simpleName}})")
+                val fancyName = RmiUtils.makeFancyMethodName(method)
+                val exception = TimeoutException("Response timed out: $fancyName")
+                // from top down, clean up the coroutine stack
+                ListenerManager.cleanStackTrace(exception, RmiClient::class.java)
+                throw exception
             }
             is Exception -> {
                 // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
                 // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
-
-                val stackTrace = Exception().stackTrace
-                val myClassName = RmiClient::class.java.name
-
-                var newStartIndex = 0
-                for (element in stackTrace) {
-                    newStartIndex++
-
-                    if (element.className == myClassName && element.methodName == "invoke") {
-                        // we do this 1 more time, because we want to remove the proxy invocation off the stack as well.
-                        newStartIndex++
-                        break
-                    }
-                }
-
-                val newStack = Array<StackTraceElement>(result.stackTrace.size + stackTrace.size - newStartIndex) { stackTrace[0] }
-                result.stackTrace.copyInto(newStack)
-                stackTrace.copyInto(newStack, result.stackTrace.size, newStartIndex)
-
-                result.stackTrace = newStack
+                ListenerManager.cleanStackTrace(Exception(), RmiClient::class.java, result)
                 throw result
             }
             else -> {
+//                val fancyName = RmiUtils.makeFancyMethodName(method)
+//                val exception = TimeoutException("Response timed out: $fancyName")
+//                // from top down, clean up the coroutine stack
+//                ListenerManager.cleanStackTrace(exception, RmiClient::class.java)
+//                throw exception
                 return result
             }
         }
@@ -218,15 +207,22 @@ internal class RmiClient(val isGlobal: Boolean,
         val maybeContinuation = args?.lastOrNull()
 
         // async will return immediately
-        val returnValue = if (maybeContinuation is Continuation<*>) {
-            invokeSuspendFunction(maybeContinuation) {
-                sendRequest(method, args)
-            }
-        } else {
+        val returnValue =
+//        if (maybeContinuation is Continuation<*>) {
+//            try {
+//                invokeSuspendFunction(maybeContinuation) {
+//                    sendRequest(method, args)
+//                }
+//            } catch (e: Exception) {
+//                println("EXCEPT!")
+//            }
+//            // if this was an exception, we want to get it out!
+//
+//        } else {
             runBlocking {
                 sendRequest(method, args ?: EMPTY_ARRAY)
             }
-        }
+//        }
 
 
         if (!isAsync) {

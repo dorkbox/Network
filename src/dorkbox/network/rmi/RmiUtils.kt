@@ -438,4 +438,28 @@ object RmiUtils {
     fun unpackRight(packedInt: Int): Int {
         return packedInt.toShort().toInt()
     }
+
+    fun makeFancyMethodName(cachedMethod: CachedMethod): String {
+        val parameterTypes = cachedMethod.method.parameterTypes
+        val size = parameterTypes.size
+        val args: String = if (size == 0 || parameterTypes[size - 1] == Continuation::class.java) {
+            ""
+        } else {
+            parameterTypes.joinToString { it.simpleName }
+        }
+
+        return "${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}($args)"
+    }
+
+    fun makeFancyMethodName(method: Method): String {
+        val parameterTypes = method.parameterTypes
+        val size = parameterTypes.size
+        val args: String = if (size != 0 || parameterTypes[size - 1] == Continuation::class.java) {
+            ""
+        } else {
+            parameterTypes.joinToString { it.simpleName }
+        }
+
+        return "${method.declaringClass.name}.${method.name}($args)"
+    }
 }

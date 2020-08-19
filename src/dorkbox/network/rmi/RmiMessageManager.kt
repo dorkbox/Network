@@ -375,9 +375,9 @@ internal class RmiMessageManager(logger: KLogger,
                                 insideResult.initCause(null)
                             }
 
-                            ListenerManager.cleanStackTrace(insideResult as Throwable)
-                            logger.error("Error invoking method: ${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}",
-                                         insideResult)
+                            ListenerManager.cleanStackTraceReverse(insideResult as Throwable)
+                            val fancyName = RmiUtils.makeFancyMethodName(cachedMethod)
+                            logger.error("Error invoking method: $fancyName", insideResult)
                         }
                         insideResult
                     }
@@ -415,9 +415,9 @@ internal class RmiMessageManager(logger: KLogger,
                             result.initCause(null)
                         }
 
-                        ListenerManager.cleanStackTrace(result as Throwable)
-                        logger.error("Error invoking method: ${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}",
-                                     result)
+                        ListenerManager.cleanStackTraceReverse(result as Throwable)
+                        val fancyName = RmiUtils.makeFancyMethodName(cachedMethod)
+                        logger.error("Error invoking method: $fancyName", result)
                     }
 
                     if (sendResponse) {
