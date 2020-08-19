@@ -25,11 +25,43 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
 
 
         /**
+         * Remove from the stacktrace until we get to the invoke site (ie: remove kotlin coroutine info + dorkbox network call stack)
+         *
+         * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
+         */
+        fun cleanStackTrace(localThrowable: Throwable, invokingClass: Class<*>, remoteException: Exception? = null) {
+            val myClassName = invokingClass.name
+            val stackTrace = localThrowable.stackTrace
+            var newStartIndex = 0
+            for (element in stackTrace) {
+                newStartIndex++
+
+                if (element.className == myClassName && element.methodName == "invoke") {
+                    // we do this 1 more time, because we want to remove the proxy invocation off the stack as well.
+                    newStartIndex++
+                    break
+                }
+            }
+
+            if (remoteException == null) {
+                // no remote exception, just cleanup our own callstack
+                localThrowable.stackTrace = stackTrace.copyOfRange(newStartIndex, stackTrace.size)
+            } else {
+                // merge this info into the remote exception, so we can get the correct call stack info
+                val newStack = Array<StackTraceElement>(remoteException.stackTrace.size + stackTrace.size - newStartIndex) { stackTrace[0] }
+                remoteException.stackTrace.copyInto(newStack)
+                stackTrace.copyInto(newStack, remoteException.stackTrace.size, newStartIndex)
+
+                remoteException.stackTrace = newStack
+            }
+        }
+
+        /**
          * Remove from the stacktrace (going in reverse), kotlin coroutine info + dorkbox network call stack.
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
-        fun cleanStackTrace(throwable: Throwable) {
+        fun cleanStackTraceReverse(throwable: Throwable) {
             // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
             val stackTrace = throwable.stackTrace
             var newEndIndex = Math.max(0, stackTrace.size - 1)
@@ -48,8 +80,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                     }
                 }
 
-                // tailToChopIndex will also remove the VERY LAST CachedMethod or CachedAsmMethod access invocation (because it's offset by 1)
-                // NOTE: we want to do this!
+                // newEndIndex will also remove the VERY LAST CachedMethod or CachedAsmMethod access invocation (because it's offset by 1)
                 throwable.stackTrace = stackTrace.copyOfRange(0, newEndIndex)
             }
         }
@@ -301,7 +332,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 it(connection)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
+                cleanStackTraceReverse(t)
                 notifyError(connection, t)
             }
         }
@@ -316,7 +347,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 it(connection)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
+                cleanStackTraceReverse(t)
                 notifyError(connection, t)
             }
         }
