@@ -1,9 +1,10 @@
 /*
- * Copyright 2019 dorkbox, llc.
+ * Copyright 2020 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -17,6 +18,10 @@ package dorkboxTest.network.rmi.classes
 open class TestCowBaseImpl : TestCowBase {
     override fun throwException() {
         throw UnsupportedOperationException("Why would I do that?")
+    }
+
+    override suspend fun throwSuspendException() {
+        throw UnsupportedOperationException("Why would I do that on suspend?")
     }
 
     open fun id(): Int {

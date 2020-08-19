@@ -1,9 +1,10 @@
 /*
- * Copyright 2019 dorkbox, llc.
+ * Copyright 2020 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -18,6 +19,6 @@ package dorkboxTest.network.rmi.classes
  * This is a different interface so we can also test CachedMethod operations
  */
 interface TestCowBase {
-    @Throws(UnsupportedOperationException::class)
     fun throwException()
+    suspend fun throwSuspendException()
 }
