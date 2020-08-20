@@ -20,13 +20,31 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
 import dorkbox.network.serialization.NetworkSerializationManager
+import dorkbox.util.collections.LockFreeIntMap
 import kotlinx.coroutines.CoroutineScope
 import mu.KLogger
 
-internal class RmiManagerForConnections(logger: KLogger,
-                                        val rmiGlobalSupport: RmiMessageManager,
-                                        private val serialization: NetworkSerializationManager,
-                                        actionDispatch: CoroutineScope) : RmiObjectCache(logger, actionDispatch) {
+internal class RmiManagerConnections(logger: KLogger,
+                                     val rmiGlobalSupport: RmiManagerGlobal,
+                                     private val serialization: NetworkSerializationManager,
+                                     actionDispatch: CoroutineScope) : RmiObjectCache(logger, actionDispatch) {
+
+    private val proxyObjects = LockFreeIntMap<RemoteObject>()
+
+    /**
+     * Removes a proxy object from the system
+     */
+    fun removeProxyObject(rmiId: Int) {
+        proxyObjects.remove(rmiId)
+    }
+
+    fun getProxyObject(rmiId: Int): RemoteObject? {
+        return proxyObjects[rmiId]
+    }
+
+    fun saveProxyObject(rmiId: Int, remoteObject: RemoteObject) {
+        proxyObjects.put(rmiId, remoteObject)
+    }
 
     private fun <Iface> createProxyObject(isGlobalObject: Boolean,
                                   connection: Connection,
@@ -37,7 +55,7 @@ internal class RmiManagerForConnections(logger: KLogger,
         // so we can just instantly create the proxy object (or get the cached one)
         var proxyObject = getProxyObject(objectId)
         if (proxyObject == null) {
-            proxyObject = RmiMessageManager.createProxyObject(isGlobalObject, connection, serialization, rmiGlobalSupport, endPoint.type.simpleName, objectId, interfaceClass)
+            proxyObject = RmiManagerGlobal.createProxyObject(isGlobalObject, connection, serialization, rmiGlobalSupport, endPoint.type.simpleName, objectId, interfaceClass)
             saveProxyObject(objectId, proxyObject)
         }
 
@@ -95,7 +113,7 @@ internal class RmiManagerForConnections(logger: KLogger,
                 // this means we could register this object.
 
                 // next, scan this object to see if there are any RMI fields
-                RmiMessageManager.scanImplForRmiFields(logger, implObject) {
+                RmiManagerGlobal.scanImplForRmiFields(logger, implObject) {
                     saveImplObject(it)
                 }
             } else {
@@ -109,5 +127,10 @@ internal class RmiManagerForConnections(logger: KLogger,
         }
 
         connection.send(response)
+    }
+
+    override fun close() {
+        proxyObjects.clear()
+        super.close()
     }
 }

@@ -26,17 +26,17 @@ import dorkbox.network.rmi.messages.MethodRequest
 import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.util.classes.ClassHelper
+import dorkbox.util.collections.LockFreeIntMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
 
-internal class RmiMessageManager(logger: KLogger,
-                                 actionDispatch: CoroutineScope,
-                                 internal val serialization: NetworkSerializationManager) : RmiObjectCache(logger, actionDispatch) {
+internal class RmiManagerGlobal(logger: KLogger,
+                                actionDispatch: CoroutineScope,
+                                internal val serialization: NetworkSerializationManager) : RmiObjectCache(logger, actionDispatch) {
     companion object {
-
         /**
          * Returns a proxy object that implements the specified interface, and the methods invoked on the proxy object will be invoked
          * remotely.
@@ -74,7 +74,7 @@ internal class RmiMessageManager(logger: KLogger,
             // This is the interface inheritance by the proxy object
             val interfaces: Array<Class<*>> = arrayOf(RemoteObject::class.java, interfaceClass)
 
-            return Proxy.newProxyInstance(RmiMessageManager::class.java.classLoader, interfaces, proxyObject) as RemoteObject
+            return Proxy.newProxyInstance(RmiManagerGlobal::class.java.classLoader, interfaces, proxyObject) as RemoteObject
         }
 
         /**
@@ -129,41 +129,9 @@ internal class RmiMessageManager(logger: KLogger,
                 }
             }
         }
-
-        /**
-         * called on "client"
-         */
-        private fun onGenericObjectResponse(endPoint: EndPoint<*>, connection: Connection, logger: KLogger,
-                                            isGlobal: Boolean, rmiId: Int, callback: suspend (Int, Any) -> Unit,
-                                            rmiObjectCache: RmiObjectCache, serialization: NetworkSerializationManager) {
-
-            // we only create the proxy + execute the callback if the RMI id is valid!
-            if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-                logger.error {
-                    "RMI ID '${rmiId}' is invalid. Unable to create RMI object on server."
-                }
-                return
-            }
-
-            val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 1)
-
-            // create the client-side proxy object, if possible
-            var proxyObject = rmiObjectCache.getProxyObject(rmiId)
-            if (proxyObject == null) {
-                proxyObject = createProxyObject(isGlobal, connection, serialization, rmiObjectCache, endPoint.type.simpleName, rmiId, interfaceClass)
-                rmiObjectCache.saveProxyObject(rmiId, proxyObject)
-            }
-
-            // this should be executed on a NEW coroutine!
-            endPoint.actionDispatch.launch {
-                try {
-                    callback(rmiId, proxyObject)
-                } catch (e: Exception) {
-                    logger.error("Error getting or creating the remote object $interfaceClass", e)
-                }
-            }
-        }
     }
+
+    private val proxyObjects = LockFreeIntMap<RemoteObject>()
 
     // this is used for all connection specific ones as well.
     private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
@@ -243,17 +211,52 @@ internal class RmiMessageManager(logger: KLogger,
         remoteObjectCreationCallbacks.close()
     }
 
+
+    /**
+     * called on "client"
+     */
+    private fun onGenericObjectResponse(endPoint: EndPoint<*>, connection: Connection, logger: KLogger,
+                                        isGlobal: Boolean, rmiId: Int, callback: suspend (Int, Any) -> Unit,
+                                        rmiObjectCache: RmiObjectCache, serialization: NetworkSerializationManager) {
+
+        // we only create the proxy + execute the callback if the RMI id is valid!
+        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
+            logger.error {
+                "RMI ID '${rmiId}' is invalid. Unable to create RMI object on server."
+            }
+            return
+        }
+
+        val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 1)
+
+        // create the client-side proxy object, if possible.  This MUST be an object that is saved for the connection
+        var proxyObject = connection.rmiConnectionSupport.getProxyObject(rmiId)
+        if (proxyObject == null) {
+            proxyObject = createProxyObject(isGlobal, connection, serialization, rmiObjectCache, endPoint.type.simpleName, rmiId, interfaceClass)
+            connection.rmiConnectionSupport.saveProxyObject(rmiId, proxyObject)
+        }
+
+        // this should be executed on a NEW coroutine!
+        endPoint.actionDispatch.launch {
+            try {
+                callback(rmiId, proxyObject)
+            } catch (e: Exception) {
+                logger.error("Error getting or creating the remote object $interfaceClass", e)
+            }
+        }
+    }
+
     /**
      * on the connection+client to get a global remote object (that exists on the server)
      */
     fun <Iface> getGlobalRemoteObject(connection: Connection, endPoint: EndPoint<*>, objectId: Int, interfaceClass: Class<Iface>): Iface {
         // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
 
-        // so we can just instantly create the proxy object (or get the cached one)
-        var proxyObject = getProxyObject(objectId)
+        // so we can just instantly create the proxy object (or get the cached one). This MUST be an object that is saved for the connection
+        var proxyObject = connection.rmiConnectionSupport.getProxyObject(objectId)
         if (proxyObject == null) {
             proxyObject = createProxyObject(true, connection, serialization, this, endPoint.type.simpleName, objectId, interfaceClass)
-            saveProxyObject(objectId, proxyObject)
+            connection.rmiConnectionSupport.saveProxyObject(objectId, proxyObject)
         }
 
         @Suppress("UNCHECKED_CAST")

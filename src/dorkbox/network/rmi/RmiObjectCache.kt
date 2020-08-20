@@ -15,7 +15,6 @@
  */
 package dorkbox.network.rmi
 
-import dorkbox.util.collections.LockFreeIntMap
 import kotlinx.coroutines.CoroutineScope
 import mu.KLogger
 
@@ -29,7 +28,6 @@ internal open class RmiObjectCache(logger: KLogger, actionDispatch: CoroutineSco
 
     private val responseStorage = RmiResponseManager(logger, actionDispatch)
     private val implObjects = RemoteObjectStorage(logger)
-    private val proxyObjects = LockFreeIntMap<RemoteObject>()
 
     fun saveImplObject(rmiObject: Any): Int {
         return implObjects.register(rmiObject)
@@ -48,21 +46,6 @@ internal open class RmiObjectCache(logger: KLogger, actionDispatch: CoroutineSco
         return implObjects.remove(rmiId) as T?
     }
 
-    /**
-     * Removes a proxy object from the system
-     */
-    fun removeProxyObject(rmiId: Int) {
-        proxyObjects.remove(rmiId)
-    }
-
-    fun getProxyObject(rmiId: Int): RemoteObject? {
-        return proxyObjects[rmiId]
-    }
-
-    fun saveProxyObject(rmiId: Int, remoteObject: RemoteObject) {
-        proxyObjects.put(rmiId, remoteObject)
-    }
-
     fun getResponseStorage(): RmiResponseManager {
         return responseStorage
     }
@@ -70,6 +53,5 @@ internal open class RmiObjectCache(logger: KLogger, actionDispatch: CoroutineSco
     open fun close() {
         responseStorage.close()
         implObjects.close()
-        proxyObjects.clear()
     }
 }

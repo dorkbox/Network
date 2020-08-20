@@ -124,7 +124,7 @@ internal class RmiClient(val isGlobal: Boolean,
             // manage all of the RemoteObject proxy methods
             when (method) {
                 closeMethod -> {
-                    rmiObjectCache.removeProxyObject(rmiObjectId)
+                    connection.rmiConnectionSupport.removeProxyObject(rmiObjectId)
                     return null
                 }
 

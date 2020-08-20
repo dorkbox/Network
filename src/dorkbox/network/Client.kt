@@ -30,7 +30,7 @@ import dorkbox.network.connection.UdpMediaDriverConnection
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
-import dorkbox.network.rmi.RmiManagerForConnections
+import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.coroutines.launch
@@ -72,7 +72,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     private val previousClosedConnectionActivity: Long = 0
 
     private val handshake = ClientHandshake(logger, config, crypto, listenerManager)
-    private val rmiConnectionSupport = RmiManagerForConnections(logger, rmiGlobalSupport, serialization, actionDispatch)
+    private val rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, serialization, actionDispatch)
 
     init {
         // have to do some basic validation of our configuration
@@ -93,7 +93,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     /**
      * So the client class can get remote objects that are THE SAME OBJECT as if called from a connection
      */
-    override fun getRmiConnectionSupport(): RmiManagerForConnections {
+    override fun getRmiConnectionSupport(): RmiManagerConnections {
         return rmiConnectionSupport
     }
 
