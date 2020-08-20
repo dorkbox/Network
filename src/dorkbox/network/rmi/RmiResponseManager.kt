@@ -33,15 +33,17 @@ import kotlin.concurrent.write
 internal class RmiResponseManager(private val logger: KLogger, private val actionDispatch: CoroutineScope) {
     companion object {
         val TIMEOUT_EXCEPTION = Exception()
-        val ASYNC_WAITER = RmiWaiter(1) // this is never waited on, we just need this to optimize how we assigned waiters.
+        val ASYNC_WAITER = RmiWaiter(RemoteObjectStorage.ASYNC_RMI) // this is never waited on, we just need this to optimize how we assigned waiters.
     }
 
 
     // Response ID's are for ALL in-flight RMI on the network stack. instead of limited to (originally) 64, we are now limited to 65,535
     // these are just looped around in a ring buffer.
     // These are stored here as int, however these are REALLY shorts and are int-packed when transferring data on the wire
-    // 64,000 IN FLIGHT RMI method invocations is plenty
-    private val maxValuesInCache = 65535 - 2 // -2 because '0' and '1' are reserved
+    // 65535 IN FLIGHT RMI method invocations is plenty
+    //   0 is reserved for INVALID
+    //   1 is reserved for ASYNC
+    private val maxValuesInCache = 65535
     private val rmiWaiterCache = Channel<RmiWaiter>(maxValuesInCache)
 
     private val pendingLock = ReentrantReadWriteLock()

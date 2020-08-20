@@ -63,6 +63,7 @@ class RemoteObjectStorage(val logger: KLogger) {
 
     companion object {
         const val INVALID_RMI = 0
+        const val ASYNC_RMI = 1
     }
 
     // this is the ID -> Object RMI map. The RMI ID is used (not the kryo ID)

@@ -311,7 +311,7 @@ internal class RmiMessageManager(logger: KLogger,
                 val rmiId = RmiUtils.unpackUnsignedRight(message.packedId)
                 val cachedMethod = message.cachedMethod
                 val args = message.args
-                val sendResponse = rmiId != 1 // async is always with a '1', and we should NOT send a message back if it is '1'
+                val sendResponse = rmiId != RemoteObjectStorage.ASYNC_RMI // async is always with a '1', and we should NOT send a message back if it is '1'
 
                 logger.trace { "RMI received: $rmiId" }
 
