@@ -21,14 +21,13 @@ import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.util.collections.LockFreeIntMap
-import kotlinx.coroutines.CoroutineScope
 import mu.KLogger
 
 internal class RmiManagerConnections(logger: KLogger,
                                      val rmiGlobalSupport: RmiManagerGlobal,
-                                     private val serialization: NetworkSerializationManager,
-                                     actionDispatch: CoroutineScope) : RmiObjectCache(logger, actionDispatch) {
+                                     private val serialization: NetworkSerializationManager) : RmiObjectCache(logger) {
 
+    // It is critical that all of the RMI proxy objects are unique, and are saved/cached PER CONNECTION. These cannot be shared between connections!
     private val proxyObjects = LockFreeIntMap<RemoteObject>()
 
     /**
@@ -46,29 +45,21 @@ internal class RmiManagerConnections(logger: KLogger,
         proxyObjects.put(rmiId, remoteObject)
     }
 
-    private fun <Iface> createProxyObject(isGlobalObject: Boolean,
-                                  connection: Connection,
-                                  endPoint: EndPoint<*>,
-                                  objectId: Int,
-                                  interfaceClass: Class<Iface>) : Iface {
-
-        // so we can just instantly create the proxy object (or get the cached one)
-        var proxyObject = getProxyObject(objectId)
-        if (proxyObject == null) {
-            proxyObject = RmiManagerGlobal.createProxyObject(isGlobalObject, connection, serialization, rmiGlobalSupport, endPoint.type.simpleName, objectId, interfaceClass)
-            saveProxyObject(objectId, proxyObject)
-        }
-
-        @Suppress("UNCHECKED_CAST")
-        return proxyObject as Iface
-    }
-
     /**
      * on the connection+client to get a connection-specific remote object (that exists on the server/client)
      */
     fun <Iface> getRemoteObject(connection: Connection, endPoint: EndPoint<*>, objectId: Int, interfaceClass: Class<Iface>): Iface {
+        // so we can just instantly create the proxy object (or get the cached one)
+        var proxyObject = getProxyObject(objectId)
+        if (proxyObject == null) {
+            proxyObject = RmiManagerGlobal.createProxyObject(false, connection, serialization, rmiGlobalSupport.rmiResponseManager,
+                                                             endPoint.type.simpleName, objectId, interfaceClass)
+            saveProxyObject(objectId, proxyObject)
+        }
+
         // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
-        return createProxyObject(false, connection, endPoint, objectId, interfaceClass)
+        @Suppress("UNCHECKED_CAST")
+        return proxyObject as Iface
     }
 
 

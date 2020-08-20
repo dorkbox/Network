@@ -15,7 +15,6 @@
  */
 package dorkbox.network.rmi
 
-import kotlinx.coroutines.CoroutineScope
 import mu.KLogger
 
 /**
@@ -24,9 +23,8 @@ import mu.KLogger
  * The impl/proxy objects CANNOT be stored in the same data structure, because their IDs are not tied to the same ID source (and there
  * would be conflicts in the data structure)
  */
-internal open class RmiObjectCache(logger: KLogger, actionDispatch: CoroutineScope) {
+internal open class RmiObjectCache(logger: KLogger) {
 
-    private val responseStorage = RmiResponseManager(logger, actionDispatch)
     private val implObjects = RemoteObjectStorage(logger)
 
     fun saveImplObject(rmiObject: Any): Int {
@@ -46,12 +44,7 @@ internal open class RmiObjectCache(logger: KLogger, actionDispatch: CoroutineSco
         return implObjects.remove(rmiId) as T?
     }
 
-    fun getResponseStorage(): RmiResponseManager {
-        return responseStorage
-    }
-
     open fun close() {
-        responseStorage.close()
         implObjects.close()
     }
 }

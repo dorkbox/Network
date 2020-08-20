@@ -26,7 +26,6 @@ import dorkbox.network.rmi.messages.MethodRequest
 import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.util.classes.ClassHelper
-import dorkbox.util.collections.LockFreeIntMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
@@ -35,7 +34,7 @@ import java.util.*
 
 internal class RmiManagerGlobal(logger: KLogger,
                                 actionDispatch: CoroutineScope,
-                                internal val serialization: NetworkSerializationManager) : RmiObjectCache(logger, actionDispatch) {
+                                internal val serialization: NetworkSerializationManager) : RmiObjectCache(logger) {
     companion object {
         /**
          * Returns a proxy object that implements the specified interface, and the methods invoked on the proxy object will be invoked
@@ -54,7 +53,7 @@ internal class RmiManagerGlobal(logger: KLogger,
          */
         internal fun createProxyObject(isGlobalObject: Boolean,
                                        connection: Connection, serialization: NetworkSerializationManager,
-                                       rmiObjectCache: RmiObjectCache, namePrefix: String,
+                                       responseManager: RmiResponseManager, namePrefix: String,
                                        rmiId: Int, interfaceClass: Class<*>): RemoteObject {
 
             require(interfaceClass.isInterface) { "iface must be an interface." }
@@ -69,7 +68,7 @@ internal class RmiManagerGlobal(logger: KLogger,
             // the ACTUAL proxy is created in the connection impl. Our proxy handler MUST BE suspending because of:
             //  1) how we send data on the wire
             //  2) how we must (sometimes) wait for a response
-            val proxyObject = RmiClient(isGlobalObject, rmiId, connection, name, rmiObjectCache, cachedMethods)
+            val proxyObject = RmiClient(isGlobalObject, rmiId, connection, name, responseManager, cachedMethods)
 
             // This is the interface inheritance by the proxy object
             val interfaces: Array<Class<*>> = arrayOf(RemoteObject::class.java, interfaceClass)
@@ -131,7 +130,7 @@ internal class RmiManagerGlobal(logger: KLogger,
         }
     }
 
-    private val proxyObjects = LockFreeIntMap<RemoteObject>()
+    val rmiResponseManager = RmiResponseManager(logger, actionDispatch)
 
     // this is used for all connection specific ones as well.
     private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
@@ -208,6 +207,7 @@ internal class RmiManagerGlobal(logger: KLogger,
 
     override fun close() {
         super.close()
+        rmiResponseManager.close()
         remoteObjectCreationCallbacks.close()
     }
 
@@ -232,7 +232,7 @@ internal class RmiManagerGlobal(logger: KLogger,
         // create the client-side proxy object, if possible.  This MUST be an object that is saved for the connection
         var proxyObject = connection.rmiConnectionSupport.getProxyObject(rmiId)
         if (proxyObject == null) {
-            proxyObject = createProxyObject(isGlobal, connection, serialization, rmiObjectCache, endPoint.type.simpleName, rmiId, interfaceClass)
+            proxyObject = createProxyObject(isGlobal, connection, serialization, rmiResponseManager, endPoint.type.simpleName, rmiId, interfaceClass)
             connection.rmiConnectionSupport.saveProxyObject(rmiId, proxyObject)
         }
 
@@ -255,7 +255,7 @@ internal class RmiManagerGlobal(logger: KLogger,
         // so we can just instantly create the proxy object (or get the cached one). This MUST be an object that is saved for the connection
         var proxyObject = connection.rmiConnectionSupport.getProxyObject(objectId)
         if (proxyObject == null) {
-            proxyObject = createProxyObject(true, connection, serialization, this, endPoint.type.simpleName, objectId, interfaceClass)
+            proxyObject = createProxyObject(true, connection, serialization, rmiResponseManager, endPoint.type.simpleName, objectId, interfaceClass)
             connection.rmiConnectionSupport.saveProxyObject(objectId, proxyObject)
         }
 
@@ -431,7 +431,7 @@ internal class RmiManagerGlobal(logger: KLogger,
             }
             is MethodResponse -> {
                 // notify the pending proxy requests that we have a response!
-                getResponseStorage().onMessage(message)
+                rmiResponseManager.onMessage(message)
             }
         }
     }

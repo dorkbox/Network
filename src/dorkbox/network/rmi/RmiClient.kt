@@ -27,8 +27,14 @@ import java.lang.reflect.Method
 import java.util.*
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+object MyUnconfined : CoroutineDispatcher() {
+    override fun isDispatchNeeded(context: CoroutineContext): Boolean = false
+    override fun dispatch(context: CoroutineContext, block: Runnable) = block.run() // !!!
+}
 
 /**
  * Handles network communication when methods are invoked on a proxy.
@@ -40,14 +46,14 @@ import kotlin.coroutines.resumeWithException
  * @param rmiObjectId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
  * @param connection this is really the network client -- there is ONLY ever 1 connection
  * @param proxyString this is the name assigned to the proxy [toString] method
- * @param rmiObjectCache is used to provide RMI support
+ * @param responseManager is used to provide RMI request/response support
  * @param cachedMethods this is the methods available for the specified class
 */
 internal class RmiClient(val isGlobal: Boolean,
                          val rmiObjectId: Int,
                          private val connection: Connection,
                          private val proxyString: String,
-                         private val rmiObjectCache: RmiObjectCache,
+                         private val responseManager: RmiResponseManager,
                          private val cachedMethods: Array<CachedMethod>) : InvocationHandler {
 
     companion object {
@@ -90,8 +96,6 @@ internal class RmiClient(val isGlobal: Boolean,
         // response (even if it is a void response). This simplifies our response mask, and lets us use more bits for storing the
         // response ID
 
-        val responseStorage = rmiObjectCache.getResponseStorage()
-
         // NOTE: we ALWAYS send a response from the remote end.
         //
         // 'async' -> DO NOT WAIT
@@ -102,7 +106,7 @@ internal class RmiClient(val isGlobal: Boolean,
 
         // If we are async, we ignore the response....
         // The response, even if there is NOT one (ie: not void) will always return a thing (so our code excution is in lockstep
-        val rmiWaiter = responseStorage.prep(isAsync)
+        val rmiWaiter = responseManager.prep(isAsync)
 
         invokeMethod.isGlobal = isGlobal
         invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, rmiWaiter.id)
@@ -112,7 +116,7 @@ internal class RmiClient(val isGlobal: Boolean,
 
 
         // if we are async, then this will immediately return
-        return responseStorage.waitForReply(isAsync, rmiWaiter, timeoutMillis)
+        return responseManager.waitForReply(isAsync, rmiWaiter, timeoutMillis)
     }
 
     @Suppress("DuplicatedCode")
@@ -200,47 +204,92 @@ internal class RmiClient(val isGlobal: Boolean,
         // async will return immediately
         var returnValue: Any? = null
         if (suspendCoroutineObject is Continuation<*>) {
-
-            // https://stackoverflow.com/questions/57230869/how-to-propagate-kotlin-coroutine-context-through-reflective-invocation-of-suspe
-            // https://stackoverflow.com/questions/52869672/call-kotlin-suspend-function-in-java-class
-            // https://discuss.kotlinlang.org/t/how-to-continue-a-suspend-function-in-a-dynamic-proxy-in-the-same-coroutine/11391
-
-
-            /**
-             * https://jakewharton.com/exceptions-and-proxies-and-coroutines-oh-my/
-             * https://github.com/Kotlin/kotlinx.coroutines/pull/1667
-             * https://github.com/square/retrofit/blob/bfb5cd375a300658dae48e29fa03d0ab553c8cf6/retrofit/src/main/java/retrofit2/KotlinExtensions.kt
-             * https://github.com/square/retrofit/blob/108fe23964b986107aed352ba467cd2007d15208/retrofit/src/main/java/retrofit2/HttpServiceMethod.java
-             * https://github.com/square/retrofit/blob/108fe23964b986107aed352ba467cd2007d15208/retrofit/src/main/java/retrofit2/Utils.java
-             * https://github.com/square/retrofit/tree/108fe23964b986107aed352ba467cd2007d15208/retrofit/src/main/java/retrofit2
-             */
-//            returnValue = try {
-//                invokeSuspendFunction(suspendCoroutineObject) {
-////                    kotlinx.coroutines.suspendCancellableCoroutine<Any?> { continuation: Any? ->
-////                        continuation.resume(body)
-////                    }
+//            val continuation = suspendCoroutineObject as Continuation<Any?>
 //
-////                    withContext(Dispatchers.Unconfined) {
-//                        delay(100)
-//                        sendRequest(invokeMethod)
-////                    }
+//
+//            val suspendFunction: suspend () -> Any? = {
+//                val rmiResult = sendRequest(invokeMethod)
+//                println("RMI: ${rmiResult?.javaClass}")
+//                println(1)
+//                delay(3000)
+//                println(2)
+//            }
+//            val suspendFunction1: Function1<Continuation<Any?>, *> = suspendFunction as Function1<Continuation<Any?>?, *>
+//            returnValue = suspendFunction1.invoke(Continuation(EmptyCoroutineContext) {
+//                it.getOrNull().apply {
+//                    continuation.resume(this)
 //                }
+//            })
 //
+//            System.err.println("have suspend ret value ${returnValue?.javaClass}")
+//
+////            returnValue = invokeSuspendFunction(continuation, suspendFunction)
+//
+//            // https://stackoverflow.com/questions/57230869/how-to-propagate-kotlin-coroutine-context-through-reflective-invocation-of-suspe
+//            // https://stackoverflow.com/questions/52869672/call-kotlin-suspend-function-in-java-class
+//            // https://discuss.kotlinlang.org/t/how-to-continue-a-suspend-function-in-a-dynamic-proxy-in-the-same-coroutine/11391
+//
+//
+//            // NOTE:
+//            // Calls to OkHttp Call.enqueue() like those inside await and awaitNullable can sometimes
+//            // invoke the supplied callback with an exception before the invoking stack frame can return.
+//            // Coroutines will intercept the subsequent invocation of the Continuation and throw the
+//            // exception synchronously. A Java Proxy cannot throw checked exceptions without them being
+//            // declared on the interface method. To avoid the synchronous checked exception being wrapped
+//            // in an UndeclaredThrowableException, it is intercepted and supplied to a helper which will
+//            // force suspension to occur so that it can be instead delivered to the continuation to
+//            // bypass this restriction.
+//
+//            /**
+//             * https://jakewharton.com/exceptions-and-proxies-and-coroutines-oh-my/
+//             * https://github.com/Kotlin/kotlinx.coroutines/pull/1667
+//             * https://github.com/square/retrofit/blob/master/retrofit/src/main/java/retrofit2/KotlinExtensions.kt
+//             * https://github.com/square/retrofit/blob/master/retrofit/src/main/java/retrofit2/HttpServiceMethod.java
+//             * https://github.com/square/retrofit/blob/master/retrofit/src/main/java/retrofit2/Utils.java
+//             * https://github.com/square/retrofit/blob/master/retrofit/src/main/java/retrofit2
+//             */
+////            returnValue = try {
+////                val actualContinuation = suspendCoroutineObject.intercepted() as Continuation<Any?>
+//////                suspend {
+//////                    try {
+//////                        delay(100)
+//////                        sendRequest(invokeMethod)
+//////                    } catch (e: Exception) {
+//////                        yield()
+//////                        throw e
+//////                    }
+//////                }.startCoroutineUninterceptedOrReturn(actualContinuation)
 ////
-////                MyUnconfined.dispatch(suspendCoroutineObject.context, Runnable {
-////                    invokeSuspendFunction(suspendCoroutineObject) {
+////                invokeSuspendFunction(actualContinuation) {
 ////
-////                    }
-////                })
-//
-//            } catch (e: Exception) {
-//                e.printStackTrace()
-//            }
-//
-//            if (returnValue == kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
-//                // we were suspend, and when we unsuspend, we will pick up where we left off
-//                return returnValue
-//            }
+////
+////////                    kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn<Any?> {
+////                        delay(100)
+////                        sendRequest(invokeMethod)
+////////                    }
+////////
+//////                    kotlinx.coroutines.suspendCancellableCoroutine<Any?> { continuation: Any? ->
+//////                        resume(body)
+//////                    }
+//////                    withContext(MyUnconfined) {
+//////
+//////                    }
+////                }
+////
+//////                MyUnconfined.dispatch(suspendCoroutineObject.context, Runnable {
+//////                    invokeSuspendFunction(suspendCoroutineObject) {
+//////
+//////                    }
+//////                })
+////
+////            } catch (e: Exception) {
+////                e.printStackTrace()
+////            }
+////
+////            if (returnValue == kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
+////                // we were suspend, and when we unsuspend, we will pick up where we left off
+////                return returnValue
+////            }
 
             // if this was an exception, we want to get it out!
             returnValue = runBlocking {
@@ -299,12 +348,12 @@ internal class RmiClient(val isGlobal: Boolean,
                     ListenerManager.cleanStackTrace(exception, RmiClient::class.java)
                     throw exception
                 }
-                is Exception -> {
-                    // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
-                    // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
-                    ListenerManager.cleanStackTrace(Exception(), RmiClient::class.java, returnValue)
-                    throw returnValue
-                }
+//                is Exception -> {
+//                    // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
+//                    // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
+//                    ListenerManager.cleanStackTrace(Exception(), RmiClient::class.java, returnValue)
+//                    throw returnValue
+//                }
                 else -> {
                     return returnValue
                 }
@@ -333,8 +382,12 @@ internal class RmiClient(val isGlobal: Boolean,
 
 
     // trampoline so we can access suspend functions correctly and (if suspend) get the coroutine connection parameter)
-    private fun invokeSuspendFunction(continuation: Continuation<*>, suspendFunction: suspend () -> Any?): Any {
-        return SuspendFunctionTrampoline.invoke(continuation, suspendFunction) as Any
+    private fun invokeSuspendFunction(continuation: Continuation<Any?>, suspendFunction: suspend () -> Any?): Any {
+        return SuspendFunctionTrampoline.invoke(Continuation<Any?>(EmptyCoroutineContext) {
+            it.getOrNull().apply {
+                continuation.resume(this)
+            }
+        }, suspendFunction) as Any
     }
 
     override fun hashCode(): Int {

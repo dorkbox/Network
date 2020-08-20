@@ -72,7 +72,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     private val previousClosedConnectionActivity: Long = 0
 
     private val handshake = ClientHandshake(logger, config, crypto, listenerManager)
-    private val rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, serialization, actionDispatch)
+    private val rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, serialization)
 
     init {
         // have to do some basic validation of our configuration
