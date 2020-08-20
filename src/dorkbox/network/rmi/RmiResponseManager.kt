@@ -34,7 +34,6 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
     companion object {
         val TIMEOUT_EXCEPTION = Exception()
         val ASYNC_WAITER = RmiWaiter(1) // this is never waited on, we just need this to optimize how we assigned waiters.
-        const val MAX = Short.MAX_VALUE.toInt()
     }
 
 
@@ -42,7 +41,7 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
     // these are just looped around in a ring buffer.
     // These are stored here as int, however these are REALLY shorts and are int-packed when transferring data on the wire
     // 64,000 IN FLIGHT RMI method invocations is plenty
-    private val maxValuesInCache = (MAX * 2) - 1 // -1 because 0 is a reserved number
+    private val maxValuesInCache = 65535 - 2 // -2 because '0' and '1' are reserved
     private val rmiWaiterCache = Channel<RmiWaiter>(maxValuesInCache)
 
     private val pendingLock = ReentrantReadWriteLock()
@@ -55,10 +54,13 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
             ids.add(id)
         }
 
+        // MIN (32768) -> -1 (65535)
+        // 2 (2) -> MAX (32767)
+
         // ZERO is special, and is never added!
         // ONE is special, and is used for ASYNC (the response will never be sent back)
 
-        for (id in 1..Short.MAX_VALUE) {
+        for (id in 2..Short.MAX_VALUE) {
             ids.add(id)
         }
         ids.shuffle()
@@ -73,15 +75,14 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
     // resume any pending remote object method invocations (if they are not async, or not manually waiting)
     // async RMI will never get here!
     suspend fun onMessage(message: MethodResponse) {
-        val rmiId = RmiUtils.unpackRight(message.packedId)
-        val adjustedRmiId = rmiId + MAX
+        val rmiId = RmiUtils.unpackUnsignedRight(message.packedId)
         val result = message.result
 
         logger.trace { "RMI return: $rmiId" }
 
         val previous = pendingLock.write {
-            val previous = pending[adjustedRmiId]
-            pending[adjustedRmiId] = result
+            val previous = pending[rmiId]
+            pending[rmiId] = result
             previous
         }
 
@@ -112,7 +113,8 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
             responseRmi.prep()
 
             pendingLock.write {
-                pending[responseRmi.id + MAX] = responseRmi
+                // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
+                pending[RmiUtils.unpackUnsignedRight(responseRmi.id)] = responseRmi
             }
 
             responseRmi
@@ -127,8 +129,8 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
             return null
         }
 
-        val rmiId = rmiWaiter.id
-        val adjustedRmiId = rmiWaiter.id + MAX
+        @Suppress("EXPERIMENTAL_API_USAGE")
+        val rmiId = RmiUtils.unpackUnsignedRight(rmiWaiter.id)  // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
 
         // NOTE: we ALWAYS send a response from the remote end.
         //
@@ -141,7 +143,7 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
             delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
             // check if we have a result or not
-            val maybeResult = pendingLock.read { pending[adjustedRmiId] }
+            val maybeResult = pendingLock.read { pending[rmiId] }
             if (maybeResult is RmiWaiter) {
                 logger.trace { "RMI timeout ($timeoutMillis) cancel: $rmiId" }
 
@@ -162,8 +164,8 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
         rmiWaiter.doWait()
 
         val resultOrWaiter = pendingLock.write {
-            val previous = pending[adjustedRmiId]
-            pending[adjustedRmiId] = null
+            val previous = pending[rmiId]
+            pending[rmiId] = null
             previous
         }
 

@@ -87,7 +87,7 @@ internal class RmiManagerForConnections(logger: KLogger,
             logger.error("Unable to create remote object!", implObject)
 
             // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
-            ConnectionObjectCreateResponse(RmiUtils.packShorts(RemoteObjectStorage.INVALID_RMI, callbackId))
+            ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, RemoteObjectStorage.INVALID_RMI))
         } else {
             val rmiId = saveImplObject(implObject)
 
@@ -105,7 +105,7 @@ internal class RmiManagerForConnections(logger: KLogger,
             }
 
             // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
-            ConnectionObjectCreateResponse(RmiUtils.packShorts(rmiId, callbackId))
+            ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, rmiId))
         }
 
         connection.send(response)

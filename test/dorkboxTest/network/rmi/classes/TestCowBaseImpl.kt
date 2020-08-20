@@ -20,7 +20,7 @@ open class TestCowBaseImpl : TestCowBase {
         throw UnsupportedOperationException("Why would I do that?")
     }
 
-    override suspend fun throwSuspendException() {
+    override suspend fun throwSuspendException(): Boolean {
         throw UnsupportedOperationException("Why would I do that on suspend?")
     }
 

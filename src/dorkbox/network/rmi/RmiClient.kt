@@ -19,11 +19,15 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.other.coroutines.SuspendFunctionTrampoline
 import dorkbox.network.rmi.messages.MethodRequest
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.util.*
 import kotlin.coroutines.Continuation
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.resumeWithException
 
 
 /**
@@ -76,7 +80,7 @@ internal class RmiClient(val isGlobal: Boolean,
     private var enableEquals = false
 
     // if we are ASYNC, then this method immediately returns
-    private suspend fun sendRequest(method: Method, args: Array<Any>): Any? {
+    private suspend fun sendRequest(invokeMethod: MethodRequest): Any? {
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded
@@ -100,43 +104,15 @@ internal class RmiClient(val isGlobal: Boolean,
         // The response, even if there is NOT one (ie: not void) will always return a thing (so our code excution is in lockstep
         val rmiWaiter = responseStorage.prep(isAsync)
 
-        val invokeMethod = MethodRequest()
         invokeMethod.isGlobal = isGlobal
         invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, rmiWaiter.id)
-        invokeMethod.args = args // if this is a kotlin suspend function, the suspend arg will NOT be here!
 
-        // which method do we access? We always want to access the IMPLEMENTATION (if available!). we know that this will always succeed
-        // this should be accessed via the KRYO class ID + method index (both are SHORT, and can be packed)
-        invokeMethod.cachedMethod = cachedMethods.first { it.method == method }
 
         connection.send(invokeMethod)
 
 
         // if we are async, then this will immediately return
-        val result = responseStorage.waitForReply(isAsync, rmiWaiter, timeoutMillis)
-        when (result) {
-            RmiResponseManager.TIMEOUT_EXCEPTION -> {
-                val fancyName = RmiUtils.makeFancyMethodName(method)
-                val exception = TimeoutException("Response timed out: $fancyName")
-                // from top down, clean up the coroutine stack
-                ListenerManager.cleanStackTrace(exception, RmiClient::class.java)
-                throw exception
-            }
-            is Exception -> {
-                // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
-                // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
-                ListenerManager.cleanStackTrace(Exception(), RmiClient::class.java, result)
-                throw result
-            }
-            else -> {
-//                val fancyName = RmiUtils.makeFancyMethodName(method)
-//                val exception = TimeoutException("Response timed out: $fancyName")
-//                // from top down, clean up the coroutine stack
-//                ListenerManager.cleanStackTrace(exception, RmiClient::class.java)
-//                throw exception
-                return result
-            }
-        }
+        return responseStorage.waitForReply(isAsync, rmiWaiter, timeoutMillis)
     }
 
     @Suppress("DuplicatedCode")
@@ -202,69 +178,159 @@ internal class RmiClient(val isGlobal: Boolean,
             }
         }
 
+        // setup the RMI request
+
+        val invokeMethod = MethodRequest()
+
+        // if this is a kotlin suspend function, the continuation arg will NOT be here (it's replaced at runtime)!
+        invokeMethod.args = args ?: EMPTY_ARRAY
+
+        // which method do we access? We always want to access the IMPLEMENTATION (if available!). we know that this will always succeed
+        // this should be accessed via the KRYO class ID + method index (both are SHORT, and can be packed)
+        invokeMethod.cachedMethod = cachedMethods.first { it.method == method }
+
+
+
+
+
         // if a 'suspend' function is called, then our last argument is a 'Continuation' object
         // We will use this for our coroutine context instead of running on a new coroutine
-        val maybeContinuation = args?.lastOrNull()
+        val suspendCoroutineObject = args?.lastOrNull()
 
         // async will return immediately
-        val returnValue =
-//        if (maybeContinuation is Continuation<*>) {
-//            try {
-//                invokeSuspendFunction(maybeContinuation) {
-//                    sendRequest(method, args)
-//                }
-//            } catch (e: Exception) {
-//                println("EXCEPT!")
-//            }
-//            // if this was an exception, we want to get it out!
+        var returnValue: Any? = null
+        if (suspendCoroutineObject is Continuation<*>) {
+
+            // https://stackoverflow.com/questions/57230869/how-to-propagate-kotlin-coroutine-context-through-reflective-invocation-of-suspe
+            // https://stackoverflow.com/questions/52869672/call-kotlin-suspend-function-in-java-class
+            // https://discuss.kotlinlang.org/t/how-to-continue-a-suspend-function-in-a-dynamic-proxy-in-the-same-coroutine/11391
+
+
+            /**
+             * https://jakewharton.com/exceptions-and-proxies-and-coroutines-oh-my/
+             * https://github.com/Kotlin/kotlinx.coroutines/pull/1667
+             * https://github.com/square/retrofit/blob/bfb5cd375a300658dae48e29fa03d0ab553c8cf6/retrofit/src/main/java/retrofit2/KotlinExtensions.kt
+             * https://github.com/square/retrofit/blob/108fe23964b986107aed352ba467cd2007d15208/retrofit/src/main/java/retrofit2/HttpServiceMethod.java
+             * https://github.com/square/retrofit/blob/108fe23964b986107aed352ba467cd2007d15208/retrofit/src/main/java/retrofit2/Utils.java
+             * https://github.com/square/retrofit/tree/108fe23964b986107aed352ba467cd2007d15208/retrofit/src/main/java/retrofit2
+             */
+//            returnValue = try {
+//                invokeSuspendFunction(suspendCoroutineObject) {
+////                    kotlinx.coroutines.suspendCancellableCoroutine<Any?> { continuation: Any? ->
+////                        continuation.resume(body)
+////                    }
 //
-//        } else {
-            runBlocking {
-                sendRequest(method, args ?: EMPTY_ARRAY)
+////                    withContext(Dispatchers.Unconfined) {
+//                        delay(100)
+//                        sendRequest(invokeMethod)
+////                    }
+//                }
+//
+////
+////                MyUnconfined.dispatch(suspendCoroutineObject.context, Runnable {
+////                    invokeSuspendFunction(suspendCoroutineObject) {
+////
+////                    }
+////                })
+//
+//            } catch (e: Exception) {
+//                e.printStackTrace()
+//            }
+//
+//            if (returnValue == kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
+//                // we were suspend, and when we unsuspend, we will pick up where we left off
+//                return returnValue
+//            }
+
+            // if this was an exception, we want to get it out!
+            returnValue = runBlocking {
+                sendRequest(invokeMethod)
             }
-//        }
-
-
-        if (!isAsync) {
-            return returnValue
+        } else {
+            returnValue = runBlocking {
+                sendRequest(invokeMethod)
+            }
         }
 
-        // if we are async then we return immediately.
-        // If you want the response value, disable async!
-        val returnType = method.returnType
-        if (returnType.isPrimitive) {
-            return when (returnType) {
-                Int::class.javaPrimitiveType -> {
-                    0
+        if (isAsync) {
+            // if we are async then we return immediately.
+            // If you want the response value, disable async!
+            val returnType = method.returnType
+            if (returnType.isPrimitive) {
+                return when (returnType) {
+                    Int::class.javaPrimitiveType -> {
+                        0
+                    }
+                    Boolean::class.javaPrimitiveType -> {
+                        java.lang.Boolean.FALSE
+                    }
+                    Float::class.javaPrimitiveType -> {
+                        0.0f
+                    }
+                    Char::class.javaPrimitiveType -> {
+                        0.toChar()
+                    }
+                    Long::class.javaPrimitiveType -> {
+                        0L
+                    }
+                    Short::class.javaPrimitiveType -> {
+                        0.toShort()
+                    }
+                    Byte::class.javaPrimitiveType -> {
+                        0.toByte()
+                    }
+                    Double::class.javaPrimitiveType -> {
+                        0.0
+                    }
+                    else -> {
+                        null
+                    }
                 }
-                Boolean::class.javaPrimitiveType -> {
-                    java.lang.Boolean.FALSE
+            }
+            return null
+        }
+        else {
+            // this will not return immediately. This will be suspended until there is a response
+            when (returnValue) {
+                RmiResponseManager.TIMEOUT_EXCEPTION -> {
+                    val fancyName = RmiUtils.makeFancyMethodName(method)
+                    val exception = TimeoutException("Response timed out: $fancyName")
+                    // from top down, clean up the coroutine stack
+                    ListenerManager.cleanStackTrace(exception, RmiClient::class.java)
+                    throw exception
                 }
-                Float::class.javaPrimitiveType -> {
-                    0.0f
-                }
-                Char::class.javaPrimitiveType -> {
-                    0.toChar()
-                }
-                Long::class.javaPrimitiveType -> {
-                    0L
-                }
-                Short::class.javaPrimitiveType -> {
-                    0.toShort()
-                }
-                Byte::class.javaPrimitiveType -> {
-                    0.toByte()
-                }
-                Double::class.javaPrimitiveType -> {
-                    0.0
+                is Exception -> {
+                    // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
+                    // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
+                    ListenerManager.cleanStackTrace(Exception(), RmiClient::class.java, returnValue)
+                    throw returnValue
                 }
                 else -> {
-                    null
+                    return returnValue
                 }
             }
         }
-        return null
     }
+
+
+    /**
+     * Force the calling coroutine to suspend before throwing [this].
+     *
+     * This is needed when a checked exception is synchronously caught in a [java.lang.reflect.Proxy]
+     * invocation to avoid being wrapped in [java.lang.reflect.UndeclaredThrowableException].
+     *
+     * The implementation is derived from:
+     * https://github.com/Kotlin/kotlinx.coroutines/pull/1667#issuecomment-556106349
+     */
+    suspend fun suspendAndThrow(e: Throwable): Nothing {
+        kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn<Nothing> { continuation ->
+            Dispatchers.Default.dispatch(continuation.context, Runnable {
+                continuation.resumeWithException(e)
+            })
+            kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
+        }
+    }
+
 
     // trampoline so we can access suspend functions correctly and (if suspend) get the coroutine connection parameter)
     private fun invokeSuspendFunction(continuation: Continuation<*>, suspendFunction: suspend () -> Any?): Any {

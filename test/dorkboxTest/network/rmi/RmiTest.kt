@@ -90,6 +90,17 @@ class RmiTest : BaseTest() {
                 caught = true
             }
             Assert.assertTrue(caught)
+            caught = false
+
+            try {
+                test.throwSuspendException()
+            } catch (e: UnsupportedOperationException) {
+                System.err.println("\tExpected exception (exception log should also be on the object impl side).")
+                e.printStackTrace()
+                caught = true
+            }
+            Assert.assertTrue(caught)
+            caught = false
 
 
             // Non-blocking call tests
@@ -109,9 +120,19 @@ class RmiTest : BaseTest() {
             // exceptions are still dealt with properly
             test.moo("Baa")
 
-            caught = false
             try {
                 test.throwException()
+            } catch (e: IllegalStateException) {
+                System.err.println("\tExpected exception (exception log should also be on the object impl side).")
+                e.printStackTrace()
+                caught = true
+            }
+            // exceptions are not caught when async = true!
+            Assert.assertFalse(caught)
+            caught = false
+
+            try {
+                test.throwSuspendException()
             } catch (e: IllegalStateException) {
                 System.err.println("\tExpected exception (exception log should also be on the object impl side).")
                 e.printStackTrace()

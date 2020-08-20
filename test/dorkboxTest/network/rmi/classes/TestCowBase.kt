@@ -20,5 +20,5 @@ package dorkboxTest.network.rmi.classes
  */
 interface TestCowBase {
     fun throwException()
-    suspend fun throwSuspendException()
+    suspend fun throwSuspendException(): Boolean
 }

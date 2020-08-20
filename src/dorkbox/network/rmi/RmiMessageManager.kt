@@ -277,8 +277,8 @@ internal class RmiMessageManager(logger: KLogger,
                 /**
                  * called on "client"
                  */
-                val rmiId = RmiUtils.unpackLeft(message.packedIds)
-                val callbackId = RmiUtils.unpackRight(message.packedIds)
+                val callbackId = RmiUtils.unpackLeft(message.packedIds)
+                val rmiId = RmiUtils.unpackRight(message.packedIds)
                 val callback = removeCallback(callbackId)
                 onGenericObjectResponse(endPoint, connection, logger, false, rmiId, callback, this, serialization)
             }
@@ -292,8 +292,8 @@ internal class RmiMessageManager(logger: KLogger,
                 /**
                  * called on "client"
                  */
-                val rmiId = RmiUtils.unpackLeft(message.packedIds)
-                val callbackId = RmiUtils.unpackRight(message.packedIds)
+                val callbackId = RmiUtils.unpackLeft(message.packedIds)
+                val rmiId = RmiUtils.unpackRight(message.packedIds)
                 val callback = removeCallback(callbackId)
                 onGenericObjectResponse(endPoint, connection, logger, true, rmiId, callback, this, serialization)
             }
@@ -308,7 +308,7 @@ internal class RmiMessageManager(logger: KLogger,
                 val isGlobal = message.isGlobal
                 val isCoroutine = message.isCoroutine
                 val rmiObjectId = RmiUtils.unpackLeft(message.packedId)
-                val rmiId = RmiUtils.unpackRight(message.packedId)
+                val rmiId = RmiUtils.unpackUnsignedRight(message.packedId)
                 val cachedMethod = message.cachedMethod
                 val args = message.args
                 val sendResponse = rmiId != 1 // async is always with a '1', and we should NOT send a message back if it is '1'
@@ -434,7 +434,7 @@ internal class RmiMessageManager(logger: KLogger,
     }
 
     private suspend fun returnRmiMessage(connection: Connection, message: MethodRequest, result: Any?, logger: KLogger) {
-        logger.trace { "RMI returned: ${RmiUtils.unpackRight(message.packedId)}" }
+        logger.trace { "RMI returned: ${RmiUtils.unpackUnsignedRight(message.packedId)}" }
 
         val rmiMessage = MethodResponse()
         rmiMessage.packedId = message.packedId
@@ -460,12 +460,12 @@ internal class RmiMessageManager(logger: KLogger,
             logger.error("Unable to create remote object!", implObject)
 
             // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
-            GlobalObjectCreateResponse(RmiUtils.packShorts(RemoteObjectStorage.INVALID_RMI, callbackId))
+            GlobalObjectCreateResponse(RmiUtils.packShorts(callbackId, RemoteObjectStorage.INVALID_RMI))
         } else {
             val rmiId = saveImplObject(logger, implObject)
 
             // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
-            GlobalObjectCreateResponse(RmiUtils.packShorts(rmiId, callbackId))
+            GlobalObjectCreateResponse(RmiUtils.packShorts(callbackId, rmiId))
         }
 
         connection.send(response)
