@@ -319,7 +319,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * from a "global" context
      */
     internal open fun getRmiConnectionSupport() : RmiManagerConnections {
-        return RmiManagerConnections(logger, rmiGlobalSupport, serialization, actionDispatch)
+        return RmiManagerConnections(logger, rmiGlobalSupport, serialization)
     }
 
     /**

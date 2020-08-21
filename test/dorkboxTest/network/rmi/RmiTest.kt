@@ -99,9 +99,9 @@ class RmiTest : BaseTest() {
                 e.printStackTrace()
                 caught = true
             }
+
             Assert.assertTrue(caught)
             caught = false
-
 
             // Non-blocking call tests
             // Non-blocking call tests
@@ -140,6 +140,7 @@ class RmiTest : BaseTest() {
             }
             // exceptions are not caught when async = true!
             Assert.assertFalse(caught)
+            caught = false
 
 
             // Call will time out if non-blocking isn't working properly
