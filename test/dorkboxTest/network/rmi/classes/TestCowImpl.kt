@@ -15,6 +15,7 @@
  */
 package dorkboxTest.network.rmi.classes
 
+import dorkbox.network.connection.Connection
 import kotlinx.coroutines.delay
 
 class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
@@ -22,46 +23,62 @@ class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
     private var moos = 0
 
     override fun moo() {
+        throw RuntimeException("Should never be executed!")
+    }
+
+    fun moo(connection: Connection) {
         moos++
-        println("Moo! $moos")
+        connection.logger.error("Moo! $moos")
     }
 
     override fun moo(value: String) {
-        moos += 2
-        println("Moo! $moos: $value")
+        throw RuntimeException("Should never be executed!")
     }
 
-    override fun moo(value: String, delay: Long) {
+    fun moo(connection: Connection, value: String) {
+        moos += 2
+        connection.logger.error("Moo! $moos: $value")
+    }
+
+    override suspend fun moo(value: String, delay: Long) {
+        throw RuntimeException("Should never be executed!")
+    }
+
+    suspend fun moo(connection: Connection, value: String, delay: Long) {
         moos += 4
-        println("Moo! $moos: $value ($delay)")
-        try {
-            Thread.sleep(delay)
-        } catch (e: InterruptedException) {
-            e.printStackTrace()
-        }
+        connection.logger.error("Moo! $moos: $value ($delay)")
+        delay(delay)
     }
 
     override fun id(): Int {
         return id
     }
 
-    override fun slow(): Float {
-        println("Slowdown!!")
-        try {
-            Thread.sleep(2000)
-        } catch (e: InterruptedException) {
-            e.printStackTrace()
-        }
+    override suspend fun slow(): Float {
+        throw RuntimeException("Should never be executed!")
+    }
+
+    suspend fun slow(connection: Connection): Float {
+        connection.logger.error("Slowdown!!")
+        delay(2000)
         return 123.0f
     }
 
     override suspend fun withSuspend(value: String, v2: Int) {
-        println("Suspending!")
+        throw RuntimeException("Should never be executed!")
+    }
+
+    suspend fun withSuspend(connection: Connection, value: String, v2: Int) {
+        connection.logger.error("Suspending!")
         delay(2000)
     }
 
     override suspend fun withSuspendAndReturn(value: String, v2: Int): Int {
-        println("Suspending with return!")
+        throw RuntimeException("Should never be executed!")
+    }
+
+    suspend fun withSuspendAndReturn(connection: Connection, value: String, v2: Int): Int {
+        connection.logger.error("Suspending with return!")
         delay(2000)
         return v2
     }

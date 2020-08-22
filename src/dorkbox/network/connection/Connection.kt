@@ -127,7 +127,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val expirationTime = System.currentTimeMillis() +
                                  TimeUnit.SECONDS.toMillis(endPoint.config.connectionCleanupTimeoutInSeconds.toLong())
 
-    private val logger = endPoint.logger
+    val logger = endPoint.logger
 
 
     //    private val needsLock = AtomicBoolean(false)
@@ -396,7 +396,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     suspend fun onDisconnect(function: suspend (Connection) -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager(logger)
+            origManager ?: ListenerManager()
         }
 
         listenerManager.value!!.onDisconnect(function)
@@ -408,7 +408,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     suspend fun <MESSAGE> onMessage(function: suspend (Connection, MESSAGE) -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager(logger)
+            origManager ?: ListenerManager()
         }
 
         listenerManager.value!!.onMessage(function)

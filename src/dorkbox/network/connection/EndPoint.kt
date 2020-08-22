@@ -108,7 +108,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val actionDispatch = CoroutineScope(Dispatchers.Default)
 //    internal val connectionActor = actionDispatch.connectionActor()
 
-    internal val listenerManager = ListenerManager<CONNECTION>(logger)
+    internal val listenerManager = ListenerManager<CONNECTION>()
     internal val connections = ConnectionManager<CONNECTION>(logger, config)
 
     internal val mediaDriverContext: MediaDriver.Context

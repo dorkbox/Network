@@ -16,7 +16,6 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ListenerManager
 import dorkbox.network.rmi.messages.MethodRequest
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
@@ -257,13 +256,13 @@ internal class RmiClient(val isGlobal: Boolean,
                         val fancyName = RmiUtils.makeFancyMethodName(method)
                         val exception = TimeoutException("Response timed out: $fancyName")
                         // from top down, clean up the coroutine stack
-                        ListenerManager.cleanStackTrace(exception, RmiClient::class.java)
+                        RmiUtils.cleanStackTraceForProxy(exception, RmiClient::class.java)
                         continuation.resumeWithException(exception)
                     }
                     is Exception -> {
                         // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
                         // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
-                        ListenerManager.cleanStackTrace(Exception(), RmiClient::class.java, any)
+                        RmiUtils.cleanStackTraceForProxy(Exception(), RmiClient::class.java, any)
                         continuation.resumeWithException(any)
                     }
                     else -> {
@@ -280,13 +279,13 @@ internal class RmiClient(val isGlobal: Boolean,
                     val fancyName = RmiUtils.makeFancyMethodName(method)
                     val exception = TimeoutException("Response timed out: $fancyName")
                     // from top down, clean up the coroutine stack
-                    ListenerManager.cleanStackTrace(exception, RmiClient::class.java)
+                    RmiUtils.cleanStackTraceForProxy(exception, RmiClient::class.java)
                     throw exception
                 }
                 is Exception -> {
                     // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
                     // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
-                    ListenerManager.cleanStackTrace(Exception(), RmiClient::class.java, any)
+                    RmiUtils.cleanStackTraceForProxy(Exception(), RmiClient::class.java, any)
                     throw any
                 }
                 else -> {

@@ -59,8 +59,8 @@ class RmiTest : BaseTest() {
 
             // Default behavior. RMI is transparent, method calls behave like normal
             // (return values and exceptions are returned, call is synchronous)
-            System.err.println("hashCode: " + test.hashCode())
-            System.err.println("toString: $test")
+            connection.logger.error("hashCode: " + test.hashCode())
+            connection.logger.error("toString: $test")
 
             test.withSuspend("test", 32)
             val s1 = test.withSuspendAndReturn("test", 32)
@@ -78,15 +78,14 @@ class RmiTest : BaseTest() {
             // Test that RMI correctly waits for the remotely invoked method to exit
             remoteObject.responseTimeout = 5000
             test.moo("You should see this two seconds before...", 2000)
-            println("...This")
+            connection.logger.error("...This")
             remoteObject.responseTimeout = 3000
 
             // Try exception handling
             try {
                 test.throwException()
             } catch (e: UnsupportedOperationException) {
-                System.err.println("\tExpected exception (exception log should also be on the object impl side).")
-                e.printStackTrace()
+                connection.logger.error("Expected exception (exception log should also be on the object impl side).", e)
                 caught = true
             }
             Assert.assertTrue(caught)
@@ -95,7 +94,7 @@ class RmiTest : BaseTest() {
             try {
                 test.throwSuspendException()
             } catch (e: UnsupportedOperationException) {
-                System.err.println("\tExpected exception (exception log should also be on the object impl side).")
+                connection.logger.error("\tExpected exception (exception log should also be on the object impl side).")
                 e.printStackTrace()
                 caught = true
             }
@@ -106,7 +105,7 @@ class RmiTest : BaseTest() {
             // Non-blocking call tests
             // Non-blocking call tests
             // Non-blocking call tests
-            System.err.println("I'm currently async: ${remoteObject.async}. Now testing ASYNC")
+            connection.logger.error("I'm currently async: ${remoteObject.async}. Now testing ASYNC")
 
             remoteObject.async = true
 
@@ -123,7 +122,7 @@ class RmiTest : BaseTest() {
             try {
                 test.throwException()
             } catch (e: IllegalStateException) {
-                System.err.println("\tExpected exception (exception log should also be on the object impl side).")
+                connection.logger.error("\tExpected exception (exception log should also be on the object impl side).")
                 e.printStackTrace()
                 caught = true
             }
@@ -134,13 +133,12 @@ class RmiTest : BaseTest() {
             try {
                 test.throwSuspendException()
             } catch (e: IllegalStateException) {
-                System.err.println("\tExpected exception (exception log should also be on the object impl side).")
+                connection.logger.error("\tExpected exception (exception log should also be on the object impl side).")
                 e.printStackTrace()
                 caught = true
             }
             // exceptions are not caught when async = true!
             Assert.assertFalse(caught)
-            caught = false
 
 
             // Call will time out if non-blocking isn't working properly
@@ -150,9 +148,9 @@ class RmiTest : BaseTest() {
             // should wait for a small time
             remoteObject.async = false
             remoteObject.responseTimeout = 6000
-            println("You should see this 2 seconds before")
+            connection.logger.error("You should see this 2 seconds before")
             val slow = test.slow()
-            println("...This")
+            connection.logger.error("...This")
             Assert.assertEquals(slow.toDouble(), 123.0, 0.0001)
 
 
@@ -162,7 +160,7 @@ class RmiTest : BaseTest() {
             m.text = "sometext"
             connection.send(m)
 
-            println("Finished tests")
+            connection.logger.error("Finished tests")
         }
 
         fun register(manager: NetworkSerializationManager) {

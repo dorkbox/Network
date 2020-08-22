@@ -17,7 +17,6 @@ package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.ListenerManager
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
 import dorkbox.network.rmi.messages.GlobalObjectCreateRequest
@@ -379,7 +378,7 @@ internal class RmiManagerGlobal(logger: KLogger,
                                 insideResult.initCause(null)
                             }
 
-                            ListenerManager.cleanStackTraceReverse(insideResult as Throwable)
+                            RmiUtils.cleanStackTraceForImpl(insideResult as Exception, true)
                             val fancyName = RmiUtils.makeFancyMethodName(cachedMethod)
                             logger.error("Error invoking method: $fancyName", insideResult)
                         }
@@ -419,7 +418,7 @@ internal class RmiManagerGlobal(logger: KLogger,
                             result.initCause(null)
                         }
 
-                        ListenerManager.cleanStackTraceReverse(result as Throwable)
+                        RmiUtils.cleanStackTraceForImpl(result as Exception, false)
                         val fancyName = RmiUtils.makeFancyMethodName(cachedMethod)
                         logger.error("Error invoking method: $fancyName", result)
                     }

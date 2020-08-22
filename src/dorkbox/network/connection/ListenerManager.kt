@@ -24,52 +24,18 @@ import dorkbox.util.collections.IdentityMap
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import mu.KLogger
 import net.jodah.typetools.TypeResolver
 
 /**
  * Manages all of the different connect/disconnect/etc listeners
  */
-internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogger) {
+internal class ListenerManager<CONNECTION: Connection> {
     companion object {
         /**
          * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
          */
         @Property
         val LOAD_FACTOR = 0.8f
-
-
-        /**
-         * Remove from the stacktrace until we get to the invoke site (ie: remove kotlin coroutine info + dorkbox network call stack)
-         *
-         * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
-         */
-        fun cleanStackTrace(localThrowable: Throwable, invokingClass: Class<*>, remoteException: Exception? = null) {
-            val myClassName = invokingClass.name
-            val stackTrace = localThrowable.stackTrace
-            var newStartIndex = 0
-            for (element in stackTrace) {
-                newStartIndex++
-
-                if (element.className == myClassName && element.methodName == "invoke") {
-                    // we do this 1 more time, because we want to remove the proxy invocation off the stack as well.
-                    newStartIndex++
-                    break
-                }
-            }
-
-            if (remoteException == null) {
-                // no remote exception, just cleanup our own callstack
-                localThrowable.stackTrace = stackTrace.copyOfRange(newStartIndex, stackTrace.size)
-            } else {
-                // merge this info into the remote exception, so we can get the correct call stack info
-                val newStack = Array<StackTraceElement>(remoteException.stackTrace.size + stackTrace.size - newStartIndex) { stackTrace[0] }
-                remoteException.stackTrace.copyInto(newStack)
-                stackTrace.copyInto(newStack, remoteException.stackTrace.size, newStartIndex)
-
-                remoteException.stackTrace = newStack
-            }
-        }
 
         /**
          * Remove from the stacktrace (going in reverse), kotlin coroutine info + dorkbox network call stack.

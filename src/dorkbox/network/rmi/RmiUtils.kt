@@ -470,101 +470,87 @@ object RmiUtils {
 
 
 
+    /**
+     * Remove from the stacktrace the "slice" of stack that relates to "dorkbox.network." package
+     *
+     * Then remove from the last occurrence of "dorkbox.network." ALL "kotlinx.coroutines." and "kotlin.coroutines." stacks
+     *
+     * We do this because these stack frames are not useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
+     */
+    fun cleanStackTraceForProxy(localThrowable: Throwable, invokingClass: Class<*>, remoteException: Exception? = null) {
+        val myClassName = invokingClass.name
+        val stackTrace = localThrowable.stackTrace
+        var newStartIndex = 0
+        for (element in stackTrace) {
+            newStartIndex++
+
+            if (element.className == myClassName && element.methodName == "invoke") {
+                // we do this 1 more time, because we want to remove the proxy invocation off the stack as well.
+                newStartIndex++
+                break
+            }
+        }
+
+        if (remoteException == null) {
+            // no remote exception, just cleanup our own callstack
+            localThrowable.stackTrace = stackTrace.copyOfRange(newStartIndex, stackTrace.size)
+        } else {
+            // merge this info into the remote exception, so we can get the correct call stack info
+            val newStack = Array<StackTraceElement>(remoteException.stackTrace.size + stackTrace.size - newStartIndex) { stackTrace[0] }
+            remoteException.stackTrace.copyInto(newStack)
+            stackTrace.copyInto(newStack, remoteException.stackTrace.size, newStartIndex)
+
+            remoteException.stackTrace = newStack
+        }
+    }
+
+    /**
+     * Remove from the stacktrace (going in reverse), kotlin coroutine info + dorkbox network call stack.
+     *
+     * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
+     */
+    fun cleanStackTraceForImpl(exception: Exception, isSuspendFunction: Boolean) {
+        val packageName = RmiUtils::class.java.packageName
+
+        val stackTrace = exception.stackTrace
+        var newEndIndex = -1 // because we index by size, but access from 0
+
+        // step 1: starting at 0, find the start of our RMI method invocation
+        for (element in stackTrace) {
+            if (element.className.startsWith(packageName)) {
+                break
+            } else {
+                newEndIndex++
+            }
+        }
 
 
+        // step 2: starting at newEndIndex -> 0, find the start of reflection information (we are java11+ ONLY, so this is easy)
+        for (i in newEndIndex downTo 0) {
+            // this will be either JAVA reflection or ReflectASM reflection
+            val stackModule = stackTrace[i].moduleName
+            if (stackModule == "java.base") {
+                newEndIndex--
+            } else {
+                break
+            }
+        }
 
+        newEndIndex++ // have to add 1 back, because a copy must be by size (and we access from 0)
 
+        if (newEndIndex > 0) {
+            // if we are Java reflection, we are correct.
+            // if we are ReflectASM reflection, there is ONE stack frame extra we have to remove
+            if (stackTrace[newEndIndex].className == CachedAsmMethod::class.java.name) {
+                newEndIndex--
+            }
 
+            // if we are a KOTLIN suspend function, there is ONE stack frame extra we have to remove
+            if (isSuspendFunction) {
+                newEndIndex--
+            }
 
-//
-//    suspend fun <T : Any> Call<T>.await(): T {
-//        return suspendCancellableCoroutine { continuation ->
-//            continuation.invokeOnCancellation {
-//                cancel()
-//            }
-//            enqueue(object : Callback<T> {
-//                override fun onResponse(call: Call<T>, response: PingResult.Response<T>) {
-//                    if (response.isSuccessful) {
-//                        val body = response.body()
-//                        if (body == null) {
-//                            val invocation = call.request().tag(Invocation::class.java)!!
-//                            val method = invocation.method()
-//                            val e = KotlinNullPointerException("Response from " +
-//                                                               method.declaringClass.name +
-//                                                               '.' +
-//                                                               method.name +
-//                                                               " was null but response body type was declared as non-null")
-//                            continuation.resumeWithException(e)
-//                        } else {
-//                            continuation.resume(body)
-//                        }
-//                    } else {
-//                        continuation.resumeWithException(HttpException(response))
-//                    }
-//                }
-//
-//                override fun onFailure(call: Call<T>, t: Throwable) {
-//                    continuation.resumeWithException(t)
-//                }
-//            })
-//        }
-//    }
-//
-//    @JvmName("awaitNullable")
-//    suspend fun <T : Any> Call<T?>.await(): T? {
-//        return suspendCancellableCoroutine { continuation ->
-//            continuation.invokeOnCancellation {
-//                cancel()
-//            }
-//            enqueue(object : Callback<T?> {
-//                override fun onResponse(call: Call<T?>, response: PingResult.Response<T?>) {
-//                    if (response.isSuccessful) {
-//                        continuation.resume(response.body())
-//                    } else {
-//                        continuation.resumeWithException(HttpException(response))
-//                    }
-//                }
-//
-//                override fun onFailure(call: Call<T?>, t: Throwable) {
-//                    continuation.resumeWithException(t)
-//                }
-//            })
-//        }
-//    }
-//
-//    suspend fun <T> Call<T>.awaitResponse(): PingResult.Response<T> {
-//        return suspendCancellableCoroutine { continuation ->
-//            continuation.invokeOnCancellation {
-//                cancel()
-//            }
-//            enqueue(object : Callback<T> {
-//                override fun onResponse(call: Call<T>, response: PingResult.Response<T>) {
-//                    continuation.resume(response)
-//                }
-//
-//                override fun onFailure(call: Call<T>, t: Throwable) {
-//                    continuation.resumeWithException(t)
-//                }
-//            })
-//        }
-//    }
-//
-//    /**
-//     * Force the calling coroutine to suspend before throwing [this].
-//     *
-//     * This is needed when a checked exception is synchronously caught in a [java.lang.reflect.Proxy]
-//     * invocation to avoid being wrapped in [java.lang.reflect.UndeclaredThrowableException].
-//     *
-//     * The implementation is derived from:
-//     * https://github.com/Kotlin/kotlinx.coroutines/pull/1667#issuecomment-556106349
-//     */
-//    suspend fun Exception.suspendAndThrow(): Nothing {
-//        kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn<Unit> { continuation: Continuation<Unit> ->
-//            Dispatchers.Default.dispatch(continuation.context, Runnable {
-//                continuation.intercepted().resumeWithException(this@suspendAndThrow)
-//            })
-//
-//            kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
-//        }
-//    }
+            exception.stackTrace = stackTrace.copyOfRange(0, newEndIndex)
+        }
+    }
 }
