@@ -106,10 +106,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val autoClosableObjects = CopyOnWriteArrayList<AutoCloseable>()
 
     internal val actionDispatch = CoroutineScope(Dispatchers.Default)
-//    internal val connectionActor = actionDispatch.connectionActor()
 
     internal val listenerManager = ListenerManager<CONNECTION>()
-    internal val connections = ConnectionManager<CONNECTION>(logger, config)
+    internal val connections = ConnectionManager<CONNECTION>()
 
     internal val mediaDriverContext: MediaDriver.Context
     internal val mediaDriver: MediaDriver
@@ -133,7 +132,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
 
-    internal val rmiGlobalSupport = RmiManagerGlobal(logger, actionDispatch, config.serialization)
+    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
 
     init {
         logger.error("NETWORK STACK IS ONLY IPV4 AT THE MOMENT. IPV6 is in progress!")
@@ -318,7 +317,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * Used for the client, because the client only has ONE ever support connection, and it allows us to create connection specific objects
      * from a "global" context
      */
-    internal open fun getRmiConnectionSupport() : RmiManagerConnections {
+    internal open fun getRmiConnectionSupport() : RmiManagerConnections<CONNECTION> {
         return RmiManagerConnections(logger, rmiGlobalSupport, serialization)
     }
 
@@ -512,6 +511,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             serialization.returnKryo(kryo)
         }
 
+        connection as CONNECTION
+
         when (message) {
             is PingMessage -> {
                 // the ping listener (internal use only!)
@@ -532,17 +533,27 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
             is Any -> {
                 @Suppress("UNCHECKED_CAST")
-                var hasListeners = listenerManager.notifyOnMessage(connection as CONNECTION, message)
+                var hasListeners = listenerManager.notifyOnMessage(connection, message)
 
                 // each connection registers, and is polled INDEPENDENTLY for messages.
                 hasListeners = hasListeners or connection.notifyOnMessage(message)
 
                 if (!hasListeners) {
-                    listenerManager.notifyError(connection, MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}"))
+                    val exception = MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
+                    ListenerManager.cleanStackTrace(exception)
+                    listenerManager.notifyError(connection, exception)
                 }
             }
             else -> {
                 // do nothing, there were problems with the message
+                val exception = if (message != null) {
+                    MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
+                } else {
+                    MessageNotRegisteredException("Unknown message received!!")
+                }
+
+                ListenerManager.cleanStackTrace(exception)
+                listenerManager.notifyError(exception)
             }
         }
     }

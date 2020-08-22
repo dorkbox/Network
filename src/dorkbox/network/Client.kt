@@ -93,7 +93,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     /**
      * So the client class can get remote objects that are THE SAME OBJECT as if called from a connection
      */
-    override fun getRmiConnectionSupport(): RmiManagerConnections {
+    override fun getRmiConnectionSupport(): RmiManagerConnections<CONNECTION> {
         return rmiConnectionSupport
     }
 

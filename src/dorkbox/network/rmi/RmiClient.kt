@@ -256,13 +256,13 @@ internal class RmiClient(val isGlobal: Boolean,
                         val fancyName = RmiUtils.makeFancyMethodName(method)
                         val exception = TimeoutException("Response timed out: $fancyName")
                         // from top down, clean up the coroutine stack
-                        RmiUtils.cleanStackTraceForProxy(exception, RmiClient::class.java)
+                        RmiUtils.cleanStackTraceForProxy(exception)
                         continuation.resumeWithException(exception)
                     }
                     is Exception -> {
                         // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
                         // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
-                        RmiUtils.cleanStackTraceForProxy(Exception(), RmiClient::class.java, any)
+                        RmiUtils.cleanStackTraceForProxy(Exception(), any)
                         continuation.resumeWithException(any)
                     }
                     else -> {
@@ -279,13 +279,13 @@ internal class RmiClient(val isGlobal: Boolean,
                     val fancyName = RmiUtils.makeFancyMethodName(method)
                     val exception = TimeoutException("Response timed out: $fancyName")
                     // from top down, clean up the coroutine stack
-                    RmiUtils.cleanStackTraceForProxy(exception, RmiClient::class.java)
+                    RmiUtils.cleanStackTraceForProxy(exception)
                     throw exception
                 }
                 is Exception -> {
                     // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
                     // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
-                    RmiUtils.cleanStackTraceForProxy(Exception(), RmiClient::class.java, any)
+                    RmiUtils.cleanStackTraceForProxy(Exception(), any)
                     throw any
                 }
                 else -> {

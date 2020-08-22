@@ -42,27 +42,32 @@ internal class ListenerManager<CONNECTION: Connection> {
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
-        fun cleanStackTraceReverse(throwable: Throwable) {
+        fun cleanStackTrace(throwable: Throwable) {
             // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
             val stackTrace = throwable.stackTrace
-            var newEndIndex = Math.max(0, stackTrace.size - 1)
+            var newEndIndex = stackTrace.size -1  // offset by 1 because we have to adjust for the access index
 
-            if (newEndIndex > 0) {
-                for (i in newEndIndex downTo 0) {
-                    val stackName = stackTrace[i].className
-                    if (i == newEndIndex) {
-                        if (stackName.startsWith("kotlinx.coroutines.") ||
-                            stackName.startsWith("kotlin.coroutines.") ||
-                            stackName.startsWith("dorkbox.network.")) {
-                            newEndIndex--
-                        } else {
-                            break
-                        }
+            for (i in newEndIndex downTo 0) {
+                val stackName = stackTrace[i].className
+                if (i == newEndIndex) {
+                    if (stackName.startsWith("kotlinx.coroutines.") ||
+                        stackName.startsWith("kotlin.coroutines.") ||
+                        stackName.startsWith("dorkbox.network.")) {
+                        newEndIndex--
+                    } else {
+                        break
                     }
                 }
+            }
 
+            newEndIndex++ // have to add 1 back, because a copy must be by size (and we access from 0)
+
+            if (newEndIndex > 0) {
                 // newEndIndex will also remove the VERY LAST CachedMethod or CachedAsmMethod access invocation (because it's offset by 1)
                 throwable.stackTrace = stackTrace.copyOfRange(0, newEndIndex)
+            } else {
+                // keep just one, since it's a stack frame INSIDE our network library, and we need that!
+                throwable.stackTrace = stackTrace.copyOfRange(0, 1)
             }
         }
     }
@@ -313,7 +318,7 @@ internal class ListenerManager<CONNECTION: Connection> {
                 it(connection)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTraceReverse(t)
+                cleanStackTrace(t)
                 notifyError(connection, t)
             }
         }
@@ -328,7 +333,7 @@ internal class ListenerManager<CONNECTION: Connection> {
                 it(connection)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTraceReverse(t)
+                cleanStackTrace(t)
                 notifyError(connection, t)
             }
         }
@@ -336,7 +341,7 @@ internal class ListenerManager<CONNECTION: Connection> {
 
     /**
      * Invoked when there is an error for a specific connection
-     * <p>
+     *
      * The error is also sent to an error log before notifying callbacks
      */
     suspend fun notifyError(connection: CONNECTION, exception: Throwable) {
@@ -347,7 +352,7 @@ internal class ListenerManager<CONNECTION: Connection> {
 
     /**
      * Invoked when there is an error in general
-     * <p>
+     *
      * The error is also sent to an error log before notifying callbacks
      */
     suspend fun notifyError(exception: Throwable) {
@@ -392,6 +397,7 @@ internal class ListenerManager<CONNECTION: Connection> {
                     try {
                         func(connection, message)
                     } catch (t: Throwable) {
+                        cleanStackTrace(t)
                         notifyError(connection, t)
                     }
                 }

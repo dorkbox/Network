@@ -17,14 +17,15 @@ package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
 import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.util.collections.LockFreeIntMap
 import mu.KLogger
 
-internal class RmiManagerConnections(logger: KLogger,
-                                     val rmiGlobalSupport: RmiManagerGlobal,
+internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
+                                     val rmiGlobalSupport: RmiManagerGlobal<CONNECTION>,
                                      private val serialization: NetworkSerializationManager) : RmiObjectCache(logger) {
 
     // It is critical that all of the RMI proxy objects are unique, and are saved/cached PER CONNECTION. These cannot be shared between connections!
@@ -82,7 +83,7 @@ internal class RmiManagerConnections(logger: KLogger,
     /**
      * called on "server"
      */
-    internal suspend fun onConnectionObjectCreateRequest(endPoint: EndPoint<*>, connection: Connection, message: ConnectionObjectCreateRequest, logger: KLogger) {
+    suspend fun onConnectionObjectCreateRequest(endPoint: EndPoint<CONNECTION>, connection: CONNECTION, message: ConnectionObjectCreateRequest) {
 
         val interfaceClassId = RmiUtils.unpackLeft(message.packedIds)
         val callbackId = RmiUtils.unpackRight(message.packedIds)
@@ -93,7 +94,8 @@ internal class RmiManagerConnections(logger: KLogger,
 
         val response = if (implObject is Exception) {
             // whoops!
-            logger.error("Unable to create remote object!", implObject)
+            ListenerManager.cleanStackTrace(implObject)
+            endPoint.listenerManager.notifyError(connection, implObject)
 
             // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
             ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, RemoteObjectStorage.INVALID_RMI))
@@ -104,13 +106,13 @@ internal class RmiManagerConnections(logger: KLogger,
                 // this means we could register this object.
 
                 // next, scan this object to see if there are any RMI fields
-                RmiManagerGlobal.scanImplForRmiFields(logger, implObject) {
+                RmiManagerGlobal.scanImplForRmiFields(endPoint.logger, implObject) {
                     saveImplObject(it)
                 }
             } else {
-                logger.error {
-                    "Trying to create an RMI object with the INVALID_RMI id!!"
-                }
+                val exception = NullPointerException("Trying to create an RMI object with the INVALID_RMI id!!")
+                ListenerManager.cleanStackTrace(exception)
+                endPoint.listenerManager.notifyError(connection, exception)
             }
 
             // we send the message ANYWAYS, because the client needs to know it did NOT succeed!

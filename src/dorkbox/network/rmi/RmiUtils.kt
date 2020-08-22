@@ -477,10 +477,13 @@ object RmiUtils {
      *
      * We do this because these stack frames are not useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
      */
-    fun cleanStackTraceForProxy(localThrowable: Throwable, invokingClass: Class<*>, remoteException: Exception? = null) {
-        val myClassName = invokingClass.name
-        val stackTrace = localThrowable.stackTrace
+    fun cleanStackTraceForProxy(localException: Exception, remoteException: Exception? = null) {
+        val myClassName = RmiClient::class.java.name
+        val stackTrace = localException.stackTrace
         var newStartIndex = 0
+        var newEndIndex = stackTrace.size-1
+
+        // step 1: Find the start of our method invocation
         for (element in stackTrace) {
             newStartIndex++
 
@@ -491,14 +494,24 @@ object RmiUtils {
             }
         }
 
+        // step 2: now we have to find the END index, since a proxy invocation ALWAYS happens starting from our network stack
+        for (i in stackTrace.size-1 downTo 0) {
+            newEndIndex--
+
+            val stackClassName = stackTrace[i].className
+            if (stackClassName.startsWith("dorkbox.network.rmi.")) {
+                break
+            }
+        }
+
         if (remoteException == null) {
             // no remote exception, just cleanup our own callstack
-            localThrowable.stackTrace = stackTrace.copyOfRange(newStartIndex, stackTrace.size)
+            localException.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
         } else {
             // merge this info into the remote exception, so we can get the correct call stack info
-            val newStack = Array<StackTraceElement>(remoteException.stackTrace.size + stackTrace.size - newStartIndex) { stackTrace[0] }
+            val newStack = Array<StackTraceElement>(remoteException.stackTrace.size + newEndIndex - newStartIndex) { stackTrace[0] }
             remoteException.stackTrace.copyInto(newStack)
-            stackTrace.copyInto(newStack, remoteException.stackTrace.size, newStartIndex)
+            stackTrace.copyInto(newStack, remoteException.stackTrace.size, newStartIndex, newEndIndex)
 
             remoteException.stackTrace = newStack
         }

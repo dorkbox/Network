@@ -15,15 +15,13 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.Configuration
 import dorkbox.util.collections.ConcurrentEntry
 import dorkbox.util.collections.ConcurrentIterator
 import dorkbox.util.collections.ConcurrentIterator.headREF
-import mu.KLogger
 
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
 @Suppress("UNCHECKED_CAST")
-internal open class ConnectionManager<CONNECTION: Connection>(val logger: KLogger, val config: Configuration) {
+internal open class ConnectionManager<CONNECTION: Connection>() {
 
     private val connections = ConcurrentIterator<CONNECTION>()
 

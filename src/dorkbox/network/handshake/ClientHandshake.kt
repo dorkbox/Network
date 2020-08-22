@@ -49,10 +49,10 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
     private var failed: Exception? = null
 
     lateinit var handler: FragmentHandler
-    lateinit var endPoint: EndPoint<*>
+    lateinit var endPoint: EndPoint<CONNECTION>
     var sessionId: Int = 0
 
-    fun init(endPoint: EndPoint<*>) {
+    fun init(endPoint: EndPoint<CONNECTION>) {
         this.endPoint = endPoint
 
         // now we have a bi-directional connection with the server on the handshake "socket".

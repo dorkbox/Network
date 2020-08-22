@@ -215,8 +215,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
                 logger.error("Error creating new connection")
 
-                listenerManager.notifyError(connection,
-                                            ClientRejectedException("Connection was not permitted!"))
+                val exception = ClientRejectedException("Connection was not permitted!")
+                ListenerManager.cleanStackTrace(exception)
+                listenerManager.notifyError(connection, exception)
 
                 endPoint.writeHandshakeMessage(handshakePublication,
                                                HandshakeMessage.error("Connection was not permitted!"))

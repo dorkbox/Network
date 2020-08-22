@@ -17,6 +17,7 @@ package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
 import dorkbox.network.rmi.messages.GlobalObjectCreateRequest
@@ -31,9 +32,9 @@ import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
 
-internal class RmiManagerGlobal(logger: KLogger,
-                                actionDispatch: CoroutineScope,
-                                internal val serialization: NetworkSerializationManager) : RmiObjectCache(logger) {
+internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
+                                                         actionDispatch: CoroutineScope,
+                                                         internal val serialization: NetworkSerializationManager) : RmiObjectCache(logger) {
     companion object {
         /**
          * Returns a proxy object that implements the specified interface, and the methods invoked on the proxy object will be invoked
@@ -214,15 +215,16 @@ internal class RmiManagerGlobal(logger: KLogger,
     /**
      * called on "client"
      */
-    private fun onGenericObjectResponse(endPoint: EndPoint<*>, connection: Connection, logger: KLogger,
-                                        isGlobal: Boolean, rmiId: Int, callback: suspend (Int, Any) -> Unit,
-                                        rmiObjectCache: RmiObjectCache, serialization: NetworkSerializationManager) {
+    private suspend fun onGenericObjectResponse(endPoint: EndPoint<CONNECTION>,
+                                                connection: CONNECTION,
+                                                isGlobal: Boolean,
+                                                rmiId: Int,
+                                                callback: suspend (Int, Any) -> Unit,
+                                                serialization: NetworkSerializationManager) {
 
         // we only create the proxy + execute the callback if the RMI id is valid!
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            logger.error {
-                "RMI ID '${rmiId}' is invalid. Unable to create RMI object on server."
-            }
+            endPoint.listenerManager.notifyError(connection, Exception("RMI ID '${rmiId}' is invalid. Unable to create RMI object on server."))
             return
         }
 
@@ -240,7 +242,8 @@ internal class RmiManagerGlobal(logger: KLogger,
             try {
                 callback(rmiId, proxyObject)
             } catch (e: Exception) {
-                logger.error("Error getting or creating the remote object $interfaceClass", e)
+                ListenerManager.cleanStackTrace(e)
+                endPoint.listenerManager.notifyError(e)
             }
         }
     }
@@ -267,13 +270,15 @@ internal class RmiManagerGlobal(logger: KLogger,
      */
     @Suppress("DuplicatedCode")
     @Throws(IllegalArgumentException::class)
-    suspend fun manage(endPoint: EndPoint<*>, connection: Connection, message: Any, logger: KLogger) {
+    suspend fun manage(endPoint: EndPoint<CONNECTION>, connection: CONNECTION, message: Any, logger: KLogger) {
         when (message) {
             is ConnectionObjectCreateRequest -> {
                 /**
                  * called on "server"
                  */
-                connection.rmiConnectionSupport.onConnectionObjectCreateRequest(endPoint, connection, message, logger)
+                @Suppress("UNCHECKED_CAST")
+                val rmiConnectionSupport: RmiManagerConnections<CONNECTION> = connection.rmiConnectionSupport as RmiManagerConnections<CONNECTION>
+                rmiConnectionSupport.onConnectionObjectCreateRequest(endPoint, connection, message)
             }
             is ConnectionObjectCreateResponse -> {
                 /**
@@ -282,7 +287,7 @@ internal class RmiManagerGlobal(logger: KLogger,
                 val callbackId = RmiUtils.unpackLeft(message.packedIds)
                 val rmiId = RmiUtils.unpackRight(message.packedIds)
                 val callback = removeCallback(callbackId)
-                onGenericObjectResponse(endPoint, connection, logger, false, rmiId, callback, this, serialization)
+                onGenericObjectResponse(endPoint, connection, false, rmiId, callback, serialization)
             }
             is GlobalObjectCreateRequest -> {
                 /**
@@ -297,7 +302,7 @@ internal class RmiManagerGlobal(logger: KLogger,
                 val callbackId = RmiUtils.unpackLeft(message.packedIds)
                 val rmiId = RmiUtils.unpackRight(message.packedIds)
                 val callback = removeCallback(callbackId)
-                onGenericObjectResponse(endPoint, connection, logger, true, rmiId, callback, this, serialization)
+                onGenericObjectResponse(endPoint, connection, true, rmiId, callback, serialization)
             }
             is MethodRequest -> {
                 /**
@@ -320,8 +325,8 @@ internal class RmiManagerGlobal(logger: KLogger,
                 val implObject = getImplObject<Any>(isGlobal, rmiObjectId, connection)
 
                 if (implObject == null) {
-                    logger.error("Unable to resolve implementation object for [global=$isGlobal, objectID=$rmiObjectId, connection=$connection")
-
+                    endPoint.listenerManager.notifyError(connection,
+                                                         NullPointerException("Unable to resolve implementation object for [global=$isGlobal, objectID=$rmiObjectId, connection=$connection"))
                     if (sendResponse) {
                         returnRmiMessage(connection,
                                          message,
@@ -365,7 +370,7 @@ internal class RmiManagerGlobal(logger: KLogger,
                         var insideResult: Any?
                         try {
                             // args!! is safe to do here (even though it doesn't make sense)
-                            insideResult = cachedMethod.invoke(connection, implObject, args)
+//                            insideResult = cachedMethod.invoke(connection, implObject, args)
                         } catch (ex: Exception) {
                             insideResult = ex.cause
                             // added to prevent a stack overflow when references is false, (because 'cause' == "this").
@@ -377,12 +382,9 @@ internal class RmiManagerGlobal(logger: KLogger,
                             else {
                                 insideResult.initCause(null)
                             }
-
-                            RmiUtils.cleanStackTraceForImpl(insideResult as Exception, true)
-                            val fancyName = RmiUtils.makeFancyMethodName(cachedMethod)
-                            logger.error("Error invoking method: $fancyName", insideResult)
                         }
-                        insideResult
+//                        insideResult
+                        Exception(":ASDASDUJHAKDSGJFHAKHDLA")
                     }
 
 
@@ -394,6 +396,15 @@ internal class RmiManagerGlobal(logger: KLogger,
                             // kotlin suspend returns, that DO NOT have a return value, REALLY return kotlin.Unit. This means there is no
                             // return value!
                             suspendResult = null
+                        }
+                        else if (suspendResult is Exception) {
+                            RmiUtils.cleanStackTraceForImpl(suspendResult, true)
+
+                            val fancyName = RmiUtils.makeFancyMethodName(cachedMethod)
+                            val exception = Exception("Error invoking method: $fancyName", suspendResult)
+                            RmiUtils.cleanStackTraceForImpl(exception, true)
+
+                            endPoint.listenerManager.notifyError(connection, exception)
                         }
 
                         if (sendResponse) {
@@ -448,7 +459,7 @@ internal class RmiManagerGlobal(logger: KLogger,
     /**
      * called on "server"
      */
-    private suspend fun onGlobalObjectCreateRequest(endPoint: EndPoint<*>, connection: Connection, message: GlobalObjectCreateRequest, logger: KLogger) {
+    private suspend fun onGlobalObjectCreateRequest(endPoint: EndPoint<CONNECTION>, connection: Connection, message: GlobalObjectCreateRequest, logger: KLogger) {
         val interfaceClassId = RmiUtils.unpackLeft(message.packedIds)
         val callbackId = RmiUtils.unpackRight(message.packedIds)
         val objectParameters = message.objectParameters
