@@ -112,6 +112,22 @@
        Copyright 2019
          QOS.ch
 
+     - MinLog-SLF4J - Drop-in replacement for MinLog to log through SLF4j.
+       [BSD 3-Clause License]
+       https://git.dorkbox.com/dorkbox/MinLog-SLF4J
+       https://github.com/EsotericSoftware/minlog
+       Copyright 2020
+         Dorkbox LLC
+         Nathan Sweet
+         Dan Brown
+
+       Extra license information
+         - SLF4J - Simple facade or abstraction for various logging frameworks
+           [MIT License]
+           http://www.slf4j.org
+           Copyright 2019
+             QOS.ch
+
      - Utilities - Utilities for use within Java projects
        [The Apache Software License, Version 2.0]
        https://git.dorkbox.com/dorkbox/Utilities
