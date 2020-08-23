@@ -370,7 +370,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
                         var insideResult: Any?
                         try {
                             // args!! is safe to do here (even though it doesn't make sense)
-//                            insideResult = cachedMethod.invoke(connection, implObject, args)
+                            insideResult = cachedMethod.invoke(connection, implObject, args)
                         } catch (ex: Exception) {
                             insideResult = ex.cause
                             // added to prevent a stack overflow when references is false, (because 'cause' == "this").
@@ -383,8 +383,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
                                 insideResult.initCause(null)
                             }
                         }
-//                        insideResult
-                        Exception(":ASDASDUJHAKDSGJFHAKHDLA")
+                        insideResult
                     }
 
 
@@ -396,8 +395,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
                             // kotlin suspend returns, that DO NOT have a return value, REALLY return kotlin.Unit. This means there is no
                             // return value!
                             suspendResult = null
-                        }
-                        else if (suspendResult is Exception) {
+                        } else if (suspendResult is Exception) {
                             RmiUtils.cleanStackTraceForImpl(suspendResult, true)
 
                             val fancyName = RmiUtils.makeFancyMethodName(cachedMethod)
