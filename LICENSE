@@ -235,6 +235,12 @@
            Copyright 2014
              The Netty Project
 
+         - Retrofit - A type-safe HTTP client for Android and Java
+           [The Apache Software License, Version 2.0]
+           https://github.com/square/retrofit
+           Copyright 2020
+             Square, Inc
+
          - JNA - Simplified native library access for Java.
            [The Apache Software License, Version 2.0]
            https://github.com/twall/jna

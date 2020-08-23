@@ -39,7 +39,7 @@ object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.0-alpha3"
+    const val version = "5.0-alpha4"
 
     // set as project.ext
     const val name = "Network"
@@ -217,8 +217,8 @@ dependencies {
 
     implementation("net.jodah:typetools:0.6.2")
 
-    implementation("com.dorkbox:Utilities:1.6")
-    implementation("com.dorkbox:NetworkUtils:1.1")
+    implementation("com.dorkbox:Utilities:1.7")
+    implementation("com.dorkbox:NetworkUtils:1.3")
 
 
     // https://github.com/MicroUtils/kotlin-logging
