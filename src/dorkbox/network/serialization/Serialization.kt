@@ -381,9 +381,16 @@ class Serialization(private val references: Boolean,
 
             // now create the registration details, used to validate that the client/server have the EXACT same class registration setup
             val registrationDetails = arrayListOf<Array<Any>>()
-            classesToRegister.forEach { classRegistration ->
-                classRegistration.log(logger)
 
+            if (logger.isTraceEnabled) {
+                // log the in-order output first
+                classesToRegister.forEach { classRegistration ->
+                    classRegistration.log(logger)
+                }
+            }
+
+
+            classesToRegister.forEach { classRegistration ->
                 // now save all of the registration IDs for quick verification/access
                 registrationDetails.add(classRegistration.getInfoArray())
 

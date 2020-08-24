@@ -163,10 +163,6 @@ object RmiUtils {
                 overwrittenMethod = getOverwriteMethodWithConnectionParam(implMethods, method)
 
                 if (overwrittenMethod != null) {
-                    logger.trace {
-                        "Overridden method: $impl.${method.name}"
-                    }
-
                     // still might be null!
                     iface_OR_ImplMethodAccess = implAsmMethodAccess
                 }
@@ -207,6 +203,12 @@ object RmiUtils {
             cachedMethod.overriddenMethod = overwrittenMethod
 
             cachedMethods[i] = cachedMethod
+
+
+            if (overwrittenMethod != null && logger.isTraceEnabled) {
+                logger.trace("Overridden method: ${makeFancyMethodName(cachedMethod)}")
+                logger.trace("        to method: ${makeFancyMethodName(overwrittenMethod)}")
+            }
         }
 
         // force the type, because we KNOW it is ok to do so
@@ -444,8 +446,8 @@ object RmiUtils {
         return packedInt.toUShort().toInt()
     }
 
-    fun makeFancyMethodName(cachedMethod: CachedMethod): String {
-        val parameterTypes = cachedMethod.method.parameterTypes
+    fun makeFancyMethodName(method: CachedMethod): String {
+        val parameterTypes = method.method.parameterTypes
         val size = parameterTypes.size
         val args: String = if (size == 0 || parameterTypes[size - 1] == Continuation::class.java) {
             ""
@@ -453,13 +455,13 @@ object RmiUtils {
             parameterTypes.joinToString { it.simpleName }
         }
 
-        return "${cachedMethod.method.declaringClass.name}.${cachedMethod.method.name}($args)"
+        return "${method.method.declaringClass.name}.${method.method.name}($args)"
     }
 
     fun makeFancyMethodName(method: Method): String {
         val parameterTypes = method.parameterTypes
         val size = parameterTypes.size
-        val args: String = if (size != 0 || parameterTypes[size - 1] == Continuation::class.java) {
+        val args: String = if (size == 0 || parameterTypes[size - 1] == Continuation::class.java) {
             ""
         } else {
             parameterTypes.joinToString { it.simpleName }
