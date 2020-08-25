@@ -215,19 +215,19 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                         var shouldCleanupConnection = false
 
                         if (connection.isExpired()) {
-                            logger.debug {"[${connection.sessionId}}] connection expired"}
+                            logger.debug {"[${connection.sessionId}] connection expired"}
                             shouldCleanupConnection = true
                         }
 
                         else if (connection.isClosed()) {
-                            logger.debug {"[${connection.sessionId}}] connection closed"}
+                            logger.debug {"[${connection.sessionId}] connection closed"}
                             shouldCleanupConnection = true
                         }
 
 
                         if (shouldCleanupConnection) {
                             // remove this connection so there won't be an attempt to poll it again
-                            logger.debug {"[${connection.sessionId}}] connection marked for remove"}
+                            logger.debug {"[${connection.sessionId}] connection marked for remove"}
                             true
                         }
                         else {
@@ -236,7 +236,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                             false
                         }
                     }, { connectionToClean ->
-                        logger.debug {"[${connectionToClean.sessionId}}] removed connection"}
+                        logger.debug {"[${connectionToClean.sessionId}] removed connection"}
 
                         // have to free up resources!
                         handshake.cleanup(connectionToClean)
