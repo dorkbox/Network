@@ -187,7 +187,7 @@ object RmiUtils {
                             methodClassId = classId,
                             serializers = serializers)
                 } catch (e: Exception) {
-                    logger.trace("Unable to use ReflectAsm for {}.{} (using java reflection instead)", declaringClass, method.name, e)
+                    logger.error("Unable to use ReflectAsm for ${makeFancyMethodName(method)}", e)
                 }
             }
 
