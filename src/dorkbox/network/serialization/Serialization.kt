@@ -501,8 +501,8 @@ class Serialization(private val references: Boolean,
                 val idMatches = idClient == idServer
                 if (!idMatches) {
                     success = false
-                    logger.error("Registration {} Client -> {} ({})", idClient, nameClient, serializerClient)
-                    logger.error("Registration {} Server -> {} ({})", idServer, nameServer, serializerServer)
+                    logger.error("MISMATCH: Registration $idClient Client -> $nameClient ($serializerClient)")
+                    logger.error("MISMATCH: Registration $idServer Server -> $nameServer ($serializerServer)")
                     continue
                 }
 
@@ -510,8 +510,8 @@ class Serialization(private val references: Boolean,
                 val nameMatches = nameServer == nameClient
                 if (!nameMatches) {
                     success = false
-                    logger.error("Registration {} Client -> {} ({})", idClient, nameClient, serializerClient)
-                    logger.error("Registration {} Server -> {} ({})", idServer, nameServer, serializerServer)
+                    logger.error("MISMATCH: Registration $idClient Client -> $nameClient ($serializerClient)")
+                    logger.error("MISMATCH: Registration $idServer Server -> $nameServer ($serializerServer)")
                     continue
                 }
 
@@ -526,8 +526,8 @@ class Serialization(private val references: Boolean,
                         // this is for CLIENT RMI!
                     } else {
                         success = false
-                        logger.error("Registration {} Client -> {} ({})", idClient, nameClient, serializerClient)
-                        logger.error("Registration {} Server -> {} ({})", idServer, nameServer, serializerServer)
+                        logger.error("MISMATCH: Registration $idClient Client -> $nameClient ($serializerClient)")
+                        logger.error("MISMATCH: Registration $idServer Server -> $nameServer ($serializerServer)")
                     }
                 }
             }
