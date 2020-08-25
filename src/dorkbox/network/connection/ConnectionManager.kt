@@ -80,7 +80,6 @@ internal open class ConnectionManager<CONNECTION: Connection>() {
             connection = current.value
             current = current.next()
 
-            function(connection)
             if (function(connection)) {
                 // Concurrent iteration...
                 connections.remove(connection)
