@@ -15,12 +15,13 @@
  */
 package dorkbox.network.serialization
 
-import dorkbox.network.rmi.messages.ObjectResponseSerializer
+import dorkbox.network.rmi.messages.RmiObjectSerializer
 
-internal class ClassRegistrationIfaceAndImpl(ifaceClass: Class<*>, val implClass: Class<*>, objectResponseSerializer: ObjectResponseSerializer) : ClassRegistration(ifaceClass) {
+internal class ClassRegistrationIfaceAndImpl(ifaceClass: Class<*>, val implClass: Class<*>, rmiObjectSerializer: RmiObjectSerializer) :
+        ClassRegistration(implClass) {
 
     init {
-        this.serializer = objectResponseSerializer
+        this.serializer = rmiObjectSerializer
     }
 
     override fun register(kryo: KryoExtra) {

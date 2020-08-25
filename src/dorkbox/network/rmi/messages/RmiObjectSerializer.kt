@@ -51,7 +51,7 @@ import dorkbox.network.serialization.KryoExtra
  *
  * @author Nathan Sweet <misc></misc>@n4te.com>
  */
-class ObjectResponseSerializer(private val rmiImplToIface: IdentityMap<Class<*>, Class<*>>) : Serializer<Any>(false) {
+class RmiObjectSerializer(private val rmiImplToIface: IdentityMap<Class<*>, Class<*>>) : Serializer<Any>(false) {
     override fun write(kryo: Kryo, output: Output, `object`: Any) {
         println(" FIX ObjectResponseSerializer ")
         val kryoExtra = kryo as KryoExtra

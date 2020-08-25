@@ -36,8 +36,8 @@ import dorkbox.network.rmi.messages.MethodRequest
 import dorkbox.network.rmi.messages.MethodRequestSerializer
 import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.rmi.messages.MethodResponseSerializer
-import dorkbox.network.rmi.messages.ObjectResponseSerializer
 import dorkbox.network.rmi.messages.RmiClientRequestSerializer
+import dorkbox.network.rmi.messages.RmiObjectSerializer
 import dorkbox.os.OS
 import dorkbox.util.serialization.SerializationDefaults
 import kotlinx.coroutines.channels.Channel
@@ -133,7 +133,7 @@ class Serialization(private val references: Boolean,
     private val methodRequestSerializer = MethodRequestSerializer()
     private val methodResponseSerializer = MethodResponseSerializer()
     private val objectRequestSerializer = RmiClientRequestSerializer()
-    private val objectResponseSerializer = ObjectResponseSerializer(rmiImplToIface)
+    private val objectResponseSerializer = RmiObjectSerializer(rmiImplToIface)
     private val continuationRequestSerializer = ContinuationSerializer()
 
 
