@@ -16,6 +16,7 @@
 package dorkbox.network.handshake
 
 import dorkbox.netUtil.IPv4
+import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.client.ClientRejectedException
 import dorkbox.network.aeron.server.AllocationException
@@ -59,7 +60,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     // note: this is called in action dispatch
     suspend fun receiveHandshakeMessageServer(handshakePublication: Publication,
                                               buffer: DirectBuffer, offset: Int, length: Int, header: Header,
-                                              endPoint: EndPoint<CONNECTION>) {
+                                              server: Server<CONNECTION>) {
         // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
         // ONLY for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
         val sessionId = header.sessionId()
@@ -73,12 +74,12 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 //        val port = remoteIpAndPort.substring(splitPoint+1)
         val clientAddress = IPv4.toInt(clientAddressString)
 
-        val message = endPoint.readHandshakeMessage(buffer, offset, length, header)
+        val message = server.readHandshakeMessage(buffer, offset, length, header)
 
         // VALIDATE:: a Registration object is the only acceptable message during the connection phase
         if (message !is HandshakeMessage) {
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Invalid connection request"))
-            endPoint.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection request"))
+            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection request"))
             return
         }
 
@@ -93,11 +94,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                     logger.debug("Connection from client $clientAddressString ready")
 
                     // now tell the client we are done
-                    endPoint.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(sessionId))
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(sessionId))
 
-                    endPoint.actionDispatch.launch {
+                    server.actionDispatch.launch {
                         listenerManager.notifyConnect(pendingConnection)
                     }
+
+                    // this enables the connection to start polling for messages
+                    server.connections.add(pendingConnection)
+
                     return
                 }
             }
@@ -106,15 +111,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
-            if (endPoint.connections.connectionCount() >= config.maxClientCount) {
+            if (server.connections.connectionCount() >= config.maxClientCount) {
                 listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}"))
 
-                endPoint.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
                 return
             }
 
             // VALIDATE:: check to see if the remote connection's public key has changed!
-            validateRemoteAddress = endPoint.crypto.validateRemoteAddress(clientAddress, clientPublicKeyBytes)
+            validateRemoteAddress = server.crypto.validateRemoteAddress(clientAddress, clientPublicKeyBytes)
             if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
                 listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Public key mismatch."))
                 return
@@ -133,13 +138,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
                 // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
                 connectionsPerIpCounts.getAndDecrement(clientAddress)
-                endPoint.writeHandshakeMessage(handshakePublication,
-                                               HandshakeMessage.error("Too many connections for IP address"))
+                server.writeHandshakeMessage(handshakePublication,
+                                             HandshakeMessage.error("Too many connections for IP address"))
                 return
             }
         } catch (e: Exception) {
             listenerManager.notifyError(ClientRejectedException("could not validate client message", e))
-            endPoint.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
+            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
             return
         }
 
@@ -163,8 +168,8 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a session ID for the client connection!"))
 
-            endPoint.writeHandshakeMessage(handshakePublication,
-                                           HandshakeMessage.error("Connection error!"))
+            server.writeHandshakeMessage(handshakePublication,
+                                         HandshakeMessage.error("Connection error!"))
             return
         }
 
@@ -179,8 +184,8 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a stream ID for the client connection!"))
 
-            endPoint.writeHandshakeMessage(handshakePublication,
-                                           HandshakeMessage.error("Connection error!"))
+            server.writeHandshakeMessage(handshakePublication,
+                                         HandshakeMessage.error("Connection error!"))
             return
         }
 
@@ -202,7 +207,14 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                                             0,
                                                             message.isReliable)
 
-            val connection: Connection = endPoint.newConnection(ConnectionParams(endPoint, clientConnection, validateRemoteAddress))
+            // we have to construct how the connection will communicate!
+            clientConnection.buildServer(server.aeron)
+
+            logger.trace {
+                "Creating new connection $clientConnection"
+            }
+
+            val connection: Connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             @Suppress("UNCHECKED_CAST")
@@ -219,8 +231,8 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 ListenerManager.cleanStackTrace(exception)
                 listenerManager.notifyError(connection, exception)
 
-                endPoint.writeHandshakeMessage(handshakePublication,
-                                               HandshakeMessage.error("Connection was not permitted!"))
+                server.writeHandshakeMessage(handshakePublication,
+                                             HandshakeMessage.error("Connection was not permitted!"))
                 return
             }
 
@@ -229,16 +241,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             val successMessage = HandshakeMessage.helloAckToClient(sessionId)
 
             // now create the encrypted payload, using ECDH
-            successMessage.registrationData = endPoint.crypto.encrypt(publicationPort,
-                                                                      subscriptionPort,
-                                                                      connectionSessionId,
-                                                                      connectionStreamId,
-                                                                      clientPublicKeyBytes!!)
+            successMessage.registrationData = server.crypto.encrypt(publicationPort,
+                                                                    subscriptionPort,
+                                                                    connectionSessionId,
+                                                                    connectionStreamId,
+                                                                    clientPublicKeyBytes!!)
 
-            successMessage.publicKey = endPoint.crypto.publicKeyBytes
-
-            // this enables the connection to start polling for messages
-            endPoint.connections.add(connection)
+            successMessage.publicKey = server.crypto.publicKeyBytes
 
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnectionsLock.write {
@@ -246,7 +255,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             }
 
             // this tells the client all of the info to connect.
-            endPoint.writeHandshakeMessage(handshakePublication, successMessage)
+            server.writeHandshakeMessage(handshakePublication, successMessage)
         } catch (e: Exception) {
             // have to unwind actions!
             connectionsPerIpCounts.getAndDecrement(clientAddress)

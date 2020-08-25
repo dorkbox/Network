@@ -88,14 +88,25 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         const val IPC_HANDSHAKE_STREAM_ID_PUB: Int = 0x1337c0de
         const val IPC_HANDSHAKE_STREAM_ID_SUB: Int = 0x1337c0d3
 
-        fun errorCodeName(result: Long): String {
+
+        private fun errorCodeName(result: Long): String {
             return when (result) {
+                // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
                 Publication.NOT_CONNECTED -> "Not connected"
-                Publication.ADMIN_ACTION -> "Administrative action"
+
+                // The offer failed due to back pressure from the subscribers preventing further transmission.
                 Publication.BACK_PRESSURED -> "Back pressured"
+
+                // The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
+                Publication.ADMIN_ACTION -> "Administrative action"
+
+                // The Publication has been closed and should no longer be used.
                 Publication.CLOSED -> "Publication is closed"
+
+                // If this happens then the publication should be closed and a new one added. To make it less likely to happen then increase the term buffer length.
                 Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
-                else -> throw IllegalStateException()
+
+                else -> throw IllegalStateException("Unknown error code: $result")
             }
         }
     }
@@ -463,7 +474,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * @return A string
      */
-    internal suspend fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
+    fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
         val kryo: KryoExtra = serialization.takeKryo()
         try {
             val message = kryo.read(buffer, offset, length)
@@ -558,6 +569,49 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         }
     }
 
+    // NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
+    suspend fun send(message: Any, publication: Publication, connection: Connection) {
+        // The sessionId is globally unique, and is assigned by the server.
+        logger.trace {
+            "[${publication.sessionId()}] send: $message"
+        }
+
+        val kryo: KryoExtra = serialization.takeKryo()
+        try {
+            kryo.write(connection, message)
+
+            val buffer = kryo.writerBuffer
+            val objectSize = buffer.position()
+            val internalBuffer = buffer.internalBuffer
+
+            var result: Long
+            while (true) {
+                result = publication.offer(internalBuffer, 0, objectSize)
+                // success!
+                if (result > 0) {
+                    return
+                }
+
+                if (result == Publication.BACK_PRESSURED || result == Publication.ADMIN_ACTION) {
+                    // we should retry.
+                    sendIdleStrategy.idle()
+                    continue
+                }
+
+                // more critical error sending the message. we shouldn't retry or anything.
+                logger.error("Error sending message. ${errorCodeName(result)}")
+
+                return
+            }
+        } catch (e: Exception) {
+            logger.error("Error serializing message $message", e)
+        } finally {
+            sendIdleStrategy.reset()
+            serialization.returnKryo(kryo)
+        }
+    }
+
+
     override fun toString(): String {
         return "EndPoint [${type.simpleName}]"
     }
@@ -597,7 +651,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     fun waitForShutdown() {
         shutdownLatch.await()
     }
-
 
     override fun close() {
         if (shutdown.compareAndSet(expect = false, update = true)) {

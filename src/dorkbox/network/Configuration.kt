@@ -81,7 +81,7 @@ open class Configuration {
     /**
      * How long a connection must be disconnected before we cleanup the memory associated with it
      */
-    var connectionCleanupTimeoutInSeconds: Int = 10
+    var connectionCloseTimeoutInSeconds: Int = 10
 
     /**
      * Allows the end user to change how endpoint settings are stored. For example, a custom database instead of the default.

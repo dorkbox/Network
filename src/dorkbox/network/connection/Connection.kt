@@ -16,27 +16,22 @@
 package dorkbox.network.connection
 
 import dorkbox.netUtil.IPv4
-import dorkbox.network.Server
 import dorkbox.network.connection.ping.PingFuture
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.TimeoutException
-import dorkbox.network.serialization.KryoExtra
 import dorkbox.util.classes.ClassHelper
 import io.aeron.FragmentAssembler
 import io.aeron.Publication
 import io.aeron.Subscription
-import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.agrona.BitUtil
-import org.agrona.BufferUtil
 import org.agrona.DirectBuffer
-import org.agrona.concurrent.UnsafeBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -82,28 +77,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     val remoteAddressInt: Int
 
 
-
-
-
-
-    /**
-     * @return true if this connection is established on the loopback interface
-     */
-    val isLoopback: Boolean
-        get() = TODO("Not yet implemented")
-
     /**
      * @return true if this connection is an IPC connection
      */
-    val isIPC: Boolean
-        get() = TODO("Not yet implemented")
+    val isIPC = connectionParameters.mediaDriverConnection is IpcMediaDriverConnection
 
     /**
      * @return true if this connection is a network connection
      */
-    val isNetwork: Boolean
-        get() = TODO("Not yet implemented")
-
+    val isNetwork = connectionParameters.mediaDriverConnection is UdpMediaDriverConnection
 
 
 
@@ -121,31 +103,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val endPoint = connectionParameters.endPoint
     private val listenerManager = atomic<ListenerManager<Connection>?>(null)
 
-    private val serialization = endPoint.config.serialization
-    private val sendIdleStrategy = endPoint.config.sendIdleStrategy.clone()
-
-    private val expirationTime = System.currentTimeMillis() +
-                                 TimeUnit.SECONDS.toMillis(endPoint.config.connectionCleanupTimeoutInSeconds.toLong())
-
     val logger = endPoint.logger
 
 
-    //    private val needsLock = AtomicBoolean(false)
-//    private val writeSignalNeeded = AtomicBoolean(false)
-//    private val writeLock = Any()
-//    private val closeInProgress = AtomicBoolean(false)
     private val isClosed = atomic(false)
-//    private val channelIsClosed = AtomicBoolean(false)
-//    private val messageInProgressLock = Any()
-//    private val messageInProgress = AtomicBoolean(false)
 
 
     @Volatile
     private var pingFuture: PingFuture? = null
-
-    // used to store connection local listeners (instead of global listeners). Only possible on the server.
-//    @Volatile
-//    private var localListenerManager: ConnectionManager<*>? = null
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private var remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
@@ -161,27 +126,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // RMI support for this connection
     internal val rmiConnectionSupport = endPoint.getRmiConnectionSupport()
 
+    // a record of how many messages are in progress of being sent. When closing the connection, this number must be 0
+    private val messagesInProgress = atomic(0)
 
-    var messageHandler: FragmentAssembler
-
-    val buffer = UnsafeBuffer(BufferUtil.allocateDirectAligned(10000, BitUtil.CACHE_LINE_LENGTH))
-
+    private var messageHandler: FragmentAssembler
 
     init {
         val mediaDriverConnection = connectionParameters.mediaDriverConnection
-
-        // we have to construct how the connection will communicate!
-        if (endPoint is Server<*>) {
-            mediaDriverConnection.buildServer(endPoint.aeron)
-        } else {
-            runBlocking {
-                mediaDriverConnection.buildClient(endPoint.aeron)
-            }
-        }
-
-        logger.trace {
-            "Creating new connection $mediaDriverConnection"
-        }
 
         // can only get this AFTER we have built the sub/pub
         subscription = mediaDriverConnection.subscription
@@ -194,13 +145,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         streamId = mediaDriverConnection.streamId // NOTE: this is UNIQUE per server!
         sessionId = mediaDriverConnection.sessionId // NOTE: this is UNIQUE per server!
 
-        messageHandler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-            // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads
-            // don't work.
+        messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+            // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
+            // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
+            // go in "lock step"
             endPoint.actionDispatch.launch {
                 endPoint.readMessage(buffer, offset, length, header, this@Connection)
             }
-        })
+        }
 
         // when closing this connection, HOW MANY endpoints need to be closed?
         closeLatch = CountDownLatch(1)
@@ -214,8 +166,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     fun hasRemoteKeyChanged(): Boolean {
         return remoteKeyChanged
     }
-
-
 
     /**
      * @return the endpoint associated with this connection
@@ -249,7 +199,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Polls the AERON media driver subscription channel for incoming messages
      */
-    fun pollSubscriptions(): Int {
+    internal fun pollSubscriptions(): Int {
         return subscription.poll(messageHandler, 1024)
     }
 
@@ -257,43 +207,17 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * Safely sends objects to a destination.
      */
     suspend fun send(message: Any) {
-        // The sessionId is globally unique, and is assigned by the server.
-        logger.trace {
-            "[${publication.sessionId()}] send: $message"
-        }
+        messagesInProgress.getAndIncrement()
+        endPoint.send(message, publication, this)
+        messagesInProgress.getAndDecrement()
+    }
 
-        val kryo: KryoExtra = serialization.takeKryo()
-        try {
-            kryo.write(this, message)
-
-            val buffer = kryo.writerBuffer
-            val objectSize = buffer.position()
-            val internalBuffer = buffer.internalBuffer
-
-            var result: Long
-            while (true) {
-                result = publication.offer(internalBuffer, 0, objectSize)
-                // success!
-                if (result > 0) {
-                    return
-                }
-
-                if (result == Publication.BACK_PRESSURED || result == Publication.ADMIN_ACTION) {
-                    // we should retry.
-                    sendIdleStrategy.idle()
-                    continue
-                }
-
-                // more critical error sending the message. we shouldn't retry or anything.
-                logger.error("Error sending message. ${EndPoint.errorCodeName(result)}")
-
-                return
-            }
-        } catch (e: Exception) {
-            logger.error("Error serializing message $message", e)
-        } finally {
-            sendIdleStrategy.reset()
-            serialization.returnKryo(kryo)
+    /**
+     * Safely sends objects to a destination.
+     */
+    fun sendBlocking(message: Any) {
+        runBlocking {
+            send(message)
         }
     }
 
@@ -353,12 +277,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
     /**
-     * @param now The current time
-     *
-     * @return `true` if this connection has no subscribers and the current time `now` is after the expriation date
+     * @return `true` if this connection has no subscribers (which means this connection longer has a remote connection)
      */
-    fun isExpired(now: Long): Boolean {
-        return subscription.imageCount() == 0 && now > expirationTime
+    internal fun isExpired(): Boolean {
+        return subscription.imageCount() == 0
     }
 
 
@@ -373,9 +295,18 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    internal suspend fun close() {
+    suspend fun close() {
         if (isClosed.compareAndSet(expect = false, update = true)) {
             subscription.close()
+
+            val closeTimeoutTime = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
+
+            // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
+            // we want a timeout-check, otherwise this will run forever
+            while (messagesInProgress.value != 0 && System.currentTimeMillis() < closeTimeoutTime) {
+                delay(100)
+            }
+
             publication.close()
 
             // a connection might have also registered for disconnect events

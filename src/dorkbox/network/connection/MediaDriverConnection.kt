@@ -72,6 +72,7 @@ class UdpMediaDriverConnection(override val address: String,
         return builder
     }
 
+    @Suppress("DuplicatedCode")
     override suspend fun buildClient(aeron: Aeron) {
         if (address.isEmpty()) {
             throw ClientException("Invalid address : '$address'")

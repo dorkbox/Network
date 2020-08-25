@@ -200,12 +200,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 var pollCount: Int
 
                 while (!isShutdown()) {
-                    // Get the current time, used to cleanup connections
-                    val now = System.currentTimeMillis()
-
                     pollCount = 0
 
-                    // this checks to see if there are NEW clients
+                    // this checks to see if there are NEW clients on the handshake ports
                     pollCount += handshakeSubscription.poll(initialConnectionHandler, 100)
 
                     // this checks to see if there are NEW clients via IPC
@@ -217,25 +214,29 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                         var shouldCleanupConnection = false
 
-                        if (connection.isExpired(now)) {
-                            logger.debug("[{}] connection expired", connection.sessionId)
+                        if (connection.isExpired()) {
+                            logger.debug {"[${connection.sessionId}}] connection expired"}
                             shouldCleanupConnection = true
                         }
 
-                        if (connection.isClosed()) {
-                            logger.debug("[{}] connection closed", connection.sessionId)
+                        else if (connection.isClosed()) {
+                            logger.debug {"[${connection.sessionId}}] connection closed"}
                             shouldCleanupConnection = true
                         }
+
+
                         if (shouldCleanupConnection) {
+                            // remove this connection so there won't be an attempt to poll it again
+                            logger.debug {"[${connection.sessionId}}] connection marked for remove"}
                             true
                         }
                         else {
-                            // Otherwise, poll the duologue for activity.
+                            // Otherwise, poll the connection for messages
                             pollCount += connection.pollSubscriptions()
                             false
                         }
                     }, { connectionToClean ->
-                        logger.debug("[{}] deleted connection", connectionToClean.sessionId)
+                        logger.debug {"[${connectionToClean.sessionId}}] removed connection"}
 
                         // have to free up resources!
                         handshake.cleanup(connectionToClean)

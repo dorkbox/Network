@@ -240,6 +240,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server-assigned client ports
             logger.info(reliableClientConnection.clientInfo())
 
+            // we have to construct how the connection will communicate!
+            reliableClientConnection.buildClient(aeron)
+
+            logger.trace {
+                "Creating new connection $reliableClientConnection"
+            }
+
             val newConnection = newConnection(ConnectionParams(this, reliableClientConnection, validateRemoteAddress))
 
             // VALIDATE are we allowed to connect to this server (now that we have the initial server information)
