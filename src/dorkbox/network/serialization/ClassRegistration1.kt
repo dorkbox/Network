@@ -15,8 +15,6 @@
  */
 package dorkbox.network.serialization
 
-import mu.KLogger
-
 internal class ClassRegistration1(clazz: Class<*>, id: Int) : ClassRegistration(clazz) {
     init {
         this.id = id
@@ -26,9 +24,7 @@ internal class ClassRegistration1(clazz: Class<*>, id: Int) : ClassRegistration(
         kryo.register(clazz, id)
     }
 
-    override fun log(logger: KLogger) {
-        logger.trace {
-            "Registered $id -> (specified) ${clazz.name}"
-        }
+    override fun info(): String {
+        return "Registered $id -> (specified) ${clazz.name}"
     }
 }

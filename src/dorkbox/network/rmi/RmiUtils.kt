@@ -205,9 +205,14 @@ object RmiUtils {
             cachedMethods[i] = cachedMethod
 
 
-            if (overwrittenMethod != null && logger.isTraceEnabled) {
-                logger.trace("Overridden method: ${makeFancyMethodName(cachedMethod)}")
-                logger.trace("        to method: ${makeFancyMethodName(overwrittenMethod)}")
+            if (overwrittenMethod != null && logger.isDebugEnabled) {
+                val name = if (cachedMethod.method.declaringClass.isInterface) {
+                    "iface"
+                } else {
+                    "method"
+                }
+                logger.debug("Overridden $name : ${makeFancyMethodName(cachedMethod)}")
+                logger.debug("        to method: ${makeFancyMethodName(overwrittenMethod)}")
             }
         }
 
@@ -447,28 +452,32 @@ object RmiUtils {
     }
 
     fun makeFancyMethodName(method: CachedMethod): String {
-        val parameterTypes = method.method.parameterTypes
-        val size = parameterTypes.size
-        val args: String = if (size == 0 || parameterTypes[size - 1] == Continuation::class.java) {
-            ""
-        } else {
-            parameterTypes.joinToString { it.simpleName }
-        }
-
-        return "${method.method.declaringClass.name}.${method.method.name}($args)"
+        return makeFancyMethodName(method.method)
     }
 
     fun makeFancyMethodName(method: Method): String {
-        val parameterTypes = method.parameterTypes
+        val parameterTypes: Array<Class<*>> = method.parameterTypes
         val size = parameterTypes.size
-        val args: String = if (size == 0 || parameterTypes[size - 1] == Continuation::class.java) {
+        val isSuspend = size > 0 && parameterTypes[size - 1] == Continuation::class.java
+
+        val args: String = if (size == 0 || (size == 1 && isSuspend)) {
             ""
         } else {
-            parameterTypes.joinToString { it.simpleName }
+            // ALWAYS remove Continuation, since it's REALLY with "suspend" modifier)
+            if (isSuspend) {
+                parameterTypes.filter { it != Continuation::class.java }.joinToString { it.simpleName }
+            } else {
+                parameterTypes.joinToString { it.simpleName }
+            }
         }
 
-        return "${method.declaringClass.name}.${method.name}($args)"
+        return if (isSuspend) {
+            "suspend ${method.declaringClass.name}.${method.name}($args)"
+        } else {
+            "${method.declaringClass.name}.${method.name}($args)"
+        }
     }
+
 
 
 

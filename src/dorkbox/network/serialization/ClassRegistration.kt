@@ -16,7 +16,6 @@
 package dorkbox.network.serialization
 
 import com.esotericsoftware.kryo.Serializer
-import mu.KLogger
 
 internal open class ClassRegistration(var clazz: Class<*>) {
     var id = 0
@@ -27,10 +26,8 @@ internal open class ClassRegistration(var clazz: Class<*>) {
         id = registration.id
     }
 
-    open fun log(logger: KLogger) {
-        logger.trace {
-            "Registered $id -> ${clazz.name}"
-        }
+    open fun info(): String {
+        return "Registered $id -> ${clazz.name}"
     }
 
     fun getInfoArray(): Array<Any> {
