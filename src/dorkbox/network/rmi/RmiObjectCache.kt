@@ -43,8 +43,4 @@ internal open class RmiObjectCache(logger: KLogger) {
     fun <T> removeImplObject(rmiId: Int): T? {
         return implObjects.remove(rmiId) as T?
     }
-
-    open fun close() {
-        implObjects.close()
-    }
 }

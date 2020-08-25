@@ -301,6 +301,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             publication.close()
 
+            rmiConnectionSupport.clearProxyObjects()
+
             // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
             endPoint.actionDispatch.launch {
                 // a connection might have also registered for disconnect events

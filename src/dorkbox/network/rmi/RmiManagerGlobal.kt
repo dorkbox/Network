@@ -205,8 +205,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
         return success as T?
     }
 
-    override fun close() {
-        super.close()
+    fun close() {
         rmiResponseManager.close()
         remoteObjectCreationCallbacks.close()
     }

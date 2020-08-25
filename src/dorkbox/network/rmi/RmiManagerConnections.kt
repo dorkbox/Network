@@ -122,8 +122,7 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
         connection.send(response)
     }
 
-    override fun close() {
+    fun clearProxyObjects() {
         proxyObjects.clear()
-        super.close()
     }
 }
