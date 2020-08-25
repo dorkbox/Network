@@ -66,7 +66,9 @@ class RmiDelayedInvocationTest : BaseTest() {
 
             server.saveGlobalObject(TestObjectImpl(iterateLock), OBJ_ID)
 
-            server.bind(false)
+            runBlocking {
+                server.bind(false)
+            }
         }
 
         run {

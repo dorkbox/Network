@@ -263,7 +263,9 @@ class RmiInitValidationTest : BaseTest() {
                 stopEndPoints()
             }
 
-            server.bind(false)
+            runBlocking {
+                server.bind(false)
+            }
         }
 
 

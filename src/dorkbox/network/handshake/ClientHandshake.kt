@@ -21,13 +21,11 @@ import dorkbox.network.aeron.client.ClientTimedOutException
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.MediaDriverConnection
 import dorkbox.network.connection.UdpMediaDriverConnection
 import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
-import kotlinx.coroutines.launch
 import mu.KLogger
 import org.agrona.DirectBuffer
 import java.security.SecureRandom
@@ -35,78 +33,71 @@ import java.security.SecureRandom
 internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogger,
                                                        private val config: Configuration,
                                                        private val crypto: CryptoManagement,
-                                                       private val listenerManager: ListenerManager<CONNECTION>) {
+                                                       private val endPoint: EndPoint<CONNECTION>) {
     // a one-time key for connecting
     private val oneTimePad = SecureRandom().nextInt()
 
     @Volatile
-    var connectionHelloInfo: ClientConnectionInfo? = null
+    private var connectionHelloInfo: ClientConnectionInfo? = null
 
     @Volatile
-    var connectionDone = false
+    private var connectionDone = false
 
     @Volatile
     private var failed: Exception? = null
 
-    lateinit var handler: FragmentHandler
-    lateinit var endPoint: EndPoint<CONNECTION>
-    var sessionId: Int = 0
+    private var handler: FragmentHandler
+    private var sessionId: Int = 0
 
-    fun init(endPoint: EndPoint<CONNECTION>) {
-        this.endPoint = endPoint
-
+    init {
         // now we have a bi-directional connection with the server on the handshake "socket".
-        handler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-            endPoint.actionDispatch.launch {
-                val sessionId = header.sessionId()
+        handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+            // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
-                val message = endPoint.readHandshakeMessage(buffer, offset, length, header)
-                logger.trace {
-                    "[$sessionId] handshake response: $message"
+            val message = endPoint.readHandshakeMessage(buffer, offset, length, header)
+
+            val sessionId = header.sessionId()
+
+            // it must be a registration message
+            if (message !is HandshakeMessage) {
+                failed = ClientException("[$sessionId] server returned unrecognized message: $message")
+                return@FragmentAssembler
+            }
+
+            // this is an error message
+            if (message.sessionId == 0) {
+                failed = ClientException("[$sessionId] error: ${message.errorMessage}")
+                return@FragmentAssembler
+            }
+
+
+            if (this@ClientHandshake.sessionId != message.sessionId) {
+                failed = ClientException("[$message.sessionId] ignored message intended for another client (mine is: ${this@ClientHandshake.sessionId}")
+                return@FragmentAssembler
+            }
+
+            // it must be the correct state
+            when (message.state) {
+                HandshakeMessage.HELLO_ACK -> {
+                    // The message was intended for this client. Try to parse it as one of the available message types.
+                    // this message is ENCRYPTED!
+                    connectionHelloInfo = crypto.decrypt(message.registrationData, message.publicKey)
+                    connectionHelloInfo!!.log(sessionId, logger)
+
                 }
-
-                // it must be a registration message
-                if (message !is HandshakeMessage) {
-                    failed = ClientException("[$sessionId] server returned unrecognized message: $message")
-                    return@launch
+                HandshakeMessage.DONE_ACK -> {
+                    connectionDone = true
                 }
-
-                // this is an error message
-                if (message.sessionId == 0) {
-                    failed = ClientException("[$sessionId] error: ${message.errorMessage}")
-                    return@launch
-                }
-
-
-                if (this@ClientHandshake.sessionId != message.sessionId) {
-                    failed = ClientException("[$message.sessionId] ignored message intended for another client (mine is: ${this@ClientHandshake.sessionId}")
-                    return@launch
-                }
-
-                // it must be the correct state
-                when (message.state) {
-                    HandshakeMessage.HELLO_ACK -> {
-                        // The message was intended for this client. Try to parse it as one of the available message types.
-                        // this message is ENCRYPTED!
-                        connectionHelloInfo = crypto.decrypt(message.registrationData, message.publicKey)
-                        connectionHelloInfo!!.log(sessionId, logger)
-
+                else -> {
+                    if (message.state != HandshakeMessage.HELLO_ACK) {
+                        failed = ClientException("[$sessionId] ignored message that is not HELLO_ACK")
                     }
-                    HandshakeMessage.DONE_ACK -> {
-                        connectionDone = true
-                    }
-                    else -> {
-                        if (message.state != HandshakeMessage.HELLO_ACK) {
-                            failed = ClientException("[$sessionId] ignored message that is not HELLO_ACK")
-                        } else if (message.state != HandshakeMessage.DONE_ACK) {
-                            failed = ClientException("[$sessionId] ignored message that is not DONE_ACK")
-                        }
-
-                        return@launch
+                    else if (message.state != HandshakeMessage.DONE_ACK) {
+                        failed = ClientException("[$sessionId] ignored message that is not DONE_ACK")
                     }
                 }
             }
-        })
+        }
     }
 
     suspend fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {

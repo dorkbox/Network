@@ -20,7 +20,6 @@ import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.server.ServerException
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.IpcMediaDriverConnection
 import dorkbox.network.connection.UdpMediaDriverConnection
 import dorkbox.network.connection.connectionType.ConnectionProperties
 import dorkbox.network.connection.connectionType.ConnectionRule
@@ -29,7 +28,7 @@ import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.TimeoutException
 import io.aeron.FragmentAssembler
-import io.aeron.logbuffer.FragmentHandler
+import io.aeron.Image
 import io.aeron.logbuffer.Header
 import kotlinx.coroutines.launch
 import org.agrona.DirectBuffer
@@ -134,13 +133,16 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * @param blockUntilTerminate if true, will BLOCK until the server [close] method is called, and if you want to continue running code
      * after this pass in false
      */
+    @Suppress("DuplicatedCode")
     @JvmOverloads
-    fun bind(blockUntilTerminate: Boolean = true) {
+    suspend fun bind(blockUntilTerminate: Boolean = true) {
         if (bindAlreadyCalled) {
             logger.error("Unable to bind when the server is already running!")
             return
         }
 
+        // we are done with initial configuration, now initialize aeron and the general state of this endpoint
+        val aeron = initEndpointState()
         bindAlreadyCalled = true
 
         config as ServerConfiguration
@@ -162,15 +164,15 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         logger.info(handshakeDriver.serverInfo())
 
 
-        val ipcHandshakeDriver = IpcMediaDriverConnection(
-                streamId = IPC_HANDSHAKE_STREAM_ID_PUB,
-                streamIdSubscription = IPC_HANDSHAKE_STREAM_ID_SUB,
-                sessionId = RESERVED_SESSION_ID_INVALID
-        )
-        ipcHandshakeDriver.buildServer(aeron)
-
-        val ipcHandshakePublication = ipcHandshakeDriver.publication
-        val ipcHandshakeSubscription = ipcHandshakeDriver.subscription
+//        val ipcHandshakeDriver = IpcMediaDriverConnection(
+//                streamId = IPC_HANDSHAKE_STREAM_ID_PUB,
+//                streamIdSubscription = IPC_HANDSHAKE_STREAM_ID_SUB,
+//                sessionId = RESERVED_SESSION_ID_INVALID
+//        )
+//        ipcHandshakeDriver.buildServer(aeron)
+//
+//        val ipcHandshakePublication = ipcHandshakeDriver.publication
+//        val ipcHandshakeSubscription = ipcHandshakeDriver.subscription
 
 
         /**
@@ -182,16 +184,41 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
          * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
          * properties from failure and streams with mechanical sympathy.
          */
-        val initialConnectionHandler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+        val initialConnectionHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+            // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
+
+            // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
+            // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
+            val sessionId = header.sessionId()
+
+            // note: this address will ALWAYS be an IP:PORT combo
+            val remoteIpAndPort = (header.context() as Image).sourceIdentity()
+
+            // split
+            val splitPoint = remoteIpAndPort.lastIndexOf(':')
+            val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
+            // val port = remoteIpAndPort.substring(splitPoint+1)
+            val clientAddress = IPv4.toInt(clientAddressString)
+
+            val message = readHandshakeMessage(buffer, offset, length, header)
+
             actionDispatch.launch {
-                handshake.receiveHandshakeMessageServer(handshakePublication, buffer, offset, length, header, this@Server)
+                handshake.processHandshakeMessageServer(handshakePublication,
+                                                        sessionId,
+                                                        clientAddressString,
+                                                        clientAddress,
+                                                        message,
+                                                        this@Server,
+                                                        aeron)
             }
-        })
-        val ipcInitialConnectionHandler = FragmentAssembler(FragmentHandler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+        }
+        val ipcInitialConnectionHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+            // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
+
             actionDispatch.launch {
                 println("GOT MESSAGE!")
             }
-        })
+        }
 
         actionDispatch.launch {
             val pollIdleStrategy = config.pollIdleStrategy
@@ -241,7 +268,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                         handshake.cleanup(connectionToClean)
 
                         connectionToClean.close()
-                        listenerManager.notifyDisconnect(connectionToClean)
                     })
 
 
@@ -252,8 +278,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 handshakePublication.close()
                 handshakeSubscription.close()
 
-                ipcHandshakePublication.close()
-                ipcHandshakeSubscription.close()
+//                ipcHandshakePublication.close()
+//                ipcHandshakeSubscription.close()
             }
         }
 
@@ -267,8 +293,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     internal suspend fun poll(): Int {
 
         var pollCount = 0
-
-
 
         return pollCount
     }
@@ -380,16 +404,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      */
     fun removeConnection(connection: CONNECTION) {
         connections.remove(connection)
-    }
-
-
-    /**
-     * Checks to see if a server (using the specified configuration) is running.
-     *
-     * @return true if the server is active and running
-     */
-    fun isRunning(): Boolean {
-        return mediaDriver.context().isDriverActive(10_000, logger::debug)
     }
 
     override fun close() {

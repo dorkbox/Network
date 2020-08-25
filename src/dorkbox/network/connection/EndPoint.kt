@@ -37,14 +37,12 @@ import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import java.io.File
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 
 
@@ -114,16 +112,14 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     val logger: KLogger = KotlinLogging.logger(type.simpleName)
 
-    internal val autoClosableObjects = CopyOnWriteArrayList<AutoCloseable>()
-
     internal val actionDispatch = CoroutineScope(Dispatchers.Default)
 
     internal val listenerManager = ListenerManager<CONNECTION>()
     internal val connections = ConnectionManager<CONNECTION>()
 
-    internal val mediaDriverContext: MediaDriver.Context
-    internal val mediaDriver: MediaDriver
-    internal val aeron: Aeron
+    private var mediaDriverContext: MediaDriver.Context? = null
+    private var mediaDriver: MediaDriver? = null
+    private var aeron: Aeron? = null
 
     /**
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
@@ -138,10 +134,14 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val crypto: CryptoManagement
 
     private val shutdown = atomic(false)
-    private val shutdownLatch = CountDownLatch(1)
+
+    @Volatile
+    private var shutdownLatch: CountDownLatch = CountDownLatch(1)
 
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
+
+    internal val globalThreadUnsafeKryo: KryoExtra = config.serialization.takeKryo()
 
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
 
@@ -231,6 +231,26 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             logger.info("Aeron log directory already exists! This might not be what you want!")
         }
 
+        // serialization stuff
+        serialization = config.serialization
+        sendIdleStrategy = config.sendIdleStrategy
+
+        // we have to be able to specify WHAT property store we want to use, since it can change!
+        settingsStore = config.settingsStore
+        settingsStore.init(serialization, config.settingsStorageSystem.build())
+
+        crypto = CryptoManagement(logger, settingsStore, type, config)
+
+
+        // we are done with initial configuration, now finish serialization
+        runBlocking {
+            serialization.finishInit(type)
+        }
+    }
+
+    internal suspend fun initEndpointState(): Aeron {
+        val aeronDirectory = config.aeronLogDirectory!!.absolutePath
+
         val threadFactory = NamedThreadFactory("Aeron", false)
 
         // LOW-LATENCY SETTINGS
@@ -241,26 +261,27 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         //             .receiverIdleStrategy(NoOpIdleStrategy.INSTANCE)
         //             .senderIdleStrategy(NoOpIdleStrategy.INSTANCE);
         mediaDriverContext = MediaDriver.Context()
-                .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
-                .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
-                .dirDeleteOnStart(true)
-                .dirDeleteOnShutdown(true)
-                .conductorThreadFactory(threadFactory)
-                .receiverThreadFactory(threadFactory)
-                .senderThreadFactory(threadFactory)
-                .sharedNetworkThreadFactory(threadFactory)
-                .sharedThreadFactory(threadFactory)
-                .threadingMode(config.threadingMode)
-                .mtuLength(config.networkMtuSize)
-                .socketSndbufLength(config.sendBufferSize)
-                .socketRcvbufLength(config.receiveBufferSize)
-                .aeronDirectoryName(config.aeronLogDirectory!!.absolutePath)
+            .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
+            .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
+            .dirDeleteOnStart(true)
+            .dirDeleteOnShutdown(true)
+            .conductorThreadFactory(threadFactory)
+            .receiverThreadFactory(threadFactory)
+            .senderThreadFactory(threadFactory)
+            .sharedNetworkThreadFactory(threadFactory)
+            .sharedThreadFactory(threadFactory)
+            .threadingMode(config.threadingMode)
+            .mtuLength(config.networkMtuSize)
+            .socketSndbufLength(config.sendBufferSize)
+            .socketRcvbufLength(config.receiveBufferSize)
+            .aeronDirectoryName(aeronDirectory)
 
-        val aeronContext = Aeron.Context().aeronDirectoryName(mediaDriverContext.aeronDirectoryName())
+        val aeronContext = Aeron.Context().aeronDirectoryName(aeronDirectory)
 
-        try {
-            mediaDriver = MediaDriver.launch(mediaDriverContext)
+        mediaDriver = try {
+            MediaDriver.launch(mediaDriverContext)
         } catch (e: Exception) {
+            listenerManager.notifyError(e)
             throw e
         }
 
@@ -268,35 +289,23 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             aeron = Aeron.connect(aeronContext)
         } catch (e: Exception) {
             try {
-                mediaDriver.close()
+                mediaDriver!!.close()
             } catch (secondaryException: Exception) {
                 e.addSuppressed(secondaryException)
             }
+
+            listenerManager.notifyError(e)
             throw e
         }
 
-        autoClosableObjects.add(aeron)
-        autoClosableObjects.add(mediaDriver)
+        shutdown.getAndSet(false)
 
+        shutdownLatch.countDown()
+        shutdownLatch = CountDownLatch(1)
 
-        // serialization stuff
-        serialization = config.serialization
-        sendIdleStrategy = config.sendIdleStrategy
-
-        // we have to be able to specify WHAT property store we want to use, since it can change!
-        settingsStore = config.settingsStore
-        settingsStore.init(serialization, config.settingsStorageSystem.build())
-
-        // the storage is closed via this as well
-        autoClosableObjects.add(settingsStore)
-
-        crypto = CryptoManagement(logger, settingsStore, type, config)
-
-        // we are done with initial configuration, now finish serialization
-        runBlocking {
-            serialization.finishInit(type)
-        }
+        return aeron!!
     }
+
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
 
@@ -419,7 +428,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     }
 
     /**
-     * Runs an action for each connection inside of a read-lock
+     * Runs an action for each connection
      */
     suspend fun forEachConnection(function: suspend (connection: CONNECTION) -> Unit) {
         connections.forEach {
@@ -433,11 +442,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             "[${publication.sessionId()}] send: $message"
         }
 
-        val kryo: KryoExtra = serialization.takeKryo()
         try {
-            kryo.write(message)
+            globalThreadUnsafeKryo.write(message)
 
-            val buffer = kryo.writerBuffer
+            val buffer = globalThreadUnsafeKryo.writerBuffer
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
@@ -463,7 +471,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             listenerManager.notifyError(newException("Error serializing message $message", e))
         } finally {
             sendIdleStrategy.reset()
-            serialization.returnKryo(kryo)
         }
     }
 
@@ -471,58 +478,68 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * @param buffer The buffer
      * @param offset The offset from the start of the buffer
      * @param length The number of bytes to extract
+     * @param header The aeron header information
      *
-     * @return A string
+     * @return the message
      */
     fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
-        val kryo: KryoExtra = serialization.takeKryo()
         try {
-            val message = kryo.read(buffer, offset, length)
+            val message = globalThreadUnsafeKryo.read(buffer, offset, length)
             logger.trace {
-                "[${header.sessionId()}] received handshake: $message"
+                "[${header.sessionId()}] received: $message"
             }
 
             return message
         } catch (e: Exception) {
-            logger.error("Error de-serializing message on connection ${header.sessionId()}!", e)
-        } finally {
-            serialization.returnKryo(kryo)
-        }
+            // The sessionId is globally unique, and is assigned by the server.
+            val sessionId = header.sessionId()
 
-        return null
+            val exception = newException("[${sessionId}] Error de-serializing message", e)
+            ListenerManager.cleanStackTrace(exception)
+            actionDispatch.launch {
+                listenerManager.notifyError(exception)
+            }
+
+            logger.error("Error de-serializing message on connection ${header.sessionId()}!", e)
+            return null
+        }
     }
 
-    // This is on the action dispatch!
-    suspend fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection) {
-        // The sessionId is globally unique, and is assigned by the server.
-        val sessionId = header.sessionId()
+    /**
+     * read the message from the aeron buffer
+     *
+     * @param buffer The buffer
+     * @param offset The offset from the start of the buffer
+     * @param length The number of bytes to extract
+     * @param header The aeron header information
+     * @param connection The connection this message happened on
+     */
+    fun processMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection) {
+        // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
+        @Suppress("UNCHECKED_CAST")
+        connection as CONNECTION
 
-        // note: this address will ALWAYS be an IP:PORT combo
-//        val remoteIpAndPort = (header.context() as Image).sourceIdentity()
-
-        // split
-//        val splitPoint = remoteIpAndPort.lastIndexOf(':')
-//        val ip = remoteIpAndPort.substring(0, splitPoint)
-//        val port = remoteIpAndPort.substring(splitPoint+1)
-
-//        val ipAsInt = NetworkUtil.IP.toInt(ip)
-
-
-        var message: Any? = null
-
-        val kryo: KryoExtra = serialization.takeKryo()
+        val message: Any?
         try {
-            message = kryo.read(buffer, offset, length, connection)
+            message = globalThreadUnsafeKryo.read(buffer, offset, length, connection)
             logger.trace {
+                // The sessionId is globally unique, and is assigned by the server.
+                val sessionId = header.sessionId()
                 "[${sessionId}] received: $message"
             }
         } catch (e: Exception) {
-            listenerManager.notifyError(newException("[${sessionId}] Error de-serializing message", e))
-        } finally {
-            serialization.returnKryo(kryo)
+            // The sessionId is globally unique, and is assigned by the server.
+            val sessionId = header.sessionId()
+
+            val exception = newException("[${sessionId}] Error de-serializing message", e)
+            ListenerManager.cleanStackTrace(exception)
+            actionDispatch.launch {
+                listenerManager.notifyError(connection, exception)
+            }
+
+            return // don't do anything!
         }
 
-        connection as CONNECTION
 
         when (message) {
             is PingMessage -> {
@@ -537,34 +554,44 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 //                    ping0(ping)
 //                }
             }
+
+            // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
+            // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
+            // go in "lock step"
             is RmiMessage -> {
-                // if we are an RMI message/registration, we have very specific, defined behavior.
-                // We do not use the "normal" listener callback pattern because this require special functionality
-                rmiGlobalSupport.manage(this, connection, message, logger)
+                actionDispatch.launch {
+                    // if we are an RMI message/registration, we have very specific, defined behavior.
+                    // We do not use the "normal" listener callback pattern because this require special functionality
+                    rmiGlobalSupport.manage(this@EndPoint, connection, message, logger)
+                }
             }
             is Any -> {
-                @Suppress("UNCHECKED_CAST")
-                var hasListeners = listenerManager.notifyOnMessage(connection, message)
+                actionDispatch.launch {
+                    @Suppress("UNCHECKED_CAST")
+                    var hasListeners = listenerManager.notifyOnMessage(connection, message)
 
-                // each connection registers, and is polled INDEPENDENTLY for messages.
-                hasListeners = hasListeners or connection.notifyOnMessage(message)
+                    // each connection registers, and is polled INDEPENDENTLY for messages.
+                    hasListeners = hasListeners or connection.notifyOnMessage(message)
 
-                if (!hasListeners) {
-                    val exception = MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
-                    ListenerManager.cleanStackTrace(exception)
-                    listenerManager.notifyError(connection, exception)
+                    if (!hasListeners) {
+                        val exception = MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
+                        ListenerManager.cleanStackTrace(exception)
+                        listenerManager.notifyError(connection, exception)
+                    }
                 }
             }
             else -> {
-                // do nothing, there were problems with the message
-                val exception = if (message != null) {
-                    MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
-                } else {
-                    MessageNotRegisteredException("Unknown message received!!")
-                }
+                actionDispatch.launch {
+                    // do nothing, there were problems with the message
+                    val exception = if (message != null) {
+                        MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
+                    } else {
+                        MessageNotRegisteredException("Unknown message received!!")
+                    }
 
-                ListenerManager.cleanStackTrace(exception)
-                listenerManager.notifyError(exception)
+                    ListenerManager.cleanStackTrace(exception)
+                    listenerManager.notifyError(exception)
+                }
             }
         }
     }
@@ -576,6 +603,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             "[${publication.sessionId()}] send: $message"
         }
 
+        // since ANY thread can call 'send', we have to take kryo instances in a safe way
         val kryo: KryoExtra = serialization.takeKryo()
         try {
             kryo.write(connection, message)
@@ -652,12 +680,22 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         shutdownLatch.await()
     }
 
+    /**
+     * Checks to see if an endpoint (using the specified configuration) is running.
+     *
+     * @return true if the client/server is active and running
+     */
+    fun isRunning(): Boolean {
+        return mediaDriverContext?.isDriverActive(10_000, logger::debug) ?: false
+    }
+
     override fun close() {
         if (shutdown.compareAndSet(expect = false, update = true)) {
-            autoClosableObjects.forEach {
-                it.close()
-            }
-            autoClosableObjects.clear()
+            aeron?.close()
+            mediaDriver?.close()
+
+            // the storage is closed via this as well
+            settingsStore.close()
 
             rmiGlobalSupport.close()
 
@@ -665,12 +703,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 // don't need anything fast or fancy here, because this method will only be called once
                 connections.forEach {
                     it.close()
-                    listenerManager.notifyDisconnect(it)
+                    listenerManager.notifyDisconnect(it) // if disconnect has a "connect" in it, this will case SO MANY PROBLEMS
                 }
             }
 
-            connections.close()
-            actionDispatch.cancel()
             shutdownLatch.countDown()
         }
     }

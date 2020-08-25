@@ -40,7 +40,6 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.serialization.NetworkSerializationManager
-import dorkbox.util.exceptions.SecurityException
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.classes.MessageWithTestCow
 import dorkboxTest.network.rmi.classes.TestCow
@@ -48,7 +47,6 @@ import dorkboxTest.network.rmi.classes.TestCowImpl
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
-import java.io.IOException
 
 class RmiTest : BaseTest() {
 
@@ -94,8 +92,7 @@ class RmiTest : BaseTest() {
             try {
                 test.throwSuspendException()
             } catch (e: UnsupportedOperationException) {
-                connection.logger.error("\tExpected exception (exception log should also be on the object impl side).")
-                e.printStackTrace()
+                connection.logger.error("\tExpected exception (exception log should also be on the object impl side).", e)
                 caught = true
             }
 
@@ -191,7 +188,6 @@ class RmiTest : BaseTest() {
 //        }
 //    }
 
-    @Throws(SecurityException::class, IOException::class)
     fun rmi(config: (Configuration) -> Unit = {}) {
         run {
             val configuration = serverConfig()
@@ -204,7 +200,9 @@ class RmiTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.bind(false)
+            runBlocking {
+                server.bind(false)
+            }
 
             server.onMessage<MessageWithTestCow> { connection, m ->
                 System.err.println("Received finish signal for test for: Client -> Server")
@@ -259,7 +257,6 @@ class RmiTest : BaseTest() {
         waitForThreads(99999999)
     }
 
-    @Throws(SecurityException::class, IOException::class)
     fun rmiGlobal(config: (Configuration) -> Unit = {}) {
         run {
             val configuration = serverConfig()
@@ -272,7 +269,9 @@ class RmiTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.bind(false)
+            runBlocking {
+                server.bind(false)
+            }
 
             server.onMessage<MessageWithTestCow> { connection, m ->
                 System.err.println("Received finish signal for test for: Client -> Server")

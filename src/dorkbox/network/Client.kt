@@ -24,6 +24,7 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.IpcMediaDriverConnection
+import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.Ping
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.connection.UdpMediaDriverConnection
@@ -34,7 +35,6 @@ import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
@@ -71,7 +71,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     private val previousClosedConnectionActivity: Long = 0
 
-    private val handshake = ClientHandshake(logger, config, crypto, listenerManager)
     private val rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, serialization)
 
     init {
@@ -119,11 +118,15 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
      */
+    @Suppress("DuplicatedCode")
     suspend fun connect(remoteAddress: String = IPv4.LOCALHOST.hostAddress, connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
         if (isConnected) {
             logger.error("Unable to connect when already connected!")
             return
         }
+
+        // we are done with initial configuration, now initialize aeron and the general state of this endpoint
+        val aeron = initEndpointState()
 
         this.connectionTimeoutMS = connectionTimeoutMS
         // localhost/loopback IP might not always be 127.0.0.1 or ::1
@@ -155,7 +158,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
 
 
-        handshake.init(this)
+        val handshake = ClientHandshake(logger, config, crypto, this)
 
         if (this.remoteAddress.isEmpty()) {
             // this is an IPC address
@@ -171,7 +174,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                     sessionId = RESERVED_SESSION_ID_INVALID
             )
 
-            autoClosableObjects.add(handshakeConnection)
 
 
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
@@ -186,6 +188,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             // @Throws(ConnectTimedOutException::class, ClientRejectedException::class)
             val connectionInfo = handshake.handshakeHello(handshakeConnection, connectionTimeoutMS)
             println("CO23232232323NASD")
+
+            // no longer necessary to hold the handshake connection open
+            handshakeConnection.close()
         }
         else {
             // THIS IS A NETWORK ADDRESS
@@ -210,16 +215,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             val connectionInfo = handshake.handshakeHello(handshakeConnection, connectionTimeoutMS)
 
 
-            // we are now connected, so we can connect to the NEW client-specific ports
-            val reliableClientConnection = UdpMediaDriverConnection(address = handshakeConnection.address,
-                                                                    // NOTE: pub/sub must be switched!
-                                                                    publicationPort = connectionInfo.subscriptionPort,
-                                                                    subscriptionPort = connectionInfo.publicationPort,
-                                                                    streamId = connectionInfo.streamId,
-                                                                    sessionId = connectionInfo.sessionId,
-                                                                    connectionTimeoutMS = connectionTimeoutMS,
-                                                                    isReliable = handshakeConnection.isReliable)
-
             // VALIDATE:: check to see if the remote connection's public key has changed!
             val validateRemoteAddress = crypto.validateRemoteAddress(IPv4.toInt(this.remoteAddress), connectionInfo.publicKey)
             if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
@@ -232,6 +227,17 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             // VALIDATE:: If the the serialization DOES NOT match between the client/server, then the server will emit a log, and the
             // client will timeout. SPECIFICALLY.... we do not give class serialization/registration info to the client (in case the client
             // is rogue, we do not want to carelessly provide info.
+
+
+            // we are now connected, so we can connect to the NEW client-specific ports
+            val reliableClientConnection = UdpMediaDriverConnection(address = handshakeConnection.address,
+                                                                    // NOTE: pub/sub must be switched!
+                                                                    publicationPort = connectionInfo.subscriptionPort,
+                                                                    subscriptionPort = connectionInfo.publicationPort,
+                                                                    streamId = connectionInfo.streamId,
+                                                                    sessionId = connectionInfo.sessionId,
+                                                                    connectionTimeoutMS = connectionTimeoutMS,
+                                                                    isReliable = handshakeConnection.isReliable)
 
 
             // only the client connects to the server, so here we have to connect. The server (when creating the new "connection" object)
@@ -268,17 +274,38 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 val pollIdleStrategy = config.pollIdleStrategy
 
                 while (!isShutdown()) {
-                    val pollCount = newConnection.pollSubscriptions()
+                    // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
+                    var shouldCleanupConnection = false
 
-                    // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
-                    pollIdleStrategy.idle(pollCount)
+                    if (newConnection.isExpired()) {
+                        logger.debug {"[${newConnection.sessionId}] connection expired"}
+                        shouldCleanupConnection = true
+                    }
+
+                    else if (newConnection.isClosed()) {
+                        logger.debug {"[${newConnection.sessionId}] connection closed"}
+                        shouldCleanupConnection = true
+                    }
+
+
+                    if (shouldCleanupConnection) {
+                        close()
+                        return@launch
+                    }
+                    else {
+                        // Otherwise, poll the connection for messages
+                        val pollCount = newConnection.pollSubscriptions()
+
+                        // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
+                        pollIdleStrategy.idle(pollCount)
+                    }
                 }
             }
 
             // tell the server our connection handshake is done, and the connection can now listen for data.
             val canFinishConnecting = handshake.handshakeDone(handshakeConnection, connectionTimeoutMS)
 
-            // no longer necessary to hold this connection open
+            // no longer necessary to hold the handshake connection open
             handshakeConnection.close()
 
             if (canFinishConnecting) {
@@ -290,6 +317,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             } else {
                 close()
                 val exception = ClientRejectedException("Unable to connect with server ${handshakeConnection.clientInfo()}")
+                ListenerManager.cleanStackTrace(exception)
                 listenerManager.notifyError(exception)
                 throw exception
             }
@@ -389,19 +417,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     }
 
     override fun close() {
-        val con = connection
         connection = null
-        if (con != null) {
-            connections.remove(con)
-
-            runBlocking {
-                con.close()
-                listenerManager.notifyDisconnect(con)
-            }
-        }
-
-        super.close()
         isConnected = false
+        super.close()
     }
 
 

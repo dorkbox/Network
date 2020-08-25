@@ -32,7 +32,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.SecretKey
@@ -120,9 +119,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
     private val aes_gcm_iv = AtomicLong(0)
 
-    // when closing this connection, HOW MANY endpoints need to be closed?
-    private var closeLatch: CountDownLatch? = null
-
     // RMI support for this connection
     internal val rmiConnectionSupport = endPoint.getRmiConnectionSupport()
 
@@ -146,16 +142,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         sessionId = mediaDriverConnection.sessionId // NOTE: this is UNIQUE per server!
 
         messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-            // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
-            // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
-            // go in "lock step"
-            endPoint.actionDispatch.launch {
-                endPoint.readMessage(buffer, offset, length, header, this@Connection)
-            }
-        }
+            // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
-        // when closing this connection, HOW MANY endpoints need to be closed?
-        closeLatch = CountDownLatch(1)
+            // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
+            //  we exclusively read from the DirectBuffer on a single thread.
+
+            endPoint.processMessage(buffer, offset, length, header, this@Connection)
+        }
     }
 
 
@@ -291,7 +284,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         return isClosed.value
     }
 
-
     /**
      * Closes the connection, and removes all connection specific listeners
      */
@@ -309,8 +301,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             publication.close()
 
-            // a connection might have also registered for disconnect events
-            notifyDisconnect()
+            // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+            endPoint.actionDispatch.launch {
+                // a connection might have also registered for disconnect events
+                listenerManager.value?.notifyDisconnect(this@Connection)
+            }
         }
     }
 
@@ -346,14 +341,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
-     * Invoked when a connection is disconnected from the remote endpoint
-     */
-    internal suspend fun notifyDisconnect() {
-        listenerManager.value?.notifyDisconnect(this)
-    }
-
-    /**
      * Invoked when a message object was received from a remote peer.
+     *
+     * This is ALWAYS called on a new dispatch
      */
     internal suspend fun notifyOnMessage(message: Any): Boolean {
         return listenerManager.value?.notifyOnMessage(this, message) ?: false

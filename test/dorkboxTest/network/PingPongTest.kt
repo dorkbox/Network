@@ -64,10 +64,18 @@ class PingPongTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind(false)
-
+            runBlocking {
+                server.bind(false)
+            }
+            
             server.onError { _, throwable ->
                 fail = "Error during processing. $throwable"
+            }
+
+            server.onConnect { connection ->
+                server.forEachConnection { connection ->
+                    println("server connection: $connection")
+                }
             }
 
             server.onMessage<Data> { connection, message ->
@@ -85,6 +93,10 @@ class PingPongTest : BaseTest() {
 
 
             client.onConnect { connection ->
+                client.forEachConnection { connection ->
+                    println("client connection: $connection")
+                }
+
                 fail = null
                 connection.send(data)
             }

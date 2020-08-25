@@ -72,7 +72,9 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
 
             server.saveGlobalObject(TestObjectImpl(counter), RMI_ID)
 
-            server.bind(false)
+            runBlocking {
+                server.bind(false)
+            }
         }
 
 

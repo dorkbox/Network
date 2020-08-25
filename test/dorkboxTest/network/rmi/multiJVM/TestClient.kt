@@ -78,7 +78,7 @@ object TestClient {
                 RmiTest.runTests(connection, remoteObject, 124123)
                 System.err.println("DONE")
 
-                // now send this remote object ACROSS the wire to the server.
+                // now send this remote object ACROSS the wire to the server (on the server, this is where the IMPLEMENTATION lives)
                 connection.send(remoteObject)
 
                 client.close()

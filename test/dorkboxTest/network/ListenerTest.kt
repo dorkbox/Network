@@ -112,7 +112,9 @@ class ListenerTest : BaseTest() {
         }
 
 
-        server.bind(false)
+        runBlocking {
+            server.bind(false)
+        }
 
 
 

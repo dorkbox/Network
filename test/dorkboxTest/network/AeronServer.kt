@@ -112,7 +112,9 @@ object AeronServer {
             }
         }
 
-        server.bind()
+        runBlocking {
+            server.bind()
+        }
     }
 
     init {

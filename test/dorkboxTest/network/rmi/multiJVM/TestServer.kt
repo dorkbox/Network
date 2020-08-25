@@ -19,9 +19,12 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.RmiTest
+import dorkboxTest.network.rmi.classes.MessageWithTestCow
 import dorkboxTest.network.rmi.classes.TestCow
 import dorkboxTest.network.rmi.classes.TestCowImpl
 import dorkboxTest.network.rmi.multiJVM.TestClient.setup
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert
 
 /**
  *
@@ -39,6 +42,45 @@ object TestServer {
 
         val server = Server<Connection>(configuration)
 
-        server.bind(false)
+        server.onMessage<MessageWithTestCow> { connection, m ->
+            System.err.println("Received finish signal for test for: Client -> Server")
+            val `object` = m.testCow
+            val id = `object`.id()
+            Assert.assertEquals(124123, id.toLong())
+            System.err.println("Finished test for: Client -> Server")
+
+//
+//            System.err.println("Starting test for: Server -> Client")
+//            connection.createObject<TestCow>(123) { rmiId, remoteObject ->
+//                System.err.println("Running test for: Server -> Client")
+//                RmiTest.runTests(connection, remoteObject, 123)
+//                System.err.println("Done with test for: Server -> Client")
+//            }
+        }
+
+        server.onMessage<TestCow> { connection, test ->
+            System.err.println("Received test cow from client")
+            // this object LIVES on the server.
+
+            test.moo()
+            test.moo("Cow")
+            Assert.assertEquals(123123, test.id())
+
+            // Test that RMI correctly waits for the remotely invoked method to exit
+            test.moo("You should see this two seconds before...", 2000)
+            connection.logger.error("...This")
+
+//
+//            System.err.println("Starting test for: Server -> Client")
+//            connection.createObject<TestCow>(123) { rmiId, remoteObject ->
+//                System.err.println("Running test for: Server -> Client")
+//                RmiTest.runTests(connection, remoteObject, 123)
+//                System.err.println("Done with test for: Server -> Client")
+//            }
+        }
+
+        runBlocking {
+            server.bind(false)
+        }
     }
 }

@@ -93,13 +93,6 @@ internal open class ConnectionManager<CONNECTION: Connection>() {
     }
 
     /**
-     * Closes all associated resources/threads/connections
-     */
-    fun close() {
-        connections.clear()
-    }
-
-    /**
      * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
      * is available to use.
      */

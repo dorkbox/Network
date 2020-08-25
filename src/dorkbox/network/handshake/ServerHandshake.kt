@@ -15,7 +15,6 @@
  */
 package dorkbox.network.handshake
 
-import dorkbox.netUtil.IPv4
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.client.ClientRejectedException
@@ -28,12 +27,10 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.connection.UdpMediaDriverConnection
-import io.aeron.Image
+import io.aeron.Aeron
 import io.aeron.Publication
-import io.aeron.logbuffer.Header
 import kotlinx.coroutines.launch
 import mu.KLogger
-import org.agrona.DirectBuffer
 import org.agrona.collections.Int2IntCounterMap
 import org.agrona.collections.Int2ObjectHashMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -58,23 +55,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     private val streamIdAllocator = RandomIdAllocator(1, Integer.MAX_VALUE)
 
     // note: this is called in action dispatch
-    suspend fun receiveHandshakeMessageServer(handshakePublication: Publication,
-                                              buffer: DirectBuffer, offset: Int, length: Int, header: Header,
-                                              server: Server<CONNECTION>) {
-        // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
-        // ONLY for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
-        val sessionId = header.sessionId()
-
-        // note: this address will ALWAYS be an IP:PORT combo
-        val remoteIpAndPort = (header.context() as Image).sourceIdentity()
-
-        // split
-        val splitPoint = remoteIpAndPort.lastIndexOf(':')
-        val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
-//        val port = remoteIpAndPort.substring(splitPoint+1)
-        val clientAddress = IPv4.toInt(clientAddressString)
-
-        val message = server.readHandshakeMessage(buffer, offset, length, header)
+    suspend fun processHandshakeMessageServer(handshakePublication: Publication,
+                                              sessionId: Int,
+                                              clientAddressString: String,
+                                              clientAddress: Int,
+                                              message: Any?,
+                                              server: Server<CONNECTION>,
+                                              aeron: Aeron) {
 
         // VALIDATE:: a Registration object is the only acceptable message during the connection phase
         if (message !is HandshakeMessage) {
@@ -85,6 +72,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
         val clientPublicKeyBytes = message.publicKey
         val validateRemoteAddress: PublicKeyValidationState
+
 
         // check to see if this is a pending connection
         if (message.state == HandshakeMessage.DONE) {
@@ -107,6 +95,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 }
             }
         }
+
 
 
         try {
@@ -148,7 +137,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             return
         }
 
-        // VALIDATE::  TODO: ?? check to see if this session is ALREADY connected??. It should not be!
 
 
         /////
@@ -208,7 +196,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                                             message.isReliable)
 
             // we have to construct how the connection will communicate!
-            clientConnection.buildServer(server.aeron)
+            clientConnection.buildServer(aeron)
 
             logger.trace {
                 "Creating new connection $clientConnection"
