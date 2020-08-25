@@ -227,7 +227,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
                         if (shouldCleanupConnection) {
                             // remove this connection so there won't be an attempt to poll it again
-                            logger.debug {"[${connection.sessionId}] connection marked for remove"}
                             true
                         }
                         else {
