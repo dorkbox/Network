@@ -229,8 +229,11 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 while (!isShutdown()) {
                     pollCount = 0
 
+                    // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
+                    //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
+
                     // this checks to see if there are NEW clients on the handshake ports
-                    pollCount += handshakeSubscription.poll(handshakeHandler, 4)
+                    pollCount += handshakeSubscription.poll(handshakeHandler, 2)
 
                     // this checks to see if there are NEW clients via IPC
 //                    pollCount += ipcHandshakeSubscription.poll(ipcInitialConnectionHandler, 100)

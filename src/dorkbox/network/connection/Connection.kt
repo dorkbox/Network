@@ -191,7 +191,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * Polls the AERON media driver subscription channel for incoming messages
      */
     internal fun pollSubscriptions(): Int {
-        return subscription.poll(messageHandler, 4)
+        // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
+        //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
+        return subscription.poll(messageHandler, 2)
     }
 
     /**

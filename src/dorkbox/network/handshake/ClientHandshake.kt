@@ -123,7 +123,9 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
 
         val startTime = System.currentTimeMillis()
         while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
-            pollCount = subscription.poll(handler, 1024)
+            // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
+            //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
+            pollCount = subscription.poll(handler, 2)
 
             if (failed != null) {
                 // no longer necessary to hold this connection open
@@ -165,7 +167,9 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
 
         val startTime = System.currentTimeMillis()
         while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
-            pollCount = subscription.poll(handler, 1024)
+            // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
+            //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
+            pollCount = subscription.poll(handler, 2)
 
             if (failed != null) {
                 // no longer necessary to hold this connection open
