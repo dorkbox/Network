@@ -167,7 +167,7 @@ class UdpMediaDriverConnection(override val address: String,
         return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
             "Connecting to $address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
-            "Connecting to $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
+            "Connecting handshake to $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
         }
     }
 
@@ -175,7 +175,7 @@ class UdpMediaDriverConnection(override val address: String,
         return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
             "Listening on $address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
-            "Listening on $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
+            "Listening handshake on $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
         }
     }
 
