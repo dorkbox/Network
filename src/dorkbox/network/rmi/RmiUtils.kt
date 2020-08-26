@@ -492,26 +492,37 @@ object RmiUtils {
         val myClassName = RmiClient::class.java.name
         val stackTrace = localException.stackTrace
         var newStartIndex = 0
-        var newEndIndex = stackTrace.size-1
+        var newEndIndex = stackTrace.size
 
-        // step 1: Find the start of our method invocation
-        for (element in stackTrace) {
-            newStartIndex++
 
-            if (element.className == myClassName && element.methodName == "invoke") {
-                // we do this 1 more time, because we want to remove the proxy invocation off the stack as well.
-                newStartIndex++
-                break
-            }
-        }
+        var foundStart = false
 
-        // step 2: now we have to find the END index, since a proxy invocation ALWAYS happens starting from our network stack
-        for (i in stackTrace.size-1 downTo 0) {
-            newEndIndex--
+        for ((index, element) in stackTrace.withIndex()) {
+            // step 1: Find the start of our method invocation
+            if (!foundStart) {
+                // "startsWith" because with continuations, the ACTUAL class name is mangled, ie: dorkbox.network.rmi.RmiClient$invoke$$inlined$Continuation$1
+                if (element.className.startsWith(myClassName)) {
+                    newStartIndex = index
 
-            val stackClassName = stackTrace[i].className
-            if (stackClassName.startsWith("dorkbox.network.rmi.")) {
-                break
+                    // check 1 more time, because we want to remove the proxy invocation off the stack as well.
+                    if (stackTrace[index+1].className.startsWith("com.sun.proxy.")) {
+                        newStartIndex++
+                    }
+
+                    // this is where we will START (not where we are)
+                    newStartIndex++
+
+                    newEndIndex = newStartIndex
+                    foundStart = true
+                }
+            } else {
+                // step 2: Find the start of coroutines
+                val className = element.className
+                if (className.startsWith("kotlin.coroutines.") || className.startsWith("kotlinx.coroutines.")) {
+                    // -1 because we want to end BEFORE the coroutine suspend call starts
+                    newEndIndex = index-1
+                    break
+                }
             }
         }
 
@@ -520,7 +531,7 @@ object RmiUtils {
             localException.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
         } else {
             // merge this info into the remote exception, so we can get the correct call stack info
-            val newStack = Array<StackTraceElement>(remoteException.stackTrace.size + newEndIndex - newStartIndex) { stackTrace[0] }
+            val newStack = Array<StackTraceElement>(remoteException.stackTrace.size + (newEndIndex - newStartIndex)) { stackTrace[0] }
             remoteException.stackTrace.copyInto(newStack)
             stackTrace.copyInto(newStack, remoteException.stackTrace.size, newStartIndex, newEndIndex)
 
