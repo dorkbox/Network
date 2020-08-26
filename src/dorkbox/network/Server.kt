@@ -290,13 +290,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         }
     }
 
-    internal suspend fun poll(): Int {
-
-        var pollCount = 0
-
-        return pollCount
-    }
-
 
     /**
      * Adds an IP+subnet rule that defines what type of connection this IP+subnet should have.
