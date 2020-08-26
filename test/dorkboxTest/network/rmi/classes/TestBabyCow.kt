@@ -13,22 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.serialization
+package dorkboxTest.network.rmi.classes
 
-import com.esotericsoftware.kryo.Serializer
-
-internal class ClassRegistration1(override val clazz: Class<*>, override var id: Int) : ClassRegistration {
-    override val serializer: Serializer<*>? = null
-
-    override fun register(kryo: KryoExtra) {
-        kryo.register(clazz, id)
-    }
-
-    override fun info(): String {
-        return "Registered $id -> (specified) ${clazz.name}"
-    }
-
-    override fun getInfoArray(): Array<Any> {
-        return arrayOf(id, clazz.name, "")
-    }
+/**
+ *
+ */
+interface TestBabyCow : TestCow {
+    fun drink()
 }

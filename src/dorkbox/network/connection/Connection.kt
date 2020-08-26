@@ -289,6 +289,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     suspend fun close() {
         if (isClosed.compareAndSet(expect = false, update = true)) {
+            // the server 'handshake' connection info is already cleaned up before this is called
+
             subscription.close()
 
             val closeTimeoutTime = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
@@ -480,7 +482,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.getRemoteObject(this, endPoint, objectId, Iface::class.java)
+        return rmiConnectionSupport.getRemoteObject(this, objectId, Iface::class.java)
     }
 
     /**
@@ -504,7 +506,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.rmiGlobalSupport.getGlobalRemoteObject(this, endPoint, objectId, Iface::class.java)
+        return rmiConnectionSupport.rmiGlobalSupport.getGlobalRemoteObject(this, objectId, Iface::class.java)
     }
 
     /**

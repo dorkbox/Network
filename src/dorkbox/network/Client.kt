@@ -265,6 +265,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 throw exception
             }
 
+            // before we do anything else, we have to correct the RMI serializers, as necessary.
+            val rmiModificationIds = connectionInfo.kryoIdsForRmi
+            updateKryoIdsForRmi(newConnection, rmiModificationIds)
+
             connection = newConnection
             connections.add(newConnection)
 
@@ -514,7 +518,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.getRemoteObject(getConnection(), this, objectId, Iface::class.java)
+        return rmiConnectionSupport.getRemoteObject(getConnection(), objectId, Iface::class.java)
     }
 
     /**
@@ -644,6 +648,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiGlobalSupport.getGlobalRemoteObject(getConnection(), this, objectId, Iface::class.java)
+        return rmiGlobalSupport.getGlobalRemoteObject(getConnection(), objectId, Iface::class.java)
     }
 }

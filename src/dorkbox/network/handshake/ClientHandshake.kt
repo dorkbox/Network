@@ -104,7 +104,8 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
         val registrationMessage = HandshakeMessage.helloFromClient(
                 oneTimePad = oneTimePad,
                 publicKey = config.settingsStore.getPublicKey()!!,
-                registrationData = config.serialization.getKryoRegistrationDetails()
+                registrationData = config.serialization.getKryoRegistrationDetails(),
+                registrationRmiIdData = config.serialization.getKryoRmiIds()
         )
 
 

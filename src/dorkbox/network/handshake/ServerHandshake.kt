@@ -97,6 +97,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         }
 
 
+        val serialization = config.serialization
 
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
@@ -115,7 +116,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             }
 
             // VALIDATE:: make sure the serialization matches between the client/server!
-            if (!config.serialization.verifyKryoRegistration(message.registrationData!!)) {
+            if (!serialization.verifyKryoRegistration(message.registrationData!!)) {
                 listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Registration data mismatch."))
                 return
             }
@@ -202,11 +203,11 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 "Creating new connection $clientConnection"
             }
 
-            val connection: Connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress))
+            val connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress)) as CONNECTION
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             @Suppress("UNCHECKED_CAST")
-            val permitConnection = listenerManager.notifyFilter(connection as CONNECTION)
+            val permitConnection = listenerManager.notifyFilter(connection)
             if (!permitConnection) {
                 // have to unwind actions!
                 connectionsPerIpCounts.getAndDecrement(clientAddress)
@@ -225,15 +226,35 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             }
 
 
+            ///////////////
+            ////   RMI
+            ///////////////
+
+            // if necessary (and only for RMI id's that have never been seen before) we want to re-write our kryo information
+            val rmiModificationIds = message.registrationRmiIdData!!
+            server.updateKryoIdsForRmi(connection, rmiModificationIds)
+
+
+
+            ///////////////
+            ///  HANDSHAKE
+            ///////////////
+
+
+
             // The one-time pad is used to encrypt the session ID, so that ONLY the correct client knows what it is!
             val successMessage = HandshakeMessage.helloAckToClient(sessionId)
 
+
+            // if necessary, we also send the kryo RMI id's that are registered as RMI on this endpoint, but maybe not on the other endpoint
+
             // now create the encrypted payload, using ECDH
-            successMessage.registrationData = server.crypto.encrypt(publicationPort,
+            successMessage.registrationData = server.crypto.encrypt(clientPublicKeyBytes!!,
+                                                                    publicationPort,
                                                                     subscriptionPort,
                                                                     connectionSessionId,
                                                                     connectionStreamId,
-                                                                    clientPublicKeyBytes!!)
+                                                                    serialization.getKryoRmiIds())
 
             successMessage.publicKey = server.crypto.publicKeyBytes
 

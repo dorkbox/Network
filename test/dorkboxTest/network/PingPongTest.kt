@@ -37,7 +37,7 @@ package dorkboxTest.network
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.network.serialization.NetworkSerializationManager
+import dorkbox.network.serialization.Serialization
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
@@ -131,7 +131,7 @@ class PingPongTest : BaseTest() {
         }
     }
 
-    private fun register(manager: NetworkSerializationManager) {
+    private fun register(manager: Serialization) {
         manager.register(Data::class.java)
     }
 

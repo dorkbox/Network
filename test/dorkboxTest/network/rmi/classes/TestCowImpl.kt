@@ -18,7 +18,7 @@ package dorkboxTest.network.rmi.classes
 import dorkbox.network.connection.Connection
 import kotlinx.coroutines.delay
 
-class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
+open class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
 
     private var moos = 0
 

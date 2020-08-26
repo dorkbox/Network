@@ -177,16 +177,17 @@ internal class CryptoManagement(val logger: KLogger,
         return SecretKeySpec(hash.digest(), "AES")
     }
 
-    fun encrypt(publicationPort: Int,
+    fun encrypt(clientPublicKeyBytes: ByteArray,
+                publicationPort: Int,
                 subscriptionPort: Int,
                 connectionSessionId: Int,
                 connectionStreamId: Int,
-                clientPublicKeyBytes: ByteArray): ByteArray {
+                kryoRmiIds: IntArray): ByteArray {
 
         val secretKeySpec = generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, publicKeyBytes)
 
         val iv = ByteArray(GCM_IV_LENGTH)
-        secureRandom.nextBytes(iv);
+        secureRandom.nextBytes(iv)
 
         val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, iv)
         aesCipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, gcmParameterSpec)
@@ -197,6 +198,10 @@ internal class CryptoManagement(val logger: KLogger,
         data.writeInt(connectionStreamId)
         data.writeInt(publicationPort)
         data.writeInt(subscriptionPort)
+        data.writeInt(kryoRmiIds.size)
+        kryoRmiIds.forEach {
+            data.writeInt(it)
+        }
 
         val bytes = data.toBytes()
 
@@ -226,12 +231,25 @@ internal class CryptoManagement(val logger: KLogger,
 
         val data = AeronInput(aesCipher.doFinal(secretBytes))
 
+
+        val sessionId = data.readInt()
+        val streamId = data.readInt()
+        val publicationPort = data.readInt()
+        val subscriptionPort = data.readInt()
+
+        val rmiIds = mutableListOf<Int>()
+        val rmiIdSize = data.readInt()
+        for (i in 0 until rmiIdSize) {
+            rmiIds.add(data.readInt())
+        }
+
         // now read data off
-        return ClientConnectionInfo(sessionId = data.readInt(),
-                                    streamId = data.readInt(),
-                                    publicationPort = data.readInt(),
-                                    subscriptionPort = data.readInt(),
-                                    publicKey = serverPublicKeyBytes)
+        return ClientConnectionInfo(sessionId = sessionId,
+                                    streamId = streamId,
+                                    publicationPort = publicationPort,
+                                    subscriptionPort = subscriptionPort,
+                                    publicKey = serverPublicKeyBytes,
+                                    kryoIdsForRmi = rmiIds.toIntArray())
     }
 
     override fun hashCode(): Int {

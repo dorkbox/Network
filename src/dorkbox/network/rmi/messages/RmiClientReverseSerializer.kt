@@ -39,38 +39,54 @@ import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import com.esotericsoftware.kryo.util.IdentityMap
+import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.serialization.KryoExtra
 
 /**
- * this is to manage serializing proxy object objects across the wire...
+ * This is to manage serializing proxy object objects across the wire...
  *
- * SO the "rmi client" sends an RMI proxy object, and the "rmi server" reads an actual object
+ * This is when the RMI server sends an impl object to a client, the client must receive a proxy object (instead of the impl object)
  *
- * Serializes an object registered with the RmiBridge so the receiving side gets a [RemoteObject] proxy rather than the bytes for the
- * serialized object.
+ * NOTE: this works because the CLIENT can never send the actual iface object, if it's RMI, it will send the java Proxy object instead.
+ *   The SERVER can never send the iface object, it will send the IMPL object instead
  *
- * @author Nathan Sweet <misc></misc>@n4te.com>
+ *   What we do is on the server, REWRITE the kryo ID for the impl so that it will send just the rmi ID instead of the object
+ *   on the client, this SAME kryo ID must have this serializer as well, so the proxy object is re-assembled.
+ *
+ *   Kryo serialization works by inspecting the field VALUE type, not the field DEFINED type... So if you send an actual object, you must
+ *   register specifically for the implementation object.
+ *
+ *
+ * To recap:
+ *  rmi-client: send proxy -> RmiIfaceSerializer -> network -> RmiIfaceSerializer -> impl object (rmi-server)
+ *  rmi-server: send impl -> RmiImplSerializer -> network -> RmiImplSerializer -> proxy object (rmi-client)
+ *
+ *  During the handshake, if the impl object 'lives' on the CLIENT, then the client must tell the server that the iface ID must use this serializer.
+ *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
-class RmiObjectSerializer(private val rmiImplToIface: IdentityMap<Class<*>, Class<*>>) : Serializer<Any>(false) {
+class RmiClientReverseSerializer(private val rmiImplToIface: IdentityMap<Class<*>, Class<*>>) : Serializer<Any>(false) {
+
     override fun write(kryo: Kryo, output: Output, `object`: Any) {
-        println(" FIX ObjectResponseSerializer ")
         val kryoExtra = kryo as KryoExtra
-//        val id = kryoExtra.rmiSupport.getRegisteredId(`object`) //
-//        output.writeInt(id, true)
-        output.writeInt(0, true)
+        val rmiConnectionSupport = kryoExtra.connection.rmiConnectionSupport
+        // have to write what the rmi ID is ONLY. We have to find out if it's a global object or connection scope object!
+
+        // check connection scope first
+        var id = rmiConnectionSupport.getId(`object`)
+
+        // check global scope second
+        if (id == RemoteObjectStorage.INVALID_RMI) {
+            id = rmiConnectionSupport.rmiGlobalSupport.getId(`object`)
+        }
+
+        output.writeInt(id, true)
     }
 
-    override fun read(kryo: Kryo, input: Input, implementationType: Class<*>): Any? {
-        println(" FIX ObjectResponseSerializer ")
+    override fun read(kryo: Kryo, input: Input, iface: Class<*>): Any? {
         val kryoExtra = kryo as KryoExtra
         val objectID = input.readInt(true)
 
-        // We have to lookup the iface, since the proxy object requires it
-        val iface = rmiImplToIface.get(implementationType)
         val connection = kryoExtra.connection
-//        return kryoExtra.rmiSupport.getProxyObject(connection, objectID, iface)
-        return null
+        return connection.rmiConnectionSupport.getRemoteObject(connection, objectID, iface)
     }
 }
-
-/// TODO: FIX THIS CLASS MAYBE!

@@ -20,13 +20,13 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
-import dorkbox.network.serialization.NetworkSerializationManager
+import dorkbox.network.serialization.Serialization
 import dorkbox.util.collections.LockFreeIntMap
 import mu.KLogger
 
 internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
                                      val rmiGlobalSupport: RmiManagerGlobal<CONNECTION>,
-                                     private val serialization: NetworkSerializationManager) : RmiObjectCache(logger) {
+                                     private val serialization: Serialization) : RmiObjectCache(logger) {
 
     // It is critical that all of the RMI proxy objects are unique, and are saved/cached PER CONNECTION. These cannot be shared between connections!
     private val proxyObjects = LockFreeIntMap<RemoteObject>()
@@ -49,12 +49,16 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
     /**
      * on the connection+client to get a connection-specific remote object (that exists on the server/client)
      */
-    fun <Iface> getRemoteObject(connection: Connection, endPoint: EndPoint<*>, objectId: Int, interfaceClass: Class<Iface>): Iface {
+    fun <Iface> getRemoteObject(connection: Connection, objectId: Int, interfaceClass: Class<Iface>): Iface {
         // so we can just instantly create the proxy object (or get the cached one)
         var proxyObject = getProxyObject(objectId)
         if (proxyObject == null) {
-            proxyObject = RmiManagerGlobal.createProxyObject(false, connection, serialization, rmiGlobalSupport.rmiResponseManager,
-                                                             endPoint.type.simpleName, objectId, interfaceClass)
+            proxyObject = RmiManagerGlobal.createProxyObject(false,
+                                                             connection,
+                                                             serialization,
+                                                             rmiGlobalSupport.rmiResponseManager,
+                                                             objectId,
+                                                             interfaceClass)
             saveProxyObject(objectId, proxyObject)
         }
 

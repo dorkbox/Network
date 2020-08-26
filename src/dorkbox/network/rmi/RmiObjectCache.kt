@@ -40,6 +40,13 @@ internal open class RmiObjectCache(logger: KLogger) {
         return implObjects[rmiId] as T?
     }
 
+    /**
+     * @return the ID registered for the specified object, or INVALID_RMI if not found.
+     */
+    fun <T> getId(implObject: T): Int {
+        return implObjects.getId(implObject)
+    }
+
     fun <T> removeImplObject(rmiId: Int): T? {
         return implObjects.remove(rmiId) as T?
     }

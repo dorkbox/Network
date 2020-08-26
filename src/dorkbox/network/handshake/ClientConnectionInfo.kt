@@ -21,7 +21,8 @@ internal class ClientConnectionInfo(val subscriptionPort: Int,
                                     val publicationPort: Int,
                                     val sessionId: Int,
                                     val streamId: Int,
-                                    val publicKey: ByteArray) {
+                                    val publicKey: ByteArray,
+                                    val kryoIdsForRmi: IntArray) {
 
     fun log(handshakeSessionId: Int, logger: Logger) {
         logger.debug("[{}] connected {}|{} (encrypted {})", handshakeSessionId, publicationPort, subscriptionPort, sessionId)

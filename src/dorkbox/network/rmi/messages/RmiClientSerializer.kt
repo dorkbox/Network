@@ -24,11 +24,28 @@ import dorkbox.network.serialization.KryoExtra
 import java.lang.reflect.Proxy
 
 /**
- * this is to manage serializing proxy object objects across the wire...
+ * This is to manage serializing proxy object objects across the wire...
  *
- * SO the "rmi client" sends an RMI proxy object, and the "rmi server" reads an actual object
+ * This is when the RMI server sends an impl object to a client, the client must receive a proxy object (instead of the impl object)
+ *
+ * NOTE: this works because the CLIENT can never send the actual iface object, if it's RMI, it will send the java Proxy object instead.
+ *   The SERVER can never send the iface object, it will send the IMPL object instead
+ *
+ *   What we do is on the server, REWRITE the kryo ID for the impl so that it will send just the rmi ID instead of the object
+ *   on the client, this SAME kryo ID must have this serializer as well, so the proxy object is re-assembled.
+ *
+ *   Kryo serialization works by inspecting the field VALUE type, not the field DEFINED type... So if you send an actual object, you must
+ *   register specifically for the implementation object.
+ *
+ *
+ * To recap:
+ *  rmi-client: send proxy -> RmiIfaceSerializer -> network -> RmiIfaceSerializer -> impl object (rmi-server)
+ *  rmi-server: send impl -> RmiImplSerializer -> network -> RmiImplSerializer -> proxy object (rmi-client)
+ *
+ *  During the handshake, if the impl object 'lives' on the CLIENT, then the client must tell the server that the iface ID must use this serializer.
+ *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
-class RmiClientRequestSerializer : Serializer<Any>() {
+class RmiClientSerializer : Serializer<Any>() {
     override fun write(kryo: Kryo, output: Output, proxyObject: Any) {
         val handler = Proxy.getInvocationHandler(proxyObject) as RmiClient
         output.writeBoolean(handler.isGlobal)

@@ -20,6 +20,7 @@ import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.RmiTest
 import dorkboxTest.network.rmi.classes.MessageWithTestCow
+import dorkboxTest.network.rmi.classes.TestBabyCow
 import dorkboxTest.network.rmi.classes.TestCow
 import dorkboxTest.network.rmi.classes.TestCowImpl
 import dorkboxTest.network.rmi.multiJVM.TestClient.setup
@@ -37,6 +38,7 @@ object TestServer {
         val configuration = BaseTest.serverConfig()
 
         RmiTest.register(configuration.serialization)
+        configuration.serialization.register(TestBabyCow::class.java)
         configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
         configuration.enableRemoteSignatureValidation = false
 
@@ -62,15 +64,15 @@ object TestServer {
             System.err.println("Received test cow from client")
             // this object LIVES on the server.
 
-            test.moo()
-            test.moo("Cow")
-            Assert.assertEquals(123123, test.id())
+            try {
+                test.moo()
+                Assert.fail("Should catch an exception!")
+            } catch (e: Exception) {
+            }
 
-            // Test that RMI correctly waits for the remotely invoked method to exit
-            test.moo("You should see this two seconds before...", 2000)
-            connection.logger.error("...This")
+            // now test sending this object BACK to the client. The client SHOULD have the same RMI proxy object as before!
+            connection.send(test)
 
-//
 //            System.err.println("Starting test for: Server -> Client")
 //            connection.createObject<TestCow>(123) { rmiId, remoteObject ->
 //                System.err.println("Running test for: Server -> Client")

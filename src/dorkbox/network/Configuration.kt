@@ -18,7 +18,6 @@ package dorkbox.network
 import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
-import dorkbox.network.serialization.NetworkSerializationManager
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.PropertyStore
 import dorkbox.network.storage.SettingsStore
@@ -96,7 +95,7 @@ open class Configuration {
     /**
      * Specify the serialization manager to use.
      */
-    var serialization: NetworkSerializationManager = Serialization.DEFAULT()
+    var serialization: Serialization = Serialization.DEFAULT()
 
     /**
      * The idle strategy used when polling the Media Driver for new messages. BackOffIdleStrategy is the DEFAULT.

@@ -17,24 +17,14 @@ package dorkbox.network.serialization
 
 import com.esotericsoftware.kryo.Serializer
 
-internal open class ClassRegistration(var clazz: Class<*>) {
-    var id = 0
-    var serializer: Serializer<*>? = null
+internal interface ClassRegistration {
+    var id: Int
+    val clazz: Class<*>
+    val serializer: Serializer<*>?
 
-    open fun register(kryo: KryoExtra) {
-        val registration = kryo.register(clazz)
-        id = registration.id
-    }
+    fun register(kryo: KryoExtra)
 
-    open fun info(): String {
-        return "Registered $id -> ${clazz.name}"
-    }
+    fun info(): String
 
-    fun getInfoArray(): Array<Any> {
-        return if (serializer != null) {
-            arrayOf(id, clazz.name, serializer!!::class.java.name)
-        } else {
-            arrayOf(id, clazz.name, "")
-        }
-    }
+    fun getInfoArray(): Array<Any>
 }

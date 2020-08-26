@@ -39,7 +39,7 @@ import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
-import dorkbox.network.serialization.NetworkSerializationManager
+import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.classes.MessageWithTestCow
 import dorkboxTest.network.rmi.classes.TestCow
@@ -160,7 +160,7 @@ class RmiTest : BaseTest() {
             connection.logger.error("Finished tests")
         }
 
-        fun register(manager: NetworkSerializationManager) {
+        fun register(manager: Serialization) {
             manager.register(Any::class.java) // Needed for Object#toString, hashCode, etc.
             manager.register(TestCow::class.java)
             manager.register(MessageWithTestCow::class.java)

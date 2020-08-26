@@ -24,7 +24,7 @@ import dorkbox.network.rmi.messages.GlobalObjectCreateRequest
 import dorkbox.network.rmi.messages.GlobalObjectCreateResponse
 import dorkbox.network.rmi.messages.MethodRequest
 import dorkbox.network.rmi.messages.MethodResponse
-import dorkbox.network.serialization.NetworkSerializationManager
+import dorkbox.network.serialization.Serialization
 import dorkbox.util.classes.ClassHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -34,7 +34,7 @@ import java.util.*
 
 internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
                                                          actionDispatch: CoroutineScope,
-                                                         internal val serialization: NetworkSerializationManager) : RmiObjectCache(logger) {
+                                                         internal val serialization: Serialization) : RmiObjectCache(logger) {
     companion object {
         /**
          * Returns a proxy object that implements the specified interface, and the methods invoked on the proxy object will be invoked
@@ -52,9 +52,11 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
          * @param interfaceClass this is the RMI interface class
          */
         internal fun createProxyObject(isGlobalObject: Boolean,
-                                       connection: Connection, serialization: NetworkSerializationManager,
-                                       responseManager: RmiResponseManager, namePrefix: String,
-                                       rmiId: Int, interfaceClass: Class<*>): RemoteObject {
+                                       connection: Connection,
+                                       serialization: Serialization,
+                                       responseManager: RmiResponseManager,
+                                       rmiId: Int,
+                                       interfaceClass: Class<*>): RemoteObject {
 
             require(interfaceClass.isInterface) { "iface must be an interface." }
 
@@ -63,7 +65,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
             val classId = serialization.getClassId(interfaceClass)
             val cachedMethods = serialization.getMethods(classId)
 
-            val name = "<${namePrefix}-proxy #$rmiId>"
+            val name = "<${connection.endPoint().type.simpleName}-proxy #$rmiId>"
 
             // the ACTUAL proxy is created in the connection impl. Our proxy handler MUST BE suspending because of:
             //  1) how we send data on the wire
@@ -219,7 +221,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
                                                 isGlobal: Boolean,
                                                 rmiId: Int,
                                                 callback: suspend (Int, Any) -> Unit,
-                                                serialization: NetworkSerializationManager) {
+                                                serialization: Serialization) {
 
         // we only create the proxy + execute the callback if the RMI id is valid!
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
@@ -232,7 +234,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
         // create the client-side proxy object, if possible.  This MUST be an object that is saved for the connection
         var proxyObject = connection.rmiConnectionSupport.getProxyObject(rmiId)
         if (proxyObject == null) {
-            proxyObject = createProxyObject(isGlobal, connection, serialization, rmiResponseManager, endPoint.type.simpleName, rmiId, interfaceClass)
+            proxyObject = createProxyObject(isGlobal, connection, serialization, rmiResponseManager, rmiId, interfaceClass)
             connection.rmiConnectionSupport.saveProxyObject(rmiId, proxyObject)
         }
 
@@ -250,13 +252,13 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
     /**
      * on the connection+client to get a global remote object (that exists on the server)
      */
-    fun <Iface> getGlobalRemoteObject(connection: Connection, endPoint: EndPoint<*>, objectId: Int, interfaceClass: Class<Iface>): Iface {
+    fun <Iface> getGlobalRemoteObject(connection: Connection, objectId: Int, interfaceClass: Class<Iface>): Iface {
         // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
 
         // so we can just instantly create the proxy object (or get the cached one). This MUST be an object that is saved for the connection
         var proxyObject = connection.rmiConnectionSupport.getProxyObject(objectId)
         if (proxyObject == null) {
-            proxyObject = createProxyObject(true, connection, serialization, rmiResponseManager, endPoint.type.simpleName, objectId, interfaceClass)
+            proxyObject = createProxyObject(true, connection, serialization, rmiResponseManager, objectId, interfaceClass)
             connection.rmiConnectionSupport.saveProxyObject(objectId, proxyObject)
         }
 

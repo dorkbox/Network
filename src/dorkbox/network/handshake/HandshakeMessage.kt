@@ -19,6 +19,7 @@ package dorkbox.network.handshake
  * Internal message to handle the connection registration process
  */
 internal class HandshakeMessage private constructor() {
+
     // the public key is used to encrypt the data in the handshake
     var publicKey: ByteArray? = null
 
@@ -46,19 +47,7 @@ internal class HandshakeMessage private constructor() {
 
     // the client sends it's registration data to the server to make sure that the registered classes are the same between the client/server
     var registrationData: ByteArray? = null
-
-
-    // NOTE: this is for ECDSA!
-//    var eccParameters: IESParameters? = null
-
-    // > 0 when we are ready to setup the connection (hasMore will always be false if this is >0). 0 when we are ready to connect
-    // ALSO used if there are fragmented frames for registration data (since we have to split it up to fit inside a single UDP packet without fragmentation)
-//    var upgradeType = 0.toByte()
-
-    // true when we are fully upgraded
-//    var upgraded = false
-
-
+    var registrationRmiIdData: IntArray? = null
 
     companion object {
         const val INVALID = -1
@@ -67,12 +56,13 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 2
         const val DONE_ACK = 3
 
-        fun helloFromClient(oneTimePad: Int, publicKey: ByteArray, registrationData: ByteArray): HandshakeMessage {
+        fun helloFromClient(oneTimePad: Int, publicKey: ByteArray, registrationData: ByteArray, registrationRmiIdData: IntArray): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
             hello.oneTimePad = oneTimePad
             hello.publicKey = publicKey
             hello.registrationData = registrationData
+            hello.registrationRmiIdData = registrationRmiIdData
             return hello
         }
 

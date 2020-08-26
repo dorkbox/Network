@@ -19,7 +19,7 @@ import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.network.serialization.NetworkSerializationManager
+import dorkbox.network.serialization.Serialization
 import dorkbox.util.exceptions.SecurityException
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
@@ -47,7 +47,7 @@ class RmiDelayedInvocationTest : BaseTest() {
 //        })
     }
 
-    fun register(serialization: NetworkSerializationManager) {
+    fun register(serialization: Serialization) {
         serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
     }
 

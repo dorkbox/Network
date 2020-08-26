@@ -15,7 +15,7 @@
  */
 package dorkbox.network.storage
 
-import dorkbox.network.serialization.NetworkSerializationManager
+import dorkbox.network.serialization.Serialization
 import dorkbox.util.exceptions.SecurityException
 import dorkbox.util.storage.Storage
 import java.security.SecureRandom
@@ -23,7 +23,7 @@ import java.security.SecureRandom
 class NullSettingsStore : SettingsStore() {
     private var serverSalt: ByteArray? = null
 
-    override fun init(serializationManager: NetworkSerializationManager, storage: Storage) {}
+    override fun init(serializationManager: Serialization, storage: Storage) {}
 
     @Throws(SecurityException::class)
     override fun getPrivateKey(): ByteArray {

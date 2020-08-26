@@ -15,7 +15,7 @@
  */
 package dorkbox.network.storage
 
-import dorkbox.network.serialization.NetworkSerializationManager
+import dorkbox.network.serialization.Serialization
 import dorkbox.util.exceptions.SecurityException
 import dorkbox.util.storage.Storage
 import org.slf4j.LoggerFactory
@@ -30,7 +30,7 @@ abstract class SettingsStore : AutoCloseable {
     /**
      * Initialize the settingsStore with the provided serialization manager.
      */
-    abstract fun init(serializationManager: NetworkSerializationManager, storage: Storage)
+    abstract fun init(serializationManager: Serialization, storage: Storage)
 
     /**
      * Simple, property based method for saving the private key of the server

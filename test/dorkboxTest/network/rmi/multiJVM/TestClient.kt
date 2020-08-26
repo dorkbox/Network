@@ -26,8 +26,11 @@ import dorkbox.network.Client
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.RmiTest
+import dorkboxTest.network.rmi.classes.TestBabyCow
+import dorkboxTest.network.rmi.classes.TestBabyCowImpl
 import dorkboxTest.network.rmi.classes.TestCow
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert
 import org.slf4j.LoggerFactory
 
 object TestClient {
@@ -66,6 +69,7 @@ object TestClient {
 
         val configuration = BaseTest.clientConfig()
         RmiTest.register(configuration.serialization)
+        configuration.serialization.registerRmi(TestBabyCow::class.java, TestBabyCowImpl::class.java)
         configuration.serialization.register(TestCow::class.java)
         configuration.enableRemoteSignatureValidation = false
 
@@ -75,15 +79,29 @@ object TestClient {
             System.err.println("Starting test for: Client -> Server")
 
             connection.createObject<TestCow>(124123) { _, remoteObject ->
-                RmiTest.runTests(connection, remoteObject, 124123)
-                System.err.println("DONE")
+//                RmiTest.runTests(connection, remoteObject, 124123)
+//                System.err.println("DONE")
 
                 // now send this remote object ACROSS the wire to the server (on the server, this is where the IMPLEMENTATION lives)
                 connection.send(remoteObject)
 
-                client.close()
+//                client.close()
             }
         }
+
+        client.onMessage<TestCow> { connection, test ->
+            System.err.println("Received test cow from server")
+            // this object LIVES on the server.
+
+            try {
+                test.moo()
+            } catch (e: Exception) {
+                Assert.fail("No exception should be caught.")
+            }
+
+            connection.close()
+        }
+
 
         runBlocking {
             client.connect(BaseTest.LOOPBACK)
