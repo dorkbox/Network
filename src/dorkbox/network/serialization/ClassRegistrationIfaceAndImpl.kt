@@ -31,8 +31,9 @@ internal class ClassRegistrationIfaceAndImpl(val ifaceClass: Class<*>,
             id = registration.id
 
             // override that registration
-            kryo.register(implClass, serializer, id).id
+            kryo.register(implClass, serializer, id)
         } else {
+            // now register the impl class
             id = kryo.register(implClass, serializer).id
         }
     }

@@ -71,11 +71,11 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
     /**
      * on the "client" to create a connection-specific remote object (that exists on the server)
      */
-    suspend fun <Iface> createRemoteObject(connection: Connection, interfaceClassId: Int, objectParameters: Array<Any?>?, callback: suspend (Int, Iface) -> Unit) {
+    suspend fun <Iface> createRemoteObject(connection: Connection, kryoId: Int, objectParameters: Array<Any?>?, callback: suspend (Int, Iface) -> Unit) {
         val callbackId = rmiGlobalSupport.registerCallback(callback)
 
         // There is no rmiID yet, because we haven't created it!
-        val message = ConnectionObjectCreateRequest(RmiUtils.packShorts(interfaceClassId, callbackId), objectParameters)
+        val message = ConnectionObjectCreateRequest(RmiUtils.packShorts(kryoId, callbackId), objectParameters)
 
         // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
         // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
@@ -89,12 +89,12 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
      */
     suspend fun onConnectionObjectCreateRequest(endPoint: EndPoint<CONNECTION>, connection: CONNECTION, message: ConnectionObjectCreateRequest) {
 
-        val interfaceClassId = RmiUtils.unpackLeft(message.packedIds)
+        val kryoId = RmiUtils.unpackLeft(message.packedIds)
         val callbackId = RmiUtils.unpackRight(message.packedIds)
         val objectParameters = message.objectParameters
 
         // We have to lookup the iface, since the proxy object requires it
-        val implObject = endPoint.serialization.createRmiObject(interfaceClassId, objectParameters)
+        val implObject = endPoint.serialization.createRmiObject(kryoId, objectParameters)
 
         val response = if (implObject is Exception) {
             // whoops!

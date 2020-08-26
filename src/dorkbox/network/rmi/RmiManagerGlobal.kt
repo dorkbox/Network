@@ -62,8 +62,8 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
 
             // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
 
-            val classId = serialization.getClassId(interfaceClass)
-            val cachedMethods = serialization.getMethods(classId)
+            val kryoClassId = serialization.getKryoIdForRmi(interfaceClass)
+            val cachedMethods = serialization.getMethods(kryoClassId)
 
             val name = "<${connection.endPoint().type.simpleName}-proxy #$rmiId>"
 
