@@ -52,7 +52,6 @@ class RmiTest : BaseTest() {
 
     companion object {
         suspend fun runTests(connection: Connection, test: TestCow, remoteObjectID: Int) {
-            var caught = false
             val remoteObject = test as RemoteObject
 
             // Default behavior. RMI is transparent, method calls behave like normal
@@ -82,22 +81,17 @@ class RmiTest : BaseTest() {
             // Try exception handling
             try {
                 test.throwException()
+                Assert.fail("sync should be throwing an exception!")
             } catch (e: UnsupportedOperationException) {
                 connection.logger.error("Expected exception (exception log should also be on the object impl side).", e)
-                caught = true
             }
-            Assert.assertTrue(caught)
-            caught = false
 
             try {
                 test.throwSuspendException()
+                Assert.fail("sync should be throwing an exception!")
             } catch (e: UnsupportedOperationException) {
                 connection.logger.error("\tExpected exception (exception log should also be on the object impl side).", e)
-                caught = true
             }
-
-            Assert.assertTrue(caught)
-            caught = false
 
             // Non-blocking call tests
             // Non-blocking call tests
@@ -119,23 +113,18 @@ class RmiTest : BaseTest() {
             try {
                 test.throwException()
             } catch (e: IllegalStateException) {
-                connection.logger.error("\tExpected exception (exception log should also be on the object impl side).")
-                e.printStackTrace()
-                caught = true
+                // exceptions are not caught when async = true!
+                Assert.fail("Async should not be throwing an exception!")
             }
-            // exceptions are not caught when async = true!
-            Assert.assertFalse(caught)
-            caught = false
 
             try {
                 test.throwSuspendException()
             } catch (e: IllegalStateException) {
-                connection.logger.error("\tExpected exception (exception log should also be on the object impl side).")
-                e.printStackTrace()
-                caught = true
+                // exceptions are not caught when async = true!
+                Assert.fail("Async should not be throwing an exception!")
             }
-            // exceptions are not caught when async = true!
-            Assert.assertFalse(caught)
+
+
 
 
             // Call will time out if non-blocking isn't working properly
