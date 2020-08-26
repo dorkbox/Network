@@ -79,7 +79,10 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             pendingConnectionsLock.write {
                 val pendingConnection = pendingConnections.remove(sessionId)
                 if (pendingConnection != null) {
-                    logger.debug("Connection from client $clientAddressString ready")
+                    logger.trace { "Connection from client $clientAddressString done with handshake." }
+
+                    // this enables the connection to start polling for messages
+                    server.connections.add(pendingConnection)
 
                     // now tell the client we are done
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(sessionId))
@@ -87,9 +90,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                     server.actionDispatch.launch {
                         listenerManager.notifyConnect(pendingConnection)
                     }
-
-                    // this enables the connection to start polling for messages
-                    server.connections.add(pendingConnection)
 
                     return
                 }
@@ -199,11 +199,11 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // we have to construct how the connection will communicate!
             clientConnection.buildServer(aeron)
 
-            logger.trace {
-                "Creating new connection $clientConnection"
+            logger.info {
+                "Creating new connection from $clientConnection"
             }
 
-            val connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress)) as CONNECTION
+            val connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             @Suppress("UNCHECKED_CAST")
@@ -213,8 +213,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 connectionsPerIpCounts.getAndDecrement(clientAddress)
                 sessionIdAllocator.free(connectionSessionId)
                 streamIdAllocator.free(connectionStreamId)
-
-                logger.error("Error creating new connection")
 
                 val exception = ClientRejectedException("Connection was not permitted!")
                 ListenerManager.cleanStackTrace(exception)
@@ -231,8 +229,10 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             ///////////////
 
             // if necessary (and only for RMI id's that have never been seen before) we want to re-write our kryo information
-            val rmiModificationIds = message.registrationRmiIdData!!
-            server.updateKryoIdsForRmi(connection, rmiModificationIds)
+            serialization.updateKryoIdsForRmi(connection, message.registrationRmiIdData!!) { errorMessage ->
+                listenerManager.notifyError(connection,
+                                            ClientRejectedException(errorMessage))
+            }
 
 
 

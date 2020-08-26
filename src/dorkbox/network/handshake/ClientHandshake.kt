@@ -82,7 +82,6 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
                     // The message was intended for this client. Try to parse it as one of the available message types.
                     // this message is ENCRYPTED!
                     connectionHelloInfo = crypto.decrypt(message.registrationData, message.publicKey)
-                    connectionHelloInfo!!.log(sessionId, logger)
 
                 }
                 HandshakeMessage.DONE_ACK -> {
