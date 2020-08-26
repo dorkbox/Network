@@ -184,7 +184,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
          * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
          * properties from failure and streams with mechanical sympathy.
          */
-        val initialConnectionHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+        val handshakeHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
             // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
@@ -230,7 +230,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     pollCount = 0
 
                     // this checks to see if there are NEW clients on the handshake ports
-                    pollCount += handshakeSubscription.poll(initialConnectionHandler, 100)
+                    pollCount += handshakeSubscription.poll(handshakeHandler, 4)
 
                     // this checks to see if there are NEW clients via IPC
 //                    pollCount += ipcHandshakeSubscription.poll(ipcInitialConnectionHandler, 100)
