@@ -398,12 +398,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
                             suspendResult = null
                         } else if (suspendResult is Exception) {
                             RmiUtils.cleanStackTraceForImpl(suspendResult, true)
-
-                            val fancyName = RmiUtils.makeFancyMethodName(cachedMethod)
-                            val exception = Exception("Error invoking method: $fancyName", suspendResult)
-                            RmiUtils.cleanStackTraceForImpl(exception, true)
-
-                            endPoint.listenerManager.notifyError(connection, exception)
+                            endPoint.listenerManager.notifyError(connection, suspendResult)
                         }
 
                         if (sendResponse) {

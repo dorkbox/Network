@@ -260,9 +260,9 @@ internal class RmiClient(val isGlobal: Boolean,
                         continuation.resumeWithException(exception)
                     }
                     is Exception -> {
-                        // reconstruct the stack trace, so the calling method knows where the method invocation happened, and can trace the call
-                        // this stack will ALWAYS run up to this method (so we remove from the top->down, to get to the call site)
-                        RmiUtils.cleanStackTraceForProxy(Exception(), any)
+                        // for co-routines, it's impossible to get a legit stacktrace without impacting general performance,
+                        // so we just don't do it.
+                        // RmiUtils.cleanStackTraceForProxy(Exception(), any)
                         continuation.resumeWithException(any)
                     }
                     else -> {
