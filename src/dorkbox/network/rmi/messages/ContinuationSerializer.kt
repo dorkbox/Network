@@ -28,8 +28,8 @@ class ContinuationSerializer() : Serializer<Continuation<*>>() {
 
 
     override fun write(kryo: Kryo, output: Output, response: Continuation<*>) {
-        // nothing to write, because we DO NOT transfer the continuation object. The remote side (side where the object lives)
-        // uses it's continuation object from the call stack
+        // nothing to write, because we DO NOT transfer the continuation object.
+        // The remote side (side where the object lives) uses the continuation object from the call stack instead.
     }
 
     override fun read(kryo: Kryo, input: Input, type: Class<out Continuation<*>>): Continuation<*>? {
