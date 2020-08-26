@@ -17,12 +17,14 @@ package dorkbox.network.serialization
 
 import com.esotericsoftware.kryo.ClassResolver
 import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.KryoException
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.SerializerFactory
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import com.esotericsoftware.kryo.util.IdentityMap
+import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.rmi.CachedMethod
@@ -53,6 +55,7 @@ import org.objenesis.strategy.StdInstantiatorStrategy
 import java.io.IOException
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationHandler
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.Continuation
 
 /**
@@ -119,7 +122,7 @@ class Serialization(private val references: Boolean,
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
     // Object checking is performed during actual registration.
     private val classesToRegister = mutableListOf<ClassRegistration>()
-    private lateinit var savedKryoIdsForRmi: IntArray
+    internal lateinit var savedKryoIdsForRmi: IntArray
     private lateinit var savedRegistrationDetails: ByteArray
 
     /// RMI things
@@ -127,6 +130,8 @@ class Serialization(private val references: Boolean,
     private val rmiIfaceToImpl = IdentityMap<Class<*>, Class<*>>()
     private val rmiImplToIface = IdentityMap<Class<*>, Class<*>>()
 
+    // This is a GLOBAL, single threaded only kryo instance.
+    private val globalKryo: KryoExtra by lazy { initKryo() }
 
     // BY DEFAULT, DefaultInstantiatorStrategy() will use ReflectASM
     // StdInstantiatorStrategy will create classes bypasses the constructor (which can be useful in some cases) THIS IS A FALLBACK!
@@ -138,7 +143,10 @@ class Serialization(private val references: Boolean,
     private val continuationSerializer = ContinuationSerializer()
 
     private val rmiClientSerializer = RmiClientSerializer()
-    internal val rmiClientReverseSerializer = RmiClientReverseSerializer(rmiImplToIface)
+    private val rmiClientReverseSerializer = RmiClientReverseSerializer(rmiImplToIface)
+
+    // list of already seen client RMI ids (which the server might not have registered as RMI types).
+    private var existingRmiIds = CopyOnWriteArrayList<Int>()
 
 
 
@@ -154,6 +162,7 @@ class Serialization(private val references: Boolean,
         val KRYO_COUNT = 64
 
         kryoPool = Channel(KRYO_COUNT)
+
     }
 
     @Synchronized
@@ -344,113 +353,110 @@ class Serialization(private val references: Boolean,
 
         // initialize the kryo pool with at least 1 kryo instance. This ALSO makes sure that all of our class registration is done
         // correctly and (if not) we are are notified on the initial thread (instead of on the network update thread)
-        val kryo = initKryo()
-
         // save off the class-resolver, so we can lookup the class <-> id relationships
-        classResolver = kryo.classResolver
+        classResolver = globalKryo.classResolver
 
+
+        // now MERGE all of the registrations (since we can have registrations overwrite newer/specific registrations based on ID
+        // in order to get the ID's, these have to be registered with a kryo instance!
+        val mergedRegistrations = mutableListOf<ClassRegistration>()
+        classesToRegister.forEach { registration ->
+            val id = registration.id
+
+            // if we ALREADY contain this registration (based ONLY on ID), then overwrite the existing one and REMOVE the current one
+            var found = false
+            mergedRegistrations.forEachIndexed { index, classRegistration ->
+                if (classRegistration.id == id) {
+                    mergedRegistrations[index] = registration
+                    found = true
+                    return@forEachIndexed
+                }
+            }
+
+            if (!found) {
+                mergedRegistrations.add(registration)
+            }
+        }
+
+        // sort these by ID, because that is what they should be registered as...
+        mergedRegistrations.sortBy { it.id }
+
+
+        // now all of the registrations are IN ORDER and MERGED (save back to original array)
+
+
+        // set 'classesToRegister' to our mergedRegistrations, because this is now the correct order
+        classesToRegister.clear()
+        classesToRegister.addAll(mergedRegistrations)
+
+
+        // now create the registration details, used to validate that the client/server have the EXACT same class registration setup
+        val registrationDetails = arrayListOf<Array<Any>>()
+
+        if (logger.isDebugEnabled) {
+            // log the in-order output first
+            classesToRegister.forEach { classRegistration ->
+                logger.debug(classRegistration.info())
+            }
+        }
+
+        val kryoIdsForRmi = mutableListOf<Int>()
+
+        classesToRegister.forEach { classRegistration ->
+            // now save all of the registration IDs for quick verification/access
+            registrationDetails.add(classRegistration.getInfoArray())
+
+            // we should cache RMI methods! We don't always know if something is RMI or not (from just how things are registered...)
+            // so it is super trivial to map out all possible, relevant types
+            val kryoId = classRegistration.id
+
+            if (classRegistration is ClassRegistrationIfaceAndImpl) {
+                // on the "RMI server" (aka, where the object lives) side, there will be an interface + implementation!
+
+                // RMI method caching
+                methodCache[kryoId] =
+                    RmiUtils.getCachedMethods(logger, globalKryo, useAsm, classRegistration.ifaceClass, classRegistration.implClass, kryoId)
+
+                // we ALSO have to cache the instantiator for these, since these are used to create remote objects
+                val instantiator = globalKryo.instantiatorStrategy.newInstantiatorOf(classRegistration.implClass)
+
+                @Suppress("UNCHECKED_CAST")
+                rmiIfaceToInstantiator[kryoId] = instantiator as ObjectInstantiator<Any>
+
+                // finally, we must save this ID, to tell the remote connection that their interface serializer must change to support
+                // receiving an RMI impl object as a proxy object
+                kryoIdsForRmi.add(kryoId)
+            } else if (classRegistration.clazz.isInterface) {
+                // non-RMI method caching
+                methodCache[kryoId] =
+                    RmiUtils.getCachedMethods(logger, globalKryo, useAsm, classRegistration.clazz, null, kryoId)
+            }
+
+            if (kryoId > 65000) {
+                throw RuntimeException("There are too many kryo class registrations!!")
+            }
+        }
+
+        // save as an array to make it faster to send this info to the remote connection
+        savedKryoIdsForRmi = kryoIdsForRmi.toIntArray()
+
+        // have to add all of our EXISTING RMI id's, so we don't try to duplicate them (in case RMI registration is duplicated)
+        existingRmiIds.addAllAbsent(kryoIdsForRmi)
+
+
+        // save this as a byte array (so class registration validation during connection handshake is faster)
+        val output = AeronOutput()
 
         try {
-            // now MERGE all of the registrations (since we can have registrations overwrite newer/specific registrations based on ID
-            // in order to get the ID's, these have to be registered with a kryo instance!
-            val mergedRegistrations = mutableListOf<ClassRegistration>()
-            classesToRegister.forEach { registration ->
-                val id = registration.id
-
-                // if we ALREADY contain this registration (based ONLY on ID), then overwrite the existing one and REMOVE the current one
-                var found = false
-                mergedRegistrations.forEachIndexed { index, classRegistration ->
-                    if (classRegistration.id == id) {
-                        mergedRegistrations[index] = registration
-                        found = true
-                        return@forEachIndexed
-                    }
-                }
-
-                if (!found) {
-                    mergedRegistrations.add(registration)
-                }
-            }
-
-            // sort these by ID, because that is what they should be registered as...
-            mergedRegistrations.sortBy { it.id }
-
-
-            // now all of the registrations are IN ORDER and MERGED (save back to original array)
-
-
-            // set 'classesToRegister' to our mergedRegistrations, because this is now the correct order
-            classesToRegister.clear()
-            classesToRegister.addAll(mergedRegistrations)
-
-
-            // now create the registration details, used to validate that the client/server have the EXACT same class registration setup
-            val registrationDetails = arrayListOf<Array<Any>>()
-
-            if (logger.isDebugEnabled) {
-                // log the in-order output first
-                classesToRegister.forEach { classRegistration ->
-                    logger.debug(classRegistration.info())
-                }
-            }
-
-            val kryoIdsForRmi = mutableListOf<Int>()
-
-            classesToRegister.forEach { classRegistration ->
-                // now save all of the registration IDs for quick verification/access
-                registrationDetails.add(classRegistration.getInfoArray())
-
-                // we should cache RMI methods! We don't always know if something is RMI or not (from just how things are registered...)
-                // so it is super trivial to map out all possible, relevant types
-                val kryoId = classRegistration.id
-
-                if (classRegistration is ClassRegistrationIfaceAndImpl) {
-                    // on the "RMI server" (aka, where the object lives) side, there will be an interface + implementation!
-
-                    // RMI method caching
-                    methodCache[kryoId] =
-                        RmiUtils.getCachedMethods(logger, kryo, useAsm, classRegistration.ifaceClass, classRegistration.implClass, kryoId)
-
-                    // we ALSO have to cache the instantiator for these, since these are used to create remote objects
-                    val instantiator = kryo.instantiatorStrategy.newInstantiatorOf(classRegistration.implClass)
-
-                    @Suppress("UNCHECKED_CAST")
-                    rmiIfaceToInstantiator[kryoId] = instantiator as ObjectInstantiator<Any>
-
-                    // finally, we must save this ID, to tell the remote connection that their interface serializer must change to support
-                    // receiving an RMI impl object as a proxy object
-                    kryoIdsForRmi.add(kryoId)
-
-                } else if (classRegistration.clazz.isInterface) {
-                    // non-RMI method caching
-                    methodCache[kryoId] =
-                        RmiUtils.getCachedMethods(logger, kryo, useAsm, classRegistration.clazz, null, kryoId)
-                }
-
-                if (kryoId > 65000) {
-                    throw RuntimeException("There are too many kryo class registrations!!")
-                }
-            }
-
-            savedKryoIdsForRmi = kryoIdsForRmi.toIntArray()
-            // save as an array to make it faster to send this info to the remote connection
-
-            // save this as a byte array (so class registration validation during connection handshake is faster)
-            val output = AeronOutput()
-
-            try {
-                kryo.writeCompressed(logger, output, registrationDetails.toTypedArray())
-            } catch (e: Exception) {
-                logger.error("Unable to write compressed data for registration details", e)
-            }
-
-            val length = output.position()
-            savedRegistrationDetails = ByteArray(length)
-            output.toBytes().copyInto(savedRegistrationDetails, 0, 0, length)
-            output.close()
-        } finally {
-            returnKryo(kryo)
+            globalKryo.writeCompressed(logger, output, registrationDetails.toTypedArray())
+        } catch (e: Exception) {
+            logger.error("Unable to write compressed data for registration details", e)
         }
+
+        val length = output.position()
+        savedRegistrationDetails = ByteArray(length)
+        output.toBytes().copyInto(savedRegistrationDetails, 0, 0, length)
+        output.close()
     }
 
     /**
@@ -617,17 +623,16 @@ class Serialization(private val references: Boolean,
     /**
      * Returns the Kryo class registration ID
      */
-    fun getClassId(iFace: Class<*>): Int {
-        return classResolver.getRegistration(iFace).id
-    }
+    fun getKryoIdForRmi(interfaceClass: Class<*>): Int {
+        if (!interfaceClass.isInterface) {
+            throw KryoException("Can only get the kryo IDs for RMI on an interface!")
+        }
 
-    /**
-     * Returns the Kryo class from a registration ID
-     */
-    fun getClassFromId(kryoId: Int): Class<*> {
-        return classResolver.getRegistration(kryoId).type
-    }
+        val implClass = rmiIfaceToImpl[interfaceClass]
 
+        // for RMI, we store the IMPL class in the class registration -- not the iface!
+        return classResolver.getRegistration(implClass).id
+    }
 
     /**
      * Creates a NEW object implementation based on the KRYO interface ID.
@@ -643,7 +648,7 @@ class Serialization(private val references: Boolean,
             val size = objectParameters.size
 
             // we have to get the constructor for this object.
-            val clazz = getClassFromId(interfaceClassId)
+            val clazz = classResolver.getRegistration(interfaceClassId).type
             val constructors = clazz.declaredConstructors
 
             // now have to find the closest match.
@@ -779,6 +784,49 @@ class Serialization(private val references: Boolean,
                 returnKryo(kryo)
             }
         }
+    }
+
+    suspend fun <CONNECTION: Connection> updateKryoIdsForRmi(connection: CONNECTION, rmiModificationIds: IntArray, onError: suspend (String) -> Unit) {
+        val endPoint = connection.endPoint()
+        val typeName = endPoint.type.simpleName
+
+        rmiModificationIds.forEach {
+            if (!existingRmiIds.contains(it)) {
+                existingRmiIds.add(it)
+
+                // have to modify the network read kryo with the correct registration id -> serializer info. This is a GLOBAL change made on
+                // a single thread.
+                // NOTE: This change will ONLY modify the network-read kryo. This is all we need to modify. The write kryo's will already be correct
+
+                val registration = globalKryo.getRegistration(it)
+                val regMessage = "$typeName-side RMI serializer for registration $it -> ${registration.type}"
+
+                if (registration.type.isInterface) {
+                    logger.debug {
+                        "Modifying $regMessage"
+                    }
+                    // RMI must be with an interface. If it's not an interface then something is wrong
+                    registration.serializer = rmiClientReverseSerializer
+                } else {
+                    // note: one way that this can be called is when BOTH the client + server register the same way for RMI IDs. When
+                    //   the endpoint serialization is initialized, we also add the RMI IDs to this list, so we don't have to worry about this specific
+                    //   scenario
+                    onError("Attempting an unsafe modification of $regMessage")
+                }
+            }
+        }
+    }
+
+    // NOTE: These following functions are ONLY called on a single thread!
+    fun readMessage(buffer: DirectBuffer, offset: Int, length: Int): Any? {
+        return globalKryo.read(buffer, offset, length)
+    }
+    fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, connection: Connection): Any? {
+        return globalKryo.read(buffer, offset, length, connection)
+    }
+    fun writeMessage(message: Any): AeronOutput {
+        globalKryo.write(message)
+        return globalKryo.writerBuffer
     }
 
 //    /**

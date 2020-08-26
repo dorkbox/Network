@@ -537,12 +537,12 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     suspend fun <Iface> createObject(vararg objectParameters: Any?, callback: suspend (Int, Iface) -> Unit) {
         val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 1)
-        val interfaceClassId = endPoint.serialization.getClassId(iFaceClass)
+        val kryoId = endPoint.serialization.getKryoIdForRmi(iFaceClass)
 
         @Suppress("UNCHECKED_CAST")
         objectParameters as Array<Any?>
 
-        rmiConnectionSupport.createRemoteObject(this, interfaceClassId, objectParameters, callback)
+        rmiConnectionSupport.createRemoteObject(this, kryoId, objectParameters, callback)
     }
 
     /**
@@ -564,7 +564,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     suspend fun <Iface> createObject(callback: suspend (Int, Iface) -> Unit) {
         val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 1)
-        val interfaceClassId = endPoint.serialization.getClassId(iFaceClass)
+        val interfaceClassId = endPoint.serialization.getKryoIdForRmi(iFaceClass)
 
         rmiConnectionSupport.createRemoteObject(this, interfaceClassId, null, callback)
     }

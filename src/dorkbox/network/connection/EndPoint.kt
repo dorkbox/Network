@@ -20,7 +20,6 @@ import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.CoroutineIdleStrategy
-import dorkbox.network.aeron.client.ClientRejectedException
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiManagerConnections
@@ -44,7 +43,6 @@ import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import java.io.File
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 
 
@@ -143,11 +141,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
 
-    // list of already seen client RMI ids (which the server might not have registered as RMI types).
-    private var alreadySeenClientRmiIds = CopyOnWriteArrayList<Int>()
-
-    private val networkReadKryo: KryoExtra = config.serialization.takeKryo()
-
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
 
     init {
@@ -233,7 +226,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         logger.info("Aeron log directory: ${config.aeronLogDirectory}")
         if (aeronDirAlreadyExists) {
-            logger.info("Aeron log directory already exists! This might not be what you want!")
+            logger.warn("Aeron log directory already exists! This might not be what you want!")
         }
 
         // serialization stuff
@@ -448,9 +441,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         }
 
         try {
-            networkReadKryo.write(message)
-
-            val buffer = networkReadKryo.writerBuffer
+            // NOTE: it is safe to use the global, single-threaded kryo instance!
+            val buffer = serialization.writeMessage(message)
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
@@ -489,7 +481,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
         try {
-            val message = networkReadKryo.read(buffer, offset, length)
+            val message = serialization.readMessage(buffer, offset, length)
             logger.trace {
                 "[${header.sessionId()}] received: $message"
             }
@@ -526,11 +518,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         val message: Any?
         try {
-            message = networkReadKryo.read(buffer, offset, length, connection)
+            message = serialization.readMessage(buffer, offset, length, connection)
             logger.trace {
-                // The sessionId is globally unique, and is assigned by the server.
-                val sessionId = header.sessionId()
-                "[${sessionId}] received: $message"
+                "[${header.sessionId()}] received: $message"
             }
         } catch (e: Exception) {
             // The sessionId is globally unique, and is assigned by the server.
@@ -713,31 +703,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
 
             shutdownLatch.countDown()
-        }
-    }
-
-    suspend fun updateKryoIdsForRmi(connection: CONNECTION, rmiModificationIds: IntArray) {
-        rmiModificationIds.forEach {
-            if (!alreadySeenClientRmiIds.contains(it)) {
-                alreadySeenClientRmiIds.add(it)
-
-                // have to modify the network read kryo with the correct registration id -> serializer info. This is a GLOBAL change made on
-                // a single thread.
-                // NOTE: This change will ONLY modify the network-read kryo. This is all we need to modify. The write kryo's will already be correct
-
-                val registration = networkReadKryo.getRegistration(it)
-                val regMessage = "${type.simpleName}-side RMI serializer for registration $it -> ${registration.type}"
-                if (registration.type.isInterface) {
-                    logger.debug {
-                        "Modifying $regMessage"
-                    }
-                    // RMI must be with an interface. If it's not an interface then something is wrong
-                    registration.serializer = serialization.rmiClientReverseSerializer
-                } else {
-                    listenerManager.notifyError(connection,
-                                                ClientRejectedException("Attempting an unsafe modification of $regMessage"))
-                }
-            }
         }
     }
 }

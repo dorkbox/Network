@@ -249,8 +249,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             // we have to construct how the connection will communicate!
             reliableClientConnection.buildClient(aeron)
 
-            logger.trace {
-                "Creating new connection $reliableClientConnection"
+            logger.info {
+                "Creating new connection to $reliableClientConnection"
             }
 
             val newConnection = newConnection(ConnectionParams(this, reliableClientConnection, validateRemoteAddress))
@@ -265,9 +265,17 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 throw exception
             }
 
-            // before we do anything else, we have to correct the RMI serializers, as necessary.
-            val rmiModificationIds = connectionInfo.kryoIdsForRmi
-            updateKryoIdsForRmi(newConnection, rmiModificationIds)
+            ///////////////
+            ////   RMI
+            ///////////////
+
+            // if necessary (and only for RMI id's that have never been seen before) we want to re-write our kryo information
+            serialization.updateKryoIdsForRmi(newConnection, connectionInfo.kryoIdsForRmi) { errorMessage ->
+                listenerManager.notifyError(newConnection,
+                                            ClientRejectedException(errorMessage))
+            }
+
+
 
             connection = newConnection
             connections.add(newConnection)
@@ -542,13 +550,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     suspend inline fun <reified Iface> createObject(vararg objectParameters: Any?, noinline callback: suspend (Int, Iface) -> Unit) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        val classId = serialization.getClassId(Iface::class.java)
+        val kryoId = serialization.getKryoIdForRmi(Iface::class.java)
 
         @Suppress("UNCHECKED_CAST")
         objectParameters as Array<Any?>
 
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        rmiConnectionSupport.createRemoteObject(getConnection(), classId, objectParameters, callback)
+        rmiConnectionSupport.createRemoteObject(getConnection(), kryoId, objectParameters, callback)
     }
 
     /**
@@ -572,7 +580,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     suspend inline fun <reified Iface> createObject(noinline callback: suspend (Int, Iface) -> Unit) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        val classId = serialization.getClassId(Iface::class.java)
+        val classId = serialization.getKryoIdForRmi(Iface::class.java)
 
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
         rmiConnectionSupport.createRemoteObject(getConnection(), classId, null, callback)
