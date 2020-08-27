@@ -98,7 +98,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
     private val endPoint = connectionParameters.endPoint
-    internal val listenerManager = atomic<ListenerManager<Connection>?>(null)
+    private val listenerManager = atomic<ListenerManager<Connection>?>(null)
 
     val logger = endPoint.logger
 

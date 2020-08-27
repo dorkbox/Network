@@ -35,6 +35,7 @@ import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
@@ -275,10 +276,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                                             ClientRejectedException(errorMessage))
             }
 
-            @Suppress("UNCHECKED_CAST")
-            newConnection.listenerManager.lazySet(listenerManager as ListenerManager<Connection>)
-
-
             connection = newConnection
             connections.add(newConnection)
 
@@ -431,9 +428,18 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     }
 
     override fun close() {
+        val con = connection
         connection = null
         isConnected = false
         super.close()
+
+        // in the client, "notifyDisconnect" will NEVER be called, because it's only called on a connection!
+        // manually call it.
+        if (con != null) {
+            runBlocking {
+                listenerManager.notifyDisconnect(con)
+            }
+        }
     }
 
 
