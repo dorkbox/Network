@@ -78,7 +78,7 @@ import kotlin.coroutines.Continuation
  *                an object's type. Default is [ReflectionSerializerFactory] with [FieldSerializer]. @see
  *                Kryo#newDefaultSerializer(Class)
  */
-class Serialization(private val references: Boolean,
+open class Serialization(private val references: Boolean,
                     private val factory: SerializerFactory<*>?) : SerializationManager<DirectBuffer> {
 
 
