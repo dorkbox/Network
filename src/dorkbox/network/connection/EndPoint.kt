@@ -122,7 +122,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     private var aeron: Aeron? = null
 
     /**
-     * Returns the serialization wrapper if there is an object type that needs to be added outside of the basics.
+     * Returns the serialization wrapper if there is an object type that needs to be added outside of the basic types.
      */
     val serialization: Serialization
 
@@ -695,7 +695,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             rmiGlobalSupport.close()
 
             runBlocking {
-                // don't need anything fast or fancy here, because this method will only be called once
                 connections.forEach {
                     it.close()
                 }

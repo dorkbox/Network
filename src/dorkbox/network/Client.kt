@@ -433,11 +433,21 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         isConnected = false
         super.close()
 
-        // in the client, "notifyDisconnect" will NEVER be called, because it's only called on a connection!
+        // in the client, "client-notifyDisconnect" will NEVER be called, because it's only called on a connection!
+        // (meaning, 'connection-notifiyDisconnect' is what is called)
+
         // manually call it.
         if (con != null) {
-            runBlocking {
+            // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+            val job = actionDispatch.launch {
                 listenerManager.notifyDisconnect(con)
+            }
+
+            // when we close a client or a server, we want to make sure that ALL notifications are finished.
+            // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
+            // NOTE: this must be the LAST thing happening!
+            runBlocking {
+                job.join()
             }
         }
     }

@@ -93,12 +93,9 @@ internal open class ConnectionManager<CONNECTION: Connection>() {
     }
 
     /**
-     * Safely sends objects to a destination (such as a custom object or a standard ping). This will automatically choose which protocol
-     * is available to use.
+     * Removes all connections. Does not call close or anything else on them
      */
-    suspend inline fun send(message: Any) {
-        forEach {
-            it.send(message)
-        }
+    fun clear() {
+        connections.clear()
     }
 }
