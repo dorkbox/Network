@@ -245,12 +245,12 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                         var shouldCleanupConnection = false
 
                         if (connection.isExpired()) {
-                            logger.debug {"[${connection.sessionId}] connection expired"}
+                            logger.trace {"[${connection.sessionId}] connection expired"}
                             shouldCleanupConnection = true
                         }
 
                         else if (connection.isClosed()) {
-                            logger.debug {"[${connection.sessionId}] connection closed"}
+                            logger.trace {"[${connection.sessionId}] connection closed"}
                             shouldCleanupConnection = true
                         }
 
@@ -265,11 +265,14 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                             false
                         }
                     }, { connectionToClean ->
-                        logger.debug {"[${connectionToClean.sessionId}] removed connection"}
-
                         // have to free up resources!
                         handshake.cleanup(connectionToClean)
 
+                        // there are 2 ways to call close.
+                        //   MANUALLY
+                        //   when a connection is disconnected via a timeout/expire.
+                        // the compareAndSet is used to make sure that if we call close() MANUALLY, when the auto-cleanup/disconnect is called -- it doesn't
+                        // try to do it again.
                         connectionToClean.close()
                     })
 

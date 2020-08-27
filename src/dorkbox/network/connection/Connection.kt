@@ -98,7 +98,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
     private val endPoint = connectionParameters.endPoint
-    private val listenerManager = atomic<ListenerManager<Connection>?>(null)
+    internal val listenerManager = atomic<ListenerManager<Connection>?>(null)
 
     val logger = endPoint.logger
 
@@ -297,8 +297,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * Closes the connection, and removes all connection specific listeners
      */
     suspend fun close() {
+        // there are 2 ways to call close.
+        //   MANUALLY
+        //   when a connection is disconnected via a timeout/expire.
+        // the compareAndSet is used to make sure that if we call close() MANUALLY, when the auto-cleanup/disconnect is called -- it doesn't
+        // try to do it again.
+
+        // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (isClosed.compareAndSet(expect = false, update = true)) {
-            // the server 'handshake' connection info is already cleaned up before this is called
+            logger.info {"[${sessionId}] closed connection"}
 
             subscription.close()
 

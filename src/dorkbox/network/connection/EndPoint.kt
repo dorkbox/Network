@@ -698,7 +698,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 // don't need anything fast or fancy here, because this method will only be called once
                 connections.forEach {
                     it.close()
-                    listenerManager.notifyDisconnect(it) // if disconnect has a "connect" in it, this will case SO MANY PROBLEMS
                 }
             }
 

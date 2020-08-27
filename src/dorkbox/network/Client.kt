@@ -275,6 +275,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                                             ClientRejectedException(errorMessage))
             }
 
+            @Suppress("UNCHECKED_CAST")
+            newConnection.listenerManager.lazySet(listenerManager as ListenerManager<Connection>)
 
 
             connection = newConnection
