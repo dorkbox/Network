@@ -9,10 +9,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.io.IOException
-import java.util.*
 
 class DisconnectReconnectTest : BaseTest() {
-    private val timer = Timer()
     private val reconnectCount = atomic(0)
 
     @Test
@@ -27,10 +25,10 @@ class DisconnectReconnectTest : BaseTest() {
             }
 
             server.onConnect { connection ->
-                println("Disconnecting after 2 seconds.")
+                connection.logger.error("Disconnecting after 2 seconds.")
                 delay(2000)
 
-                println("Disconnecting....")
+                connection.logger.error("Disconnecting....")
                 connection.close()
             }
         }
@@ -43,14 +41,15 @@ class DisconnectReconnectTest : BaseTest() {
 
 
             client.onDisconnect { connection ->
-                println("Disconnected!")
+                connection.logger.error("Disconnected!")
+
                 val count = reconnectCount.getAndIncrement()
                 if (count == 3) {
-                    println("Shutting down")
+                    connection.logger.error("Shutting down")
                     stopEndPoints()
                 }
                 else {
-                    println("Reconnecting: $count")
+                    connection.logger.error("Reconnecting: $count")
                     try {
                         client.connect(LOOPBACK)
                     } catch (e: IOException) {
