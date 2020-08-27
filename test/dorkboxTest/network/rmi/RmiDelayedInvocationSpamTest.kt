@@ -30,7 +30,6 @@ import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 
 class RmiDelayedInvocationSpamTest : BaseTest() {
-    private val totalRuns = 1000000
     private val counter = AtomicLong(0)
 
     private val RMI_ID = 12251
@@ -62,12 +61,17 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
     fun rmi(config: (Configuration) -> Unit = {}) {
         val server: Server<Connection>
 
+        val async = false
+
+        val mod = if (async) 10_000L else 200L
+        val totalRuns = if (async) 1_000_000 else 70_000
+
         run {
             val configuration = serverConfig()
             config(configuration)
             register(configuration.serialization)
 
-            server = Server<Connection>(configuration)
+            server = Server(configuration)
             addEndPoint(server)
 
             server.saveGlobalObject(TestObjectImpl(counter), RMI_ID)
@@ -87,10 +91,9 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect { connection ->
-
                 val remoteObject = connection.getGlobalObject<TestObject>(RMI_ID)
                 val obj = remoteObject as RemoteObject
-                obj.async = true
+                obj.async = async
 
                 var started = false
                 for (i in 0 until totalRuns) {
@@ -99,7 +102,7 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
                         System.err.println("Running for $totalRuns iterations....")
                     }
 
-                    if (i % 10000L == 0L) {
+                    if (i % mod == 0L) {
                         // this doesn't always output to the console. weird.
                         client.logger.error("$i")
                     }

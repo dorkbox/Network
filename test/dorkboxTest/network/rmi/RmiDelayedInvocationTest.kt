@@ -82,7 +82,7 @@ class RmiDelayedInvocationTest : BaseTest() {
             client.onConnect { connection ->
                 val remoteObject = connection.getGlobalObject<TestObject>(OBJ_ID)
 
-                val totalRuns = 1000
+                val totalRuns = 100
                 var abort = false
                 System.err.println("Running for $totalRuns iterations....")
 
@@ -90,7 +90,7 @@ class RmiDelayedInvocationTest : BaseTest() {
                     if (abort) {
                         break
                     }
-                    if (i % 10000 == 0) {
+                    if (i % 10 == 0) {
                         System.err.println(i)
                     }
 
