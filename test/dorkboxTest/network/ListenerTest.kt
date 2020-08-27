@@ -40,33 +40,33 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.util.exceptions.InitializationException
 import dorkbox.util.exceptions.SecurityException
+import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 class ListenerTest : BaseTest() {
-    private val origString = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // lots of a's to encourage compression
+    private val origString = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     private val limit = 20
-    private val count = AtomicInteger(0)
-    var checkFail1 = AtomicBoolean(false)
-    var checkFail2 = AtomicBoolean(false)
 
-    var overrideCheck = AtomicBoolean(false)
-    var serverOnMessage = AtomicBoolean(false)
-    var serverConnectionOnMessage = AtomicBoolean(false)
-    var serverDisconnectMessage = AtomicBoolean(false)
-    var serverConnect = AtomicBoolean(false)
-    var serverDisconnect = AtomicBoolean(false)
-    var clientConnect = AtomicBoolean(false)
-    var clientDisconnect = AtomicBoolean(false)
+    private val count = atomic(0)
+    var checkFail1 = atomic(false)
+    var checkFail2 = atomic(false)
+
+    var overrideCheck = atomic(false)
+    var serverOnMessage = atomic(false)
+    var serverConnectionOnMessage = atomic(false)
+    var serverDisconnectMessage = atomic(false)
+    var serverConnect = atomic(false)
+    var serverDisconnect = atomic(false)
+    var clientConnect = atomic(false)
+    var clientDisconnect = atomic(false)
 
     // quick and dirty test to also test connection sub-classing
     internal open inner class TestConnectionA(connectionParameters: ConnectionParams<TestConnectionA>) : Connection(connectionParameters) {
         open fun check() {
-            overrideCheck.set(true)
+            overrideCheck.value = true
         }
     }
 
@@ -91,24 +91,25 @@ class ListenerTest : BaseTest() {
         // generic listener
         server.onMessage<Any> { _, _ ->
             // should be called!
-            serverOnMessage.set(true)
+            serverOnMessage.value = true
         }
 
         // standard connect check
         server.onConnect { connection ->
-            serverConnect.set(true)
+            serverConnect.value = true
+
             connection.onMessage<Any> {_, _ ->
-                serverConnectionOnMessage.set(true)
+                serverConnectionOnMessage.value = true
             }
 
             connection.onDisconnect { _ ->
-                serverDisconnectMessage.set(true)
+                serverDisconnectMessage.value = true
             }
         }
 
         // standard listener disconnect check
-        server.onDisconnect {
-            serverDisconnect.set(true)
+        server.onDisconnect { connection ->
+            serverDisconnect.value = true
         }
 
 
@@ -135,7 +136,7 @@ class ListenerTest : BaseTest() {
 
         client.onMessage<String> { connection, message ->
             if (origString != message) {
-                checkFail2.set(true)
+                checkFail2.value = true
                 System.err.println("original string not equal to the string received")
                 stopEndPoints()
                 return@onMessage
@@ -150,13 +151,13 @@ class ListenerTest : BaseTest() {
 
         // standard connect check
         client.onConnect {
-            clientConnect.set(true)
+            clientConnect.value = true
         }
 
 
         // standard listener disconnect check
         client.onDisconnect {
-            clientDisconnect.set(true)
+            clientDisconnect.value = true
         }
 
 
@@ -167,17 +168,17 @@ class ListenerTest : BaseTest() {
         waitForThreads()
 
         // -1 BECAUSE we are `getAndIncrement` for each check earlier
-        Assert.assertEquals(limit.toLong(), count.get() - 1.toLong())
-        Assert.assertTrue(overrideCheck.get())
-        Assert.assertTrue(serverOnMessage.get())
-        Assert.assertTrue(serverConnectionOnMessage.get())
-        Assert.assertTrue(serverDisconnectMessage.get())
-        Assert.assertTrue(serverConnect.get())
-        Assert.assertTrue(serverDisconnect.get())
-        Assert.assertTrue(clientConnect.get())
-        Assert.assertTrue(clientDisconnect.get())
+        Assert.assertEquals(limit, count.value - 1)
+        Assert.assertTrue(overrideCheck.value)
+        Assert.assertTrue(serverOnMessage.value)
+        Assert.assertTrue(serverConnectionOnMessage.value)
+        Assert.assertTrue(serverDisconnectMessage.value)
+        Assert.assertTrue(serverConnect.value)
+        Assert.assertTrue(serverDisconnect.value)
+        Assert.assertTrue(clientConnect.value)
+        Assert.assertTrue(clientDisconnect.value)
 
-        Assert.assertFalse(checkFail1.get())
-        Assert.assertFalse(checkFail2.get())
+        Assert.assertFalse(checkFail1.value)
+        Assert.assertFalse(checkFail2.value)
     }
 }
