@@ -59,7 +59,7 @@ class MultipleServerTest : BaseTest() {
         var serverAeronDir: File? = null
         val didReceive = mutableListOf<AtomicBoolean>()
 
-        for (count in 0..total) {
+        for (count in 0 until total) {
             didReceive.add(AtomicBoolean())
             val offset = count * portOffset
 
@@ -71,7 +71,7 @@ class MultipleServerTest : BaseTest() {
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
 
-            server.onMessage<String>{ connection, message ->
+            server.onMessage<String>{ _, message ->
                 if (message != "client_$count") {
                     Assert.fail()
                 }
@@ -93,7 +93,7 @@ class MultipleServerTest : BaseTest() {
         var clientAeronDir: File? = null
         val didSend = mutableListOf<AtomicBoolean>()
 
-        for (count in 0..total) {
+        for (count in 0 until total) {
             didSend.add(AtomicBoolean())
             val offset = count * portOffset
 
