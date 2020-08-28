@@ -28,6 +28,8 @@ import org.junit.Test
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
+
+
 class RmiOverrideAndProxyTest : BaseTest() {
 
     companion object {
@@ -77,15 +79,15 @@ class RmiOverrideAndProxyTest : BaseTest() {
      * The implType (if it exists, with the same name, and with the same signature + connection parameter) will be called from the interface
      * instead of the method that would NORMALLY be called.
      */
-    @Throws(SecurityException::class, IOException::class)
     fun rmi(config: (Configuration) -> Unit = {}) {
         run {
             val configuration = serverConfig()
             config(configuration)
 
             configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+            configuration.serialization.register(TestObject::class.java) // the iface is again, on purpose to verify registration orders!
             configuration.serialization.registerRmi(OtherObject::class.java, OtherObjectImpl::class.java)
-            configuration.serialization.register(OtherObjectImpl::class.java) // registered because this class is sent over the wire
+//            configuration.serialization.register(OtherObjectImpl::class.java) // registered because this class is sent over the wire
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
@@ -112,14 +114,14 @@ class RmiOverrideAndProxyTest : BaseTest() {
 
             configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
             configuration.serialization.registerRmi(OtherObject::class.java, OtherObjectImpl::class.java)
-            configuration.serialization.register(OtherObjectImpl::class.java) // registered because this class is sent over the wire
+//            configuration.serialization.register(OtherObjectImpl::class.java) // registered because this class is sent over the wire
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
             client.onConnect { connection ->
                 connection.createObject<TestObject>() { rmiId, remoteObject ->
-                    println("Starting test")
+                    connection.logger.error("Starting test")
                     remoteObject.setValue(43.21f)
 
                     // Normal remote method call.
@@ -128,7 +130,7 @@ class RmiOverrideAndProxyTest : BaseTest() {
                     // Make a remote method call that returns another remote proxy object.
                     // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
                     //  here we have a proxy to both of them.
-                    val otherObject = remoteObject.getOtherObject()
+                    val otherObject: OtherObject = remoteObject.getOtherObject()
 
                     // Normal remote method call on the second object.
                     otherObject.setValue(12.34f)
@@ -179,7 +181,7 @@ class RmiOverrideAndProxyTest : BaseTest() {
         }
 
         suspend fun setValue(connection: Connection, aFloat: Float) {
-            println("receiving")
+            connection.logger.error("receiving")
             this.aFloat = aFloat
         }
 
