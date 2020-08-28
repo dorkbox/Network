@@ -38,17 +38,21 @@ import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
-import com.esotericsoftware.kryo.util.IdentityMap
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.serialization.KryoExtra
 
 /**
- * This is to manage serializing proxy object objects across the wire...
+ * This is to manage serializing RMI objects across the wire...
  *
  * This is when the RMI server sends an impl object to a client, the client must receive a proxy object (instead of the impl object)
  *
- * NOTE: this works because the CLIENT can never send the actual iface object, if it's RMI, it will send the java Proxy object instead.
- *   The SERVER can never send the iface object, it will send the IMPL object instead
+ * NOTE:
+ *   CLIENT: can never send the iface object, if it's RMI, it will send the java Proxy object instead.
+ *   SERVER: can never send the iface object, it will always send the IMPL object instead (because of how kryo works)
+ *
+ *   **************************
+ *   NOTE: This works because we TRICK kryo serialization by changing what the kryo ID serializer is on each end of the connection
+ *   **************************
  *
  *   What we do is on the server, REWRITE the kryo ID for the impl so that it will send just the rmi ID instead of the object
  *   on the client, this SAME kryo ID must have this serializer as well, so the proxy object is re-assembled.
@@ -64,7 +68,7 @@ import dorkbox.network.serialization.KryoExtra
  *  During the handshake, if the impl object 'lives' on the CLIENT, then the client must tell the server that the iface ID must use this serializer.
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
-class RmiClientReverseSerializer(private val rmiImplToIface: IdentityMap<Class<*>, Class<*>>) : Serializer<Any>(false) {
+class RmiClientReverseSerializer : Serializer<Any>(false) {
 
     override fun write(kryo: Kryo, output: Output, `object`: Any) {
         val kryoExtra = kryo as KryoExtra
@@ -87,6 +91,7 @@ class RmiClientReverseSerializer(private val rmiImplToIface: IdentityMap<Class<*
         val objectID = input.readInt(true)
 
         val connection = kryoExtra.connection
-        return connection.rmiConnectionSupport.getRemoteObject(connection, objectID, iface)
+        val kryoId = connection.endPoint.serialization.getKryoIdForRmiClient(iface)
+        return connection.rmiConnectionSupport.getRemoteObject(connection, kryoId, objectID, iface)
     }
 }

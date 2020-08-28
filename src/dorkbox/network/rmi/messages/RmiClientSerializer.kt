@@ -24,12 +24,17 @@ import dorkbox.network.serialization.KryoExtra
 import java.lang.reflect.Proxy
 
 /**
- * This is to manage serializing proxy object objects across the wire...
+ * This is to manage serializing RMI objects across the wire...
  *
- * This is when the RMI server sends an impl object to a client, the client must receive a proxy object (instead of the impl object)
+ * This is when the RMI client sends a java proxy object to a server, the server must receive the impl object
  *
- * NOTE: this works because the CLIENT can never send the actual iface object, if it's RMI, it will send the java Proxy object instead.
- *   The SERVER can never send the iface object, it will send the IMPL object instead
+ * NOTE:
+ *   CLIENT: can never send the iface object, if it's RMI, it will send the java Proxy object instead.
+ *   SERVER: can never send the iface object, it will always send the IMPL object instead (because of how kryo works)
+ *
+ *   **************************
+ *   NOTE: This works because we TRICK kryo serialization by changing what the kryo ID serializer is on each end of the connection
+ *   **************************
  *
  *   What we do is on the server, REWRITE the kryo ID for the impl so that it will send just the rmi ID instead of the object
  *   on the client, this SAME kryo ID must have this serializer as well, so the proxy object is re-assembled.
@@ -58,6 +63,6 @@ class RmiClientSerializer : Serializer<Any>() {
 
         kryo as KryoExtra
         val connection = kryo.connection
-        return connection.endPoint().rmiGlobalSupport.getImplObject(isGlobal, objectId, connection)
+        return connection.endPoint.rmiGlobalSupport.getImplObject(isGlobal, objectId, connection)
     }
 }
