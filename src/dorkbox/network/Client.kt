@@ -72,7 +72,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     private val previousClosedConnectionActivity: Long = 0
 
-    private val rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, serialization)
+    private val rmiConnectionSupport = RmiManagerConnections(logger, listenerManager, rmiGlobalSupport, serialization)
 
     init {
         // have to do some basic validation of our configuration
@@ -498,7 +498,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
-    fun saveObject(`object`: Any): Int {
+    suspend fun saveObject(`object`: Any): Int {
         return rmiConnectionSupport.saveImplObject(`object`)
     }
 
@@ -519,7 +519,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
-    fun saveObject(`object`: Any, objectId: Int): Boolean {
+    suspend fun saveObject(`object`: Any, objectId: Int): Boolean {
         return rmiConnectionSupport.saveImplObject(`object`, objectId)
     }
 
@@ -543,8 +543,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     inline fun <reified Iface> getObject(objectId: Int): Iface {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
+        val kryoId = serialization.getKryoIdForRmiClient(Iface::class.java)
+
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.getRemoteObject(getConnection(), objectId, Iface::class.java)
+        return rmiConnectionSupport.getRemoteObject(getConnection(), kryoId, objectId, Iface::class.java)
     }
 
     /**
@@ -568,7 +570,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     suspend inline fun <reified Iface> createObject(vararg objectParameters: Any?, noinline callback: suspend (Int, Iface) -> Unit) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        val kryoId = serialization.getKryoIdForRmi(Iface::class.java)
+        val kryoId = serialization.getKryoIdForRmiClient(Iface::class.java)
 
         @Suppress("UNCHECKED_CAST")
         objectParameters as Array<Any?>
@@ -598,10 +600,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     suspend inline fun <reified Iface> createObject(noinline callback: suspend (Int, Iface) -> Unit) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        val classId = serialization.getKryoIdForRmi(Iface::class.java)
+        val kryoId = serialization.getKryoIdForRmiClient(Iface::class.java)
 
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        rmiConnectionSupport.createRemoteObject(getConnection(), classId, null, callback)
+        rmiConnectionSupport.createRemoteObject(getConnection(), kryoId, null, callback)
     }
 
     //
@@ -628,7 +630,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
-    fun saveGlobalObject(`object`: Any): Int {
+    suspend fun saveGlobalObject(`object`: Any): Int {
         return rmiGlobalSupport.saveImplObject(`object`)
     }
 
@@ -649,7 +651,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
-    fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
+    suspend fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
         return rmiGlobalSupport.saveImplObject(`object`, objectId)
     }
 

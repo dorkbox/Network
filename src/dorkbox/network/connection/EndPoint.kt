@@ -141,7 +141,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
 
-    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
+    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, listenerManager, actionDispatch, config.serialization)
 
     init {
         logger.error("NETWORK STACK IS ONLY IPV4 AT THE MOMENT. IPV6 is in progress!")
@@ -239,7 +239,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         crypto = CryptoManagement(logger, settingsStore, type, config)
 
-
         // we are done with initial configuration, now finish serialization
         runBlocking {
             serialization.finishInit(type)
@@ -336,7 +335,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * from a "global" context
      */
     internal open fun getRmiConnectionSupport() : RmiManagerConnections<CONNECTION> {
-        return RmiManagerConnections(logger, rmiGlobalSupport, serialization)
+        return RmiManagerConnections(logger, listenerManager, rmiGlobalSupport, serialization)
     }
 
     /**

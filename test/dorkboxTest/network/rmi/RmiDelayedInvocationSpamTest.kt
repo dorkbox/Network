@@ -37,7 +37,9 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
     @Test
     @Throws(SecurityException::class, IOException::class)
     fun rmiNetwork() {
-        rmi()
+        runBlocking {
+            rmi()
+        }
     }
 
     @Test
@@ -58,7 +60,7 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
      * In this test the server has two objects in an object space. The client
      * uses the first remote object to get the second remote object.
      */
-    fun rmi(config: (Configuration) -> Unit = {}) {
+    suspend fun rmi(config: (Configuration) -> Unit = {}) {
         val server: Server<Connection>
 
         val async = false

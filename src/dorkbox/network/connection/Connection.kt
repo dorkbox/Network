@@ -97,7 +97,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             return pingFuture2?.response ?: -1
         }
 
-    private val endPoint = connectionParameters.endPoint
+    /**
+     * the endpoint associated with this connection
+     */
+    internal val endPoint = connectionParameters.endPoint
     private val listenerManager = atomic<ListenerManager<Connection>?>(null)
 
     val logger = endPoint.logger
@@ -156,13 +159,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     fun hasRemoteKeyChanged(): Boolean {
         return remoteKeyChanged
-    }
-
-    /**
-     * @return the endpoint associated with this connection
-     */
-    internal fun endPoint(): EndPoint<*> {
-        return endPoint
     }
 
 //    /**
@@ -442,13 +438,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @see RemoteObject
      */
-    fun saveObject(`object`: Any): Int {
-        val rmiId = rmiConnectionSupport.saveImplObject(`object`)
-        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            logger.error("Invalid RMI ID for saving object: $`object`")
-        }
-
-        return rmiId
+    suspend fun saveObject(`object`: Any): Int {
+        return rmiConnectionSupport.saveImplObject(`object`)
     }
 
     /**
@@ -468,13 +459,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @see RemoteObject
      */
-    fun saveObject(`object`: Any, objectId: Int): Boolean {
-        val success = rmiConnectionSupport.saveImplObject(`object`, objectId)
-        if (!success) {
-            logger.error("Unable to save object $`object` with RMI ID $objectId")
-        }
-
-        return success
+    suspend fun saveObject(`object`: Any, objectId: Int): Boolean {
+        return rmiConnectionSupport.saveImplObject(`object`, objectId)
     }
 
     /**
@@ -498,7 +484,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.getRemoteObject(this, objectId, Iface::class.java)
+        val kryoId = endPoint.serialization.getKryoIdForRmiClient(Iface::class.java)
+
+        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
+        return rmiConnectionSupport.getRemoteObject(this, kryoId, objectId, Iface::class.java)
     }
 
     /**
@@ -544,7 +533,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     suspend fun <Iface> createObject(vararg objectParameters: Any?, callback: suspend (Int, Iface) -> Unit) {
         val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 1)
-        val kryoId = endPoint.serialization.getKryoIdForRmi(iFaceClass)
+        val kryoId = endPoint.serialization.getKryoIdForRmiClient(iFaceClass)
 
         @Suppress("UNCHECKED_CAST")
         objectParameters as Array<Any?>
@@ -571,8 +560,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     suspend fun <Iface> createObject(callback: suspend (Int, Iface) -> Unit) {
         val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 1)
-        val interfaceClassId = endPoint.serialization.getKryoIdForRmi(iFaceClass)
+        val kryoId = endPoint.serialization.getKryoIdForRmiClient(iFaceClass)
 
-        rmiConnectionSupport.createRemoteObject(this, interfaceClassId, null, callback)
+        rmiConnectionSupport.createRemoteObject(this, kryoId, null, callback)
     }
 }

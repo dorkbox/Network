@@ -95,7 +95,7 @@ open class Configuration {
     /**
      * Specify the serialization manager to use.
      */
-    var serialization: Serialization = Serialization.DEFAULT()
+    var serialization: Serialization = Serialization()
 
     /**
      * The idle strategy used when polling the Media Driver for new messages. BackOffIdleStrategy is the DEFAULT.

@@ -530,8 +530,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      *
      * @see RemoteObject
      */
-    fun saveGlobalObject(`object`: Any): Int {
-        return rmiGlobalSupport.saveImplObject(logger, `object`)
+    suspend fun saveGlobalObject(`object`: Any): Int {
+        return rmiGlobalSupport.saveImplObject(`object`)
     }
 
     /**
@@ -551,7 +551,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      *
      * @see RemoteObject
      */
-    fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
-        return rmiGlobalSupport.saveImplObject(logger, `object`, objectId)
+    suspend fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
+        return rmiGlobalSupport.saveImplObject(`object`, objectId)
     }
 }
