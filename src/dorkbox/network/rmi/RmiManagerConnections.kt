@@ -24,9 +24,11 @@ import dorkbox.network.serialization.Serialization
 import dorkbox.util.collections.LockFreeIntMap
 import mu.KLogger
 
-internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
-                                     val rmiGlobalSupport: RmiManagerGlobal<CONNECTION>,
-                                     private val serialization: Serialization) : RmiObjectCache(logger) {
+internal class RmiManagerConnections<CONNECTION: Connection>(
+        logger: KLogger,
+        listenerManager: ListenerManager<CONNECTION>,
+        val rmiGlobalSupport: RmiManagerGlobal<CONNECTION>,
+        private val serialization: Serialization) : RmiObjectCache<CONNECTION>(listenerManager, logger) {
 
     // It is critical that all of the RMI proxy objects are unique, and are saved/cached PER CONNECTION. These cannot be shared between connections!
     private val proxyObjects = LockFreeIntMap<RemoteObject>()
@@ -49,7 +51,7 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
     /**
      * on the connection+client to get a connection-specific remote object (that exists on the server/client)
      */
-    fun <Iface> getRemoteObject(connection: Connection, objectId: Int, interfaceClass: Class<Iface>): Iface {
+    fun <Iface> getRemoteObject(connection: Connection, kryoId: Int, objectId: Int, interfaceClass: Class<Iface>): Iface {
         // so we can just instantly create the proxy object (or get the cached one)
         var proxyObject = getProxyObject(objectId)
         if (proxyObject == null) {
@@ -58,6 +60,7 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
                                                              serialization,
                                                              rmiGlobalSupport.rmiResponseManager,
                                                              objectId,
+                                                             kryoId,
                                                              interfaceClass)
             saveProxyObject(objectId, proxyObject)
         }
@@ -106,14 +109,7 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
         } else {
             val rmiId = saveImplObject(implObject)
 
-            if (rmiId != RemoteObjectStorage.INVALID_RMI) {
-                // this means we could register this object.
-
-                // next, scan this object to see if there are any RMI fields
-                RmiManagerGlobal.scanImplForRmiFields(endPoint.logger, implObject) {
-                    saveImplObject(it)
-                }
-            } else {
+            if (rmiId == RemoteObjectStorage.INVALID_RMI) {
                 val exception = NullPointerException("Trying to create an RMI object with the INVALID_RMI id!!")
                 ListenerManager.cleanStackTrace(exception)
                 endPoint.listenerManager.notifyError(connection, exception)
