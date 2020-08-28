@@ -15,19 +15,11 @@
  */
 package dorkbox.network.serialization
 
-import com.esotericsoftware.kryo.Serializer
-
-internal open class ClassRegistration3(override var clazz: Class<*>) : ClassRegistration {
-    override var id = 0
-    override val serializer: Serializer<*>? = null
+internal open class ClassRegistration3(clazz: Class<*>) : ClassRegistration(clazz) {
 
     override fun register(kryo: KryoExtra) {
-        val registration = kryo.register(clazz)
-        id = registration.id
-    }
-
-    override fun info(): String {
-        return "Registered $id -> ${clazz.name}"
+        id = kryo.register(clazz).id
+        info = "Registered $id -> ${clazz.name}"
     }
 
     override fun getInfoArray(): Array<Any> {

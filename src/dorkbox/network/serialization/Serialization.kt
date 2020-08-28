@@ -17,15 +17,12 @@ package dorkbox.network.serialization
 
 import com.esotericsoftware.kryo.ClassResolver
 import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.KryoException
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.SerializerFactory
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
-import com.esotericsoftware.kryo.util.IdentityMap
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
@@ -41,6 +38,7 @@ import dorkbox.network.rmi.messages.MethodResponseSerializer
 import dorkbox.network.rmi.messages.RmiClientReverseSerializer
 import dorkbox.network.rmi.messages.RmiClientSerializer
 import dorkbox.os.OS
+import dorkbox.util.collections.IdentityMap
 import dorkbox.util.serialization.SerializationDefaults
 import dorkbox.util.serialization.SerializationManager
 import kotlinx.coroutines.channels.Channel
@@ -78,39 +76,8 @@ import kotlin.coroutines.Continuation
  *                an object's type. Default is [ReflectionSerializerFactory] with [FieldSerializer]. @see
  *                Kryo#newDefaultSerializer(Class)
  */
-open class Serialization(private val references: Boolean,
-                    private val factory: SerializerFactory<*>?) : SerializationManager<DirectBuffer> {
-
-
-    companion object {
-        /**
-         * Additionally, this serialization manager will register the entire class+interface hierarchy for an object. If you want to specify a
-         * serialization scheme for a specific class in an objects hierarchy, you must register that first.
-         *
-         * @param references If true, each appearance of an object in the graph after the first is stored as an integer ordinal. When set to true,
-         *         [MapReferenceResolver] is used. This enables references to the same object and cyclic graphs to be serialized,
-         *         but typically adds overhead of one byte per object. (should be true)
-         *
-         * @param factory Sets the serializer factory to use when no {@link Kryo#addDefaultSerializer(Class, Class) default serializers} match
-         *         an object's type. Default is {@link ReflectionSerializerFactory} with {@link FieldSerializer}. @see
-         *         Kryo#newDefaultSerializer(Class)
-         */
-        fun DEFAULT(references: Boolean = true, factory: SerializerFactory<*>? = null): Serialization {
-            val serialization = Serialization(references, factory)
-
-            serialization.register(PingMessage::class.java) // TODO this is built into aeron!??!?!?!
-
-            // TODO: this is for diffie hellmen handshake stuff!
-//            serialization.register(IESParameters::class.java, IesParametersSerializer())
-//            serialization.register(IESWithCipherParameters::class.java, IesWithCipherParametersSerializer())
-            // TODO: fix kryo to work the way we want, so we can register interfaces + serializers with kryo
-//            serialization.register(XECPublicKey::class.java, XECPublicKeySerializer())
-//            serialization.register(XECPrivateKey::class.java, XECPrivateKeySerializer())
-//            serialization.register(Message::class.java) // must use full package name!
-
-            return serialization
-        }
-    }
+open class Serialization(private val references: Boolean = true,
+                         private val factory: SerializerFactory<*>? = null) : SerializationManager<DirectBuffer> {
 
     private lateinit var logger: KLogger
 
@@ -122,7 +89,7 @@ open class Serialization(private val references: Boolean,
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
     // Object checking is performed during actual registration.
     private val classesToRegister = mutableListOf<ClassRegistration>()
-    internal lateinit var savedKryoIdsForRmi: IntArray
+    private lateinit var savedKryoIdsForRmi: IntArray
     private lateinit var savedRegistrationDetails: ByteArray
 
     /// RMI things
@@ -130,7 +97,10 @@ open class Serialization(private val references: Boolean,
     private val rmiIfaceToImpl = IdentityMap<Class<*>, Class<*>>()
     private val rmiImplToIface = IdentityMap<Class<*>, Class<*>>()
 
+
     // This is a GLOBAL, single threaded only kryo instance.
+    // This is to make sure that we have an instance of class registration done correctly and (if not) we are
+    // are notified on the initial thread (instead of on the network update thread)
     private val globalKryo: KryoExtra by lazy { initKryo() }
 
     // BY DEFAULT, DefaultInstantiatorStrategy() will use ReflectASM
@@ -143,7 +113,7 @@ open class Serialization(private val references: Boolean,
     private val continuationSerializer = ContinuationSerializer()
 
     private val rmiClientSerializer = RmiClientSerializer()
-    private val rmiClientReverseSerializer = RmiClientReverseSerializer(rmiImplToIface)
+    private val rmiClientReverseSerializer = RmiClientReverseSerializer()
 
     // list of already seen client RMI ids (which the server might not have registered as RMI types).
     private var existingRmiIds = CopyOnWriteArrayList<Int>()
@@ -162,7 +132,6 @@ open class Serialization(private val references: Boolean,
         val KRYO_COUNT = 64
 
         kryoPool = Channel(KRYO_COUNT)
-
     }
 
     @Synchronized
@@ -174,6 +143,17 @@ open class Serialization(private val references: Boolean,
 
         // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
         SerializationDefaults.register(kryo)
+
+//            serialization.register(PingMessage::class.java) // TODO this is built into aeron!??!?!?!
+
+        // TODO: this is for diffie hellmen handshake stuff!
+//            serialization.register(IESParameters::class.java, IesParametersSerializer())
+//            serialization.register(IESWithCipherParameters::class.java, IesWithCipherParametersSerializer())
+        // TODO: fix kryo to work the way we want, so we can register interfaces + serializers with kryo
+//            serialization.register(XECPublicKey::class.java, XECPublicKeySerializer())
+//            serialization.register(XECPrivateKey::class.java, XECPrivateKeySerializer())
+//            serialization.register(Message::class.java) // must use full package name!
+
 
         // RMI stuff!
         kryo.register(HandshakeMessage::class.java)
@@ -192,8 +172,9 @@ open class Serialization(private val references: Boolean,
         kryo.register(Continuation::class.java, continuationSerializer)
 
         // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
+        // note, we have to check to make sure a class is not ALREADY registered for RMI before it is registered again
         classesToRegister.forEach { registration ->
-            registration.register(kryo)
+            registration.register(kryo, rmiIfaceToImpl)
         }
 
         if (factory != null) {
@@ -349,12 +330,30 @@ open class Serialization(private val references: Boolean,
     fun finishInit(endPointClass: Class<*>) {
         this.logger = KotlinLogging.logger(endPointClass.simpleName)
 
+
+        // get all classes/fields with @Rmi field annotation.
+        // The field type must also be added as an RMI type
+//        val fieldsWithRmiAnnotation = AnnotationDetector.scanClassPath()
+//            .forAnnotations(Rmi::class.java)
+//            .on(ElementType.FIELD)
+//            .collect(AnnotationDefaults.getField)
+//
+//        fieldsWithRmiAnnotation.forEach { field ->
+//            val fieldType = field.type
+//            require(fieldType.isInterface) { "RMI annotated fields must be an interface!" }
+//
+//            logger.debug { "Adding additional @Rmi field annotation for RMI registration" }
+//
+//            // now we add this field type as an RMI serializable
+////            registerRmi(fieldType, fieldType)
+//        }
+
+
         initialized = true
 
-        // initialize the kryo pool with at least 1 kryo instance. This ALSO makes sure that all of our class registration is done
-        // correctly and (if not) we are are notified on the initial thread (instead of on the network update thread)
         // save off the class-resolver, so we can lookup the class <-> id relationships
         classResolver = globalKryo.classResolver
+
 
 
         // now MERGE all of the registrations (since we can have registrations overwrite newer/specific registrations based on ID
@@ -362,6 +361,13 @@ open class Serialization(private val references: Boolean,
         val mergedRegistrations = mutableListOf<ClassRegistration>()
         classesToRegister.forEach { registration ->
             val id = registration.id
+
+            // if the id == -1, it means that this registration was ignored! We don't want to include it -- but we want to log
+            // that something happened.
+            if (id == -1) {
+                logger.debug(registration.info)
+                return@forEach
+            }
 
             // if we ALREADY contain this registration (based ONLY on ID), then overwrite the existing one and REMOVE the current one
             var found = false
@@ -396,7 +402,7 @@ open class Serialization(private val references: Boolean,
         if (logger.isDebugEnabled) {
             // log the in-order output first
             classesToRegister.forEach { classRegistration ->
-                logger.debug(classRegistration.info())
+                logger.debug(classRegistration.info)
             }
         }
 
@@ -415,7 +421,7 @@ open class Serialization(private val references: Boolean,
 
                 // RMI method caching
                 methodCache[kryoId] =
-                    RmiUtils.getCachedMethods(logger, globalKryo, useAsm, classRegistration.ifaceClass, classRegistration.implClass, kryoId)
+                    RmiUtils.getCachedMethods(logger, globalKryo, useAsm, classRegistration.clazz, classRegistration.implClass, kryoId)
 
                 // we ALSO have to cache the instantiator for these, since these are used to create remote objects
                 val instantiator = globalKryo.instantiatorStrategy.newInstantiatorOf(classRegistration.implClass)
@@ -553,7 +559,6 @@ open class Serialization(private val references: Boolean,
                 val serializerMatches = serializerServer == serializerClient
                 if (!serializerMatches) {
                     // JUST MAYBE this is a serializer for RMI. The client doesn't have to register for RMI stuff explicitly
-
                     when {
                         serializerServer == rmiClientReverseSerializer::class.java.name -> {
                             // this is for when the impl is on server, and iface is on client
@@ -621,17 +626,16 @@ open class Serialization(private val references: Boolean,
     }
 
     /**
-     * Returns the Kryo class registration ID
+     * Returns the Kryo class registration ID. This is ALWAYS called on the client!
      */
-    fun getKryoIdForRmi(interfaceClass: Class<*>): Int {
-        if (!interfaceClass.isInterface) {
-            throw KryoException("Can only get the kryo IDs for RMI on an interface!")
-        }
+    fun getKryoIdForRmiClient(interfaceClass: Class<*>): Int {
+        require (interfaceClass.isInterface) { "Can only get the kryo IDs for RMI on an interface!" }
 
-        val implClass = rmiIfaceToImpl[interfaceClass]
+        // if we are the RMI-server, we kryo-register the impl
+        // if we are the RMI-client, we kryo-register the iface (this is us! This method is only called on the rmi-client)
 
         // for RMI, we store the IMPL class in the class registration -- not the iface!
-        return classResolver.getRegistration(implClass).id
+        return classResolver.getRegistration(interfaceClass).id
     }
 
     /**
@@ -787,8 +791,7 @@ open class Serialization(private val references: Boolean,
     }
 
     suspend fun <CONNECTION: Connection> updateKryoIdsForRmi(connection: CONNECTION, rmiModificationIds: IntArray, onError: suspend (String) -> Unit) {
-        val endPoint = connection.endPoint()
-        val typeName = endPoint.type.simpleName
+        val typeName = connection.endPoint.type.simpleName
 
         rmiModificationIds.forEach {
             if (!existingRmiIds.contains(it)) {

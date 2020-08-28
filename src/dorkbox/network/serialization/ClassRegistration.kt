@@ -16,15 +16,39 @@
 package dorkbox.network.serialization
 
 import com.esotericsoftware.kryo.Serializer
+import dorkbox.network.rmi.messages.RmiClientReverseSerializer
+import dorkbox.util.collections.IdentityMap
 
-internal interface ClassRegistration {
-    var id: Int
-    val clazz: Class<*>
-    val serializer: Serializer<*>?
+internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: Serializer<*>? = null, var id: Int = 0) {
+    var info: String = ""
 
-    fun register(kryo: KryoExtra)
+     fun register(kryo: KryoExtra, rmiIfaceToImpl: IdentityMap<Class<*>, Class<*>>) {
+         // we have to check if this registration ALREADY exists for RMI. If so, we ignore it.
+         // RMI kryo-registration is SPECIFICALLY for impl object ONLY DURING INITIAL REGISTRATION!
+         // if the registration is modified, then the registration will be the iface
+         if (clazz.isInterface) {
+             val impl = rmiIfaceToImpl[clazz]
+             if (impl != null && kryo.classResolver.getRegistration(impl)?.serializer is RmiClientReverseSerializer) {
+                 // do nothing, because this is already registered for RMI
+                 info = "Removed RMI conflict registration for class ${clazz.name}"
+                 id = -1
+                 return
+             }
 
-    fun info(): String
+         } else {
+             if (kryo.classResolver.getRegistration(clazz)?.serializer is RmiClientReverseSerializer) {
+                 // do nothing, because this is already registered for RMI
+                 info = "Removed RMI conflict registration for class ${clazz.name}"
+                 id = -1
+                 return
+             }
+         }
 
-    fun getInfoArray(): Array<Any>
+         // otherwise, we are OK to continue to register this
+         register(kryo)
+     }
+
+
+    abstract fun register(kryo: KryoExtra)
+    abstract fun getInfoArray(): Array<Any>
 }
