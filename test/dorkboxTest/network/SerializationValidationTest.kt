@@ -13,34 +13,53 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkboxTest.network.rmi
+package dorkboxTest.network
 
 import dorkbox.network.Client
-import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
-import dorkbox.util.exceptions.SecurityException
-import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
-import java.io.IOException
 
-class RmiInitValidationTest : BaseTest() {
+class SerializationValidationTest : BaseTest() {
     @Test
-    @Throws(SecurityException::class, IOException::class)
-    fun rmiNetwork() {
-        rmi()
-    }
+    fun checkObjects() {
+        run {
+            val configuration = serverConfig()
+            register(configuration.serialization)
 
-    @Test
-    @Throws(SecurityException::class, IOException::class)
-    fun rmiLocal() {
-//        rmi(object : Config() {
-//            fun apply(configuration: Configuration) {
-//                configuration.localChannelName = EndPoint.LOCAL_CHANNEL
-//            }
-//        })
+            val server = Server<Connection>(configuration)
+            addEndPoint(server)
+
+            server.onMessage<FinishedCommand> { connection, message ->
+                stopEndPoints()
+            }
+
+            runBlocking {
+                server.bind(false)
+            }
+        }
+
+
+        run {
+            val configuration = clientConfig()
+            register(configuration.serialization)
+
+            val client = Client<Connection>(configuration)
+            addEndPoint(client)
+
+            client.onConnect { connection ->
+                connection.send(FinishedCommand())
+            }
+
+
+            runBlocking {
+                client.connect(LOOPBACK)
+            }
+        }
+
+        waitForThreads()
     }
 
     private fun register(serialization: Serialization) {
@@ -244,51 +263,6 @@ class RmiInitValidationTest : BaseTest() {
         serialization.register(Command198::class.java)
         serialization.register(Command199::class.java)
         serialization.register(FinishedCommand::class.java)
-    }
-
-    /**
-     * In this test the server has two objects in an object space. The client
-     * uses the first remote object to get the second remote object.
-     */
-    fun rmi(config: (Configuration) -> Unit = {}) {
-        run {
-            val configuration = serverConfig()
-            config(configuration)
-            register(configuration.serialization)
-
-            val server = Server<Connection>(configuration)
-            addEndPoint(server)
-
-            server.onMessage<FinishedCommand> { connection, message ->
-                stopEndPoints()
-            }
-
-            runBlocking {
-                server.bind(false)
-            }
-        }
-
-
-        run {
-            val configuration = clientConfig()
-            config(configuration)
-            register(configuration.serialization)
-
-            val client = Client<Connection>(configuration)
-            addEndPoint(client)
-
-            client.onConnect { connection ->
-                connection.send(FinishedCommand())
-            }
-
-
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
-        }
-
-//        waitForThreads()
-        waitForThreads(99999999)
     }
 
     private class Command1

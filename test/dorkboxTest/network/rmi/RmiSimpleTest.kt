@@ -38,8 +38,6 @@ import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.network.rmi.RemoteObject
-import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.classes.MessageWithTestCow
 import dorkboxTest.network.rmi.classes.TestCow
@@ -48,114 +46,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 
-class RmiTest : BaseTest() {
-
-    companion object {
-        suspend fun runTests(connection: Connection, test: TestCow, remoteObjectID: Int) {
-            val remoteObject = test as RemoteObject
-
-            // Default behavior. RMI is transparent, method calls behave like normal
-            // (return values and exceptions are returned, call is synchronous)
-            connection.logger.error("hashCode: " + test.hashCode())
-            connection.logger.error("toString: $test")
-
-            test.withSuspend("test", 32)
-            val s1 = test.withSuspendAndReturn("test", 32)
-            Assert.assertEquals(s1, 32)
-
-
-            // see what the "remote" toString() method is
-            val s = remoteObject.toString()
-            remoteObject.enableToString(true)
-            Assert.assertFalse(s == remoteObject.toString())
-            test.moo()
-            test.moo("Cow")
-            Assert.assertEquals(remoteObjectID, test.id())
-
-            // Test that RMI correctly waits for the remotely invoked method to exit
-            remoteObject.responseTimeout = 5000
-            test.moo("You should see this two seconds before...", 2000)
-            connection.logger.error("...This")
-            remoteObject.responseTimeout = 3000
-
-            // Try exception handling
-            try {
-                test.throwException()
-                Assert.fail("sync should be throwing an exception!")
-            } catch (e: UnsupportedOperationException) {
-                connection.logger.error("Expected exception (exception log should also be on the object impl side).", e)
-            }
-
-            try {
-                test.throwSuspendException()
-                Assert.fail("sync should be throwing an exception!")
-            } catch (e: UnsupportedOperationException) {
-                connection.logger.error("\tExpected exception (exception log should also be on the object impl side).", e)
-            }
-
-            // Non-blocking call tests
-            // Non-blocking call tests
-            // Non-blocking call tests
-            connection.logger.error("I'm currently async: ${remoteObject.async}. Now testing ASYNC")
-
-            remoteObject.async = true
-
-
-            // calls that ignore the return value
-            test.moo("Meow")
-            // Non-blocking call that ignores the return value
-            Assert.assertEquals(0, test.id().toLong())
-
-
-            // exceptions are still dealt with properly
-            test.moo("Baa")
-
-            try {
-                test.throwException()
-            } catch (e: IllegalStateException) {
-                // exceptions are not caught when async = true!
-                Assert.fail("Async should not be throwing an exception!")
-            }
-
-            try {
-                test.throwSuspendException()
-            } catch (e: IllegalStateException) {
-                // exceptions are not caught when async = true!
-                Assert.fail("Async should not be throwing an exception!")
-            }
-
-
-
-
-            // Call will time out if non-blocking isn't working properly
-            test.moo("Mooooooooo", 4000)
-
-
-            // should wait for a small time
-            remoteObject.async = false
-            remoteObject.responseTimeout = 6000
-            connection.logger.error("You should see this 2 seconds before")
-            val slow = test.slow()
-            connection.logger.error("...This")
-            Assert.assertEquals(slow.toDouble(), 123.0, 0.0001)
-
-
-            // Test sending a reference to a remote object.
-            val m = MessageWithTestCow(test)
-            m.number = 678
-            m.text = "sometext"
-            connection.send(m)
-
-            connection.logger.error("Finished tests")
-        }
-
-        fun register(manager: Serialization) {
-            manager.register(Any::class.java) // Needed for Object#toString, hashCode, etc.
-            manager.register(TestCow::class.java)
-            manager.register(MessageWithTestCow::class.java)
-            manager.register(UnsupportedOperationException::class.java)
-        }
-    }
+class RmiSimpleTest : BaseTest() {
 
     @Test
     fun rmiNetworkGlobal() {
@@ -181,7 +72,7 @@ class RmiTest : BaseTest() {
         run {
             val configuration = serverConfig()
             config(configuration)
-            register(configuration.serialization)
+            RmiCommonTest.register(configuration.serialization)
 
             // for Client -> Server RMI
             configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
@@ -204,7 +95,7 @@ class RmiTest : BaseTest() {
                 System.err.println("Starting test for: Server -> Client")
                 connection.createObject<TestCow>(123) { rmiId, remoteObject ->
                     System.err.println("Running test for: Server -> Client")
-                    runTests(connection, remoteObject, 123)
+                    RmiCommonTest.runTests(connection, remoteObject, 123)
                     System.err.println("Done with test for: Server -> Client")
                 }
             }
@@ -213,7 +104,7 @@ class RmiTest : BaseTest() {
         run {
             val configuration = clientConfig()
             config(configuration)
-            register(configuration.serialization)
+            RmiCommonTest.register(configuration.serialization)
 
             // for Server -> Client RMI
             configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
@@ -224,7 +115,7 @@ class RmiTest : BaseTest() {
             client.onConnect { connection ->
                 connection.createObject<TestCow>(23) { rmiId, remoteObject ->
                     System.err.println("Running test for: Client -> Server")
-                    runTests(connection, remoteObject, 23)
+                    RmiCommonTest.runTests(connection, remoteObject, 23)
                     System.err.println("Done with test for: Client -> Server")
                 }
             }
@@ -250,7 +141,7 @@ class RmiTest : BaseTest() {
         run {
             val configuration = serverConfig()
             config(configuration)
-            register(configuration.serialization)
+            RmiCommonTest.register(configuration.serialization)
 
             // for Client -> Server RMI
             configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
@@ -275,7 +166,7 @@ class RmiTest : BaseTest() {
                 // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
                 connection.createObject<TestCow>(4) { rmiId, remoteObject ->
                     System.err.println("Running test for: Server -> Client")
-                    runTests(connection, remoteObject, 4)
+                    RmiCommonTest.runTests(connection, remoteObject, 4)
                     System.err.println("Done with test for: Server -> Client")
                 }
             }
@@ -284,7 +175,7 @@ class RmiTest : BaseTest() {
         run {
             val configuration = clientConfig()
             config(configuration)
-            register(configuration.serialization)
+            RmiCommonTest.register(configuration.serialization)
 
             // for Server -> Client RMI
             configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
@@ -308,7 +199,7 @@ class RmiTest : BaseTest() {
                 // this creates a GLOBAL object on the server (instead of a connection specific object)
                 client.createObject<TestCow>(44) { rmiId, remoteObject ->
                     System.err.println("Running test for: Client -> Server")
-                    runTests(client.getConnection(), remoteObject, 44)
+                    RmiCommonTest.runTests(client.getConnection(), remoteObject, 44)
                     System.err.println("Done with test for: Client -> Server")
                 }
             }
