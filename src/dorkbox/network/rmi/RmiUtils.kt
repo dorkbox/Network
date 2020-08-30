@@ -212,7 +212,7 @@ object RmiUtils {
                     "method"
                 }
                 logger.debug("Overridden $name : ${makeFancyMethodName(cachedMethod)}")
-                logger.debug("        to method: ${makeFancyMethodName(overwrittenMethod)}")
+                logger.debug("       to method : ${makeFancyMethodName(overwrittenMethod)}")
             }
         }
 
