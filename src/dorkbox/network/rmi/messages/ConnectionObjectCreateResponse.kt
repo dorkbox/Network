@@ -15,6 +15,8 @@
  */
 package dorkbox.network.rmi.messages
 
+import dorkbox.network.rmi.RmiUtils
+
 
 /**
  * These use packed IDs, because both are REALLY shorts, but the JVM deals better with ints.
@@ -22,4 +24,8 @@ package dorkbox.network.rmi.messages
  * @param callbackId (LEFT) to know which callback to use when the object is created
  * @param rmiId (RIGHT) the Kryo interface class ID to create
  */
-data class ConnectionObjectCreateResponse(val packedIds: Int) : RmiMessage
+data class ConnectionObjectCreateResponse(val packedIds: Int) : RmiMessage {
+    override fun toString(): String {
+        return "ConnectionObjectCreateResponse(callbackId:${RmiUtils.unpackLeft(packedIds)} rmiId:${RmiUtils.unpackUnsignedRight(packedIds)})"
+    }
+}

@@ -62,8 +62,6 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(
                                        rmiId: Int,
                                        interfaceClass: Class<*>): RemoteObject {
 
-            require(interfaceClass.isInterface) { "iface must be an interface." }
-
             // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
 
             val cachedMethods = serialization.getMethods(kryoId)
@@ -167,6 +165,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(
      */
     fun <Iface> getGlobalRemoteObject(connection: Connection, objectId: Int, interfaceClass: Class<Iface>): Iface {
         // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
+        require(interfaceClass.isInterface) { "iface must be an interface." }
 
         val kryoId = serialization.getKryoIdForRmiClient(interfaceClass)
 
