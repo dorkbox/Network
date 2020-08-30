@@ -16,9 +16,11 @@
 package dorkbox.network.storage
 
 import dorkbox.network.serialization.Serialization
+import dorkbox.util.bytes.ByteArrayWrapper
 import dorkbox.util.exceptions.SecurityException
 import dorkbox.util.storage.Storage
 import org.slf4j.LoggerFactory
+import java.util.*
 
 /**
  * This class provides a way for the network stack to use the server's database, instead of a property file (which it uses when stand-alone)
@@ -31,6 +33,16 @@ abstract class SettingsStore : AutoCloseable {
      * Initialize the settingsStore with the provided serialization manager.
      */
     abstract fun init(serializationManager: Serialization, storage: Storage)
+
+    fun getSerializationTypes(): List<Class<out Any>> {
+        // make sure our custom types are registered
+        // only register if not ALREADY initialized, since we can initialize in the server and in the client. This creates problems if
+        // running inside the same JVM
+        return listOf(HashMap::class.java,
+                      ByteArrayWrapper::class.java,
+                      DB_Server::class.java
+                )
+    }
 
     /**
      * Simple, property based method for saving the private key of the server

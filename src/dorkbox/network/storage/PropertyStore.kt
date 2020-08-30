@@ -17,11 +17,9 @@ package dorkbox.network.storage
 
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.serialization.Serialization
-import dorkbox.util.bytes.ByteArrayWrapper
 import dorkbox.util.storage.Storage
 import org.agrona.collections.Int2ObjectHashMap
 import java.security.SecureRandom
-import java.util.*
 
 /**
  * The property store is the DEFAULT type of store for the network stack.
@@ -36,15 +34,6 @@ class PropertyStore : SettingsStore() {
      * @param serializationManager this is the serialization used for saving objects into the storage database
      */
     override fun init(serializationManager: Serialization, storage: Storage) {
-        // make sure our custom types are registered
-        // only register if not ALREADY initialized, since we can initialize in the server and in the client. This creates problems if
-        // running inside the same JVM (we don't permit it)
-        if (!serializationManager.initialized()) {
-            serializationManager.register(HashMap::class.java)
-            serializationManager.register(ByteArrayWrapper::class.java)
-            serializationManager.register(DB_Server::class.java)
-        }
-
         this.storage = storage
         servers = this.storage.get(DB_Server.STORAGE_KEY, Int2ObjectHashMap())
 

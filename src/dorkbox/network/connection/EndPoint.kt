@@ -237,12 +237,14 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         settingsStore = config.settingsStore
         settingsStore.init(serialization, config.settingsStorageSystem.build())
 
+        settingsStore.getSerializationTypes().forEach {
+            serialization.register(it)
+        }
+
         crypto = CryptoManagement(logger, settingsStore, type, config)
 
         // we are done with initial configuration, now finish serialization
-        runBlocking {
-            serialization.finishInit(type)
-        }
+        serialization.finishInit(type)
     }
 
     internal suspend fun initEndpointState(): Aeron {
