@@ -37,8 +37,8 @@ package dorkboxTest.network.rmi
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.serialization.Serialization
-import dorkboxTest.network.rmi.classes.MessageWithTestCow
-import dorkboxTest.network.rmi.classes.TestCow
+import dorkboxTest.network.rmi.cows.MessageWithTestCow
+import dorkboxTest.network.rmi.cows.TestCow
 import org.junit.Assert
 
 object RmiCommonTest {

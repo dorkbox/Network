@@ -13,18 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkboxTest.network.rmi.classes
+package dorkboxTest.network.rmi.cows
 
-open class TestCowBaseImpl : TestCowBase {
-    override fun throwException() {
-        throw UnsupportedOperationException("Why would I do that?")
-    }
-
-    override suspend fun throwSuspendException(): Boolean {
-        throw UnsupportedOperationException("Why would I do that on suspend?")
-    }
-
-    open fun id(): Int {
-        return Int.MAX_VALUE
-    }
+/**
+ * This is a different interface so we can also test CachedMethod operations
+ */
+interface TestCowBase {
+    fun throwException()
+    suspend fun throwSuspendException(): Boolean
 }

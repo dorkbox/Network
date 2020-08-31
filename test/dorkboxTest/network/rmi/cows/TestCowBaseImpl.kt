@@ -13,14 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkboxTest.network.rmi.classes
+package dorkboxTest.network.rmi.cows
 
-class TestBabyCowImpl(id: Int) : TestCowImpl(id), TestBabyCow {
-    override fun drink() {
-        println("Drinking milk!!")
+open class TestCowBaseImpl : TestCowBase {
+    override fun throwException() {
+        throw UnsupportedOperationException("Why would I do that?")
     }
 
-    override fun toString(): String {
-        return "Tada! This is a remote object baby cow!"
+    override suspend fun throwSuspendException(): Boolean {
+        throw UnsupportedOperationException("Why would I do that on suspend?")
+    }
+
+    open fun id(): Int {
+        return Int.MAX_VALUE
     }
 }

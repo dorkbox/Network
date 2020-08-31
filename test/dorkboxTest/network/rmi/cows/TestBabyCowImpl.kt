@@ -13,12 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkboxTest.network.rmi.classes
+package dorkboxTest.network.rmi.cows
 
-/**
- * This is a different interface so we can also test CachedMethod operations
- */
-interface TestCowBase {
-    fun throwException()
-    suspend fun throwSuspendException(): Boolean
+class TestBabyCowImpl(id: Int) : TestCowImpl(id), TestBabyCow {
+    override fun drink() {
+        println("Drinking milk!!")
+    }
+
+    override fun toString(): String {
+        return "Tada! This is a remote object baby cow!"
+    }
 }

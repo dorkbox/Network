@@ -26,9 +26,9 @@ import dorkbox.network.Client
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.RmiCommonTest
-import dorkboxTest.network.rmi.classes.TestBabyCow
-import dorkboxTest.network.rmi.classes.TestBabyCowImpl
-import dorkboxTest.network.rmi.classes.TestCow
+import dorkboxTest.network.rmi.cows.TestBabyCow
+import dorkboxTest.network.rmi.cows.TestBabyCowImpl
+import dorkboxTest.network.rmi.cows.TestCow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.slf4j.LoggerFactory

@@ -39,9 +39,9 @@ import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
-import dorkboxTest.network.rmi.classes.MessageWithTestCow
-import dorkboxTest.network.rmi.classes.TestCow
-import dorkboxTest.network.rmi.classes.TestCowImpl
+import dorkboxTest.network.rmi.cows.MessageWithTestCow
+import dorkboxTest.network.rmi.cows.TestCow
+import dorkboxTest.network.rmi.cows.TestCowImpl
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test

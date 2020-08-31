@@ -13,11 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkboxTest.network.rmi.classes
+package dorkboxTest.network.rmi.cows
 
-/**
- *
- */
-interface TestBabyCow : TestCow {
-    fun drink()
+class MessageWithTestCow(val testCow: TestCow) {
+    var number = 0
+    var text: String? = null
 }

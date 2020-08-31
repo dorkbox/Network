@@ -119,8 +119,10 @@ class RmiOverrideAndProxyTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
+
             client.onConnect { connection ->
-                connection.createObject<TestObject>() { rmiId, remoteObject ->
+                connection.logger.error("Connected")
+                connection.createObject<TestObject> { rmiId, remoteObject ->
                     connection.logger.error("Starting test")
                     remoteObject.setValue(43.21f)
 
