@@ -23,14 +23,17 @@ import java.time.Instant
 ////// RELEASE : (to sonatype/maven central), <'publish and release' - 'publishToSonatypeAndRelease'>
 ///////////////////////////////
 
+gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
+gradle.startParameter.warningMode = WarningMode.All
+
 plugins {
     java
 
-    id("com.dorkbox.GradleUtils") version "1.10"
-    id("com.dorkbox.Licensing") version "2.3"
+    id("com.dorkbox.GradleUtils") version "1.12"
+    id("com.dorkbox.Licensing") version "2.5"
     id("com.dorkbox.VersionUpdate") version "2.0"
-    id("com.dorkbox.GradlePublish") version "1.6"
-    id("com.dorkbox.GradleModuleInfo") version "1.0"
+    id("com.dorkbox.GradlePublish") version "1.7"
+    id("com.dorkbox.GradleModuleInfo") version "1.1"
 
     kotlin("jvm") version "1.4.0"
 }
@@ -39,7 +42,7 @@ object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.0-alpha5"
+    const val version = "5.0-alpha9"
 
     // set as project.ext
     const val name = "Network"
@@ -202,10 +205,13 @@ dependencies {
     implementation("io.aeron:aeron-client:$aeronVer")
     implementation("io.aeron:aeron-driver:$aeronVer")
 
-
+    // https://github.com/EsotericSoftware/kryo
     implementation("com.esotericsoftware:kryo:5.0.0-RC8")
+
+    // https://github.com/magro/kryo-serializers
     implementation("de.javakaffee:kryo-serializers:0.45")
 
+    // https://github.com/jpountz/lz4-java
     implementation("net.jpountz.lz4:lz4:1.3.0")
 
     // this is NOT the same thing as LMAX disruptor.
@@ -214,16 +220,18 @@ dependencies {
     // https://www.youtube.com/watch?v=jVMOgQgYzWU
     implementation("com.conversantmedia:disruptor:1.2.17")
 
-
+    // https://github.com/jhalterman/typetools
     implementation("net.jodah:typetools:0.6.2")
 
-    implementation("com.dorkbox:MinLog-SLF4J:1.2")
-    implementation("com.dorkbox:Utilities:1.7")
+    // https://github.com/dorkbox
+    implementation("com.dorkbox:Annotations:3.1")
+    implementation("com.dorkbox:MinLog-SLF4J:2.0")
+    implementation("com.dorkbox:Utilities:1.8")
     implementation("com.dorkbox:NetworkUtils:1.3")
 
 
     // https://github.com/MicroUtils/kotlin-logging
-    implementation("io.github.microutils:kotlin-logging:1.8.3")  // slick kotlin wrapper for slf4j
+    implementation("io.github.microutils:kotlin-logging:1.8.3")
     implementation("org.slf4j:slf4j-api:1.7.30")
 
     testImplementation("junit:junit:4.13")
