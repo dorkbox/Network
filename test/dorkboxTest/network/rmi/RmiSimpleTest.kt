@@ -80,9 +80,7 @@ class RmiSimpleTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
 
             server.onMessage<MessageWithTestCow> { connection, m ->
                 System.err.println("Received finish signal for test for: Client -> Server")
@@ -148,10 +146,7 @@ class RmiSimpleTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
 
             server.onMessage<MessageWithTestCow> { connection, m ->
                 System.err.println("Received finish signal for test for: Client -> Server")

@@ -24,7 +24,6 @@ import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
-import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
@@ -107,14 +106,10 @@ object AeronServer {
         }
 
         server.onMessage<String> { connection, message ->
-            runBlocking {
-                connection.send("ECHO $message")
-            }
+            connection.send("ECHO $message")
         }
 
-        runBlocking {
-            server.bind()
-        }
+        server.bind()
     }
 
     init {

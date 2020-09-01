@@ -112,10 +112,7 @@ class ListenerTest : BaseTest() {
             serverDisconnect.value = true
         }
 
-
-        runBlocking {
-            server.bind(false)
-        }
+        server.bind(false)
 
 
 

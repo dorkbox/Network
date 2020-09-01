@@ -67,10 +67,7 @@ class RmiDelayedInvocationTest : BaseTest() {
             addEndPoint(server)
 
             server.saveGlobalObject(TestObjectImpl(iterateLock), OBJ_ID)
-
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
         }
 
         run {
@@ -113,9 +110,7 @@ class RmiDelayedInvocationTest : BaseTest() {
                 stopEndPoints()
             }
 
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
         waitForThreads(9999999)

@@ -83,9 +83,7 @@ class MultipleServerTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
 
             serverAeronDir = File(configuration.aeronLogDirectory.toString() + count)
         }

@@ -93,9 +93,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
         }
 
 
@@ -165,9 +163,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
         }
 
 
@@ -236,9 +232,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
         }
 
 

@@ -77,10 +77,7 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
             addEndPoint(server)
 
             server.saveGlobalObject(TestObjectImpl(counter), RMI_ID)
-
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
         }
 
 
@@ -123,9 +120,7 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
                 stopEndPoints()
             }
 
-            runBlocking {
-                client.connect()
-            }
+            client.connect()
         }
 
         waitForThreads(200)

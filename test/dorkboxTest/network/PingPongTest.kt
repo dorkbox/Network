@@ -64,10 +64,8 @@ class PingPongTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            runBlocking {
-                server.bind(false)
-            }
-            
+            server.bind(false)
+
             server.onError { _, throwable ->
                 fail = "Error during processing. $throwable"
             }

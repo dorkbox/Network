@@ -36,10 +36,7 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<FinishedCommand> { connection, message ->
                 stopEndPoints()
             }
-
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
         }
 
 
@@ -77,10 +74,7 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<TestObject> { connection, message ->
                 stopEndPoints()
             }
-
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
         }
 
 

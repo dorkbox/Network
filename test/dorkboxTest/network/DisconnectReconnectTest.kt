@@ -20,9 +20,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            runBlocking {
-                server.bind(false)
-            }
+            server.bind(false)
 
             server.onConnect { connection ->
                 connection.logger.error("Disconnecting after 2 seconds.")
