@@ -304,7 +304,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                         return@launch
                     }
                     else {
-                        // Otherwise, poll the connection for messages
+                        //  Polls the AERON media driver subscription channel for incoming messages
                         val pollCount = newConnection.pollSubscriptions()
 
                         // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
