@@ -54,8 +54,8 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                                        EndPoint.RESERVED_SESSION_ID_HIGH)
     private val streamIdAllocator = RandomIdAllocator(1, Integer.MAX_VALUE)
 
-    // note: this is called in action dispatch
-    suspend fun processHandshakeMessageServer(handshakePublication: Publication,
+    // note: CANNOT be called in action dispatch
+    fun processHandshakeMessageServer(handshakePublication: Publication,
                                               sessionId: Int,
                                               clientAddressString: String,
                                               clientAddress: Int,
@@ -66,7 +66,10 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         // VALIDATE:: a Registration object is the only acceptable message during the connection phase
         if (message !is HandshakeMessage) {
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Invalid connection request"))
-            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection request"))
+
+            server.actionDispatch.launch {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection request"))
+            }
             return
         }
 
@@ -84,10 +87,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                     // this enables the connection to start polling for messages
                     server.connections.add(pendingConnection)
 
-                    // now tell the client we are done
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(sessionId))
-
                     server.actionDispatch.launch {
+                        // now tell the client we are done
+                        server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(sessionId))
                         listenerManager.notifyConnect(pendingConnection)
                     }
 
@@ -104,7 +106,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             if (server.connections.connectionCount() >= config.maxClientCount) {
                 listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}"))
 
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
+                server.actionDispatch.launch {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
+                }
                 return
             }
 
@@ -124,17 +128,21 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // VALIDATE:: we are now connected to the client and are going to create a new connection.
             val currentCountForIp = connectionsPerIpCounts.getAndIncrement(clientAddress)
             if (currentCountForIp >= config.maxConnectionsPerIpAddress) {
-                listenerManager.notifyError(ClientRejectedException("Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}"))
-
                 // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
                 connectionsPerIpCounts.getAndDecrement(clientAddress)
-                server.writeHandshakeMessage(handshakePublication,
-                                             HandshakeMessage.error("Too many connections for IP address"))
+
+                listenerManager.notifyError(ClientRejectedException("Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}"))
+                server.actionDispatch.launch {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Too many connections for IP address"))
+                }
+
                 return
             }
         } catch (e: Exception) {
             listenerManager.notifyError(ClientRejectedException("could not validate client message", e))
-            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
+            server.actionDispatch.launch {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
+            }
             return
         }
 
@@ -156,9 +164,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             connectionsPerIpCounts.getAndDecrement(clientAddress)
 
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a session ID for the client connection!"))
-
-            server.writeHandshakeMessage(handshakePublication,
-                                         HandshakeMessage.error("Connection error!"))
+            server.actionDispatch.launch {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            }
             return
         }
 
@@ -172,9 +180,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             sessionIdAllocator.free(connectionSessionId)
 
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a stream ID for the client connection!"))
-
-            server.writeHandshakeMessage(handshakePublication,
-                                         HandshakeMessage.error("Connection error!"))
+            server.actionDispatch.launch {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            }
             return
         }
 
@@ -218,8 +226,11 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 ListenerManager.cleanStackTrace(exception)
                 listenerManager.notifyError(connection, exception)
 
-                server.writeHandshakeMessage(handshakePublication,
-                                             HandshakeMessage.error("Connection was not permitted!"))
+                server.actionDispatch.launch {
+                    server.writeHandshakeMessage(handshakePublication,
+                                                 HandshakeMessage.error("Connection was not permitted!"))
+                }
+
                 return
             }
 
@@ -229,6 +240,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             ///////////////
 
             // if necessary (and only for RMI id's that have never been seen before) we want to re-write our kryo information
+            // NOTE: This modifies the readKryo! This cannot be on a different thread!
             serialization.updateKryoIdsForRmi(connection, message.registrationRmiIdData!!) { errorMessage ->
                 listenerManager.notifyError(connection,
                                             ClientRejectedException(errorMessage))
@@ -264,7 +276,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             }
 
             // this tells the client all of the info to connect.
-            server.writeHandshakeMessage(handshakePublication, successMessage)
+            server.actionDispatch.launch {
+                server.writeHandshakeMessage(handshakePublication, successMessage)
+            }
         } catch (e: Exception) {
             // have to unwind actions!
             connectionsPerIpCounts.getAndDecrement(clientAddress)

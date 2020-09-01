@@ -247,7 +247,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         serialization.finishInit(type)
     }
 
-    internal suspend fun initEndpointState(): Aeron {
+    internal fun initEndpointState(): Aeron {
         val aeronDirectory = config.aeronLogDirectory!!.absolutePath
 
         val threadFactory = NamedThreadFactory("Aeron", false)
@@ -398,7 +398,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onError(function: suspend (CONNECTION, Throwable) -> Unit) {
+    fun onError(function: (CONNECTION, Throwable) -> Unit) {
         actionDispatch.launch {
             listenerManager.onError(function)
         }
@@ -409,7 +409,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onError(function: suspend (Throwable) -> Unit) {
+    fun onError(function: (Throwable) -> Unit) {
         actionDispatch.launch {
             listenerManager.onError(function)
         }
@@ -441,9 +441,13 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             "[${publication.sessionId()}] send: $message"
         }
 
+        // we are not thread-safe!
+        val kryo = serialization.takeKryo()
+
         try {
-            // NOTE: it is safe to use the global, single-threaded kryo instance!
-            val buffer = serialization.writeMessage(message)
+            kryo.write(message)
+
+            val buffer = kryo.writerBuffer
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
@@ -469,6 +473,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             listenerManager.notifyError(newException("Error serializing message $message", e))
         } finally {
             sendIdleStrategy.reset()
+            serialization.returnKryo(kryo)
         }
     }
 
@@ -494,9 +499,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
             val exception = newException("[${sessionId}] Error de-serializing message", e)
             ListenerManager.cleanStackTrace(exception)
-            actionDispatch.launch {
-                listenerManager.notifyError(exception)
-            }
+            listenerManager.notifyError(exception)
 
             logger.error("Error de-serializing message on connection ${header.sessionId()}!", e)
             return null
@@ -529,9 +532,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
             val exception = newException("[${sessionId}] Error de-serializing message", e)
             ListenerManager.cleanStackTrace(exception)
-            actionDispatch.launch {
-                listenerManager.notifyError(connection, exception)
-            }
+            listenerManager.notifyError(connection, exception)
 
             return // don't do anything!
         }
@@ -577,17 +578,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
             }
             else -> {
-                actionDispatch.launch {
-                    // do nothing, there were problems with the message
-                    val exception = if (message != null) {
-                        MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
-                    } else {
-                        MessageNotRegisteredException("Unknown message received!!")
-                    }
-
-                    ListenerManager.cleanStackTrace(exception)
-                    listenerManager.notifyError(exception)
+                // do nothing, there were problems with the message
+                val exception = if (message != null) {
+                    MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
+                } else {
+                    MessageNotRegisteredException("Unknown message received!!")
                 }
+
+                ListenerManager.cleanStackTrace(exception)
+                listenerManager.notifyError(exception)
             }
         }
     }

@@ -103,7 +103,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
     /**
      * @return the removed object. If null, an error log will be emitted
      */
-    suspend fun <T> removeImplObject(endPoint: EndPoint<CONNECTION>, objectId: Int): T? {
+    fun <T> removeImplObject(endPoint: EndPoint<CONNECTION>, objectId: Int): T? {
         val success = removeImplObject<Any>(objectId)
         if (success == null) {
             val exception = Exception("Error trying to remove RMI impl object id $objectId.")
@@ -124,12 +124,12 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
     /**
      * called on "client"
      */
-    private suspend fun onGenericObjectResponse(endPoint: EndPoint<CONNECTION>,
-                                                connection: CONNECTION,
-                                                isGlobal: Boolean,
-                                                rmiId: Int,
-                                                callback: suspend (Int, Any) -> Unit,
-                                                serialization: Serialization) {
+    private fun onGenericObjectResponse(endPoint: EndPoint<CONNECTION>,
+                                        connection: CONNECTION,
+                                        isGlobal: Boolean,
+                                        rmiId: Int,
+                                        callback: suspend (Int, Any) -> Unit,
+                                        serialization: Serialization) {
 
         // we only create the proxy + execute the callback if the RMI id is valid!
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {

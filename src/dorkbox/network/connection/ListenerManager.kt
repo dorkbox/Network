@@ -85,10 +85,10 @@ internal class ListenerManager<CONNECTION: Connection> {
     private val onDisconnectList = atomic(Array<suspend (CONNECTION) -> Unit>(0) { { } })
     private val onDisconnectMutex = Mutex()
 
-    private val onErrorList = atomic(Array<suspend (CONNECTION, Throwable) -> Unit>(0) { { _, _ -> } })
+    private val onErrorList = atomic(Array<(CONNECTION, Throwable) -> Unit>(0) { { _, _ -> } })
     private val onErrorMutex = Mutex()
 
-    private val onErrorGlobalList = atomic(Array<suspend (Throwable) -> Unit>(0) { { _ -> } })
+    private val onErrorGlobalList = atomic(Array<(Throwable) -> Unit>(0) { { _ -> } })
     private val onErrorGlobalMutex = Mutex()
 
     private val onMessageMap = atomic(IdentityMap<Class<*>, Array<suspend (CONNECTION, Any) -> Unit>>(32, LOAD_FACTOR))
@@ -171,7 +171,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * The error is also sent to an error log before this method is called.
      */
-    suspend fun onError(function: suspend (CONNECTION, throwable: Throwable) -> Unit) {
+    suspend fun onError(function: (CONNECTION, throwable: Throwable) -> Unit) {
         onErrorMutex.withLock {
             // we have to follow the single-writer principle!
             onErrorList.lazySet(add(function, onErrorList.value))
@@ -183,7 +183,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * The error is also sent to an error log before this method is called.
      */
-    suspend fun onError(function: suspend (throwable: Throwable) -> Unit) {
+    suspend fun onError(function: (throwable: Throwable) -> Unit) {
         onErrorGlobalMutex.withLock {
             // we have to follow the single-writer principle!
             onErrorGlobalList.lazySet(add(function, onErrorGlobalList.value))
@@ -252,7 +252,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * @return true if the connection will be allowed to connect. False if we should terminate this connection
      */
-    suspend fun notifyFilter(connection: CONNECTION): Boolean {
+     fun notifyFilter(connection: CONNECTION): Boolean {
         // NOTE: pass a reference to a string, so if there is an error, we can get it! (and log it, and send it to the client)
 
         // first run through the IP connection filters, THEN run through the "custom" filters
@@ -264,12 +264,12 @@ internal class ListenerManager<CONNECTION: Connection> {
 
         // these are the IP filters (optimized checking based on simple IP rules)
         onConnectIpFilterList.value.forEach {
-//            if (it.matches())
+//            if (it.matches(connection))
 //
 //
 //                if (!it(connection)) {
 //                    return false
-//                }
+//            }
         }
 
 
@@ -344,7 +344,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * The error is also sent to an error log before notifying callbacks
      */
-    suspend fun notifyError(connection: CONNECTION, exception: Throwable) {
+    fun notifyError(connection: CONNECTION, exception: Throwable) {
         onErrorList.value.forEach {
             it(connection, exception)
         }
@@ -355,7 +355,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * The error is also sent to an error log before notifying callbacks
      */
-    suspend fun notifyError(exception: Throwable) {
+    fun notifyError(exception: Throwable) {
         onErrorGlobalList.value.forEach {
             it(exception)
         }

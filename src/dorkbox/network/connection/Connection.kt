@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit
  * This connection is established once the registration information is validated, and the various connect/filter checks have passed
  */
 open class Connection(connectionParameters: ConnectionParams<*>) {
+    private var messageHandler: FragmentAssembler
     private val subscription: Subscription
     private val publication: Publication
 
@@ -125,8 +126,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     // a record of how many messages are in progress of being sent. When closing the connection, this number must be 0
     private val messagesInProgress = atomic(0)
-
-    private var messageHandler: FragmentAssembler
 
     init {
         val mediaDriverConnection = connectionParameters.mediaDriverConnection
@@ -264,10 +263,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
     /**
+     * A message in progress means that we have requested to to send an object over the network, but it hasn't finished sending over the network
      *
      * @return the number of messages in progress for this connection.
-     *
-     * A message in progress means that we have requested to to send an object over the network, but it hasn't finished sending over the network
      */
     fun messagesInProgress(): Int {
         return messagesInProgress.value
@@ -278,7 +276,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * @return `true` if this connection has no subscribers (which means this connection longer has a remote connection)
      */
     internal fun isExpired(): Boolean {
-        return subscription.imageCount() == 0
+        return !subscription.isConnected
     }
 
 
@@ -439,7 +437,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * @see RemoteObject
      */
     @Suppress("DuplicatedCode")
-    suspend fun saveObject(`object`: Any): Int {
+    fun saveObject(`object`: Any): Int {
         val rmiId = rmiConnectionSupport.saveImplObject(`object`)
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
@@ -468,7 +466,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * @see RemoteObject
      */
     @Suppress("DuplicatedCode")
-    suspend fun saveObject(`object`: Any, objectId: Int): Boolean {
+    fun saveObject(`object`: Any, objectId: Int): Boolean {
         val success = rmiConnectionSupport.saveImplObject(`object`, objectId)
         if (!success) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
