@@ -59,6 +59,7 @@ object RmiCommonTest {
         val s = remoteObject.toString()
         remoteObject.enableToString(true)
         Assert.assertFalse(s == remoteObject.toString())
+
         test.moo()
         test.moo("Cow")
         Assert.assertEquals(remoteObjectID, test.id())
@@ -141,7 +142,7 @@ object RmiCommonTest {
     }
 
     fun register(manager: Serialization) {
-        manager.register(Any::class.java) // Needed for Object#toString, hashCode, etc.
+//        manager.register(Any::class.java) // Needed for Object#toString, hashCode, etc.
         manager.register(TestCow::class.java)
         manager.register(MessageWithTestCow::class.java)
         manager.register(UnsupportedOperationException::class.java)
