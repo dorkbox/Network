@@ -66,7 +66,7 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
         val async = false
 
         val mod = if (async) 10_000L else 200L
-        val totalRuns = if (async) 1_000_000 else 70_000
+        val totalRuns = if (async) 1_000_000 else 700
 
         run {
             val configuration = serverConfig()
