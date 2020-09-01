@@ -24,11 +24,9 @@ import dorkbox.network.serialization.Serialization
 import dorkbox.util.collections.LockFreeIntMap
 import mu.KLogger
 
-internal class RmiManagerConnections<CONNECTION: Connection>(
-        logger: KLogger,
-        listenerManager: ListenerManager<CONNECTION>,
-        val rmiGlobalSupport: RmiManagerGlobal<CONNECTION>,
-        private val serialization: Serialization) : RmiObjectCache<CONNECTION>(listenerManager, logger) {
+internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
+                                                             val rmiGlobalSupport: RmiManagerGlobal<CONNECTION>,
+                                                             private val serialization: Serialization) : RmiObjectCache(logger) {
 
     // It is critical that all of the RMI proxy objects are unique, and are saved/cached PER CONNECTION. These cannot be shared between connections!
     private val proxyObjects = LockFreeIntMap<RemoteObject>()
@@ -51,20 +49,20 @@ internal class RmiManagerConnections<CONNECTION: Connection>(
     /**
      * on the connection+client to get a connection-specific remote object (that exists on the server/client)
      */
-    fun <Iface> getRemoteObject(connection: Connection, kryoId: Int, objectId: Int, interfaceClass: Class<Iface>): Iface {
+    fun <Iface> getProxyObject(connection: Connection, kryoId: Int, rmiId: Int, interfaceClass: Class<Iface>): Iface {
         require(interfaceClass.isInterface) { "iface must be an interface." }
 
         // so we can just instantly create the proxy object (or get the cached one)
-        var proxyObject = getProxyObject(objectId)
+        var proxyObject = getProxyObject(rmiId)
         if (proxyObject == null) {
             proxyObject = RmiManagerGlobal.createProxyObject(false,
                                                              connection,
                                                              serialization,
                                                              rmiGlobalSupport.rmiResponseManager,
-                                                             objectId,
                                                              kryoId,
+                                                             rmiId,
                                                              interfaceClass)
-            saveProxyObject(objectId, proxyObject)
+            saveProxyObject(rmiId, proxyObject)
         }
 
         // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
@@ -97,30 +95,29 @@ internal class RmiManagerConnections<CONNECTION: Connection>(
         val callbackId = RmiUtils.unpackLeft(message.packedIds)
         val kryoId = RmiUtils.unpackRight(message.packedIds)
         val objectParameters = message.objectParameters
+        val serialization = endPoint.serialization
 
         // We have to lookup the iface, since the proxy object requires it
-        val implObject = endPoint.serialization.createRmiObject(kryoId, objectParameters)
+        val implObject = serialization.createRmiObject(kryoId, objectParameters)
 
         val response = if (implObject is Exception) {
             // whoops!
             ListenerManager.cleanStackTrace(implObject)
             endPoint.listenerManager.notifyError(connection, implObject)
 
-            // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
             ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, RemoteObjectStorage.INVALID_RMI))
         } else {
             val rmiId = saveImplObject(implObject)
-
             if (rmiId == RemoteObjectStorage.INVALID_RMI) {
                 val exception = NullPointerException("Trying to create an RMI object with the INVALID_RMI id!!")
                 ListenerManager.cleanStackTrace(exception)
                 endPoint.listenerManager.notifyError(connection, exception)
             }
 
-            // we send the message ANYWAYS, because the client needs to know it did NOT succeed!
             ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, rmiId))
         }
 
+        // we send the message ALWAYS, because the client needs to know it worked or not
         connection.send(response)
     }
 

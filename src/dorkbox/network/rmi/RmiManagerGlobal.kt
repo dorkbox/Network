@@ -32,11 +32,9 @@ import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
 
-internal class RmiManagerGlobal<CONNECTION : Connection>(
-        logger: KLogger,
-        listenerManager: ListenerManager<CONNECTION>,
-        actionDispatch: CoroutineScope,
-        internal val serialization: Serialization) : RmiObjectCache<CONNECTION>(listenerManager, logger) {
+internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
+                                                         actionDispatch: CoroutineScope,
+                                                         internal val serialization: Serialization) : RmiObjectCache(logger) {
 
     companion object {
         /**
@@ -208,7 +206,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(
                 /**
                  * called on "server"
                  */
-                onGlobalObjectCreateRequest(endPoint, connection, message, logger)
+                onGlobalObjectCreateRequest(endPoint, connection, message)
             }
             is GlobalObjectCreateResponse -> {
                 /**
@@ -367,14 +365,17 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(
     /**
      * called on "server"
      */
-    private suspend fun onGlobalObjectCreateRequest(endPoint: EndPoint<CONNECTION>, connection: CONNECTION, message: GlobalObjectCreateRequest, logger: KLogger) {
+    private suspend fun onGlobalObjectCreateRequest(endPoint: EndPoint<CONNECTION>,
+                                                    connection: CONNECTION,
+                                                    message: GlobalObjectCreateRequest) {
         val interfaceClassId = RmiUtils.unpackLeft(message.packedIds)
         val callbackId = RmiUtils.unpackRight(message.packedIds)
         val objectParameters = message.objectParameters
+        val serialization = endPoint.serialization
 
 
         // We have to lookup the iface, since the proxy object requires it
-        val implObject = endPoint.serialization.createRmiObject(interfaceClassId, objectParameters)
+        val implObject = serialization.createRmiObject(interfaceClassId, objectParameters)
 
         val response = if (implObject is Exception) {
             // whoops!

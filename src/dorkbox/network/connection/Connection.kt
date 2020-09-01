@@ -438,8 +438,16 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @see RemoteObject
      */
+    @Suppress("DuplicatedCode")
     suspend fun saveObject(`object`: Any): Int {
-        return rmiConnectionSupport.saveImplObject(`object`)
+        val rmiId = rmiConnectionSupport.saveImplObject(`object`)
+        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
+            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.value?.notifyError(this, exception)
+        }
+
+        return rmiId
     }
 
     /**
@@ -459,8 +467,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @see RemoteObject
      */
+    @Suppress("DuplicatedCode")
     suspend fun saveObject(`object`: Any, objectId: Int): Boolean {
-        return rmiConnectionSupport.saveImplObject(`object`, objectId)
+        val success = rmiConnectionSupport.saveImplObject(`object`, objectId)
+        if (!success) {
+            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.value?.notifyError(this, exception)
+        }
+        return success
     }
 
     /**
@@ -487,7 +502,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         val kryoId = endPoint.serialization.getKryoIdForRmiClient(Iface::class.java)
 
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.getRemoteObject(this, kryoId, objectId, Iface::class.java)
+        return rmiConnectionSupport.getProxyObject(this, kryoId, objectId, Iface::class.java)
     }
 
     /**

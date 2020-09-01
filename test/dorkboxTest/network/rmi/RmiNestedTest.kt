@@ -16,10 +16,8 @@
 package dorkboxTest.network.rmi
 
 import dorkbox.network.Client
-import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.network.rmi.Rmi
 import dorkbox.util.exceptions.SecurityException
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
@@ -30,16 +28,11 @@ import java.util.concurrent.atomic.AtomicInteger
 
 
 
-class RmiOverrideAndProxyTest : BaseTest() {
+@Suppress("unused", "RedundantSuspendModifier")
+class RmiNestedTest : BaseTest() {
 
     companion object {
         private val idCounter = AtomicInteger()
-    }
-
-    @Test
-    @Throws(SecurityException::class, IOException::class)
-    fun rmiNetwork() {
-        rmi()
     }
 
     @Test
@@ -79,15 +72,13 @@ class RmiOverrideAndProxyTest : BaseTest() {
      * The implType (if it exists, with the same name, and with the same signature + connection parameter) will be called from the interface
      * instead of the method that would NORMALLY be called.
      */
-    fun rmi(config: (Configuration) -> Unit = {}) {
+    @Test
+    fun biDirectionalDoubleRmi() {
         run {
             val configuration = serverConfig()
-            config(configuration)
 
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
-            configuration.serialization.register(TestObject::class.java) // the iface is again, on purpose to verify registration orders!
+            configuration.serialization.registerRmi(TestObject::class.java, TestObjectAnnotImpl::class.java)
             configuration.serialization.registerRmi(OtherObject::class.java, OtherObjectImpl::class.java)
-//            configuration.serialization.register(OtherObjectImpl::class.java) // registered because this class is sent over the wire
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
@@ -110,15 +101,12 @@ class RmiOverrideAndProxyTest : BaseTest() {
 
         run {
             val configuration = clientConfig()
-            config(configuration)
 
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+            configuration.serialization.registerRmi(TestObject::class.java, TestObjectAnnotImpl::class.java)
             configuration.serialization.registerRmi(OtherObject::class.java, OtherObjectImpl::class.java)
-//            configuration.serialization.register(OtherObjectImpl::class.java) // registered because this class is sent over the wire
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
-
 
             client.onConnect { connection ->
                 connection.logger.error("Connected")
@@ -157,6 +145,145 @@ class RmiOverrideAndProxyTest : BaseTest() {
         waitForThreads()
     }
 
+    @Test
+    fun doubleRmi() {
+        run {
+            val configuration = serverConfig()
+            configuration.serialization.registerRmi(TestObject::class.java, TestObjectAnnotImpl::class.java)
+            configuration.serialization.registerRmi(OtherObject::class.java, OtherObjectImpl::class.java)
+
+            val server = Server<Connection>(configuration)
+            addEndPoint(server)
+
+            server.onMessage<OtherObject> { connection, message ->
+                // The test is complete when the client sends the OtherObject instance.
+                // this 'object' is the REAL object, not a proxy, because this object is created within this connection.
+                if (message.value() == 12.34f) {
+                    stopEndPoints()
+                } else {
+                    Assert.fail("Incorrect object value")
+                }
+            }
+
+            runBlocking {
+                server.bind(false)
+            }
+        }
+
+
+        run {
+            val configuration = clientConfig()
+            configuration.serialization.register(TestObject::class.java)
+            configuration.serialization.register(OtherObject::class.java)
+
+            val client = Client<Connection>(configuration)
+            addEndPoint(client)
+
+            client.onConnect { connection ->
+                connection.logger.error("Connected")
+                connection.createObject<TestObject> { rmiId, remoteObject ->
+                    connection.logger.error("Starting test")
+                    remoteObject.setValue(43.21f)
+
+                    // Normal remote method call.
+                    Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
+
+                    // Make a remote method call that returns another remote proxy object.
+                    // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
+                    //  here we have a proxy to both of them.
+                    val otherObject: OtherObject = remoteObject.getOtherObject()
+
+                    // Normal remote method call on the second object.
+                    otherObject.setValue(12.34f)
+                    val value = otherObject.value()
+                    Assert.assertEquals(12.34f, value, .0001f)
+
+
+                    // make sure the "local" object and the "remote" object have the same values
+                    Assert.assertEquals(12.34f, remoteObject.getOtherValue(), .0001f)
+
+
+                    // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                    // that is where that object actually exists.
+                    connection.send(otherObject)
+                }
+            }
+
+            runBlocking {
+                client.connect(LOOPBACK, 5000)
+            }
+        }
+        waitForThreads(999999)
+    }
+
+    @Test
+    fun singleRmi() {
+        run {
+            val configuration = serverConfig()
+            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+            configuration.serialization.register(OtherObjectImpl::class.java)
+
+            val server = Server<Connection>(configuration)
+            addEndPoint(server)
+
+            server.onMessage<OtherObject> { connection, message ->
+                // The test is complete when the client sends the OtherObject instance.
+                // this 'object' is the REAL object
+                if (message.value() == 43.21f) {
+                    stopEndPoints()
+                } else {
+                    Assert.fail("Incorrect object value")
+                }
+            }
+
+            runBlocking {
+                server.bind(false)
+            }
+        }
+
+
+        run {
+            val configuration = clientConfig()
+            configuration.serialization.register(TestObject::class.java)
+            configuration.serialization.register(OtherObjectImpl::class.java)
+
+            val client = Client<Connection>(configuration)
+            addEndPoint(client)
+
+            client.onConnect { connection ->
+                connection.logger.error("Connected")
+                connection.createObject<TestObject> { rmiId, remoteObject ->
+                    connection.logger.error("Starting test")
+                    remoteObject.setOtherValue(43.21f)
+
+                    // Normal remote method call.
+                    Assert.assertEquals(43.21f, remoteObject.getOtherValue(), .0001f)
+
+                    // real object
+                    val otherObject: OtherObject = remoteObject.getOtherObject()
+
+                    // Normal remote method call on the second object.
+                    val value = otherObject.value()
+                    Assert.assertEquals(43.21f, value, .0001f)
+
+
+                    // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                    // that is where that object actually exists.
+                    connection.send(otherObject)
+                }
+            }
+
+            runBlocking {
+                client.connect(LOOPBACK, 5000)
+            }
+        }
+        waitForThreads(999999)
+    }
+
+
+
+
+
     private interface TestObject {
         suspend fun setValue(aFloat: Float)
         suspend fun setOtherValue(aFloat: Float)
@@ -174,7 +301,6 @@ class RmiOverrideAndProxyTest : BaseTest() {
         @Transient
         private val ID = idCounter.getAndIncrement()
 
-        @Rmi
         private val otherObject: OtherObject = OtherObjectImpl()
 
         private var aFloat = 0f
@@ -204,10 +330,47 @@ class RmiOverrideAndProxyTest : BaseTest() {
         }
 
         override fun getOtherObject(): OtherObject {
+            return otherObject
+        }
+
+        override fun hashCode(): Int {
+            return ID
+        }
+    }
+
+    private class TestObjectAnnotImpl : TestObject {
+        @Transient
+        private val ID = idCounter.getAndIncrement()
+
+        private val otherObject: OtherObject = OtherObjectImpl()
+
+        private var aFloat = 0f
+        override suspend fun setValue(aFloat: Float) {
             throw RuntimeException("Whoops!")
         }
 
-        fun getOtherObject(connection: Connection): OtherObject {
+        suspend fun setValue(connection: Connection, aFloat: Float) {
+            connection.logger.error("receiving")
+            this.aFloat = aFloat
+        }
+
+        override suspend fun setOtherValue(aFloat: Float) {
+            otherObject.setValue(aFloat)
+        }
+
+        override suspend fun getOtherValue(): Float {
+            return otherObject.value()
+        }
+
+        override fun other(): Float {
+            throw RuntimeException("Whoops!")
+        }
+
+        fun other(connection: Connection): Float {
+            return aFloat
+        }
+
+        override fun getOtherObject(): OtherObject {
             return otherObject
         }
 

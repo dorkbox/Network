@@ -15,7 +15,7 @@
  */
 package dorkbox.network.serialization
 
-import com.esotericsoftware.kryo.ClassResolver
+import com.conversantmedia.util.concurrent.MultithreadConcurrentQueue
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.SerializerFactory
@@ -35,13 +35,12 @@ import dorkbox.network.rmi.messages.MethodRequest
 import dorkbox.network.rmi.messages.MethodRequestSerializer
 import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.rmi.messages.MethodResponseSerializer
-import dorkbox.network.rmi.messages.RmiClientReverseSerializer
 import dorkbox.network.rmi.messages.RmiClientSerializer
+import dorkbox.network.rmi.messages.RmiServerSerializer
 import dorkbox.os.OS
-import dorkbox.util.collections.IdentityMap
 import dorkbox.util.serialization.SerializationDefaults
 import dorkbox.util.serialization.SerializationManager
-import kotlinx.coroutines.channels.Channel
+import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
@@ -55,6 +54,7 @@ import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationHandler
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.Continuation
+
 
 /**
  * Threads reading/writing at the same time a single instance of kryo. it is possible to use a single kryo with the use of
@@ -76,14 +76,17 @@ import kotlin.coroutines.Continuation
  *                an object's type. Default is [ReflectionSerializerFactory] with [FieldSerializer]. @see
  *                Kryo#newDefaultSerializer(Class)
  */
-open class Serialization(private val references: Boolean = true,
-                         private val factory: SerializerFactory<*>? = null) : SerializationManager<DirectBuffer> {
+open class Serialization(private val references: Boolean = true, private val factory: SerializerFactory<*>? = null) : SerializationManager<DirectBuffer> {
+
+    companion object {
+        // -2 is the same value that kryo uses for invalid id's
+        const val INVALID_KRYO_ID = -2
+    }
 
     private lateinit var logger: KLogger
 
-    private var initialized = false
-    private val kryoPool: Channel<KryoExtra>
-    lateinit var classResolver: ClassResolver
+    private var initialized = atomic(false)
+    private val kryoPool = MultithreadConcurrentQueue<KryoExtra>(1024)  // reasonable size of available kryo's
 
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class)
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
@@ -91,12 +94,6 @@ open class Serialization(private val references: Boolean = true,
     private val classesToRegister = mutableListOf<ClassRegistration>()
     private lateinit var savedKryoIdsForRmi: IntArray
     private lateinit var savedRegistrationDetails: ByteArray
-
-    /// RMI things
-    private val rmiIfaceToInstantiator : Int2ObjectHashMap<ObjectInstantiator<Any>> = Int2ObjectHashMap()
-    private val rmiIfaceToImpl = IdentityMap<Class<*>, Class<*>>()
-    private val rmiImplToIface = IdentityMap<Class<*>, Class<*>>()
-
 
     // This is a GLOBAL, single threaded only kryo instance.
     // This is to make sure that we have an instance of class registration done correctly and (if not) we are
@@ -109,32 +106,161 @@ open class Serialization(private val references: Boolean = true,
 
     private val methodRequestSerializer = MethodRequestSerializer()
     private val methodResponseSerializer = MethodResponseSerializer()
-
     private val continuationSerializer = ContinuationSerializer()
 
     private val rmiClientSerializer = RmiClientSerializer()
-    private val rmiClientReverseSerializer = RmiClientReverseSerializer()
+    private val rmiServerSerializer = RmiServerSerializer()
+
+    val rmiHolder = RmiHolder()
 
     // list of already seen client RMI ids (which the server might not have registered as RMI types).
     private var existingRmiIds = CopyOnWriteArrayList<Int>()
 
-
-
     // the purpose of the method cache, is to accelerate looking up methods for specific class
     private val methodCache : Int2ObjectHashMap<Array<CachedMethod>> = Int2ObjectHashMap()
-
 
     // reflectASM doesn't work on android
     private val useAsm = !OS.isAndroid()
 
-    init {
-        // reasonable size of available kryo's before coroutines are suspended during read/write
-        val KRYO_COUNT = 64
+    /**
+     * Registers the class using the lowest, next available integer ID and the [default serializer][Kryo.getDefaultSerializer].
+     * If the class is already registered, the existing entry is updated with the new serializer.
+     *
+     *
+     * Registering a primitive also affects the corresponding primitive wrapper.
+     *
+     * Because the ID assigned is affected by the IDs registered before it, the order classes are registered is important when using this
+     * method.
+     *
+     * The order must be the same at deserialization as it was for serialization.
+     *
+     * This must happen before the creation of the client/server
+     */
+    override fun <T> register(clazz: Class<T>): Serialization {
+        require(!initialized.value) { "Serialization 'register(class)' cannot happen after client/server initialization!" }
 
-        kryoPool = Channel(KRYO_COUNT)
+//        // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
+//        // with object types... EVEN IF THERE IS A SERIALIZER
+//        require(!clazz.isInterface) { "Cannot register '${clazz}' with specified ID for serialization. It must be an implementation." }
+
+        classesToRegister.add(ClassRegistration3(clazz))
+        return this
     }
 
+    /**
+     * Registers the class using the specified ID. If the ID is already in use by the same type, the old entry is overwritten. If the ID
+     * is already in use by a different type, an exception is thrown.
+     *
+     *
+     * Registering a primitive also affects the corresponding primitive wrapper.
+     *
+     * IDs must be the same at deserialization as they were for serialization.
+     *
+     * This must happen before the creation of the client/server
+     *
+     * @param id Must be >= 0. Smaller IDs are serialized more efficiently. IDs 0-8 are used by default for primitive types and String, but
+     * these IDs can be repurposed.
+     */
+    override fun <T> register(clazz: Class<T>, id: Int): Serialization {
+        require(!initialized.value) { "Serialization 'register(Class, int)' cannot happen after client/server initialization!" }
+
+        // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
+        // with object types... EVEN IF THERE IS A SERIALIZER
+        require(!clazz.isInterface) { "Cannot register '${clazz}' with specified ID for serialization. It must be an implementation." }
+
+        classesToRegister.add(ClassRegistration1(clazz, id))
+        return this
+    }
+
+    /**
+     * Registers the class using the lowest, next available integer ID and the specified serializer. If the class is already registered,
+     * the existing entry is updated with the new serializer.
+     *
+     *
+     * Registering a primitive also affects the corresponding primitive wrapper.
+     *
+     *
+     * Because the ID assigned is affected by the IDs registered before it, the order classes are registered is important when using this
+     * method. The order must be the same at deserialization as it was for serialization.
+     */
     @Synchronized
+    override fun <T> register(clazz: Class<T>, serializer: Serializer<T>): Serialization {
+        require(!initialized.value) { "Serialization 'register(Class, Serializer)' cannot happen after client/server initialization!" }
+
+        // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
+        // with object types... EVEN IF THERE IS A SERIALIZER
+        require(!clazz.isInterface) { "Cannot register '${clazz.name}' with a serializer. It must be an implementation." }
+
+        classesToRegister.add(ClassRegistration0(clazz, serializer))
+        return this
+    }
+
+    /**
+     * Registers the class using the specified ID and serializer. If the ID is already in use by the same type, the old entry is
+     * overwritten. If the ID is already in use by a different type, an exception is thrown.
+     *
+     *
+     * Registering a primitive also affects the corresponding primitive wrapper.
+     *
+     *
+     * IDs must be the same at deserialization as they were for serialization.
+     *
+     * @param id Must be >= 0. Smaller IDs are serialized more efficiently. IDs 0-8 are used by default for primitive types and String, but
+     * these IDs can be repurposed.
+     */
+    @Synchronized
+    override fun <T> register(clazz: Class<T>, serializer: Serializer<T>, id: Int): Serialization {
+        require(!initialized.value) { "Serialization 'register(Class, Serializer, int)' cannot happen after client/server initialization!" }
+
+        // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
+        // with object types... EVEN IF THERE IS A SERIALIZER
+        require(!clazz.isInterface) { "Cannot register '${clazz.name}'. It must be an implementation." }
+
+        classesToRegister.add(ClassRegistration2(clazz, serializer, id))
+        return this
+    }
+
+    /**
+     * There is additional overhead to using RMI.
+     *
+     * This enables a "remote endpoint" to access methods and create objects (RMI) for this endpoint.
+     *
+     * This is NOT bi-directional, and this endpoint cannot access or create remote objects on the "remote client".
+     *
+     * @throws IllegalArgumentException if the iface/impl have previously been overridden
+     */
+    @Synchronized
+    fun <Iface, Impl : Iface> registerRmi(ifaceClass: Class<Iface>, implClass: Class<Impl>): Serialization {
+        require(!initialized.value) { "Serialization 'registerRmi(Class, Class)' cannot happen after client/server initialization!" }
+
+        require(ifaceClass.isInterface) { "Cannot register an implementation for RMI access. It must be an interface." }
+        require(!implClass.isInterface) { "Cannot register an interface for RMI implementations. It must be an implementation." }
+
+        classesToRegister.add(ClassRegistrationForRmi(ifaceClass, implClass, rmiServerSerializer))
+        return this
+    }
+
+    /**
+     * NOTE: When this fails, the CLIENT will just time out. We DO NOT want to send an error message to the client
+     *   (it should check for updates or something else). We do not want to give "rogue" clients knowledge of the
+     *   server, thus preventing them from trying to probe the server data structures.
+     *
+     * @return a compressed byte array of the details of all registration IDs -> Class name -> Serialization type used by kryo
+     */
+    fun getKryoRegistrationDetails(): ByteArray {
+        return savedRegistrationDetails
+    }
+
+    /**
+     * @return the details of all registration IDs for RMI iface serializer rewrites
+     */
+    fun getKryoRmiIds(): IntArray {
+        return savedKryoIdsForRmi
+    }
+
+    /**
+     * called as the first think inside [finishInit]
+     */
     private fun initKryo(): KryoExtra {
         val kryo = KryoExtra(methodCache)
 
@@ -174,7 +300,7 @@ open class Serialization(private val references: Boolean = true,
         // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
         // note, we have to check to make sure a class is not ALREADY registered for RMI before it is registered again
         classesToRegister.forEach { registration ->
-            registration.register(kryo, rmiIfaceToImpl)
+            registration.register(kryo, rmiHolder)
         }
 
         if (factory != null) {
@@ -184,177 +310,20 @@ open class Serialization(private val references: Boolean = true,
         return kryo
     }
 
-
-
-    /**
-     * Registers the class using the lowest, next available integer ID and the [default serializer][Kryo.getDefaultSerializer].
-     * If the class is already registered, the existing entry is updated with the new serializer.
-     *
-     *
-     * Registering a primitive also affects the corresponding primitive wrapper.
-     *
-     *
-     * Because the ID assigned is affected by the IDs registered before it, the order classes are registered is important when using this
-     * method. The order must be the same at deserialization as it was for serialization.
-     */
-    @Synchronized
-    override fun <T> register(clazz: Class<T>): Serialization {
-        if (initialized) {
-            logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class) call.")
-        } else {
-            classesToRegister.add(ClassRegistration3(clazz))
-        }
-
-        return this
-    }
-
-    /**
-     * Registers the class using the specified ID. If the ID is already in use by the same type, the old entry is overwritten. If the ID
-     * is already in use by a different type, an exception is thrown.
-     *
-     *
-     * Registering a primitive also affects the corresponding primitive wrapper.
-     *
-     * IDs must be the same at deserialization as they were for serialization.
-     *
-     * @param id Must be >= 0. Smaller IDs are serialized more efficiently. IDs 0-8 are used by default for primitive types and String, but
-     * these IDs can be repurposed.
-     */
-    @Synchronized
-    override fun <T> register(clazz: Class<T>, id: Int): Serialization {
-        if (initialized) {
-            logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, int) call.")
-            return this
-        }
-
-        // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
-        // with object types... EVEN IF THERE IS A SERIALIZER
-        require(!clazz.isInterface) { "Cannot register an interface '${clazz}' with specified ID for serialization. It must be an implementation." }
-
-        classesToRegister.add(ClassRegistration1(clazz, id))
-        return this
-    }
-
-    /**
-     * Registers the class using the lowest, next available integer ID and the specified serializer. If the class is already registered,
-     * the existing entry is updated with the new serializer.
-     *
-     *
-     * Registering a primitive also affects the corresponding primitive wrapper.
-     *
-     *
-     * Because the ID assigned is affected by the IDs registered before it, the order classes are registered is important when using this
-     * method. The order must be the same at deserialization as it was for serialization.
-     */
-    @Synchronized
-    override fun <T> register(clazz: Class<T>, serializer: Serializer<T>): Serialization {
-        if (initialized) {
-            logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer) call.")
-            return this
-        }
-
-        // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
-        // with object types... EVEN IF THERE IS A SERIALIZER
-        require(!clazz.isInterface) { "Cannot register an interface '${clazz.name}' with a serializer. It must be an implementation." }
-
-        classesToRegister.add(ClassRegistration0(clazz, serializer))
-        return this
-    }
-
-    /**
-     * Registers the class using the specified ID and serializer. If the ID is already in use by the same type, the old entry is
-     * overwritten. If the ID is already in use by a different type, an exception is thrown.
-     *
-     *
-     * Registering a primitive also affects the corresponding primitive wrapper.
-     *
-     *
-     * IDs must be the same at deserialization as they were for serialization.
-     *
-     * @param id Must be >= 0. Smaller IDs are serialized more efficiently. IDs 0-8 are used by default for primitive types and String, but
-     * these IDs can be repurposed.
-     */
-    @Synchronized
-    override fun <T> register(clazz: Class<T>, serializer: Serializer<T>, id: Int): Serialization {
-        if (initialized) {
-            logger.warn("Serialization manager already initialized. Ignoring duplicate register(Class, Serializer, int) call.")
-            return this
-        }
-
-        // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
-        // with object types... EVEN IF THERE IS A SERIALIZER
-        require(!clazz.isInterface) { "Cannot register an interface '${clazz.name}'. It must be an implementation." }
-
-        classesToRegister.add(ClassRegistration2(clazz, serializer, id))
-        return this
-    }
-
-    /**
-     * There is additional overhead to using RMI.
-     *
-     * This enables a "remote endpoint" to access methods and create objects (RMI) for this endpoint.
-     *
-     * This is NOT bi-directional, and this endpoint cannot access or create remote objects on the "remote client".
-     *
-     * @throws IllegalArgumentException if the iface/impl have previously been overridden
-     */
-    @Synchronized
-    fun <Iface, Impl : Iface> registerRmi(ifaceClass: Class<Iface>, implClass: Class<Impl>): Serialization {
-        if (initialized) {
-            logger.warn("Serialization manager already initialized. Ignoring duplicate registerRmiImplementation(Class, Class) call.")
-            return this
-        }
-
-        require(ifaceClass.isInterface) { "Cannot register an implementation for RMI access. It must be an interface." }
-        require(!implClass.isInterface) { "Cannot register an interface for RMI implementations. It must be an implementation." }
-
-        classesToRegister.add(ClassRegistrationIfaceAndImpl(ifaceClass, implClass, rmiClientReverseSerializer))
-
-        // rmiIfaceToImpl tells us, "the server" how to create a (requested) remote object
-        // this MUST BE UNIQUE otherwise unexpected and BAD things can happen.
-        val a = rmiIfaceToImpl.put(ifaceClass, implClass)
-        val b = rmiImplToIface.put(implClass, ifaceClass)
-
-        require(!(a != null || b != null)) {
-            "Unable to override interface ($ifaceClass) and implementation ($implClass) " +
-                    "because they have already been overridden by something else. It is critical that they are both unique per JVM"
-        }
-        return this
-    }
-
     /**
      * Called when initialization is complete. This is to prevent (and recognize) out-of-order class/serializer registration. If an ID
      * is already in use by a different type, an exception is thrown.
      */
-    @Synchronized
     fun finishInit(endPointClass: Class<*>) {
-        this.logger = KotlinLogging.logger(endPointClass.simpleName)
+        logger = KotlinLogging.logger(endPointClass.simpleName)
 
+        if (!initialized.compareAndSet(expect = false, update = true)) {
+            logger.error("Unable to initialize serialization more than once!")
+            return
+        }
 
-        // get all classes/fields with @Rmi field annotation.
-        // The field type must also be added as an RMI type
-//        val fieldsWithRmiAnnotation = AnnotationDetector.scanClassPath()
-//            .forAnnotations(Rmi::class.java)
-//            .on(ElementType.FIELD)
-//            .collect(AnnotationDefaults.getField)
-//
-//        fieldsWithRmiAnnotation.forEach { field ->
-//            val fieldType = field.type
-//            require(fieldType.isInterface) { "RMI annotated fields must be an interface!" }
-//
-//            logger.debug { "Adding additional @Rmi field annotation for RMI registration" }
-//
-//            // now we add this field type as an RMI serializable
-////            registerRmi(fieldType, fieldType)
-//        }
-
-
-        initialized = true
-
-        // save off the class-resolver, so we can lookup the class <-> id relationships
-        classResolver = globalKryo.classResolver
-
-
+        // this will set up the class registration information
+        initKryo()
 
         // now MERGE all of the registrations (since we can have registrations overwrite newer/specific registrations based on ID
         // in order to get the ID's, these have to be registered with a kryo instance!
@@ -362,10 +331,11 @@ open class Serialization(private val references: Boolean = true,
         classesToRegister.forEach { registration ->
             val id = registration.id
 
-            // if the id == -1, it means that this registration was ignored! We don't want to include it -- but we want to log
-            // that something happened.
-            if (id == -1) {
-                logger.debug(registration.info)
+            // if the id == -1, it means that this registration was ignored!
+            //
+            // We don't want to include it -- but we want to log that something happened (the info has been customized)
+            if (id == ClassRegistration.IGNORE_REGISTRATION) {
+                logger.warn(registration.info)
                 return@forEach
             }
 
@@ -416,18 +386,20 @@ open class Serialization(private val references: Boolean = true,
             // so it is super trivial to map out all possible, relevant types
             val kryoId = classRegistration.id
 
-            if (classRegistration is ClassRegistrationIfaceAndImpl) {
+            if (classRegistration is ClassRegistrationForRmi) {
                 // on the "RMI server" (aka, where the object lives) side, there will be an interface + implementation!
+
+                val implClass = classRegistration.implClass
 
                 // RMI method caching
                 methodCache[kryoId] =
-                    RmiUtils.getCachedMethods(logger, globalKryo, useAsm, classRegistration.clazz, classRegistration.implClass, kryoId)
+                    RmiUtils.getCachedMethods(logger, globalKryo, useAsm, classRegistration.clazz, implClass, kryoId)
 
                 // we ALSO have to cache the instantiator for these, since these are used to create remote objects
-                val instantiator = globalKryo.instantiatorStrategy.newInstantiatorOf(classRegistration.implClass)
-
                 @Suppress("UNCHECKED_CAST")
-                rmiIfaceToInstantiator[kryoId] = instantiator as ObjectInstantiator<Any>
+                rmiHolder.idToInstantiator[kryoId] =
+                        globalKryo.instantiatorStrategy.newInstantiatorOf(implClass) as ObjectInstantiator<Any>
+
 
                 // finally, we must save this ID, to tell the remote connection that their interface serializer must change to support
                 // receiving an RMI impl object as a proxy object
@@ -452,7 +424,6 @@ open class Serialization(private val references: Boolean = true,
 
         // save this as a byte array (so class registration validation during connection handshake is faster)
         val output = AeronOutput()
-
         try {
             globalKryo.writeCompressed(logger, output, registrationDetails.toTypedArray())
         } catch (e: Exception) {
@@ -465,23 +436,6 @@ open class Serialization(private val references: Boolean = true,
         output.close()
     }
 
-    /**
-     * NOTE: When this fails, the CLIENT will just time out. We DO NOT want to send an error message to the client
-     * (it should check for updates or something else). We do not want to give "rogue" clients knowledge of the
-     * server, thus preventing them from trying to probe the server data structures.
-     *
-     * @return a compressed byte array of the details of all registration IDs -> Class name -> Serialization type used by kryo
-     */
-    fun getKryoRegistrationDetails(): ByteArray {
-        return savedRegistrationDetails
-    }
-
-    /**
-     * @return the details of all registration IDs for RMI iface serializer rewrites
-     */
-    fun getKryoRmiIds(): IntArray {
-        return savedKryoIdsForRmi
-    }
 
     /**
      * NOTE: When this fails, the CLIENT will just time out. We DO NOT want to send an error message to the client
@@ -560,14 +514,14 @@ open class Serialization(private val references: Boolean = true,
                 if (!serializerMatches) {
                     // JUST MAYBE this is a serializer for RMI. The client doesn't have to register for RMI stuff explicitly
                     when {
-                        serializerServer == rmiClientReverseSerializer::class.java.name -> {
-                            // this is for when the impl is on server, and iface is on client
+                        serializerServer == rmiServerSerializer::class.java.name -> {
+                            // this is for when the rmi-server is on the server, and the rmi-client is on client
 
                             // after this check, we tell the client that this ID is for RMI
                             //  This necessary because only 1 side registers RMI iface/impl info
                         }
-                        serializerClient == rmiClientReverseSerializer::class.java.name -> {
-                            // this is for when the impl is on client, and iface is on server
+                        serializerClient == rmiServerSerializer::class.java.name -> {
+                            // this is for when the rmi-server is on client, and the rmi-client is on server
 
                             // after this check, we tell MYSELF (the server) that this id is for RMI
                             //  This necessary because only 1 side registers RMI iface/impl info
@@ -605,8 +559,48 @@ open class Serialization(private val references: Boolean = true,
             input.close()
         }
 
-
         return false
+    }
+
+
+    /**
+     * Called when the kryo IDs are updated to be the RMI reverse serializer.
+     *
+     * NOTE: the IFACE must already be registered!!
+     */
+    suspend fun <CONNECTION : Connection> updateKryoIdsForRmi(connection: CONNECTION,
+                                                              rmiModificationIds: IntArray,
+                                                              onError: suspend (String) -> Unit) {
+        val typeName = connection.endPoint.type.simpleName
+
+        // store all of the classes + kryo registration IDs
+
+        rmiModificationIds.forEach {
+            if (!existingRmiIds.contains(it)) {
+                existingRmiIds.add(it)
+
+
+                // have to modify the network read kryo with the correct registration id -> serializer info. This is a GLOBAL change made on
+                // a single thread.
+                // NOTE: This change will ONLY modify the network-read kryo. This is all we need to modify. The write kryo's will already be correct
+                //   because they are set on initialization
+
+                val registration = globalKryo.getRegistration(it)
+                val regMessage = "$typeName-side RMI serializer for registration $it -> ${registration.type}"
+
+                if (registration.type.isInterface) {
+                    logger.debug { "Modifying $regMessage" }
+
+                    // RMI must be with an interface. If it's not an interface then something is wrong
+                    registration.serializer = rmiServerSerializer
+                } else {
+                    // note: one way that this can be called is when BOTH the client + server register the same way for RMI IDs. When
+                    //   the endpoint serialization is initialized, we also add the RMI IDs to this list, so we don't have to worry about this specific
+                    //   scenario
+                    onError("Ignoring unsafe modification of $regMessage")
+                }
+            }
+        }
     }
 
     /**
@@ -631,11 +625,14 @@ open class Serialization(private val references: Boolean = true,
     fun getKryoIdForRmiClient(interfaceClass: Class<*>): Int {
         require (interfaceClass.isInterface) { "Can only get the kryo IDs for RMI on an interface!" }
 
-        // if we are the RMI-server, we kryo-register the impl
-        // if we are the RMI-client, we kryo-register the iface (this is us! This method is only called on the rmi-client)
+        // BI-DIRECTIONAL RMI -- WILL NOT CALL THIS METHOD!
 
-        // for RMI, we store the IMPL class in the class registration -- not the iface!
-        return classResolver.getRegistration(interfaceClass).id
+        // the rmi-server will have iface+impl id's
+        // the rmi-client will have iface id's
+
+        val id = rmiHolder.ifaceToId[interfaceClass]!!
+        require(id != INVALID_KRYO_ID) { "Registration for $interfaceClass is invalid!!" }
+        return id
     }
 
     /**
@@ -645,17 +642,19 @@ open class Serialization(private val references: Boolean = true,
      */
     fun createRmiObject(interfaceClassId: Int, objectParameters: Array<Any?>?): Any {
         try {
-            if (objectParameters == null) {
-                return rmiIfaceToInstantiator[interfaceClassId].newInstance()
+            if (objectParameters.isNullOrEmpty()) {
+                // simple, easy, fast.
+                return rmiHolder.idToInstantiator[interfaceClassId].newInstance()
             }
 
-            val size = objectParameters.size
-
             // we have to get the constructor for this object.
-            val clazz = classResolver.getRegistration(interfaceClassId).type
-            val constructors = clazz.declaredConstructors
+            val clazz: Class<*> = rmiHolder.idToImpl[interfaceClassId] ?:
+                                  return IllegalArgumentException("Cannot create RMI object for kryo interfaceClassId: $interfaceClassId (no class exists)")
+
 
             // now have to find the closest match.
+            val constructors = clazz.declaredConstructors
+            val size = objectParameters.size
             val matchedBySize = constructors.filter { it.parameterCount == size }
 
             if (matchedBySize.size == 1) {
@@ -681,7 +680,7 @@ open class Serialization(private val references: Boolean = true,
             // find the constructor with the highest match
             matchedByType.sortByDescending { it.first }
             return matchedByType[0].second.newInstance(*objectParameters)
-        } catch(e: Exception) {
+        } catch (e: Exception) {
             return e
         }
     }
@@ -691,15 +690,6 @@ open class Serialization(private val references: Boolean = true,
      */
     fun getMethods(classId: Int): Array<CachedMethod> {
         return methodCache[classId]
-    }
-
-    /**
-     * @return true if our initialization is complete. Some registrations (in the property store, for example) always register for client
-     *              and server, even if in the same JVM. This only attempts to register once.
-     */
-    @Synchronized
-    fun initialized(): Boolean {
-        return initialized
     }
 
     /**
@@ -786,36 +776,6 @@ open class Serialization(private val references: Boolean = true,
             } finally {
                 kryo.isRegistrationRequired = prev
                 returnKryo(kryo)
-            }
-        }
-    }
-
-    suspend fun <CONNECTION: Connection> updateKryoIdsForRmi(connection: CONNECTION, rmiModificationIds: IntArray, onError: suspend (String) -> Unit) {
-        val typeName = connection.endPoint.type.simpleName
-
-        rmiModificationIds.forEach {
-            if (!existingRmiIds.contains(it)) {
-                existingRmiIds.add(it)
-
-                // have to modify the network read kryo with the correct registration id -> serializer info. This is a GLOBAL change made on
-                // a single thread.
-                // NOTE: This change will ONLY modify the network-read kryo. This is all we need to modify. The write kryo's will already be correct
-
-                val registration = globalKryo.getRegistration(it)
-                val regMessage = "$typeName-side RMI serializer for registration $it -> ${registration.type}"
-
-                if (registration.type.isInterface) {
-                    logger.debug {
-                        "Modifying $regMessage"
-                    }
-                    // RMI must be with an interface. If it's not an interface then something is wrong
-                    registration.serializer = rmiClientReverseSerializer
-                } else {
-                    // note: one way that this can be called is when BOTH the client + server register the same way for RMI IDs. When
-                    //   the endpoint serialization is initialized, we also add the RMI IDs to this list, so we don't have to worry about this specific
-                    //   scenario
-                    onError("Attempting an unsafe modification of $regMessage")
-                }
             }
         }
     }

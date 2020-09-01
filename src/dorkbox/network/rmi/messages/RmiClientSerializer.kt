@@ -47,6 +47,8 @@ import java.lang.reflect.Proxy
  *  rmi-client: send proxy -> RmiIfaceSerializer -> network -> RmiIfaceSerializer -> impl object (rmi-server)
  *  rmi-server: send impl -> RmiImplSerializer -> network -> RmiImplSerializer -> proxy object (rmi-client)
  *
+ *  rmi-server MUST registerRmi both the iface+impl
+ *
  *  During the handshake, if the impl object 'lives' on the CLIENT, then the client must tell the server that the iface ID must use this serializer.
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */

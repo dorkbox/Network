@@ -49,8 +49,4 @@ class TimeoutException : IOException {
     constructor(message: String?, cause: Throwable?) : super(message, cause) {}
     constructor(message: String?) : super(message) {}
     constructor(cause: Throwable?) : super(cause) {}
-
-    companion object {
-        private const val serialVersionUID = -3526277240277423682L
-    }
 }

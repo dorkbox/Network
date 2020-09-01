@@ -40,6 +40,7 @@ import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.serialization.KryoExtra
+import dorkbox.network.serialization.Serialization.Companion.INVALID_KRYO_ID
 
 /**
  * This is to manage serializing RMI objects across the wire...
@@ -65,33 +66,60 @@ import dorkbox.network.serialization.KryoExtra
  *  rmi-client: send proxy -> RmiIfaceSerializer -> network -> RmiIfaceSerializer -> impl object (rmi-server)
  *  rmi-server: send impl -> RmiImplSerializer -> network -> RmiImplSerializer -> proxy object (rmi-client)
  *
+ *  rmi-server MUST registerRmi both the iface+impl
+ *
  *  During the handshake, if the impl object 'lives' on the CLIENT, then the client must tell the server that the iface ID must use this serializer.
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
-class RmiClientReverseSerializer : Serializer<Any>(false) {
+class RmiServerSerializer : Serializer<Any>(false) {
 
     override fun write(kryo: Kryo, output: Output, `object`: Any) {
         val kryoExtra = kryo as KryoExtra
-        val rmiConnectionSupport = kryoExtra.connection.rmiConnectionSupport
-        // have to write what the rmi ID is ONLY. We have to find out if it's a global object or connection scope object!
+        val connection = kryoExtra.connection
+        val rmiConnectionSupport = connection.rmiConnectionSupport
 
-        // check connection scope first
-        var id = rmiConnectionSupport.getId(`object`)
+        // have to write what the rmi ID is ONLY. A remote object sent via a connection IS ONLY a connection-scope object!
 
-        // check global scope second
-        if (id == RemoteObjectStorage.INVALID_RMI) {
-            id = rmiConnectionSupport.rmiGlobalSupport.getId(`object`)
+        // check if we have saved it already
+        var rmiId = rmiConnectionSupport.getId(`object`)
+        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
+            // this means we have to save it. This object is cached so we can have an association between rmiID <-> object
+            rmiId = rmiConnectionSupport.saveImplObject(`object`)
+
+            if (rmiId == RemoteObjectStorage.INVALID_RMI) {
+                connection.logger.error("Unable to save $`object` for use as RMI!")
+            }
         }
 
-        output.writeInt(id, true)
+        output.writeInt(rmiId, true)
     }
 
-    override fun read(kryo: Kryo, input: Input, iface: Class<*>): Any? {
+    override fun read(kryo: Kryo, input: Input, interfaceClass: Class<*>): Any? {
         val kryoExtra = kryo as KryoExtra
-        val objectID = input.readInt(true)
+        val rmiId = input.readInt(true)
 
         val connection = kryoExtra.connection
-        val kryoId = connection.endPoint.serialization.getKryoIdForRmiClient(iface)
-        return connection.rmiConnectionSupport.getRemoteObject(connection, kryoId, objectID, iface)
+        val serialization = connection.endPoint.serialization
+
+        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
+            throw NullPointerException("RMI ID is invalid. Unable to use proxy object!")
+        }
+
+        // the rmi-server will have iface+impl id's
+        // the rmi-client will have iface id's
+
+        return if (interfaceClass.isInterface) {
+            // normal case. RMI only on 1 side
+            val kryoId = serialization.rmiHolder.ifaceToId[interfaceClass]!!
+            require(kryoId != INVALID_KRYO_ID) { "Registration for $interfaceClass is invalid!!" }
+            connection.rmiConnectionSupport.getProxyObject(connection, kryoId, rmiId, interfaceClass)
+        } else {
+            // BI-DIRECTIONAL RMI -- THIS IS NOT NORMAL!
+            // this won't be an interface. It will be an impl (because of how RMI is setup)
+            val kryoId = serialization.rmiHolder.implToId[interfaceClass]!!
+            require(kryoId != INVALID_KRYO_ID) { "Registration for $interfaceClass is invalid!!" }
+            val iface = serialization.rmiHolder.idToIface[kryoId]
+            connection.rmiConnectionSupport.getProxyObject(connection, kryoId, rmiId, iface)
+        }
     }
 }

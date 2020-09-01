@@ -20,6 +20,7 @@ import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.server.ServerException
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.UdpMediaDriverConnection
 import dorkbox.network.connection.connectionType.ConnectionProperties
 import dorkbox.network.connection.connectionType.ConnectionRule
@@ -530,8 +531,16 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      *
      * @see RemoteObject
      */
+    @Suppress("DuplicatedCode")
     suspend fun saveGlobalObject(`object`: Any): Int {
-        return rmiGlobalSupport.saveImplObject(`object`)
+        val rmiId = rmiGlobalSupport.saveImplObject(`object`)
+        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
+            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.notifyError(exception)
+            return rmiId
+        }
+        return rmiId
     }
 
     /**
@@ -551,7 +560,14 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      *
      * @see RemoteObject
      */
+    @Suppress("DuplicatedCode")
     suspend fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
-        return rmiGlobalSupport.saveImplObject(`object`, objectId)
+        val success = rmiGlobalSupport.saveImplObject(`object`, objectId)
+        if (!success) {
+            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.notifyError(exception)
+        }
+        return success
     }
 }

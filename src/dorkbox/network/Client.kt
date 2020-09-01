@@ -72,7 +72,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     private val previousClosedConnectionActivity: Long = 0
 
-    private val rmiConnectionSupport = RmiManagerConnections(logger, listenerManager, rmiGlobalSupport, serialization)
+    private val rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, serialization)
 
     init {
         // have to do some basic validation of our configuration
@@ -498,8 +498,17 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
+    @Suppress("DuplicatedCode")
     suspend fun saveObject(`object`: Any): Int {
-        return rmiConnectionSupport.saveImplObject(`object`)
+        val rmiId = rmiConnectionSupport.saveImplObject(`object`)
+        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
+            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.notifyError(exception)
+            return rmiId
+        }
+
+        return rmiId
     }
 
     /**
@@ -519,8 +528,15 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
+    @Suppress("DuplicatedCode")
     suspend fun saveObject(`object`: Any, objectId: Int): Boolean {
-        return rmiConnectionSupport.saveImplObject(`object`, objectId)
+        val success = rmiConnectionSupport.saveImplObject(`object`, objectId)
+        if (!success) {
+            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.notifyError(exception)
+        }
+        return success
     }
 
     /**
@@ -546,7 +562,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         val kryoId = serialization.getKryoIdForRmiClient(Iface::class.java)
 
         @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.getRemoteObject(getConnection(), kryoId, objectId, Iface::class.java)
+        return rmiConnectionSupport.getProxyObject(getConnection(), kryoId, objectId, Iface::class.java)
     }
 
     /**
@@ -630,8 +646,15 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
+    @Suppress("DuplicatedCode")
     suspend fun saveGlobalObject(`object`: Any): Int {
-        return rmiGlobalSupport.saveImplObject(`object`)
+        val rmiId = rmiGlobalSupport.saveImplObject(`object`)
+        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
+            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.notifyError(exception)
+        }
+        return rmiId
     }
 
     /**
@@ -651,8 +674,16 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
+    @Suppress("DuplicatedCode")
     suspend fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
-        return rmiGlobalSupport.saveImplObject(`object`, objectId)
+        val success = rmiGlobalSupport.saveImplObject(`object`, objectId)
+        if (!success) {
+            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.notifyError(exception)
+        }
+
+        return success
     }
 
     /**
