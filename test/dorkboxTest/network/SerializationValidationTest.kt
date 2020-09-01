@@ -20,11 +20,12 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert
 import org.junit.Test
 
 class SerializationValidationTest : BaseTest() {
     @Test
-    fun checkObjects() {
+    fun checkManyObjects() {
         run {
             val configuration = serverConfig()
             register(configuration.serialization)
@@ -51,6 +52,58 @@ class SerializationValidationTest : BaseTest() {
 
             client.onConnect { connection ->
                 connection.send(FinishedCommand())
+            }
+
+
+            runBlocking {
+                client.connect(LOOPBACK)
+            }
+        }
+
+        waitForThreads()
+    }
+
+
+    @Test
+    fun checkOutOfOrder() {
+        run {
+            val configuration = serverConfig()
+            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+            configuration.serialization.register(TestObject::class.java) // the iface is again, on purpose to verify registration order!
+
+            val server = Server<Connection>(configuration)
+            addEndPoint(server)
+
+            server.onMessage<TestObject> { connection, message ->
+                stopEndPoints()
+            }
+
+            runBlocking {
+                server.bind(false)
+            }
+        }
+
+
+        run {
+            val configuration = clientConfig()
+            configuration.serialization.register(TestObject::class.java)
+
+            val client = Client<Connection>(configuration)
+            addEndPoint(client)
+
+            client.onConnect { connection ->
+                connection.logger.error("Connected")
+                connection.createObject<TestObject> { rmiId, remoteObject ->
+                    connection.logger.error("Starting test")
+                    remoteObject.setValue(43.21f)
+
+                    // Normal remote method call.
+                    Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
+
+                    // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                    // that is where that object actually exists.
+                    connection.send(remoteObject)
+                }
             }
 
 
@@ -465,4 +518,34 @@ class SerializationValidationTest : BaseTest() {
     private class Command198
     private class Command199
     private class FinishedCommand
+
+
+    private interface TestObject {
+        suspend fun setValue(aFloat: Float)
+        fun other(): Float
+    }
+
+    private class TestObjectImpl : TestObject {
+        private var aFloat = 0f
+        override suspend fun setValue(aFloat: Float) {
+            throw RuntimeException("Whoops!")
+        }
+
+        suspend fun setValue(connection: Connection, aFloat: Float) {
+            connection.logger.error("receiving")
+            this.aFloat = aFloat
+        }
+
+        override fun other(): Float {
+            throw RuntimeException("Whoops!")
+        }
+
+        fun other(connection: Connection): Float {
+            return aFloat
+        }
+
+        override fun hashCode(): Int {
+            return 1
+        }
+    }
 }
