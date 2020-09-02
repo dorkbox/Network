@@ -25,9 +25,6 @@ import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.Client
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
-import dorkboxTest.network.rmi.RmiCommonTest
-import dorkboxTest.network.rmi.cows.TestBabyCow
-import dorkboxTest.network.rmi.cows.TestBabyCowImpl
 import dorkboxTest.network.rmi.cows.TestCow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
@@ -68,9 +65,6 @@ object TestClient {
         setup()
 
         val configuration = BaseTest.clientConfig()
-        RmiCommonTest.register(configuration.serialization)
-        configuration.serialization.registerRmi(TestBabyCow::class.java, TestBabyCowImpl::class.java)
-        configuration.serialization.register(TestCow::class.java)
         configuration.enableRemoteSignatureValidation = false
 
         val client = Client<Connection>(configuration)

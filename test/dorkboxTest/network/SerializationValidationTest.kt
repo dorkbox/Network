@@ -42,7 +42,6 @@ class SerializationValidationTest : BaseTest() {
 
         run {
             val configuration = clientConfig()
-            register(configuration.serialization)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
@@ -66,7 +65,7 @@ class SerializationValidationTest : BaseTest() {
         run {
             val configuration = serverConfig()
             configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
-            configuration.serialization.register(TestObject::class.java) // the iface is again, on purpose to verify registration order!
+            configuration.serialization.register(TestObjectImpl::class.java) // this is again, on purpose to verify registration order!
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
@@ -80,7 +79,6 @@ class SerializationValidationTest : BaseTest() {
 
         run {
             val configuration = clientConfig()
-            configuration.serialization.register(TestObject::class.java)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)

@@ -85,9 +85,6 @@ class RmiNestedTest : BaseTest() {
         run {
             val configuration = clientConfig()
 
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectAnnotImpl::class.java)
-            configuration.serialization.registerRmi(OtherObject::class.java, OtherObjectImpl::class.java)
-
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
@@ -154,8 +151,6 @@ class RmiNestedTest : BaseTest() {
 
         run {
             val configuration = clientConfig()
-            configuration.serialization.register(TestObject::class.java)
-            configuration.serialization.register(OtherObject::class.java)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
@@ -223,8 +218,6 @@ class RmiNestedTest : BaseTest() {
 
         run {
             val configuration = clientConfig()
-            configuration.serialization.register(TestObject::class.java)
-            configuration.serialization.register(OtherObjectImpl::class.java)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)

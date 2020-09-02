@@ -39,6 +39,7 @@ import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
+import dorkboxTest.network.rmi.cows.TestCowImpl
 import org.junit.Assert
 
 object RmiCommonTest {
@@ -141,10 +142,9 @@ object RmiCommonTest {
         connection.logger.error("Finished tests")
     }
 
-    fun register(manager: Serialization) {
-//        manager.register(Any::class.java) // Needed for Object#toString, hashCode, etc.
-        manager.register(TestCow::class.java)
-        manager.register(MessageWithTestCow::class.java)
-        manager.register(UnsupportedOperationException::class.java)
+    fun register(serialization: Serialization) {
+        serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+        serialization.register(MessageWithTestCow::class.java)
+        serialization.register(UnsupportedOperationException::class.java)
     }
 }

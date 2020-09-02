@@ -81,12 +81,12 @@ abstract class BaseTest {
             jc.context = context
             context.reset() // override default configuration
 
-//        rootLogger.setLevel(Level.OFF);
+//        rootLogger.setLevel(Level.OFF)
 
-        rootLogger.level = Level.INFO;
-//        rootLogger.level = Level.TRACE;
+//        rootLogger.level = Level.INFO
+        rootLogger.level = Level.TRACE
 //            rootLogger.level = Level.DEBUG
-//        rootLogger.level = Level.ALL;
+//        rootLogger.level = Level.ALL
 
 
             // we only want error messages

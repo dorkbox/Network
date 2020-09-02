@@ -38,11 +38,9 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
-import dorkbox.util.exceptions.SecurityException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
-import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
 class PingPongTest : BaseTest() {
@@ -51,7 +49,6 @@ class PingPongTest : BaseTest() {
     var tries = 1000
 
     @Test
-    @Throws(SecurityException::class, IOException::class)
     fun pingPong() {
         fail = "Data not received."
         val data = Data()
@@ -84,7 +81,6 @@ class PingPongTest : BaseTest() {
 
         run {
             val config = clientConfig()
-            register(config.serialization)
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)

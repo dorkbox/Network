@@ -69,7 +69,6 @@ class RmiDelayedInvocationTest : BaseTest() {
         run {
             val configuration = clientConfig()
             config(configuration)
-            register(configuration.serialization)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)

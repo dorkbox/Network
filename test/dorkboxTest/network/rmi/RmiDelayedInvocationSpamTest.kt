@@ -15,16 +15,21 @@
  */
 package dorkboxTest.network.rmi
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.joran.JoranConfigurator
 import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
-import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert
+import org.junit.Before
 import org.junit.Test
+import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicLong
 
 class RmiDelayedInvocationSpamTest : BaseTest() {
@@ -33,6 +38,32 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
     private val RMI_ID = 12251
 
     var async = true
+
+    @Before
+    fun setupLogBefore() {
+        // assume SLF4J is bound to logback in the current environment
+        val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
+        val context = rootLogger.loggerContext
+        val jc = JoranConfigurator()
+        jc.context = context
+        context.reset() // override default configuration
+
+        // the logger cannot keep-up if it's on trace
+        rootLogger.level = Level.DEBUG
+    }
+
+    @After
+    fun setupLogAfter() {
+        // assume SLF4J is bound to logback in the current environment
+        val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
+        val context = rootLogger.loggerContext
+        val jc = JoranConfigurator()
+        jc.context = context
+        context.reset() // override default configuration
+
+        // the logger cannot keep-up if it's on trace
+        rootLogger.level = Level.TRACE
+    }
 
     @Test
     fun rmiNetwork() {
@@ -70,10 +101,6 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
         }
     }
 
-    fun register(serialization: Serialization) {
-        serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
-    }
-
     /**
      * In this test the server has two objects in an object space. The client
      * uses the first remote object to get the second remote object.
@@ -87,7 +114,8 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
         run {
             val configuration = serverConfig()
             config(configuration)
-            register(configuration.serialization)
+
+            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
 
             server = Server(configuration)
             addEndPoint(server)
@@ -100,7 +128,6 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
         run {
             val configuration = clientConfig()
             config(configuration)
-            register(configuration.serialization)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)

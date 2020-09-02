@@ -78,9 +78,6 @@ class RmiSimpleTest : BaseTest() {
             config(configuration)
             RmiCommonTest.register(configuration.serialization)
 
-            // for Client -> Server RMI
-            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
-
             val server = Server<Connection>(configuration)
             addEndPoint(server)
             server.bind()
@@ -105,10 +102,6 @@ class RmiSimpleTest : BaseTest() {
         run {
             val configuration = clientConfig()
             config(configuration)
-            RmiCommonTest.register(configuration.serialization)
-
-            // for Server -> Client RMI
-            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
@@ -173,10 +166,7 @@ class RmiSimpleTest : BaseTest() {
         run {
             val configuration = clientConfig()
             config(configuration)
-            RmiCommonTest.register(configuration.serialization)
 
-            // for Server -> Client RMI
-            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
