@@ -22,6 +22,7 @@ import com.esotericsoftware.kryo.SerializerFactory
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
+import com.esotericsoftware.minlog.Log
 import dorkbox.network.connection.Connection
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.rmi.CachedMethod
@@ -81,6 +82,10 @@ open class Serialization(private val references: Boolean = true, private val fac
     companion object {
         // -2 is the same value that kryo uses for invalid id's
         const val INVALID_KRYO_ID = -2
+
+        init {
+            Log.set(Log.LEVEL_ERROR)
+        }
     }
 
     private lateinit var logger: KLogger
@@ -568,9 +573,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      *
      * NOTE: the IFACE must already be registered!!
      */
-    fun <CONNECTION : Connection> updateKryoIdsForRmi(connection: CONNECTION,
-                                                      rmiModificationIds: IntArray,
-                                                      onError: (String) -> Unit) {
+    fun <CONNECTION : Connection> updateKryoIdsForRmi(connection: CONNECTION, rmiModificationIds: IntArray, onError: (String) -> Unit) {
         val typeName = connection.endPoint.type.simpleName
 
         // store all of the classes + kryo registration IDs
@@ -622,7 +625,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      * Returns the Kryo class registration ID. This is ALWAYS called on the client!
      */
     fun getKryoIdForRmiClient(interfaceClass: Class<*>): Int {
-        require (interfaceClass.isInterface) { "Can only get the kryo IDs for RMI on an interface!" }
+        require(interfaceClass.isInterface) { "Can only get the kryo IDs for RMI on an interface!" }
 
         // BI-DIRECTIONAL RMI -- WILL NOT CALL THIS METHOD!
 
