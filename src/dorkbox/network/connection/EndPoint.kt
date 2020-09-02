@@ -60,7 +60,7 @@ import java.io.File
  *
  * @throws SecurityException if unable to initialize/generate ECC keys
 */
-abstract class EndPoint<CONNECTION: Connection>
+abstract class EndPoint<CONNECTION : Connection>
 internal constructor(val type: Class<*>, internal val config: Configuration) : AutoCloseable {
     protected constructor(config: Configuration) : this(Client::class.java, config)
     protected constructor(config: ServerConfiguration) : this(Server::class.java, config)
@@ -265,8 +265,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             .aeronDirectoryName(config.aeronLogDirectory!!.absolutePath)
             .concludeAeronDirectory()
 
-        mDrivercontext.ipcTermBufferLength(16 * 1024 * 1024) // default: 64 megs each is HUGE
-        mDrivercontext.publicationTermBufferLength(4 * 1024 * 1024) // default: 16 megs each is HUGE (we run out of space in production w/ lots of clients)
+        if (mDrivercontext.ipcTermBufferLength() != io.aeron.driver.Configuration.ipcTermBufferLength()) {
+            // default 64 megs each is HUGE
+            mDrivercontext.ipcTermBufferLength(16 * 1024 * 1024)
+        }
+
+        if (mDrivercontext.publicationTermBufferLength() != io.aeron.driver.Configuration.termBufferLength()) {
+            // default 16 megs each is HUGE (we run out of space in production w/ lots of clients)
+            mDrivercontext.publicationTermBufferLength(4 * 1024 * 1024)
+        }
 
         mediaDriverContext = mDrivercontext
 
@@ -292,8 +299,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal fun initEndpointState(): Aeron {
         val aeronDirectory = config.aeronLogDirectory!!.absolutePath
 
-        if (!isRunning()) {
-            // the server always creates a media driver.
+        if (type == Server::class.java || !isRunning()) {
+            // the server always creates a the media driver.
             mediaDriver = try {
                 MediaDriver.launch(mediaDriverContext)
             } catch (e: Exception) {
@@ -488,8 +495,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                listenerManager.notifyError(
-                        newException("[${publication.sessionId()}] Error sending handshake message. $message (${errorCodeName(result)})"))
+                listenerManager.notifyError(newException("[${publication.sessionId()}] Error sending handshake message. $message (${
+                    errorCodeName(result)
+                })"))
                 return
             }
         } catch (e: Exception) {
