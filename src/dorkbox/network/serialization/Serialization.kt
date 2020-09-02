@@ -228,14 +228,22 @@ open class Serialization(private val references: Boolean = true, private val fac
      *
      * This is NOT bi-directional, and this endpoint cannot access or create remote objects on the "remote client".
      *
+     * @param ifaceClass this must be the interface class used for RMI
+     * @param implClass this must be the implementation class used for RMI
+     *          If *null* it means that this endpoint is the rmi-client
+     *          If *not-null* it means that this endpoint is the rmi-server
+     *
      * @throws IllegalArgumentException if the iface/impl have previously been overridden
      */
     @Synchronized
-    fun <Iface, Impl : Iface> registerRmi(ifaceClass: Class<Iface>, implClass: Class<Impl>): Serialization {
+    fun <Iface, Impl : Iface> registerRmi(ifaceClass: Class<Iface>, implClass: Class<Impl>? = null): Serialization {
         require(!initialized.value) { "Serialization 'registerRmi(Class, Class)' cannot happen after client/server initialization!" }
 
         require(ifaceClass.isInterface) { "Cannot register an implementation for RMI access. It must be an interface." }
-        require(!implClass.isInterface) { "Cannot register an interface for RMI implementations. It must be an implementation." }
+
+        if (implClass != null) {
+            require(!implClass.isInterface) { "Cannot register an interface for RMI implementations. It must be an implementation." }
+        }
 
         classesToRegister.add(ClassRegistrationForRmi(ifaceClass, implClass, rmiServerSerializer))
         return this
@@ -332,7 +340,6 @@ open class Serialization(private val references: Boolean = true, private val fac
                 return true
             }
 
-            require(classesToRegister.isEmpty()) { "Unable to initialize a non-empty class registration state! Make sure there are no serialization registrations for the client!" }
             initializeClient(kryoRegistrationDetailsFromServer)
         }
     }
@@ -459,7 +466,18 @@ open class Serialization(private val references: Boolean = true, private val fac
 
     @Suppress("UNCHECKED_CAST")
     private fun initializeClient(kryoRegistrationDetailsFromServer: ByteArray): Boolean {
-        val kryo = initKryo()
+        // we have to allow CUSTOM classes to register (where the order does not matter), so that if the CLIENT is the RMI-SERVER, it can
+        // specify IMPL classes for RMI.
+        classesToRegister.forEach { registration ->
+            require(registration is ClassRegistrationForRmi) { "Unable to initialize a class registrations for anything OTHER than RMI!! To fix this, remove ${registration.clazz}" }
+        }
+        val classesToRegisterForRmi = listOf(*classesToRegister.toTypedArray()) as List<ClassRegistrationForRmi>
+        classesToRegister.clear()
+
+
+
+
+        var kryo = initKryo()
         val input = AeronInput(kryoRegistrationDetailsFromServer)
         val clientClassRegistrations = kryo.readCompressed(logger, input, kryoRegistrationDetailsFromServer.size) as Array<Array<Any>>
 
@@ -486,16 +504,18 @@ open class Serialization(private val references: Boolean = true, private val fac
                         // we literally want everything to be 100% the same.
                         // the only WEIRD case is when the client == rmi-server (in which case, the IMPL object is on the client)
                         // for this, the server (rmi-client) WILL ALSO have the same registration info. (bi-directional RMI, but not really)
-                        val implClazzName = bytes[4] as String
-                        var implClass: Class<*>? = null
+                        val implClassName = bytes[4] as String
+                        var implClass: Class<*>? = classesToRegisterForRmi.firstOrNull { it.clazz.name == clazzName }?.implClass
 
-                        if (implClazzName.isNotEmpty()) {
+                        // if we do not have the impl class specified by the registrations for RMI, then do a lookup to see if we have access to it as the client
+                        if (implClass == null) {
                             try {
-                                implClass = Class.forName(implClazzName)
+                                implClass = Class.forName(implClassName)
                             } catch (ignored: Exception) {
                             }
                         }
 
+                        // implClass MIGHT BE NULL!
                         classesToRegister.add(ClassRegistrationForRmi(clazz, implClass, rmiServerSerializer))
 
                     }
@@ -512,11 +532,8 @@ open class Serialization(private val references: Boolean = true, private val fac
         // we have to re-init so the registrations are set!
         initKryo()
 
-        // now do a round-trip through the server serialization to make sure our byte arrays are THE SAME.
-        initializeClassRegistrations()
-
-        // verify the registration ID data is THE SAME!
-        return savedRegistrationDetails.contentEquals(kryoRegistrationDetailsFromServer)
+        // now do a round-trip through the class registrations
+        return initializeClassRegistrations()
     }
 
     /**

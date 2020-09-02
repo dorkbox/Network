@@ -63,7 +63,7 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
         // otherwise, we are OK to continue to register this
         register(kryo)
 
-        if (serializer != null && overriddenSerializer != serializer) {
+        if (serializer != null && overriddenSerializer != null && overriddenSerializer != serializer) {
             info = "$info (Replaced $overriddenSerializer)"
         }
 

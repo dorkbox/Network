@@ -45,7 +45,7 @@ import dorkbox.network.rmi.messages.RmiServerSerializer
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
 internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
-                                       val implClass: Class<*>?,
+                                       var implClass: Class<*>?,
                                        serializer: RmiServerSerializer) : ClassRegistration(ifaceClass, serializer) {
     /**
      * In general:
@@ -106,21 +106,55 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
     override fun register(kryo: KryoExtra, rmi: RmiHolder) {
         // we override this, because we ALWAYS will call our RMI registration!
 
-        // have to get the ID for the interface (if it exists)
-        val registration = kryo.classResolver.getRegistration(clazz) // this is ifaceClass, and must match what is defined on the rmi client
-        if (registration != null) {
-            id = registration.id
+        if (implClass == null) {
+            // this means we are the RMI-CLIENT
 
-            // override that registration
-            kryo.register(implClass, serializer, id)
-        } else {
-            // now register the impl class
-            id = kryo.register(implClass, serializer).id
+            // see if we have the IMPL registered? NOT LIKELY, but possible
+            val existingId = rmi.ifaceToId[clazz]
+            if (existingId != null) {
+                implClass = rmi.idToImpl[existingId]
+            }
+
+            if (implClass == null) {
+                // then we just register the interface class!
+
+                val registration = kryo.classResolver.getRegistration(clazz)
+                if (registration != null) {
+                    id = registration.id
+
+                    // override that registration
+                    kryo.register(clazz, serializer, id)
+                }
+                else {
+                    // just register the iface class
+                    id = kryo.register(clazz, serializer).id
+                }
+            }
         }
+
+
+        if (implClass != null) {
+            // this means we are the RMI-SERVER
+            val registration = kryo.classResolver.getRegistration(implClass) // we cannot register iface classes!
+            if (registration != null) {
+                id = registration.id
+
+                // override that registration
+                kryo.register(implClass, serializer, id)
+            }
+            else {
+                // now register the impl class
+                id = kryo.register(implClass, serializer).id
+            }
+        }
+
+
+
+        // have to get the ID for the interface (if it exists)
         info = if (implClass == null) {
             "Registered $id -> (RMI-CLIENT) ${clazz.name}"
         } else {
-            "Registered $id -> (RMI-SERVER) ${clazz.name}  ->  ${implClass.name}"
+            "Registered $id -> (RMI-SERVER) ${clazz.name}  ->  ${implClass!!.name}"
         }
 
         // now, we want to save the relationship between classes and kryoId
@@ -128,8 +162,10 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
         rmi.idToIface[id] = clazz
 
         // we have to know what the IMPL class is so we can create it for a "createObject" RMI command
-        rmi.implToId[implClass] = id
-        rmi.idToImpl[id] = implClass
+        if (implClass != null) {
+            rmi.implToId[implClass] = id
+            rmi.idToImpl[id] = implClass
+        }
     }
 
     override fun getInfoArray(): Array<Any> {
@@ -137,7 +173,7 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
         return if (implClass == null) {
             arrayOf(4, id, clazz.name, serializer!!::class.java.name, "")
         } else {
-            arrayOf(4, id, clazz.name, serializer!!::class.java.name, implClass.name)
+            arrayOf(4, id, clazz.name, serializer!!::class.java.name, implClass!!.name)
         }
     }
 }
