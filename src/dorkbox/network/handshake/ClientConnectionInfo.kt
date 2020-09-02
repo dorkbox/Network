@@ -20,5 +20,5 @@ internal class ClientConnectionInfo(val subscriptionPort: Int = 0,
                                     val sessionId: Int,
                                     val streamId: Int = 0,
                                     val publicKey: ByteArray = ByteArray(0),
-                                    val kryoIdsForRmi: IntArray) {
+                                    val kryoRegistrationDetails: ByteArray) {
 }

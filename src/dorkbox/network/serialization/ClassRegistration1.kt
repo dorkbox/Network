@@ -22,6 +22,6 @@ internal class ClassRegistration1(clazz: Class<*>, id: Int) : ClassRegistration(
     }
 
     override fun getInfoArray(): Array<Any> {
-        return arrayOf(id, clazz.name, "")
+        return arrayOf(1, id, clazz.name, "")
     }
 }

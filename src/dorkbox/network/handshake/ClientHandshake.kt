@@ -91,18 +91,14 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
                     val sessionId = cryptInput.readInt()
                     val streamSubId = cryptInput.readInt()
                     val streamPubId = cryptInput.readInt()
-
-                    val rmiIds = mutableListOf<Int>()
-                    val rmiIdSize = cryptInput.readInt()
-                    for (i in 0 until rmiIdSize) {
-                        rmiIds.add(cryptInput.readInt())
-                    }
+                    val regDetailsSize = cryptInput.readInt()
+                    val regDetails = cryptInput.readBytes(regDetailsSize)
 
                     // now read data off
                     connectionHelloInfo = ClientConnectionInfo(sessionId = sessionId,
                                                                subscriptionPort = streamSubId,
                                                                publicationPort = streamPubId,
-                                                               kryoIdsForRmi = rmiIds.toIntArray())
+                                                               kryoRegistrationDetails = regDetails)
                 }
                 HandshakeMessage.DONE_ACK -> {
                     connectionDone = true
@@ -120,16 +116,12 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
     }
 
     suspend fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {
-        val registrationMessage = HandshakeMessage.helloFromClient(
-                oneTimePad = oneTimePad,
-                publicKey = config.settingsStore.getPublicKey()!!,
-                registrationData = config.serialization.getKryoRegistrationDetails(),
-                registrationRmiIdData = config.serialization.getKryoRmiIds()
-        )
+        val registrationMessage = HandshakeMessage.helloFromClient(oneTimePad, config.settingsStore.getPublicKey()!!)
 
 
         // Send the one-time pad to the server.
         endPoint.writeHandshakeMessage(handshakeConnection.publication, registrationMessage)
+        endPoint.serialization.takeKryo() // TAKE THE KRYO BACK OFF! We don't want it on the pool yet, since this kryo hasn't had all of the classes registered yet!
         sessionId = handshakeConnection.publication.sessionId()
 
 

@@ -32,7 +32,9 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
      * If this class registration will EVENTUALLY be for RMI, then [ClassRegistrationForRmi] will reassign the serializer
      */
     open fun register(kryo: KryoExtra, rmi: RmiHolder) {
-        val savedKryoId: Int? = rmi.ifaceToId[clazz]
+        // ClassRegistrationForRmi overrides this method
+
+        val savedKryoId: Int? = rmi.implToId[clazz] // ALL registrations MUST BE IMPL!
 
         var overriddenSerializer: Serializer<Any>? = null
 
@@ -53,7 +55,7 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
                     return
                 }
                 else -> {
-                    // mark that this was overridden!
+                    // We didn't do anything.
                 }
             }
         }
@@ -61,7 +63,7 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
         // otherwise, we are OK to continue to register this
         register(kryo)
 
-        if (overriddenSerializer != null) {
+        if (serializer != null && overriddenSerializer != serializer) {
             info = "$info (Replaced $overriddenSerializer)"
         }
 

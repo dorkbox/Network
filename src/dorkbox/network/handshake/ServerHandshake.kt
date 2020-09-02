@@ -123,6 +123,50 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         return true
     }
 
+    /**
+     * @return true if we should continue parsing the incoming message, false if we should abort
+     */
+    private fun validateConnectionInfo(server: Server<CONNECTION>,
+                                       handshakePublication: Publication,
+                                       config: ServerConfiguration,
+                                       clientAddressString: String,
+                                       clientAddress: Int): Boolean {
+
+        try {
+            // VALIDATE:: Check to see if there are already too many clients connected.
+            if (server.connections.connectionCount() >= config.maxClientCount) {
+                listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}"))
+
+                server.actionDispatch.launch {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
+                }
+                return false
+            }
+
+            // VALIDATE:: we are now connected to the client and are going to create a new connection.
+            val currentCountForIp = connectionsPerIpCounts.getAndIncrement(clientAddress)
+            if (currentCountForIp >= config.maxConnectionsPerIpAddress) {
+                // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
+                connectionsPerIpCounts.getAndDecrement(clientAddress)
+
+                listenerManager.notifyError(ClientRejectedException("Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}"))
+                server.actionDispatch.launch {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Too many connections for IP address"))
+                }
+
+                return false
+            }
+        } catch (e: Exception) {
+            listenerManager.notifyError(ClientRejectedException("could not validate client message", e))
+            server.actionDispatch.launch {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
+            }
+            return false
+        }
+
+        return true
+    }
+
 
     // note: CANNOT be called in action dispatch
     fun processHandshakeMessageServer(server: Server<CONNECTION>,
@@ -139,12 +183,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         message as HandshakeMessage
 
         val serialization = config.serialization
-
-        // VALIDATE:: make sure the serialization matches between the client/server!
-        if (!serialization.verifyKryoRegistration(message.registrationData!!)) {
-            listenerManager.notifyError(ClientRejectedException("Connection from $connectionString not allowed! Registration data mismatch."))
-            return
-        }
 
 
         /////
@@ -235,17 +273,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             }
 
 
-            ///////////////
-            ////   RMI
-            ///////////////
-
-            // if necessary (and only for RMI id's that have never been seen before) we want to re-write our kryo information
-            // NOTE: This modifies the readKryo! This cannot be on a different thread!
-            serialization.updateKryoIdsForRmi(connection, message.registrationRmiIdData!!) { errorMessage ->
-                listenerManager.notifyError(connection,
-                                            ClientRejectedException(errorMessage))
-            }
-
 
 
             ///////////////
@@ -267,11 +294,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             cryptOutput.writeInt(connectionStreamSubId)
             cryptOutput.writeInt(connectionStreamPubId)
 
-            val kryoRmiIds = serialization.getKryoRmiIds()
-            cryptOutput.writeInt(kryoRmiIds.size)
-            kryoRmiIds.forEach {
-                cryptOutput.writeInt(it)
-            }
+            val regDetails = serialization.getKryoRegistrationDetails()
+            cryptOutput.writeInt(regDetails.size)
+            cryptOutput.writeBytes(regDetails)
 
             successMessage.registrationData = cryptOutput.toBytes()
 
@@ -314,51 +339,16 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         val validateRemoteAddress: PublicKeyValidationState
         val serialization = config.serialization
 
-        try {
-            // VALIDATE:: Check to see if there are already too many clients connected.
-            if (server.connections.connectionCount() >= config.maxClientCount) {
-                listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}"))
-
-                server.actionDispatch.launch {
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
-                }
-                return
-            }
-
-            // VALIDATE:: check to see if the remote connection's public key has changed!
-            validateRemoteAddress = server.crypto.validateRemoteAddress(clientAddress, clientPublicKeyBytes)
-            if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
-                listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Public key mismatch."))
-                return
-            }
-
-            // VALIDATE:: make sure the serialization matches between the client/server!
-            if (!serialization.verifyKryoRegistration(message.registrationData!!)) {
-                listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Registration data mismatch."))
-                return
-            }
-
-            // VALIDATE:: we are now connected to the client and are going to create a new connection.
-            val currentCountForIp = connectionsPerIpCounts.getAndIncrement(clientAddress)
-            if (currentCountForIp >= config.maxConnectionsPerIpAddress) {
-                // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
-                connectionsPerIpCounts.getAndDecrement(clientAddress)
-
-                listenerManager.notifyError(ClientRejectedException("Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}"))
-                server.actionDispatch.launch {
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Too many connections for IP address"))
-                }
-
-                return
-            }
-        } catch (e: Exception) {
-            listenerManager.notifyError(ClientRejectedException("could not validate client message", e))
-            server.actionDispatch.launch {
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
-            }
+        // VALIDATE:: check to see if the remote connection's public key has changed!
+        validateRemoteAddress = server.crypto.validateRemoteAddress(clientAddress, clientPublicKeyBytes)
+        if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
+            listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Public key mismatch."))
             return
         }
 
+        if (!validateConnectionInfo(server, handshakePublication, config, clientAddressString, clientAddress)) {
+            return
+        }
 
 
         /////
@@ -449,19 +439,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
 
             ///////////////
-            ////   RMI
-            ///////////////
-
-            // if necessary (and only for RMI id's that have never been seen before) we want to re-write our kryo information
-            // NOTE: This modifies the readKryo! This cannot be on a different thread!
-            serialization.updateKryoIdsForRmi(connection, message.registrationRmiIdData!!) { errorMessage ->
-                listenerManager.notifyError(connection,
-                                            ClientRejectedException(errorMessage))
-            }
-
-
-
-            ///////////////
             ///  HANDSHAKE
             ///////////////
 
@@ -471,7 +448,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             val successMessage = HandshakeMessage.helloAckToClient(sessionId)
 
 
-            // if necessary, we also send the kryo RMI id's that are registered as RMI on this endpoint, but maybe not on the other endpoint
+            // Also send the RMI registration data to the client (so the client doesn't register anything)
 
             // now create the encrypted payload, using ECDH
             successMessage.registrationData = server.crypto.encrypt(clientPublicKeyBytes!!,
@@ -479,7 +456,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                                                     subscriptionPort,
                                                                     connectionSessionId,
                                                                     connectionStreamId,
-                                                                    serialization.getKryoRmiIds())
+                                                                    serialization.getKryoRegistrationDetails())
 
             successMessage.publicKey = server.crypto.publicKeyBytes
 

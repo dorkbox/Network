@@ -25,6 +25,6 @@ internal class ClassRegistration2(clazz: Class<*>, serializer: Serializer<*>, id
     }
 
     override fun getInfoArray(): Array<Any> {
-        return arrayOf(id, clazz.name, serializer!!::class.java.name)
+        return arrayOf(2, id, clazz.name, serializer!!::class.java.name)
     }
 }

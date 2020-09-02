@@ -188,7 +188,7 @@ internal class CryptoManagement(val logger: KLogger,
                 subscriptionPort: Int,
                 connectionSessionId: Int,
                 connectionStreamId: Int,
-                kryoRmiIds: IntArray): ByteArray {
+                kryoRegDetails: ByteArray): ByteArray {
 
         val secretKeySpec = generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, publicKeyBytes)
         secureRandom.nextBytes(iv)
@@ -200,10 +200,8 @@ internal class CryptoManagement(val logger: KLogger,
         cryptOutput.writeInt(connectionStreamId)
         cryptOutput.writeInt(publicationPort)
         cryptOutput.writeInt(subscriptionPort)
-        cryptOutput.writeInt(kryoRmiIds.size)
-        kryoRmiIds.forEach {
-            cryptOutput.writeInt(it)
-        }
+        cryptOutput.writeInt(kryoRegDetails.size)
+        cryptOutput.writeBytes(kryoRegDetails)
 
         return iv + aesCipher.doFinal(cryptOutput.toBytes())
     }
@@ -234,12 +232,8 @@ internal class CryptoManagement(val logger: KLogger,
         val streamId = cryptInput.readInt()
         val publicationPort = cryptInput.readInt()
         val subscriptionPort = cryptInput.readInt()
-
-        val rmiIds = mutableListOf<Int>()
-        val rmiIdSize = cryptInput.readInt()
-        for (i in 0 until rmiIdSize) {
-            rmiIds.add(cryptInput.readInt())
-        }
+        val regDetailsSize = cryptInput.readInt()
+        val regDetails = cryptInput.readBytes(regDetailsSize)
 
         // now read data off
         return ClientConnectionInfo(sessionId = sessionId,
@@ -247,7 +241,7 @@ internal class CryptoManagement(val logger: KLogger,
                                     publicationPort = publicationPort,
                                     subscriptionPort = subscriptionPort,
                                     publicKey = serverPublicKeyBytes,
-                                    kryoIdsForRmi = rmiIds.toIntArray())
+                                    kryoRegistrationDetails = regDetails)
     }
 
     override fun hashCode(): Int {

@@ -281,6 +281,23 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         // throws a ConnectTimedOutException if the client cannot connect for any reason to the server-assigned client ports
         logger.info(reliableClientConnection.clientInfo())
 
+
+        ///////////////
+        ////   RMI
+        ///////////////
+
+        // we setup our kryo information once we connect to a server (using the server's kryo registration details)
+        if (!serialization.finishInit(type, settingsStore, connectionInfo.kryoRegistrationDetails)) {
+            handshakeConnection.close()
+
+            // because we are getting the class registration details from the SERVER, this should never be the case.
+            // It is still and edge case where the reconstruction of the registration details fails (maybe because of custom serializers)
+            val exception = ClientRejectedException("Connection to $remoteAddress has incorrect class registration details!!")
+            listenerManager.notifyError(exception)
+            throw exception
+        }
+
+
         val newConnection = if (isIpcConnection) {
             newConnection(ConnectionParams(this, reliableClientConnection, PublicKeyValidationState.VALID))
         } else {
@@ -295,16 +312,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             val exception = ClientRejectedException("Connection to $remoteAddress was not permitted!")
             listenerManager.notifyError(exception)
             throw exception
-        }
-
-        ///////////////
-        ////   RMI
-        ///////////////
-
-        // if necessary (and only for RMI id's that have never been seen before) we want to re-write our kryo information
-        serialization.updateKryoIdsForRmi(newConnection, connectionInfo.kryoIdsForRmi) { errorMessage ->
-            listenerManager.notifyError(newConnection,
-                                        ClientRejectedException(errorMessage))
         }
 
         //////////////
@@ -515,7 +522,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @see RemoteObject
      */
     @Suppress("DuplicatedCode")
-    suspend fun saveObject(`object`: Any): Int {
+    fun saveObject(`object`: Any): Int {
         val rmiId = rmiConnectionSupport.saveImplObject(`object`)
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
@@ -545,7 +552,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @see RemoteObject
      */
     @Suppress("DuplicatedCode")
-    suspend fun saveObject(`object`: Any, objectId: Int): Boolean {
+    fun saveObject(`object`: Any, objectId: Int): Boolean {
         val success = rmiConnectionSupport.saveImplObject(`object`, objectId)
         if (!success) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
@@ -663,7 +670,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @see RemoteObject
      */
     @Suppress("DuplicatedCode")
-    suspend fun saveGlobalObject(`object`: Any): Int {
+    fun saveGlobalObject(`object`: Any): Int {
         val rmiId = rmiGlobalSupport.saveImplObject(`object`)
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
@@ -691,7 +698,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @see RemoteObject
      */
     @Suppress("DuplicatedCode")
-    suspend fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
+    fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
         val success = rmiGlobalSupport.saveImplObject(`object`, objectId)
         if (!success) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")

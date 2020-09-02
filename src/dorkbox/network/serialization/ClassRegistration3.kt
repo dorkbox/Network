@@ -23,6 +23,6 @@ internal open class ClassRegistration3(clazz: Class<*>) : ClassRegistration(claz
     }
 
     override fun getInfoArray(): Array<Any> {
-        return arrayOf(id, clazz.name, "")
+        return arrayOf(3, id, clazz.name, "")
     }
 }

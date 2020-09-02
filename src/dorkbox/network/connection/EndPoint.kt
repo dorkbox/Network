@@ -21,6 +21,7 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.ping.PingMessage
+import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.other.coroutines.SuspendWaiter
 import dorkbox.network.rmi.RmiManagerConnections
@@ -286,14 +287,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         settingsStore = config.settingsStore
         settingsStore.init(serialization, config.settingsStorageSystem.build())
 
-        settingsStore.getSerializationTypes().forEach {
-            serialization.register(it)
-        }
-
         crypto = CryptoManagement(logger, settingsStore, type, config)
-
-        // we are done with initial configuration, now finish serialization
-        serialization.finishInit(type)
     }
 
     internal fun initEndpointState(): Aeron {
@@ -464,7 +458,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         }
     }
 
-    internal suspend fun writeHandshakeMessage(publication: Publication, message: Any) {
+    internal suspend fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage) {
         // The sessionId is globally unique, and is assigned by the server.
         logger.trace {
             "[${publication.sessionId()}] send: $message"

@@ -45,7 +45,7 @@ import dorkbox.network.rmi.messages.RmiServerSerializer
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
 internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
-                                       val implClass: Class<*>,
+                                       val implClass: Class<*>?,
                                        serializer: RmiServerSerializer) : ClassRegistration(ifaceClass, serializer) {
     /**
      * In general:
@@ -117,8 +117,11 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
             // now register the impl class
             id = kryo.register(implClass, serializer).id
         }
-        info = "Registered $id -> (RMI) ${implClass.name}"
-
+        info = if (implClass == null) {
+            "Registered $id -> (RMI-CLIENT) ${clazz.name}"
+        } else {
+            "Registered $id -> (RMI-SERVER) ${clazz.name}  ->  ${implClass.name}"
+        }
 
         // now, we want to save the relationship between classes and kryoId
         rmi.ifaceToId[clazz] = id
@@ -131,6 +134,10 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
 
     override fun getInfoArray(): Array<Any> {
         // the info array has to match for the INTERFACE (not the impl!)
-        return arrayOf(id, clazz.name, serializer!!::class.java.name)
+        return if (implClass == null) {
+            arrayOf(4, id, clazz.name, serializer!!::class.java.name, "")
+        } else {
+            arrayOf(4, id, clazz.name, serializer!!::class.java.name, implClass.name)
+        }
     }
 }

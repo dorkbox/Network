@@ -57,13 +57,11 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 3
         const val DONE_ACK = 4
 
-        fun helloFromClient(oneTimePad: Int, publicKey: ByteArray, registrationData: ByteArray, registrationRmiIdData: IntArray): HandshakeMessage {
+        fun helloFromClient(oneTimePad: Int, publicKey: ByteArray): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
             hello.oneTimePad = oneTimePad
             hello.publicKey = publicKey
-            hello.registrationData = registrationData
-            hello.registrationRmiIdData = registrationRmiIdData
             return hello
         }
 
