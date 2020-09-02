@@ -98,18 +98,22 @@ internal class HandshakeMessage private constructor() {
             error.errorMessage = errorMessage
             return error
         }
+
+        fun toStateString(state: Int) : String {
+            return when(state) {
+                INVALID -> "INVALID"
+                HELLO -> "HELLO"
+                HELLO_ACK -> "HELLO_ACK"
+                HELLO_ACK_IPC -> "HELLO_ACK_IPC"
+                DONE -> "DONE"
+                DONE_ACK -> "DONE_ACK"
+                else -> "ERROR. THIS SHOULD NEVER HAPPEN FOR STATE!"
+            }
+        }
     }
 
     override fun toString(): String {
-        val stateStr = when(state) {
-            INVALID -> "INVALID"
-            HELLO -> "HELLO"
-            HELLO_ACK -> "HELLO_ACK"
-            HELLO_ACK_IPC -> "HELLO_ACK_IPC"
-            DONE -> "DONE"
-            DONE_ACK -> "DONE_ACK"
-            else -> "ERROR. THIS SHOULD NEVER HAPPEN FOR STATE!"
-        }
+        val stateStr = toStateString(state)
 
         val errorMsg = if (errorMessage == null) {
             ""

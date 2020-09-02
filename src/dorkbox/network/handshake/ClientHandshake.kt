@@ -88,14 +88,14 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
                     val cryptInput = crypto.cryptInput
                     cryptInput.buffer = message.registrationData
 
-                    val sessionId = cryptInput.readInt()
+                    val sessId = cryptInput.readInt()
                     val streamSubId = cryptInput.readInt()
                     val streamPubId = cryptInput.readInt()
                     val regDetailsSize = cryptInput.readInt()
                     val regDetails = cryptInput.readBytes(regDetailsSize)
 
                     // now read data off
-                    connectionHelloInfo = ClientConnectionInfo(sessionId = sessionId,
+                    connectionHelloInfo = ClientConnectionInfo(sessionId = sessId,
                                                                subscriptionPort = streamSubId,
                                                                publicationPort = streamPubId,
                                                                kryoRegistrationDetails = regDetails)
@@ -104,12 +104,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
                     connectionDone = true
                 }
                 else -> {
-                    if (message.state != HandshakeMessage.HELLO_ACK) {
-                        failed = ClientException("[$sessionId] ignored message that is not HELLO_ACK")
-                    }
-                    else if (message.state != HandshakeMessage.DONE_ACK) {
-                        failed = ClientException("[$sessionId] ignored message that is not DONE_ACK")
-                    }
+                    failed = ClientException("[$sessionId] ignored message that is ${HandshakeMessage.toStateString(message.state)}")
                 }
             }
         }
@@ -162,18 +157,18 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
         return connectionHelloInfo!!
     }
 
-    suspend fun handshakeDone(mediaConnection: MediaDriverConnection, connectionTimeoutMS: Long): Boolean {
+    suspend fun handshakeDone(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long): Boolean {
         val registrationMessage = HandshakeMessage.doneFromClient()
 
         // Send the done message to the server.
-        endPoint.writeHandshakeMessage(mediaConnection.publication, registrationMessage)
+        endPoint.writeHandshakeMessage(handshakeConnection.publication, registrationMessage)
 
 
         // block until we receive the connection information from the server
 
         failed = null
         var pollCount: Int
-        val subscription = mediaConnection.subscription
+        val subscription = handshakeConnection.subscription
         val pollIdleStrategy = endPoint.config.pollIdleStrategy
 
         val startTime = System.currentTimeMillis()
@@ -184,7 +179,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
 
             if (failed != null) {
                 // no longer necessary to hold this connection open
-                mediaConnection.close()
+                handshakeConnection.close()
                 throw failed as Exception
             }
 
@@ -196,9 +191,10 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
             pollIdleStrategy.idle(pollCount)
         }
 
+        // no longer necessary to hold this connection open
+        handshakeConnection.close()
+
         if (!connectionDone) {
-            // no longer necessary to hold this connection open
-            mediaConnection.close()
             throw ClientTimedOutException("Waiting for registration response from server")
         }
 

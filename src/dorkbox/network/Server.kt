@@ -23,7 +23,6 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.IpcMediaDriverConnection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.UdpMediaDriverConnection
-import dorkbox.network.connection.connectionType.ConnectionProperties
 import dorkbox.network.connection.connectionType.ConnectionRule
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.rmi.RemoteObject
@@ -36,7 +35,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
-import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -68,14 +66,15 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         }
     }
 
-
     /**
      * @return true if this server has successfully bound to an IP address and is running
      */
     @Volatile
     private var bindAlreadyCalled = false
 
-
+    /**
+     * Used for handshake connections
+     */
     private val handshake = ServerHandshake(logger, config, listenerManager)
 
     /**
@@ -403,32 +402,32 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
 
 
-    /**
-     * Only called by the server!
-     *
-     * If we are loopback or the client is a specific IP/CIDR address, then we do things differently. The LOOPBACK address will never encrypt or compress the traffic.
-     */
-    // after the handshake, what sort of connection do we want (NONE, COMPRESS, ENCRYPT+COMPRESS)
-    fun getConnectionUpgradeType(remoteAddress: InetSocketAddress): Byte {
-        val address = remoteAddress.address
-        val size = connectionRules.size
-
-        // if it's unknown, then by default we encrypt the traffic
-        var connectionType = ConnectionProperties.COMPRESS_AND_ENCRYPT
-        if (size == 0 && address == IPv4.LOCALHOST) {
-            // if nothing is specified, then by default localhost is compression and everything else is encrypted
-            connectionType = ConnectionProperties.COMPRESS
-        }
-        for (i in 0 until size) {
-            val rule = connectionRules[i] ?: continue
-            if (rule.matches(remoteAddress)) {
-                connectionType = rule.ruleType()
-                break
-            }
-        }
-        logger.debug("Validating {}  Permitted type is: {}", remoteAddress, connectionType)
-        return connectionType.type
-    }
+//    /**
+//     * Only called by the server!
+//     *
+//     * If we are loopback or the client is a specific IP/CIDR address, then we do things differently. The LOOPBACK address will never encrypt or compress the traffic.
+//     */
+//    // after the handshake, what sort of connection do we want (NONE, COMPRESS, ENCRYPT+COMPRESS)
+//    fun getConnectionUpgradeType(remoteAddress: InetSocketAddress): Byte {
+//        val address = remoteAddress.address
+//        val size = connectionRules.size
+//
+//        // if it's unknown, then by default we encrypt the traffic
+//        var connectionType = ConnectionProperties.COMPRESS_AND_ENCRYPT
+//        if (size == 0 && address == IPv4.LOCALHOST) {
+//            // if nothing is specified, then by default localhost is compression and everything else is encrypted
+//            connectionType = ConnectionProperties.COMPRESS
+//        }
+//        for (i in 0 until size) {
+//            val rule = connectionRules[i] ?: continue
+//            if (rule.matches(remoteAddress)) {
+//                connectionType = rule.ruleType()
+//                break
+//            }
+//        }
+//        logger.debug("Validating {}  Permitted type is: {}", remoteAddress, connectionType)
+//        return connectionType.type
+//    }
 
 
     // RMI notes (in multiple places, copypasta, because this is confusing if not written down)

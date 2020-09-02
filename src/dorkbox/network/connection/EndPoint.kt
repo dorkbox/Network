@@ -296,6 +296,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         if (type == Server::class.java || !isRunning()) {
             // the server always creates a the media driver.
             mediaDriver = try {
+                logger.debug { "Starting Aeron Media driver..."}
                 MediaDriver.launch(mediaDriverContext)
             } catch (e: Exception) {
                 listenerManager.notifyError(e)
@@ -510,7 +511,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * @return the message
      */
-    fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
+    internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
         try {
             val message = serialization.readMessage(buffer, offset, length)
             logger.trace {
@@ -540,7 +541,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * @param header The aeron header information
      * @param connection The connection this message happened on
      */
-    fun processMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection) {
+    internal fun processMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection) {
         // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
         @Suppress("UNCHECKED_CAST")
         connection as CONNECTION
@@ -617,7 +618,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     }
 
     // NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
-    suspend fun send(message: Any, publication: Publication, connection: Connection) {
+    internal suspend fun send(message: Any, publication: Publication, connection: Connection) {
         // The sessionId is globally unique, and is assigned by the server.
         logger.trace {
             "[${publication.sessionId()}] send: $message"
