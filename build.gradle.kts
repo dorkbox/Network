@@ -229,6 +229,13 @@ dependencies {
     implementation("com.dorkbox:Utilities:1.8")
     implementation("com.dorkbox:NetworkUtils:1.3")
 
+    // Caffeine High-throughput Timeout Cache
+    // https://github.com/ben-manes/caffeine
+    implementation("com.github.ben-manes.caffeine:caffeine:2.8.5") {
+        exclude("org.checkerframework", "checker-qual")
+        exclude("com.google.errorprone", "error_prone_annotations")
+    }
+
 
     // https://github.com/MicroUtils/kotlin-logging
     implementation("io.github.microutils:kotlin-logging:1.8.3")
