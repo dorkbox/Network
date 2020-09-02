@@ -94,15 +94,6 @@ object AeronClient {
     @Throws(Exception::class)
     @JvmStatic
     fun main(args: Array<String>) {
-//        val ntpClient = NtpClient()
-//        ntpClient.requestTime("time.mit.edu", 10_000)
-//
-//        println("ROUNDTRIP: ${ntpClient.roundTripTime}")
-//        println("NTP : ${convertLongToTime(System.currentTimeMillis())}")
-//        println("NTP : ${convertLongToTime(ntpClient.ntpTime)}")
-//
-//        if (true) return
-
         val configuration = Configuration()
         configuration.subscriptionPort = 2000
         configuration.publicationPort = 2001
@@ -136,7 +127,6 @@ object AeronClient {
 
         runBlocking {
             client.connect("127.0.0.1") // UDP connection via loopback
-//            client.connect()  // IPC connection
         }
 
 
@@ -146,11 +136,11 @@ object AeronClient {
         // send - unreliable
         // send - priority (0-255 -- 255 is MAX priority) when sending, max is always sent immediately, then lower priority is sent if there is no backpressure from the MediaDriver.
         // send - IPC/local
-        runBlocking {
-            while (!client.isShutdown()) {
-                client.send("ECHO " + java.lang.Long.toUnsignedString(client.crypto.secureRandom.nextLong(), 16))
-            }
-        }
+//        runBlocking {
+//            while (!client.isShutdown()) {
+//                client.send("ECHO " + java.lang.Long.toUnsignedString(client.crypto.secureRandom.nextLong(), 16))
+//            }
+//        }
 
 
         // connection needs to know

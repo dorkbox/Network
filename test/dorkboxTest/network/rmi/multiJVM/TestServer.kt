@@ -80,6 +80,6 @@ object TestServer {
 //            }
         }
 
-        server.bind(false)
+        server.bind()
     }
 }

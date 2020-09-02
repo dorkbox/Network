@@ -21,12 +21,10 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.serialization.Serialization
-import dorkbox.util.exceptions.SecurityException
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
-import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 
 class RmiDelayedInvocationSpamTest : BaseTest() {
@@ -34,22 +32,42 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
 
     private val RMI_ID = 12251
 
+    var async = true
+
     @Test
-    @Throws(SecurityException::class, IOException::class)
     fun rmiNetwork() {
         runBlocking {
+            async = false
+            rmi { configuration ->
+                configuration.enableIpcForLoopback = false
+            }
+        }
+    }
+
+    @Test
+    fun rmiNetworkAync() {
+        runBlocking {
+            async = true
+            rmi { configuration ->
+                configuration.enableIpcForLoopback = false
+            }
+        }
+    }
+
+    @Test
+    fun rmiIpc() {
+        runBlocking {
+            async = false
             rmi()
         }
     }
 
     @Test
-    @Throws(SecurityException::class, IOException::class)
-    fun rmiLocal() {
-//        rmi(object : Config() {
-//            fun apply(configuration: Configuration) {
-//                configuration.localChannelName = EndPoint.LOCAL_CHANNEL
-//            }
-//        })
+    fun rmiIpcAsync() {
+        runBlocking {
+            async = true
+            rmi()
+        }
     }
 
     fun register(serialization: Serialization) {
@@ -63,10 +81,8 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
     suspend fun rmi(config: (Configuration) -> Unit = {}) {
         val server: Server<Connection>
 
-        val async = false
-
         val mod = if (async) 10_000L else 200L
-        val totalRuns = if (async) 1_000_000 else 700
+        val totalRuns = if (async) 1_000_000 else 1_000
 
         run {
             val configuration = serverConfig()
@@ -77,7 +93,7 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
             addEndPoint(server)
 
             server.saveGlobalObject(TestObjectImpl(counter), RMI_ID)
-            server.bind(false)
+            server.bind()
         }
 
 
@@ -116,7 +132,6 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
 
                 // have to do this first, so it will wait for the client responses!
                 // if we close the client first, the connection will be closed, and the responses will never arrive to the server
-                server.close()
                 stopEndPoints()
             }
 

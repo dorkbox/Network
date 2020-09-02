@@ -50,23 +50,27 @@ class RmiSimpleTest : BaseTest() {
 
     @Test
     fun rmiNetworkGlobal() {
-        rmiGlobal()
+        rmiGlobal() { configuration ->
+            configuration.enableIpcForLoopback = false
+        }
     }
 
     @Test
     fun rmiNetworkConnection() {
+        rmi { configuration ->
+            configuration.enableIpcForLoopback = false
+        }
+    }
+
+    @Test
+    fun rmiIpcNetworkGlobal() {
+        rmiGlobal()
+    }
+
+    @Test
+    fun rmiIPcNetworkConnection() {
         rmi()
     }
-//
-//    @Test
-//    @Throws(SecurityException::class, IOException::class, InterruptedException::class)
-//    fun rmiIPC() {
-//        rmi { configuration ->
-//            if (configuration is ServerConfiguration) {
-//                configuration.listenIpAddress = LOOPBACK
-//            }
-//        }
-//    }
 
     fun rmi(config: (Configuration) -> Unit = {}) {
         run {
@@ -79,8 +83,7 @@ class RmiSimpleTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-
-            server.bind(false)
+            server.bind()
 
             server.onMessage<MessageWithTestCow> { connection, m ->
                 System.err.println("Received finish signal for test for: Client -> Server")
@@ -146,7 +149,7 @@ class RmiSimpleTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind(false)
+            server.bind()
 
             server.onMessage<MessageWithTestCow> { connection, m ->
                 System.err.println("Received finish signal for test for: Client -> Server")

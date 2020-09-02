@@ -18,12 +18,10 @@ package dorkboxTest.network.rmi
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.util.exceptions.SecurityException
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
-import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
 
@@ -33,19 +31,6 @@ class RmiNestedTest : BaseTest() {
 
     companion object {
         private val idCounter = AtomicInteger()
-    }
-
-    @Test
-    @Throws(SecurityException::class, IOException::class)
-    fun rmiIPC() {
-//        TODO("DO IPC STUFF!")
-        // rmi(new Config() {
-        //     @Override
-        //     public
-        //     void apply(final Configuration configuration) {
-        //         configuration.localChannelName = EndPoint.LOCAL_CHANNEL;
-        //     }
-        // });
     }
 
     /**
@@ -93,7 +78,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind(false)
+            server.bind()
         }
 
 
@@ -163,7 +148,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind(false)
+            server.bind()
         }
 
 
@@ -232,7 +217,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind(false)
+            server.bind()
         }
 
 

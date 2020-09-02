@@ -105,8 +105,7 @@ object TestClient {
 
         runBlocking {
             client.connect(BaseTest.LOOPBACK)
+            client.waitForClose()
         }
-
-        client.waitForShutdown()
     }
 }

@@ -83,8 +83,8 @@ abstract class BaseTest {
 
 //        rootLogger.setLevel(Level.OFF);
 
-//        rootLogger.level = Level.INFO;
-        rootLogger.level = Level.TRACE;
+        rootLogger.level = Level.INFO;
+//        rootLogger.level = Level.TRACE;
 //            rootLogger.level = Level.DEBUG
 //        rootLogger.level = Level.ALL;
 

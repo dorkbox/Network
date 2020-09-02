@@ -96,12 +96,12 @@ object AeronServer {
         }
 
         server.onError { throwable ->
-            println("has error")
+            println("from test: has error")
             throwable.printStackTrace()
         }
 
         server.onError { connection, throwable ->
-            println("has error")
+            println("from test: has connection error")
             throwable.printStackTrace()
         }
 

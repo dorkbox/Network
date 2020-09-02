@@ -83,7 +83,7 @@ class MultipleServerTest : BaseTest() {
                 }
             }
 
-            server.bind(false)
+            server.bind()
 
             serverAeronDir = File(configuration.aeronLogDirectory.toString() + count)
         }

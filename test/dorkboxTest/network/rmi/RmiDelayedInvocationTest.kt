@@ -20,11 +20,9 @@ import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
-import dorkbox.util.exceptions.SecurityException
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
-import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
 class RmiDelayedInvocationTest : BaseTest() {
@@ -32,21 +30,19 @@ class RmiDelayedInvocationTest : BaseTest() {
     private val OBJ_ID = 123
 
     @Test
-    @Throws(SecurityException::class, IOException::class)
     fun rmiNetwork() {
         runBlocking {
-            rmi()
+            rmi() { configuration ->
+                configuration.enableIpcForLoopback = false
+            }
         }
     }
 
     @Test
-    @Throws(SecurityException::class, IOException::class)
-    fun rmiLocal() {
-//        rmi(object : Config() {
-//            fun apply(configuration: Configuration) {
-//                configuration.localChannelName = EndPoint.LOCAL_CHANNEL
-//            }
-//        })
+    fun rmiIpc() {
+        runBlocking {
+            rmi()
+        }
     }
 
     fun register(serialization: Serialization) {
@@ -67,7 +63,7 @@ class RmiDelayedInvocationTest : BaseTest() {
             addEndPoint(server)
 
             server.saveGlobalObject(TestObjectImpl(iterateLock), OBJ_ID)
-            server.bind(false)
+            server.bind()
         }
 
         run {
