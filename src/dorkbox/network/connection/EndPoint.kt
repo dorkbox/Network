@@ -293,7 +293,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal fun initEndpointState(): Aeron {
         val aeronDirectory = config.aeronLogDirectory!!.absolutePath
 
-        if (type == Server::class.java || !isRunning()) {
+        if (!isRunning()) {
             // the server always creates a the media driver.
             mediaDriver = try {
                 logger.debug { "Starting Aeron Media driver..."}
