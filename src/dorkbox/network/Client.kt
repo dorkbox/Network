@@ -149,9 +149,14 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         when (remoteAddress) {
             "0.0.0.0" -> throw IllegalArgumentException("0.0.0.0 is an invalid address to connect to!")
             "loopback", "localhost", "lo", "" -> {
-                isIpcConnection = true
-                logger.info("Auto-changing network connection from $remoteAddress -> IPC")
-                this.remoteAddress = "ipc"
+                if (config.enableIpcForLoopback) {
+                    isIpcConnection = true
+                    logger.info("Auto-changing network connection from $remoteAddress -> IPC")
+                    this.remoteAddress = "ipc"
+                } else {
+                    isIpcConnection = false
+                    this.remoteAddress = IPv4.LOCALHOST.hostAddress
+                }
             }
             "0x" -> {
                 isIpcConnection = true
@@ -159,14 +164,24 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             }
             else -> when {
                 IPv4.isLoopback(remoteAddress) -> {
-                    logger.info("Auto-changing network connection from $remoteAddress -> IPC")
-                    isIpcConnection = true
-                    this.remoteAddress = "ipc"
+                    if (config.enableIpcForLoopback) {
+                        isIpcConnection = true
+                        logger.info("Auto-changing network connection from $remoteAddress -> IPC")
+                        this.remoteAddress = "ipc"
+                    } else {
+                        isIpcConnection = false
+                        this.remoteAddress = IPv4.LOCALHOST.hostAddress
+                    }
                 }
                 IPv6.isLoopback(remoteAddress) -> {
-                    logger.info("Auto-changing network connection from $remoteAddress -> IPC")
-                    isIpcConnection = true
-                    this.remoteAddress = "ipc"
+                    if (config.enableIpcForLoopback) {
+                        isIpcConnection = true
+                        logger.info("Auto-changing network connection from $remoteAddress -> IPC")
+                        this.remoteAddress = "ipc"
+                    } else {
+                        isIpcConnection = false
+                        this.remoteAddress = IPv6.LOCALHOST.hostAddress
+                    }
                 }
                 else -> {
                     isIpcConnection = false

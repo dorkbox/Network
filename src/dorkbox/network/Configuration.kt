@@ -48,7 +48,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
 }
 
 open class Configuration {
-
     /**
      * When connecting to a remote client/server, should connections be allowed if the remote machine signature has changed?
      *
@@ -76,6 +75,12 @@ open class Configuration {
      */
     var subscriptionPort: Int = 0
 
+    /**
+     * Permit loopback connections to use IPC instead of UDP for communicating. IPC is about 4x faster than UDP in loopback situations.
+     *
+     * This configuration only affects the client
+     */
+    var enableIpcForLoopback: Boolean = true
 
     /**
      * How long a connection must be disconnected before we cleanup the memory associated with it
