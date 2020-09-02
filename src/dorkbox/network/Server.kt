@@ -20,6 +20,7 @@ import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.server.ServerException
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.IpcMediaDriverConnection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.UdpMediaDriverConnection
 import dorkbox.network.connection.connectionType.ConnectionProperties
@@ -88,7 +89,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
         // localhost/loopback IP might not always be 127.0.0.1 or ::1
         when (config.listenIpAddress) {
-            "loopback", "localhost", "lo" -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
+            "loopback", "localhost", "lo", "" -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
             else -> when {
                 IPv4.isLoopback(config.listenIpAddress) -> config.listenIpAddress = IPv4.LOCALHOST.hostAddress
                 IPv6.isLoopback(config.listenIpAddress) -> config.listenIpAddress = IPv6.LOCALHOST.hostAddress
@@ -132,13 +133,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
     /**
      * Binds the server to AERON configuration
-     *
-     * @param blockUntilTerminate if true, will BLOCK until the server [close] method is called, and if you want to continue running code
-     * after this pass in false
      */
     @Suppress("DuplicatedCode")
-    @JvmOverloads
-    suspend fun bind(blockUntilTerminate: Boolean = true) {
+    fun bind() {
         if (bindAlreadyCalled) {
             logger.error("Unable to bind when the server is already running!")
             return
@@ -150,32 +147,29 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
         config as ServerConfiguration
 
-        // setup the "HANDSHAKE" ports, for initial clients to connect.
-        // The is how clients then get the new ports to connect to + other configuration options
 
-        val handshakeDriver = UdpMediaDriverConnection(address = config.listenIpAddress,
-                                                       publicationPort = config.publicationPort,
-                                                       subscriptionPort = config.subscriptionPort,
-                                                       streamId = UDP_HANDSHAKE_STREAM_ID,
-                                                       sessionId = RESERVED_SESSION_ID_INVALID)
-
-        handshakeDriver.buildServer(aeron)
-
-        val handshakePublication = handshakeDriver.publication
-        val handshakeSubscription = handshakeDriver.subscription
-
-        logger.info(handshakeDriver.serverInfo())
+        val ipcHandshakeDriver = IpcMediaDriverConnection(streamIdSubscription = IPC_HANDSHAKE_STREAM_ID_SUB,
+                                                          streamId = IPC_HANDSHAKE_STREAM_ID_PUB,
+                                                          sessionId = RESERVED_SESSION_ID_INVALID)
+        ipcHandshakeDriver.buildServer(aeron)
+        val ipcHandshakePublication = ipcHandshakeDriver.publication
+        val ipcHandshakeSubscription = ipcHandshakeDriver.subscription
 
 
-//        val ipcHandshakeDriver = IpcMediaDriverConnection(
-//                streamId = IPC_HANDSHAKE_STREAM_ID_PUB,
-//                streamIdSubscription = IPC_HANDSHAKE_STREAM_ID_SUB,
-//                sessionId = RESERVED_SESSION_ID_INVALID
-//        )
-//        ipcHandshakeDriver.buildServer(aeron)
-//
-//        val ipcHandshakePublication = ipcHandshakeDriver.publication
-//        val ipcHandshakeSubscription = ipcHandshakeDriver.subscription
+
+        val udpHandshakeDriver = UdpMediaDriverConnection(address = config.listenIpAddress,
+                                                          publicationPort = config.publicationPort,
+                                                          subscriptionPort = config.subscriptionPort,
+                                                          streamId = UDP_HANDSHAKE_STREAM_ID,
+                                                          sessionId = RESERVED_SESSION_ID_INVALID)
+
+        udpHandshakeDriver.buildServer(aeron)
+        val handshakePublication = udpHandshakeDriver.publication
+        val handshakeSubscription = udpHandshakeDriver.subscription
+
+
+        logger.info(ipcHandshakeDriver.serverInfo())
+        logger.info(udpHandshakeDriver.serverInfo())
 
 
         /**
@@ -187,14 +181,14 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
          * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
          * properties from failure and streams with mechanical sympathy.
          */
-        val handshakeHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+        val udpHandshakeHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
             // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
             // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
             val sessionId = header.sessionId()
 
-            // note: this address will ALWAYS be an IP:PORT combo
+            // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
             val remoteIpAndPort = (header.context() as Image).sourceIdentity()
 
             // split
@@ -204,23 +198,28 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             val clientAddress = IPv4.toInt(clientAddressString)
 
             val message = readHandshakeMessage(buffer, offset, length, header)
-
-            actionDispatch.launch {
-                handshake.processHandshakeMessageServer(handshakePublication,
-                                                        sessionId,
-                                                        clientAddressString,
-                                                        clientAddress,
-                                                        message,
-                                                        this@Server,
-                                                        aeron)
-            }
+            handshake.processHandshakeMessageServer(this@Server,
+                                                    handshakePublication,
+                                                    sessionId,
+                                                    clientAddressString,
+                                                    clientAddress,
+                                                    message,
+                                                    aeron)
         }
-        val ipcInitialConnectionHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+
+        val ipcHandshakeHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
-            actionDispatch.launch {
-                println("GOT MESSAGE!")
-            }
+            // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
+            // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
+            val sessionId = header.sessionId()
+
+            val message = readHandshakeMessage(buffer, offset, length, header)
+            handshake.processHandshakeMessageServer(this@Server,
+                                                    ipcHandshakePublication,
+                                                    sessionId,
+                                                    message,
+                                                    aeron)
         }
 
         actionDispatch.launch {
@@ -236,10 +235,10 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
 
                     // this checks to see if there are NEW clients on the handshake ports
-                    pollCount += handshakeSubscription.poll(handshakeHandler, 2)
+                    pollCount += handshakeSubscription.poll(udpHandshakeHandler, 1)
 
                     // this checks to see if there are NEW clients via IPC
-//                    pollCount += ipcHandshakeSubscription.poll(ipcInitialConnectionHandler, 100)
+                    pollCount += ipcHandshakeSubscription.poll(ipcHandshakeHandler, 1)
 
 
                     // this manages existing clients (for cleanup + connection polling)
@@ -248,12 +247,12 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                         var shouldCleanupConnection = false
 
                         if (connection.isExpired()) {
-                            logger.trace {"[${connection.sessionId}] connection expired"}
+                            logger.trace {"[${connection.id}] connection expired"}
                             shouldCleanupConnection = true
                         }
 
                         else if (connection.isClosed()) {
-                            logger.trace {"[${connection.sessionId}] connection closed"}
+                            logger.trace {"[${connection.id}] connection closed"}
                             shouldCleanupConnection = true
                         }
 
@@ -268,7 +267,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                             false
                         }
                     }, { connectionToClean ->
-                        logger.info {"[${connectionToClean.sessionId}] cleaned-up connection"}
+                        logger.info {"[${connectionToClean.id}] cleaned-up connection"}
 
                         // have to free up resources!
                         handshake.cleanup(connectionToClean)
@@ -294,15 +293,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 handshakePublication.close()
                 handshakeSubscription.close()
 
-//                ipcHandshakePublication.close()
-//                ipcHandshakeSubscription.close()
+                ipcHandshakePublication.close()
+                ipcHandshakeSubscription.close()
             }
-        }
-
-
-        // we now BLOCK until the stop method is called.
-        if (blockUntilTerminate) {
-            waitForShutdown();
         }
     }
 
@@ -364,8 +357,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     /**
      * Closes the server and all it's connections. After a close, you may call 'bind' again.
      */
-    override fun close() {
-        super.close()
+    override fun close0() {
         bindAlreadyCalled = false
 
         // when we call close, it will shutdown the polling mechanism, so we have to manually cleanup the connections and call server-notifyDisconnect
@@ -436,55 +428,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
 
-
-
-//    enum class STATE {
-//        ERROR, WAIT, CONTINUE
-//    }
-
-//    fun verifyClassRegistration(metaChannel: MetaChannel, registration: Registration): STATE {
-//        if (registration.upgradeType == UpgradeType.FRAGMENTED) {
-//            val fragment = registration.payload!!
-//
-//            // this means that the registrations are FRAGMENTED!
-//            // max size of ALL fragments is xxx * 127
-//            if (metaChannel.fragmentedRegistrationDetails == null) {
-//                metaChannel.remainingFragments = fragment[1]
-//                metaChannel.fragmentedRegistrationDetails = ByteArray(Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE * fragment[1])
-//            }
-//            System.arraycopy(fragment, 2, metaChannel.fragmentedRegistrationDetails, fragment[0] * Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE, fragment.size - 2)
-//
-//            metaChannel.remainingFragments--
-//
-//            if (fragment[0] + 1 == fragment[1].toInt()) {
-//                // this is the last fragment in the in byte array (but NOT necessarily the last fragment to arrive)
-//                val correctSize = Serialization.CLASS_REGISTRATION_VALIDATION_FRAGMENT_SIZE * (fragment[1] - 1) + (fragment.size - 2)
-//                val correctlySized = ByteArray(correctSize)
-//                System.arraycopy(metaChannel.fragmentedRegistrationDetails, 0, correctlySized, 0, correctSize)
-//                metaChannel.fragmentedRegistrationDetails = correctlySized
-//            }
-//            if (metaChannel.remainingFragments.toInt() == 0) {
-//                // there are no more fragments available
-//                val details = metaChannel.fragmentedRegistrationDetails
-//                metaChannel.fragmentedRegistrationDetails = null
-//                if (!serialization.verifyKryoRegistration(details)) {
-//                    // error
-//                    return STATE.ERROR
-//                }
-//            } else {
-//                // wait for more fragments
-//                return STATE.WAIT
-//            }
-//        } else {
-//            if (!serialization.verifyKryoRegistration(registration.payload!!)) {
-//                return STATE.ERROR
-//            }
-//        }
-//        return STATE.CONTINUE
-//    }
-
-
-
     // RMI notes (in multiple places, copypasta, because this is confusing if not written down)
     //
     // only server can create a global object (in itself, via save)
@@ -532,7 +475,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * @see RemoteObject
      */
     @Suppress("DuplicatedCode")
-    suspend fun saveGlobalObject(`object`: Any): Int {
+    fun saveGlobalObject(`object`: Any): Int {
         val rmiId = rmiGlobalSupport.saveImplObject(`object`)
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
@@ -561,7 +504,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      * @see RemoteObject
      */
     @Suppress("DuplicatedCode")
-    suspend fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
+    fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
         val success = rmiGlobalSupport.saveImplObject(`object`, objectId)
         if (!success) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")

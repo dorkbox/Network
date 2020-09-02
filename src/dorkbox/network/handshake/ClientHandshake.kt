@@ -22,7 +22,6 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.MediaDriverConnection
-import dorkbox.network.connection.UdpMediaDriverConnection
 import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
@@ -82,7 +81,28 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
                     // The message was intended for this client. Try to parse it as one of the available message types.
                     // this message is ENCRYPTED!
                     connectionHelloInfo = crypto.decrypt(message.registrationData, message.publicKey)
+                }
+                HandshakeMessage.HELLO_ACK_IPC -> {
+                    // The message was intended for this client. Try to parse it as one of the available message types.
+                    // this message is ENCRYPTED!
+                    val cryptInput = crypto.cryptInput
+                    cryptInput.buffer = message.registrationData
 
+                    val sessionId = cryptInput.readInt()
+                    val streamSubId = cryptInput.readInt()
+                    val streamPubId = cryptInput.readInt()
+
+                    val rmiIds = mutableListOf<Int>()
+                    val rmiIdSize = cryptInput.readInt()
+                    for (i in 0 until rmiIdSize) {
+                        rmiIds.add(cryptInput.readInt())
+                    }
+
+                    // now read data off
+                    connectionHelloInfo = ClientConnectionInfo(sessionId = sessionId,
+                                                               subscriptionPort = streamSubId,
+                                                               publicationPort = streamPubId,
+                                                               kryoIdsForRmi = rmiIds.toIntArray())
                 }
                 HandshakeMessage.DONE_ACK -> {
                     connectionDone = true
@@ -124,7 +144,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
         while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pollCount = subscription.poll(handler, 2)
+            pollCount = subscription.poll(handler, 1)
 
             if (failed != null) {
                 // no longer necessary to hold this connection open
@@ -150,7 +170,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
         return connectionHelloInfo!!
     }
 
-    suspend fun handshakeDone(mediaConnection: UdpMediaDriverConnection, connectionTimeoutMS: Long): Boolean {
+    suspend fun handshakeDone(mediaConnection: MediaDriverConnection, connectionTimeoutMS: Long): Boolean {
         val registrationMessage = HandshakeMessage.doneFromClient()
 
         // Send the done message to the server.
@@ -168,7 +188,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
         while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pollCount = subscription.poll(handler, 2)
+            pollCount = subscription.poll(handler, 1)
 
             if (failed != null) {
                 // no longer necessary to hold this connection open

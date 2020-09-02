@@ -53,8 +53,9 @@ internal class HandshakeMessage private constructor() {
         const val INVALID = -1
         const val HELLO = 0
         const val HELLO_ACK = 1
-        const val DONE = 2
-        const val DONE_ACK = 3
+        const val HELLO_ACK_IPC = 2
+        const val DONE = 3
+        const val DONE_ACK = 4
 
         fun helloFromClient(oneTimePad: Int, publicKey: ByteArray, registrationData: ByteArray, registrationRmiIdData: IntArray): HandshakeMessage {
             val hello = HandshakeMessage()
@@ -69,6 +70,13 @@ internal class HandshakeMessage private constructor() {
         fun helloAckToClient(sessionId: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO_ACK
+            hello.sessionId = sessionId // has to be the same as before (the client expects this)
+            return hello
+        }
+
+        fun helloAckIpcToClient(sessionId: Int): HandshakeMessage {
+            val hello = HandshakeMessage()
+            hello.state = HELLO_ACK_IPC
             hello.sessionId = sessionId // has to be the same as before (the client expects this)
             return hello
         }
@@ -99,6 +107,7 @@ internal class HandshakeMessage private constructor() {
             INVALID -> "INVALID"
             HELLO -> "HELLO"
             HELLO_ACK -> "HELLO_ACK"
+            HELLO_ACK_IPC -> "HELLO_ACK_IPC"
             DONE -> "DONE"
             DONE_ACK -> "DONE_ACK"
             else -> "ERROR. THIS SHOULD NEVER HAPPEN FOR STATE!"

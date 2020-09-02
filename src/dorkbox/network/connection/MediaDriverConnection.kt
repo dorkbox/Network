@@ -198,9 +198,10 @@ class IpcMediaDriverConnection(override val streamId: Int,
                                val streamIdSubscription: Int,
                                override val sessionId: Int,
                                private val connectionTimeoutMS: Long = 30_000,
-                               override val isReliable: Boolean = true) : MediaDriverConnection {
+                               ) : MediaDriverConnection {
 
-    override val address = ""
+    override val isReliable = true
+    override val address = "ipc"
     override val subscriptionPort = 0
     override val publicationPort = 0
 
@@ -208,10 +209,6 @@ class IpcMediaDriverConnection(override val streamId: Int,
     override lateinit var publication: Publication
 
     var success: Boolean = false
-
-
-    init {
-    }
 
     private fun uri(): ChannelUriStringBuilder {
         val builder = ChannelUriStringBuilder().media("ipc")
@@ -226,14 +223,10 @@ class IpcMediaDriverConnection(override val streamId: Int,
     override suspend fun buildClient(aeron: Aeron) {
         // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         val subscriptionUri = uri()
-//                .controlEndpoint("$address:$subscriptionPort")
-//                .controlMode("dynamic")
-
 
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
-//                .endpoint("$address:$publicationPort")
 
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
@@ -288,15 +281,10 @@ class IpcMediaDriverConnection(override val streamId: Int,
     override fun buildServer(aeron: Aeron) {
         // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         val subscriptionUri = uri()
-//                .endpoint("$address:$subscriptionPort")
-
 
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
-//                .controlEndpoint("$address:$publicationPort")
-//                .controlMode("dynamic")
-
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
@@ -305,22 +293,29 @@ class IpcMediaDriverConnection(override val streamId: Int,
     }
 
     override fun clientInfo() : String {
-        return ""
+        return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
+            "[$sessionId] aeron connection established to [$streamIdSubscription|$streamId]"
+        } else {
+            "Connecting IPC with handshake to [$streamIdSubscription|$streamId]"
+        }
     }
 
     override fun serverInfo() : String {
-        return ""
-    }
-
-    fun connect() : Pair<String, String> {
-        return Pair("","")
+        return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
+            "[$sessionId] IPC listening on [$streamIdSubscription|$streamId] "
+        } else {
+            "IPC listening with handshake on [$streamIdSubscription|$streamId]"
+        }
     }
 
     override fun close() {
-
+        if (success) {
+            subscription.close()
+            publication.close()
+        }
     }
 
     override fun toString(): String {
-        return "$address [$subscriptionPort|$publicationPort] [$streamId|$sessionId]"
+        return "[$streamIdSubscription|$streamId] [$sessionId]"
     }
 }

@@ -69,6 +69,11 @@ internal class CryptoManagement(val logger: KLogger,
 
     val secureRandom = SecureRandom(settingsStore.getSalt())
 
+    private val iv = ByteArray(GCM_IV_LENGTH)
+    private val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, iv)
+    val cryptOutput = AeronOutput()
+    val cryptInput = AeronInput()
+
     private val enableRemoteSignatureValidation = config.enableRemoteSignatureValidation
 
     init {
@@ -177,6 +182,7 @@ internal class CryptoManagement(val logger: KLogger,
         return SecretKeySpec(hash.digest(), "AES")
     }
 
+    // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the server, mutually exclusive calls to decrypt)
     fun encrypt(clientPublicKeyBytes: ByteArray,
                 publicationPort: Int,
                 subscriptionPort: Int,
@@ -185,29 +191,24 @@ internal class CryptoManagement(val logger: KLogger,
                 kryoRmiIds: IntArray): ByteArray {
 
         val secretKeySpec = generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, publicKeyBytes)
-
-        val iv = ByteArray(GCM_IV_LENGTH)
         secureRandom.nextBytes(iv)
-
-        val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, iv)
         aesCipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, gcmParameterSpec)
 
         // now create the byte array that holds all our data
-        val data = AeronOutput()
-        data.writeInt(connectionSessionId)
-        data.writeInt(connectionStreamId)
-        data.writeInt(publicationPort)
-        data.writeInt(subscriptionPort)
-        data.writeInt(kryoRmiIds.size)
+        cryptOutput.reset()
+        cryptOutput.writeInt(connectionSessionId)
+        cryptOutput.writeInt(connectionStreamId)
+        cryptOutput.writeInt(publicationPort)
+        cryptOutput.writeInt(subscriptionPort)
+        cryptOutput.writeInt(kryoRmiIds.size)
         kryoRmiIds.forEach {
-            data.writeInt(it)
+            cryptOutput.writeInt(it)
         }
 
-        val bytes = data.toBytes()
-
-        return iv + aesCipher.doFinal(bytes)
+        return iv + aesCipher.doFinal(cryptOutput.toBytes())
     }
 
+    // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the client, mutually exclusive calls to encrypt)
     fun decrypt(registrationData: ByteArray?, serverPublicKeyBytes: ByteArray?): ClientConnectionInfo? {
         if (registrationData == null || serverPublicKeyBytes == null) {
             return null
@@ -216,7 +217,6 @@ internal class CryptoManagement(val logger: KLogger,
         val secretKeySpec = generateAesKey(serverPublicKeyBytes, publicKeyBytes, serverPublicKeyBytes)
 
         // now read the encrypted data
-        val iv = ByteArray(GCM_IV_LENGTH)
         registrationData.copyInto(destination = iv,
                                   endIndex = GCM_IV_LENGTH)
 
@@ -226,21 +226,19 @@ internal class CryptoManagement(val logger: KLogger,
 
 
         // now decrypt the data
-        val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, iv)
         aesCipher.init(Cipher.DECRYPT_MODE, secretKeySpec, gcmParameterSpec)
 
-        val data = AeronInput(aesCipher.doFinal(secretBytes))
+        cryptInput.buffer = aesCipher.doFinal(secretBytes)
 
-
-        val sessionId = data.readInt()
-        val streamId = data.readInt()
-        val publicationPort = data.readInt()
-        val subscriptionPort = data.readInt()
+        val sessionId = cryptInput.readInt()
+        val streamId = cryptInput.readInt()
+        val publicationPort = cryptInput.readInt()
+        val subscriptionPort = cryptInput.readInt()
 
         val rmiIds = mutableListOf<Int>()
-        val rmiIdSize = data.readInt()
+        val rmiIdSize = cryptInput.readInt()
         for (i in 0 until rmiIdSize) {
-            rmiIds.add(data.readInt())
+            rmiIds.add(cryptInput.readInt())
         }
 
         // now read data off

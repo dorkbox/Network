@@ -16,6 +16,7 @@
 package dorkbox.network.connection
 
 import dorkbox.netUtil.IPv4
+import dorkbox.network.aeron.server.RandomIdAllocator
 import dorkbox.network.connection.ping.PingFuture
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.rmi.RemoteObject
@@ -32,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
+import org.agrona.collections.Int2IntCounterMap
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -46,76 +48,68 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * The publication port (used by aeron) for this connection. This is from the perspective of the server!
      */
-    internal val subscriptionPort: Int
-    internal val publicationPort: Int
+    private val subscriptionPort: Int
+    private val publicationPort: Int
 
     /**
-     * the stream id of this connection.
+     * the stream id of this connection. Can be 0 for IPC connections
      */
-    internal val streamId: Int
+    private val streamId: Int
 
     /**
      * the session id of this connection. This value is UNIQUE
      */
-    internal val sessionId: Int
-
-    /**
-     * the id of this connection. This value is UNIQUE
-     */
     val id: Int
-        get() = sessionId
 
     /**
-     * the remote address, as a string.
+     * the remote address, as a string. Will be "ipc" for IPC connections
      */
     val remoteAddress: String
 
     /**
-     * the remote address, as an integer.
+     * the remote address, as an integer. Can be 0 for IPC connections
      */
-    val remoteAddressInt: Int
-
+    private val remoteAddressInt: Int
 
     /**
      * @return true if this connection is an IPC connection
      */
-    val isIPC = connectionParameters.mediaDriverConnection is IpcMediaDriverConnection
+    val isIpc = connectionParameters.mediaDriverConnection is IpcMediaDriverConnection
 
     /**
      * @return true if this connection is a network connection
      */
     val isNetwork = connectionParameters.mediaDriverConnection is UdpMediaDriverConnection
 
-
-
-
-
-    /**
-     * Returns the last calculated TCP return trip time, or -1 if or the [PingMessage] response has not yet been received.
-     */
-    val lastRoundTripTime: Int
-        get() {
-            val pingFuture2 = pingFuture
-            return pingFuture2?.response ?: -1
-        }
-
     /**
      * the endpoint associated with this connection
      */
     internal val endPoint = connectionParameters.endPoint
-    private val listenerManager = atomic<ListenerManager<Connection>?>(null)
 
+
+    private val listenerManager = atomic<ListenerManager<Connection>?>(null)
     val logger = endPoint.logger
 
 
+    internal var preCloseAction: suspend () -> Unit = {}
+    internal var postCloseAction: suspend () -> Unit = {}
+
     private val isClosed = atomic(false)
 
+    /**
+    //     * Returns the last calculated TCP return trip time, or -1 if or the [PingMessage] response has not yet been received.
+    //     */
+//    val lastRoundTripTime: Int
+//        get() {
+//            val pingFuture2 = pingFuture
+//            return pingFuture2?.response ?: -1
+//        }
 
     @Volatile
     private var pingFuture: PingFuture? = null
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
-    private var remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
+    private val remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
 
     // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
     // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
@@ -128,6 +122,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // a record of how many messages are in progress of being sent. When closing the connection, this number must be 0
     private val messagesInProgress = atomic(0)
 
+    val toString0: () -> String
+
     init {
         val mediaDriverConnection = connectionParameters.mediaDriverConnection
 
@@ -135,12 +131,25 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         subscription = mediaDriverConnection.subscription
         publication = mediaDriverConnection.publication
 
-        subscriptionPort = mediaDriverConnection.subscriptionPort
-        publicationPort = mediaDriverConnection.publicationPort
-        remoteAddress = mediaDriverConnection.address
-        remoteAddressInt = IPv4.toInt(remoteAddress)
-        streamId = mediaDriverConnection.streamId // NOTE: this is UNIQUE per server!
-        sessionId = mediaDriverConnection.sessionId // NOTE: this is UNIQUE per server!
+        remoteAddress = mediaDriverConnection.address // this can be the IP address or "ipc" word
+        id = mediaDriverConnection.sessionId // NOTE: this is UNIQUE per server!
+
+        if (mediaDriverConnection is IpcMediaDriverConnection) {
+            streamId = 0 // this is because with IPC, we have stream sub/pub (which are replaced as port sub/pub)
+            subscriptionPort = mediaDriverConnection.streamIdSubscription
+            publicationPort = mediaDriverConnection.streamId
+            remoteAddressInt = 0
+
+            toString0 = { "[$id] IPC [$subscriptionPort|$publicationPort]" }
+        } else {
+            streamId = mediaDriverConnection.streamId // NOTE: this is UNIQUE per server!
+            subscriptionPort = mediaDriverConnection.subscriptionPort
+            publicationPort = mediaDriverConnection.publicationPort
+            remoteAddressInt = IPv4.toInt(mediaDriverConnection.address)
+
+            toString0 = { "[$id] $remoteAddress [$publicationPort|$subscriptionPort]" }
+        }
+
 
         messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
@@ -155,7 +164,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
     /**
-     * Has the remote ECC public key changed. This can be useful if specific actions are necessary when the key has changed.
+     * @return true if the remote public key changed. This can be useful if specific actions are necessary when the key has changed.
      */
     fun hasRemoteKeyChanged(): Boolean {
         return remoteKeyChanged
@@ -272,14 +281,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         return messagesInProgress.value
     }
 
-
     /**
-     * @return `true` if this connection has no subscribers (which means this connection longer has a remote connection)
+     * @return `true` if this connection has no subscribers (which means this connection does not have a remote connection)
      */
     internal fun isExpired(): Boolean {
-        return !subscription.isConnected
+        // cannot use subscription.isConnected !!! images can be in a state of flux. We only care if there are NO images.
+        return subscription.hasNoImages()
     }
-
 
     /**
      * @return `true` if this connection has been closed
@@ -300,7 +308,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (isClosed.compareAndSet(expect = false, update = true)) {
-            logger.info {"[${sessionId}] closed connection"}
+            logger.info {"[$id] closed connection"}
 
             subscription.close()
 
@@ -332,11 +340,19 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             rmiConnectionSupport.clearProxyObjects()
 
+            // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
+            // lock-stop ordering for how disconnect and connect work with each-other
+            preCloseAction()
+
             // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
             endPoint.actionDispatch.launch {
                 // a connection might have also registered for disconnect events
                 listenerManager.value?.notifyDisconnect(this@Connection)
             }
+
+            // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
+            // lock-stop ordering for how disconnect and connect work with each-other
+            postCloseAction()
         }
     }
 
@@ -387,11 +403,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     //
     //
     override fun toString(): String {
-        return "$remoteAddress $publicationPort/$subscriptionPort ID: $sessionId"
+        return toString0()
     }
 
     override fun hashCode(): Int {
-        return sessionId
+        return id
     }
 
     override fun equals(other: Any?): Boolean {
@@ -406,9 +422,21 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         val other1 = other as Connection
-        return sessionId == other1.sessionId
+        return id == other1.id
     }
 
+    // cleans up the connection information
+    fun cleanup(connectionsPerIpCounts: Int2IntCounterMap, sessionIdAllocator: RandomIdAllocator, streamIdAllocator: RandomIdAllocator) {
+        if (isIpc) {
+            sessionIdAllocator.free(subscriptionPort)
+            sessionIdAllocator.free(publicationPort)
+            streamIdAllocator.free(streamId)
+        } else {
+            connectionsPerIpCounts.getAndDecrement(remoteAddressInt)
+            sessionIdAllocator.free(id)
+            streamIdAllocator.free(streamId)
+        }
+    }
 
     // RMI notes (in multiple places, copypasta, because this is confusing if not written down)
     //

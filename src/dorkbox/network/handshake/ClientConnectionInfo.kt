@@ -15,10 +15,10 @@
  */
 package dorkbox.network.handshake
 
-internal class ClientConnectionInfo(val subscriptionPort: Int,
-                                    val publicationPort: Int,
+internal class ClientConnectionInfo(val subscriptionPort: Int = 0,
+                                    val publicationPort: Int = 0,
                                     val sessionId: Int,
-                                    val streamId: Int,
-                                    val publicKey: ByteArray,
+                                    val streamId: Int = 0,
+                                    val publicKey: ByteArray = ByteArray(0),
                                     val kryoIdsForRmi: IntArray) {
 }

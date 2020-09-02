@@ -22,6 +22,7 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.ping.PingMessage
 import dorkbox.network.ipFilter.IpFilterRule
+import dorkbox.network.other.coroutines.SuspendWaiter
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
 import dorkbox.network.rmi.messages.RmiMessage
@@ -43,7 +44,6 @@ import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import java.io.File
-import java.util.concurrent.CountDownLatch
 
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
@@ -117,7 +117,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val listenerManager = ListenerManager<CONNECTION>()
     internal val connections = ConnectionManager<CONNECTION>()
 
-    private var mediaDriverContext: MediaDriver.Context? = null
+    internal var mediaDriverContext: MediaDriver.Context? = null
     private var mediaDriver: MediaDriver? = null
     private var aeron: Aeron? = null
 
@@ -136,7 +136,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     private val shutdown = atomic(false)
 
     @Volatile
-    private var shutdownLatch: CountDownLatch = CountDownLatch(1)
+    private var shutdownLatch: SuspendWaiter = SuspendWaiter()
 
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
@@ -219,7 +219,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         if (config.aeronLogDirectory == null) {
             val baseFileLocation = config.suggestAeronLogLocation(logger)
 
-            val aeronLogDirectory = File(baseFileLocation, "aeron-" + type.simpleName)
+//            val aeronLogDirectory = File(baseFileLocation, "aeron-" + type.simpleName)
+            val aeronLogDirectory = File(baseFileLocation, "aeron")
             aeronDirAlreadyExists = aeronLogDirectory.exists()
             config.aeronLogDirectory = aeronLogDirectory
         }
@@ -228,6 +229,47 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         if (aeronDirAlreadyExists) {
             logger.warn("Aeron log directory already exists! This might not be what you want!")
         }
+
+        val threadFactory = NamedThreadFactory("Aeron", false)
+
+        // LOW-LATENCY SETTINGS
+        // .termBufferSparseFile(false)
+        //             .useWindowsHighResTimer(true)
+        //             .threadingMode(ThreadingMode.DEDICATED)
+        //             .conductorIdleStrategy(BusySpinIdleStrategy.INSTANCE)
+        //             .receiverIdleStrategy(NoOpIdleStrategy.INSTANCE)
+        //             .senderIdleStrategy(NoOpIdleStrategy.INSTANCE);
+        //     setProperty(DISABLE_BOUNDS_CHECKS_PROP_NAME, "true");
+        //    setProperty("aeron.mtu.length", "16384");
+        //    setProperty("aeron.socket.so_sndbuf", "2097152");
+        //    setProperty("aeron.socket.so_rcvbuf", "2097152");
+        //    setProperty("aeron.rcv.initial.window.length", "2097152");
+
+        // driver context must happen in the initializer, because we have a Server.isRunning() method that uses the mediaDriverContext (without bind)
+        val mDrivercontext = MediaDriver.Context()
+            .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
+            .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
+            .dirDeleteOnStart(true)
+            .dirDeleteOnShutdown(true)
+            .conductorThreadFactory(threadFactory)
+            .receiverThreadFactory(threadFactory)
+            .senderThreadFactory(threadFactory)
+            .sharedNetworkThreadFactory(threadFactory)
+            .sharedThreadFactory(threadFactory)
+            .threadingMode(config.threadingMode)
+            .mtuLength(config.networkMtuSize)
+            .socketSndbufLength(config.sendBufferSize)
+            .socketRcvbufLength(config.receiveBufferSize)
+
+        mDrivercontext
+            .aeronDirectoryName(config.aeronLogDirectory!!.absolutePath)
+            .concludeAeronDirectory()
+
+        mDrivercontext.ipcTermBufferLength(16 * 1024 * 1024) // default: 64 megs each is HUGE
+        mDrivercontext.publicationTermBufferLength(4 * 1024 * 1024) // default: 16 megs each is HUGE (we run out of space in production w/ lots of clients)
+
+        mediaDriverContext = mDrivercontext
+
 
         // serialization stuff
         serialization = config.serialization
@@ -250,45 +292,26 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal fun initEndpointState(): Aeron {
         val aeronDirectory = config.aeronLogDirectory!!.absolutePath
 
-        val threadFactory = NamedThreadFactory("Aeron", false)
-
-        // LOW-LATENCY SETTINGS
-        // .termBufferSparseFile(false)
-        //             .useWindowsHighResTimer(true)
-        //             .threadingMode(ThreadingMode.DEDICATED)
-        //             .conductorIdleStrategy(BusySpinIdleStrategy.INSTANCE)
-        //             .receiverIdleStrategy(NoOpIdleStrategy.INSTANCE)
-        //             .senderIdleStrategy(NoOpIdleStrategy.INSTANCE);
-        mediaDriverContext = MediaDriver.Context()
-            .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
-            .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
-            .dirDeleteOnStart(true)
-            .dirDeleteOnShutdown(true)
-            .conductorThreadFactory(threadFactory)
-            .receiverThreadFactory(threadFactory)
-            .senderThreadFactory(threadFactory)
-            .sharedNetworkThreadFactory(threadFactory)
-            .sharedThreadFactory(threadFactory)
-            .threadingMode(config.threadingMode)
-            .mtuLength(config.networkMtuSize)
-            .socketSndbufLength(config.sendBufferSize)
-            .socketRcvbufLength(config.receiveBufferSize)
-            .aeronDirectoryName(aeronDirectory)
-
-        val aeronContext = Aeron.Context().aeronDirectoryName(aeronDirectory)
-
-        mediaDriver = try {
-            MediaDriver.launch(mediaDriverContext)
-        } catch (e: Exception) {
-            listenerManager.notifyError(e)
-            throw e
+        if (!isRunning()) {
+            // the server always creates a media driver.
+            mediaDriver = try {
+                MediaDriver.launch(mediaDriverContext)
+            } catch (e: Exception) {
+                listenerManager.notifyError(e)
+                throw e
+            }
         }
+
+        val aeronContext = Aeron.Context()
+        aeronContext
+            .aeronDirectoryName(aeronDirectory)
+            .concludeAeronDirectory()
 
         try {
             aeron = Aeron.connect(aeronContext)
         } catch (e: Exception) {
             try {
-                mediaDriver!!.close()
+                mediaDriver?.close()
             } catch (secondaryException: Exception) {
                 e.addSuppressed(secondaryException)
             }
@@ -299,8 +322,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         shutdown.getAndSet(false)
 
-        shutdownLatch.countDown()
-        shutdownLatch = CountDownLatch(1)
+        shutdownLatch = SuspendWaiter()
 
         return aeron!!
     }
@@ -466,11 +488,12 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                listenerManager.notifyError(newException("Error sending message. ${errorCodeName(result)}"))
+                listenerManager.notifyError(
+                        newException("[${publication.sessionId()}] Error sending handshake message. $message (${errorCodeName(result)})"))
                 return
             }
         } catch (e: Exception) {
-            listenerManager.notifyError(newException("Error serializing message $message", e))
+            listenerManager.notifyError(newException("[${publication.sessionId()}] Error serializing handshake message $message", e))
         } finally {
             sendIdleStrategy.reset()
             serialization.returnKryo(kryo)
@@ -622,12 +645,12 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                logger.error("Error sending message. ${errorCodeName(result)}")
+                logger.error("[${publication.sessionId()}] Error sending message. $message (${errorCodeName(result)})")
 
                 return
             }
         } catch (e: Exception) {
-            logger.error("Error serializing message $message", e)
+            logger.error("[${publication.sessionId()}] Error serializing message $message", e)
         } finally {
             sendIdleStrategy.reset()
             serialization.returnKryo(kryo)
@@ -671,8 +694,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     /**
      * Waits for this endpoint to be closed
      */
-    fun waitForShutdown() {
-        shutdownLatch.await()
+    suspend fun waitForClose() {
+        shutdownLatch.doWait()
     }
 
     /**
@@ -681,10 +704,11 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * @return true if the client/server is active and running
      */
     fun isRunning(): Boolean {
-        return mediaDriverContext?.isDriverActive(10_000, logger::debug) ?: false
+        // if the media driver is running, it will be a quick connection. Usually 100ms or so
+        return mediaDriverContext?.isDriverActive(1_000, logger::debug) ?: false
     }
 
-    override fun close() {
+    final override fun close() {
         if (shutdown.compareAndSet(expect = false, update = true)) {
             aeron?.close()
             mediaDriver?.close()
@@ -700,7 +724,12 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
             }
 
-            shutdownLatch.countDown()
+            close0()
+
+            // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
+            shutdownLatch.cancel()
         }
     }
+
+    internal open fun close0() {}
 }
