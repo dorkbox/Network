@@ -268,12 +268,12 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         if (mDrivercontext.ipcTermBufferLength() != io.aeron.driver.Configuration.ipcTermBufferLength()) {
             // default 64 megs each is HUGE
-            mDrivercontext.ipcTermBufferLength(16 * 1024 * 1024)
+            mDrivercontext.ipcTermBufferLength(8 * 1024 * 1024)
         }
 
         if (mDrivercontext.publicationTermBufferLength() != io.aeron.driver.Configuration.termBufferLength()) {
             // default 16 megs each is HUGE (we run out of space in production w/ lots of clients)
-            mDrivercontext.publicationTermBufferLength(4 * 1024 * 1024)
+            mDrivercontext.publicationTermBufferLength(2 * 1024 * 1024)
         }
 
         mediaDriverContext = mDrivercontext
