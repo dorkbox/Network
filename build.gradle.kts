@@ -32,7 +32,7 @@ plugins {
     id("com.dorkbox.GradleUtils") version "1.12"
     id("com.dorkbox.Licensing") version "2.5"
     id("com.dorkbox.VersionUpdate") version "2.0"
-    id("com.dorkbox.GradlePublish") version "1.7"
+    id("com.dorkbox.GradlePublish") version "1.8"
     id("com.dorkbox.GradleModuleInfo") version "1.1"
 
     kotlin("jvm") version "1.4.0"
@@ -42,7 +42,7 @@ object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.0-alpha9"
+    const val version = "5.0-beta1"
 
     // set as project.ext
     const val name = "Network"
