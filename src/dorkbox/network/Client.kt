@@ -352,14 +352,15 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         if (canFinishConnecting) {
             isConnected = true
 
-            // we poll for new messages AFTER `handshake.handshakeDone`, because the aeron media driver will queue up the messages for us.
-            // we want to make sure to call notify connect BEFORE processing new messages.
-
             // have to make a new thread to listen for incoming data!
             // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
             actionDispatch.launch {
                 listenerManager.notifyConnect(newConnection)
+            }
 
+            // these have to be in two SEPARATE actionDispatch.launch commands.... otherwise...
+            // if something inside of notifyConnect is blocking or suspends, then polling will never happen!
+            actionDispatch.launch {
                 val pollIdleStrategy = config.pollIdleStrategy
 
                 while (!isShutdown()) {
