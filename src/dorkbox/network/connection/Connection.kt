@@ -281,12 +281,34 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         return messagesInProgress.value
     }
 
+
+    var previousConnectionExpireTime = Long.MAX_VALUE
+
     /**
      * @return `true` if this connection has no subscribers (which means this connection does not have a remote connection)
      */
     internal fun isExpired(): Boolean {
-        // cannot use subscription.isConnected !!! images can be in a state of flux. We only care if there are NO images.
-        return subscription.hasNoImages()
+        return if (subscription.isConnected) {
+            false
+        }
+        else {
+            // images can be in a state of flux. Sometimes they come and go VERY quickly
+            val now = System.nanoTime()
+            when {
+                previousConnectionExpireTime == Long.MAX_VALUE -> {
+                    // this means we haven't set an expire time yet.
+                    val timeOut = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
+                    previousConnectionExpireTime = now + timeOut
+                    false
+                }
+                now < previousConnectionExpireTime -> {
+                    false
+                }
+                else -> {
+                    true
+                }
+            }
+        }
     }
 
     /**
