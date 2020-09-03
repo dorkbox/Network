@@ -40,7 +40,6 @@ import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.serialization.KryoExtra
-import dorkbox.network.serialization.Serialization.Companion.INVALID_KRYO_ID
 
 /**
  * This is to manage serializing RMI objects across the wire...
@@ -110,14 +109,14 @@ class RmiServerSerializer : Serializer<Any>(false) {
 
         return if (interfaceClass.isInterface) {
             // normal case. RMI only on 1 side
-            val kryoId = serialization.rmiHolder.ifaceToId[interfaceClass]!!
-            require(kryoId != INVALID_KRYO_ID) { "Registration for $interfaceClass is invalid!!" }
+            val kryoId = serialization.rmiHolder.ifaceToId[interfaceClass]
+            require(kryoId != null) { "Registration for $interfaceClass is invalid!!" }
             connection.rmiConnectionSupport.getProxyObject(connection, kryoId, rmiId, interfaceClass)
         } else {
             // BI-DIRECTIONAL RMI -- THIS IS NOT NORMAL!
             // this won't be an interface. It will be an impl (because of how RMI is setup)
-            val kryoId = serialization.rmiHolder.implToId[interfaceClass]!!
-            require(kryoId != INVALID_KRYO_ID) { "Registration for $interfaceClass is invalid!!" }
+            val kryoId = serialization.rmiHolder.implToId[interfaceClass]
+            require(kryoId != null) { "Registration for $interfaceClass is invalid!!" }
             val iface = serialization.rmiHolder.idToIface[kryoId]
             connection.rmiConnectionSupport.getProxyObject(connection, kryoId, rmiId, iface)
         }
