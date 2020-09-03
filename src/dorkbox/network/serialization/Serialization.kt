@@ -92,6 +92,7 @@ open class Serialization(private val references: Boolean = true, private val fac
     private lateinit var logger: KLogger
 
     private var initialized = atomic(false)
+    private val initializedKryoCount = atomic(0)
     private val kryoPool = MultithreadConcurrentQueue<KryoExtra>(1024)  // reasonable size of available kryo's
     private val kryoHandshakePool = MultithreadConcurrentQueue<KryoExtra>(1024)  // reasonable size of available kryo's
 
@@ -335,6 +336,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      * called as the first thing inside when initializing the classesToRegister
      */
     private fun initKryo(): KryoExtra {
+        initializedKryoCount.getAndIncrement()
         val kryo = KryoExtra()
 
         kryo.instantiatorStrategy = instantiatorStrategy
@@ -530,7 +532,7 @@ open class Serialization(private val references: Boolean = true, private val fac
         // save this as a byte array (so class registration validation during connection handshake is faster)
         val output = AeronOutput()
         try {
-            kryo.writeCompressed(logger, output, registrationDetails.toTypedArray())
+            kryo.write(output, registrationDetails.toTypedArray())
         } catch (e: Exception) {
             logger.error("Unable to write compressed data for registration details", e)
             return false
@@ -549,7 +551,7 @@ open class Serialization(private val references: Boolean = true, private val fac
                                  classesToRegisterForRmi: List<ClassRegistrationForRmi>,
                                  kryo: KryoExtra): Boolean {
         val input = AeronInput(kryoRegistrationDetailsFromServer)
-        val clientClassRegistrations = kryo.readCompressed(logger, input, kryoRegistrationDetailsFromServer.size) as Array<Array<Any>>
+        val clientClassRegistrations = kryo.read(input) as Array<Array<Any>>
 
         val maker = kryo.instantiatorStrategy
 
@@ -625,6 +627,16 @@ open class Serialization(private val references: Boolean = true, private val fac
     fun returnHandshakeKryo(kryo: KryoExtra) {
         // return as much as we can. don't suspend if the pool is full, we just throw it away.
         kryoHandshakePool.offer(kryo)
+    }
+
+    /**
+     * @return The number of kryo instances created. This does not reflect the size of the pool, just the number of
+     * existing kryo instances.
+     *
+     * If there are more kryo instances than the pool size, they will end up on the heap and will contribute to GC pauses.
+     */
+    fun getInitializedKryoCount(): Int {
+        return initializedKryoCount.value
     }
 
     /**
