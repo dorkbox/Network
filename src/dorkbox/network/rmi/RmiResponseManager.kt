@@ -68,7 +68,7 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
         ids.shuffle()
 
         // populate the array of randomly assigned ID's + waiters.
-        ids.forEach {
+        for (it in ids) {
             rmiWaiterCache.offer(RmiWaiter(it))
         }
     }
