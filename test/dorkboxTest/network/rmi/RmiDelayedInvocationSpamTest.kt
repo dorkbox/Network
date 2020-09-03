@@ -25,9 +25,7 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Assert
-import org.junit.Before
 import org.junit.Test
 import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicLong
@@ -39,8 +37,7 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
 
     var async = true
 
-    @Before
-    fun setupLogBefore() {
+    private fun setupLogBefore() {
         // assume SLF4J is bound to logback in the current environment
         val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
         val context = rootLogger.loggerContext
@@ -52,8 +49,7 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
         rootLogger.level = Level.DEBUG
     }
 
-    @After
-    fun setupLogAfter() {
+    private fun setupLogAfter() {
         // assume SLF4J is bound to logback in the current environment
         val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
         val context = rootLogger.loggerContext
@@ -78,10 +74,12 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
     @Test
     fun rmiNetworkAync() {
         runBlocking {
+            setupLogBefore()
             async = true
             rmi { configuration ->
                 configuration.enableIpcForLoopback = false
             }
+            setupLogAfter()
         }
     }
 
@@ -96,8 +94,10 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
     @Test
     fun rmiIpcAsync() {
         runBlocking {
+            setupLogBefore()
             async = true
             rmi()
+            setupLogAfter()
         }
     }
 
