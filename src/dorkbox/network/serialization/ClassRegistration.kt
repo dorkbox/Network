@@ -68,8 +68,9 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
         }
 
         // now, we want to save the relationship between classes and kryoId
-        rmi.idToIface[id] = clazz
-        rmi.ifaceToId[clazz] = id
+        // ALL REGISTRATIONS MUST BE IMPL! (only RMI can have IFACE)
+        rmi.idToImpl[id] = clazz
+        rmi.implToId[clazz] = id
     }
 
     open fun register(kryo: KryoExtra) {}

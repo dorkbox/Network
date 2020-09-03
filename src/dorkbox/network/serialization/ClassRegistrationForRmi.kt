@@ -106,16 +106,77 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
     override fun register(kryo: KryoExtra, rmi: RmiHolder) {
         // we override this, because we ALWAYS will call our RMI registration!
 
-        if (implClass == null) {
-            // this means we are the RMI-CLIENT
+        // EVERY time initKryo() is called, this will happen. We have to ensure that every call produces the same results
 
-            // see if we have the IMPL registered? NOT LIKELY, but possible
-            val existingId = rmi.ifaceToId[clazz]
-            if (existingId != null) {
-                implClass = rmi.idToImpl[existingId]
+        // SUPER IMPORTANT:
+        //   if RMI-CLIENT is registered, an IFACE will be present
+        //   if RMI-SERVER is registered, and IFACE+IMPL will be present
+        //  Both IFACE+IMPL must be checked when deciding if something needs to be overloaded, but ONLY for registerRmi
+
+        // check to see if we have already registered this as RMI-CLIENT
+        val  alreadyRegistered = rmi.ifaceToId[clazz] != null
+
+        if (alreadyRegistered) {
+            // if we are ALREADY registered, then we have to make sure that RMI-CLIENT doesn't override RMI-SERVER...
+            val previousId = rmi.ifaceToId[clazz]
+            if (rmi.idToImpl[previousId] != null) {
+                // the impl was registered, which means that ANOTHER registration registered as RMI-SERVER.
+
+                if (implClass == null) {
+                    // we are RMI-CLIENT.
+                    // remove this registration, because we ALREADY have RMI-SERVER registered, and changing it to RMI-CLIENT will break rmi.
+                    info = "CONFLICTED $previousId -> (RMI) Ignored duplicate registration for ${clazz.name}"
+
+                    // mark this for later, so we don't try to do something with it
+                    id = IGNORE_REGISTRATION
+                    return
+                } else {
+                    // Who cares. we are RMI-SERVER, so redo the registration info.
+                    // MAYBE there are duplicates, but we don't care because whatever is registered as RMI-SERVER is the authority
+                    val registration = kryo.classResolver.getRegistration(clazz)
+                    if (registration != null) {
+                        id = registration.id
+
+                        // override that registration
+                        kryo.register(implClass, serializer, id)
+                    }
+                    else {
+                        // now register the impl class
+                        id = kryo.register(implClass, serializer).id
+                    }
+                }
+            } else {
+                // we don't have an IMPL registered (this means, only RMI-CLIENT was registered
+
+                // if we are RMI-SERVER, then we register, if we are RMI-CLIENT, then we are a duplicate registration (and should be ignored)
+                if (implClass != null) {
+                    // this means we are the RMI-SERVER
+                    val registration = kryo.classResolver.getRegistration(clazz)
+                    if (registration != null) {
+                        id = registration.id
+
+                        // override that registration
+                        kryo.register(implClass, serializer, id)
+                    }
+                    else {
+                        // now register the impl class
+                        id = kryo.register(implClass, serializer).id
+                    }
+                } else {
+                    // duplicate. ignore!
+                    // do nothing, because this is ALREADY registered for RMI
+                    info = "CONFLICTED $previousId -> (RMI) Ignored duplicate registration for ${clazz.name}"
+
+                    // mark this for later, so we don't try to do something with it
+                    id = IGNORE_REGISTRATION
+                    return
+                }
             }
+        } else {
+            // this means we were NOT already registered
 
             if (implClass == null) {
+                // this means we are the RMI-CLIENT
                 // then we just register the interface class!
 
                 val registration = kryo.classResolver.getRegistration(clazz)
@@ -129,26 +190,23 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
                     // just register the iface class
                     id = kryo.register(clazz, serializer).id
                 }
+            } else {
+                // RMI-SERVER
+
+                // this means we are the RMI-SERVER
+                val registration = kryo.classResolver.getRegistration(clazz)
+                if (registration != null) {
+                    id = registration.id
+
+                    // override that registration
+                    kryo.register(implClass, serializer, id)
+                }
+                else {
+                    // now register the impl class
+                    id = kryo.register(implClass, serializer).id
+                }
             }
         }
-
-
-        if (implClass != null) {
-            // this means we are the RMI-SERVER
-            val registration = kryo.classResolver.getRegistration(implClass) // we cannot register iface classes!
-            if (registration != null) {
-                id = registration.id
-
-                // override that registration
-                kryo.register(implClass, serializer, id)
-            }
-            else {
-                // now register the impl class
-                id = kryo.register(implClass, serializer).id
-            }
-        }
-
-
 
         // have to get the ID for the interface (if it exists)
         info = if (implClass == null) {

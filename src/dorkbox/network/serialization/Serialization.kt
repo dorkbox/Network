@@ -333,7 +333,8 @@ open class Serialization(private val references: Boolean = true, private val fac
                 classesToRegister.add(ClassRegistration3(it))
             }
 
-            initializeClassRegistrations()
+            val kryo = initKryo() // this will initialize the class registrations
+            initializeClassRegistrations(kryo)
         } else {
             if (!initialized.compareAndSet(expect = false, update = true)) {
                 // the client CAN initialize more than once, since initialization happens in the handshake now
@@ -344,9 +345,7 @@ open class Serialization(private val references: Boolean = true, private val fac
         }
     }
 
-    private fun initializeClassRegistrations(): Boolean {
-        val kryo = initKryo()
-
+    private fun initializeClassRegistrations(kryo: KryoExtra): Boolean {
         // now MERGE all of the registrations (since we can have registrations overwrite newer/specific registrations based on ID
         // in order to get the ID's, these have to be registered with a kryo instance!
         val mergedRegistrations = mutableListOf<ClassRegistration>()
@@ -474,6 +473,7 @@ open class Serialization(private val references: Boolean = true, private val fac
         val classesToRegisterForRmi = listOf(*classesToRegister.toTypedArray()) as List<ClassRegistrationForRmi>
         classesToRegister.clear()
 
+        // NOTE: to be clear, the "client" can ONLY registerRmi(IFACE, IMPL), to have extra info as the RMI-SERVER!!
 
 
 
@@ -530,10 +530,10 @@ open class Serialization(private val references: Boolean = true, private val fac
         }
 
         // we have to re-init so the registrations are set!
-        initKryo()
+        kryo = initKryo()
 
         // now do a round-trip through the class registrations
-        return initializeClassRegistrations()
+        return initializeClassRegistrations(kryo)
     }
 
     /**
