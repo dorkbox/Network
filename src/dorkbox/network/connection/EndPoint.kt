@@ -711,7 +711,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     fun isRunning(): Boolean {
         // if the media driver is running, it will be a quick connection. Usually 100ms or so
-        return mediaDriverContext?.isDriverActive(1_000, logger::debug) ?: false
+        return mediaDriverContext.isDriverActive(1_000, logger::debug)
     }
 
     final override fun close() {

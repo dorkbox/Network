@@ -187,7 +187,7 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
 
     fun close() {
         pendingLock.write {
-            pending.forEachIndexed { index, any ->
+            pending.forEachIndexed { index, _ ->
                 pending[index] = null
             }
         }
