@@ -493,13 +493,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                listenerManager.notifyError(newException("[${publication.sessionId()}] Error sending handshake message. $message (${
-                    errorCodeName(result)
-                })"))
+                val exception = newException("[${publication.sessionId()}] Error sending handshake message. $message (${errorCodeName(result)})")
+                ListenerManager.cleanStackTrace(exception)
+                listenerManager.notifyError(exception)
                 return
             }
         } catch (e: Exception) {
-            listenerManager.notifyError(newException("[${publication.sessionId()}] Error serializing handshake message $message", e))
+            val exception = newException("[${publication.sessionId()}] Error serializing handshake message $message", e)
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.notifyError(exception)
         } finally {
             sendIdleStrategy.reset()
             serialization.returnHandshakeKryo(kryo)
