@@ -18,7 +18,6 @@ package dorkboxTest.network.rmi.multiJVM
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
-import dorkboxTest.network.rmi.RmiCommonTest
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestBabyCowImpl
 import dorkboxTest.network.rmi.cows.TestCow
@@ -36,7 +35,10 @@ object TestServer {
 
         val configuration = BaseTest.serverConfig()
 
-        RmiCommonTest.register(configuration.serialization)
+        configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+        configuration.serialization.register(MessageWithTestCow::class.java)
+        configuration.serialization.register(UnsupportedOperationException::class.java)
+
         configuration.serialization.register(TestBabyCowImpl::class.java)
         configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
         configuration.enableRemoteSignatureValidation = false

@@ -68,7 +68,7 @@ class RmiSimpleTest : BaseTest() {
     }
 
     @Test
-    fun rmiIPcNetworkConnection() {
+    fun rmiIpcNetworkConnection() {
         rmi()
     }
 
@@ -76,7 +76,10 @@ class RmiSimpleTest : BaseTest() {
         run {
             val configuration = serverConfig()
             config(configuration)
-            RmiCommonTest.register(configuration.serialization)
+            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+            configuration.serialization.register(MessageWithTestCow::class.java)
+            configuration.serialization.register(UnsupportedOperationException::class.java)
+
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
@@ -91,6 +94,7 @@ class RmiSimpleTest : BaseTest() {
 
 
                 System.err.println("Starting test for: Server -> Client")
+                // NOTE: THIS IS BI-DIRECTIONAL!
                 connection.createObject<TestCow>(123) { rmiId, remoteObject ->
                     System.err.println("Running test for: Server -> Client")
                     RmiCommonTest.runTests(connection, remoteObject, 123)
@@ -102,6 +106,8 @@ class RmiSimpleTest : BaseTest() {
         run {
             val configuration = clientConfig()
             config(configuration)
+//            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
@@ -128,14 +134,16 @@ class RmiSimpleTest : BaseTest() {
             }
         }
 
-        waitForThreads(99999999)
+        waitForThreads()
     }
 
     fun rmiGlobal(config: (Configuration) -> Unit = {}) {
         run {
             val configuration = serverConfig()
             config(configuration)
-            RmiCommonTest.register(configuration.serialization)
+            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+            configuration.serialization.register(MessageWithTestCow::class.java)
+            configuration.serialization.register(UnsupportedOperationException::class.java)
 
             // for Client -> Server RMI
             configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
@@ -166,6 +174,7 @@ class RmiSimpleTest : BaseTest() {
         run {
             val configuration = clientConfig()
             config(configuration)
+//            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
