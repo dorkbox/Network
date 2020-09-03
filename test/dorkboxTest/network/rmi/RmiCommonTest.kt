@@ -36,10 +36,8 @@ package dorkboxTest.network.rmi
 
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
-import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
-import dorkboxTest.network.rmi.cows.TestCowImpl
 import org.junit.Assert
 
 object RmiCommonTest {
@@ -140,11 +138,5 @@ object RmiCommonTest {
         connection.send(m)
 
         connection.logger.error("Finished tests")
-    }
-
-    fun register(serialization: Serialization) {
-        serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
-        serialization.register(MessageWithTestCow::class.java)
-        serialization.register(UnsupportedOperationException::class.java)
     }
 }
