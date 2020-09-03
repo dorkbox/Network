@@ -466,7 +466,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         }
 
         // we are not thread-safe!
-        val kryo = serialization.takeKryo()
+        val kryo = serialization.takeHandshakeKryo()
 
         try {
             kryo.write(message)
@@ -499,7 +499,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             listenerManager.notifyError(newException("[${publication.sessionId()}] Error serializing handshake message $message", e))
         } finally {
             sendIdleStrategy.reset()
-            serialization.returnKryo(kryo)
+            serialization.returnHandshakeKryo(kryo)
         }
     }
 
@@ -513,7 +513,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
         try {
-            val message = serialization.readMessage(buffer, offset, length)
+            val message = serialization.readHandshakeMessage(buffer, offset, length)
             logger.trace {
                 "[${header.sessionId()}] received: $message"
             }

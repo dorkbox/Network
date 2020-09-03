@@ -34,8 +34,22 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
     open fun register(kryo: KryoExtra, rmi: RmiHolder) {
         // ClassRegistrationForRmi overrides this method
 
-        val savedKryoId: Int? = rmi.implToId[clazz] // ALL registrations MUST BE IMPL!
+        if (id != 0) {
+            // our ID will always be > 0
+            // this means that this registration was PREVIOUSLY registered on a different kryo. Shortcut the logic.
 
+            if (serializer != null) {
+                kryo.register(clazz, serializer, id)
+            } else {
+                kryo.register(clazz, id)
+            }
+
+            return
+        }
+
+
+
+        val savedKryoId: Int? = rmi.implToId[clazz] // ALL registrations MUST BE IMPL!
         var overriddenSerializer: Serializer<Any>? = null
 
         // did we already process this class?  We permit overwriting serializers, etc!

@@ -105,6 +105,21 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
      */
     override fun register(kryo: KryoExtra, rmi: RmiHolder) {
         // we override this, because we ALWAYS will call our RMI registration!
+        if (id != 0) {
+            // our ID will always be > 0
+            // this means that this registration was PREVIOUSLY registered on a different kryo. Shortcut the logic.
+
+            if (implClass != null) {
+                // RMI-SERVER
+                kryo.register(implClass, serializer, id)
+            } else {
+                // RMI-CLIENT
+                kryo.register(clazz, serializer, id)
+            }
+            return
+        }
+
+
 
         // EVERY time initKryo() is called, this will happen. We have to ensure that every call produces the same results
 
@@ -114,7 +129,7 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
         //  Both IFACE+IMPL must be checked when deciding if something needs to be overloaded, but ONLY for registerRmi
 
         // check to see if we have already registered this as RMI-CLIENT
-        val  alreadyRegistered = rmi.ifaceToId[clazz] != null
+        val alreadyRegistered = rmi.ifaceToId[clazz] != null
 
         if (alreadyRegistered) {
             // if we are ALREADY registered, then we have to make sure that RMI-CLIENT doesn't override RMI-SERVER...

@@ -116,7 +116,6 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
 
         // Send the one-time pad to the server.
         endPoint.writeHandshakeMessage(handshakeConnection.publication, registrationMessage)
-        endPoint.serialization.takeKryo() // TAKE THE KRYO BACK OFF! We don't want it on the pool yet, since this kryo hasn't had all of the classes registered yet!
         sessionId = handshakeConnection.publication.sessionId()
 
 

@@ -39,15 +39,17 @@ import com.esotericsoftware.kryo.KryoException
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
+import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.serialization.KryoExtra
+import org.agrona.collections.Int2ObjectHashMap
 import java.lang.reflect.Method
 
 /**
  * Internal message to invoke methods remotely.
  */
 @Suppress("ConstantConditionIf")
-class MethodRequestSerializer : Serializer<MethodRequest>() {
+class MethodRequestSerializer(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>) : Serializer<MethodRequest>() {
     override fun write(kryo: Kryo, output: Output, methodRequest: MethodRequest) {
         val method = methodRequest.cachedMethod
 
@@ -83,7 +85,7 @@ class MethodRequestSerializer : Serializer<MethodRequest>() {
         (kryo as KryoExtra)
 
         val cachedMethod = try {
-            kryo.getMethods(methodClassId)[methodIndex]
+            methodCache[methodClassId][methodIndex]
         } catch (ex: Exception) {
             val methodClass = kryo.getRegistration(methodClassId).type
             throw KryoException("Invalid method index " + methodIndex + " for class: " + methodClass.name)

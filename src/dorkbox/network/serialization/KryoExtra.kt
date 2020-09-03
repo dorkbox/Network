@@ -19,20 +19,18 @@ import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.connection.Connection
-import dorkbox.network.rmi.CachedMethod
 import dorkbox.os.OS
 import dorkbox.util.Sys
 import dorkbox.util.bytes.OptimizeUtilsByteArray
 import net.jpountz.lz4.LZ4Factory
 import org.agrona.DirectBuffer
-import org.agrona.collections.Int2ObjectHashMap
 import org.slf4j.Logger
 import java.io.IOException
 
 /**
  * Nothing in this class is thread safe
  */
-class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>) : Kryo() {
+class KryoExtra() : Kryo() {
     // for kryo serialization
     private val readerBuffer = AeronInput()
     val writerBuffer = AeronOutput()
@@ -74,10 +72,6 @@ class KryoExtra(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>)
 //            throw IllegalStateException("could not get cipher instance", e)
 //        }
 //    }
-
-    fun getMethods(classId: Int): Array<CachedMethod> {
-        return methodCache[classId]
-    }
 
     /**
      * NOTE: THIS CANNOT BE USED FOR ANYTHING RELATED TO RMI!
