@@ -73,13 +73,12 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
 
     @Test
     fun rmiNetworkAync() {
+        setupLogBefore()
         runBlocking {
-            setupLogBefore()
             async = true
             rmi { configuration ->
                 configuration.enableIpcForLoopback = false
             }
-            setupLogAfter()
         }
     }
 
@@ -93,11 +92,10 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
 
     @Test
     fun rmiIpcAsync() {
+        setupLogBefore()
         runBlocking {
-            setupLogBefore()
             async = true
             rmi()
-            setupLogAfter()
         }
     }
 

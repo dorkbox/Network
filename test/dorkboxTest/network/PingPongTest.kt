@@ -69,7 +69,7 @@ class PingPongTest : BaseTest() {
 
             server.onConnect { connection ->
                 server.forEachConnection { connection ->
-                    println("server connection: $connection")
+                    connection.logger.error("server connection: $connection")
                 }
             }
 
@@ -88,7 +88,7 @@ class PingPongTest : BaseTest() {
 
             client.onConnect { connection ->
                 client.forEachConnection { connection ->
-                    println("client connection: $connection")
+                    connection.logger.error("client connection: $connection")
                 }
 
                 fail = null
@@ -105,8 +105,8 @@ class PingPongTest : BaseTest() {
                 if (counter.getAndIncrement() <= tries) {
                     connection.send(data)
                 } else {
-                    System.err.println("done.")
-                    System.err.println("Ran $tries times")
+                    connection.logger.error("done.")
+                    connection.logger.error("Ran $tries times")
                     stopEndPoints()
                 }
             }

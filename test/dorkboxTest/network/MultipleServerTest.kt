@@ -71,14 +71,14 @@ class MultipleServerTest : BaseTest() {
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
 
-            server.onMessage<String>{ _, message ->
+            server.onMessage<String>{ connection, message ->
                 if (message != "client_$count") {
                     Assert.fail()
                 }
 
                 didReceive[count].set(true)
                 if (received.incrementAndGet() == total) {
-                    println("Done, stopping endpoints")
+                    connection.logger.error("Done, stopping endpoints")
                     stopEndPoints()
                 }
             }
