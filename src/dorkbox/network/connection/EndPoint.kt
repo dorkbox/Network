@@ -118,7 +118,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val listenerManager = ListenerManager<CONNECTION>()
     internal val connections = ConnectionManager<CONNECTION>()
 
-    internal var mediaDriverContext: MediaDriver.Context? = null
+    internal val mediaDriverContext: MediaDriver.Context
     private var mediaDriver: MediaDriver? = null
     private var aeron: Aeron? = null
 
@@ -250,8 +250,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         val mDrivercontext = MediaDriver.Context()
             .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
             .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
-            .dirDeleteOnStart(true)
-            .dirDeleteOnShutdown(true)
             .conductorThreadFactory(threadFactory)
             .receiverThreadFactory(threadFactory)
             .senderThreadFactory(threadFactory)
@@ -294,10 +292,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         val aeronDirectory = config.aeronLogDirectory!!.absolutePath
 
         if (!isRunning()) {
+            logger.debug { "Starting Aeron Media driver..."}
+
+            mediaDriverContext
+                .dirDeleteOnStart(true)
+                .dirDeleteOnShutdown(true)
+
             // the server always creates a the media driver.
-            mediaDriver = try {
-                logger.debug { "Starting Aeron Media driver..."}
-                MediaDriver.launch(mediaDriverContext)
+            try {
+                mediaDriver = MediaDriver.launch(mediaDriverContext)
             } catch (e: Exception) {
                 listenerManager.notifyError(e)
                 throw e
