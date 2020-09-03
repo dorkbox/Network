@@ -70,7 +70,6 @@ internal class CryptoManagement(val logger: KLogger,
     val secureRandom = SecureRandom(settingsStore.getSalt())
 
     private val iv = ByteArray(GCM_IV_LENGTH)
-    private val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, iv)
     val cryptOutput = AeronOutput()
     val cryptInput = AeronInput()
 
@@ -192,6 +191,7 @@ internal class CryptoManagement(val logger: KLogger,
 
         val secretKeySpec = generateAesKey(clientPublicKeyBytes, clientPublicKeyBytes, publicKeyBytes)
         secureRandom.nextBytes(iv)
+        val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, iv)
         aesCipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, gcmParameterSpec)
 
         // now create the byte array that holds all our data
@@ -224,6 +224,7 @@ internal class CryptoManagement(val logger: KLogger,
 
 
         // now decrypt the data
+        val gcmParameterSpec = GCMParameterSpec(GCM_TAG_LENGTH * 8, iv)
         aesCipher.init(Cipher.DECRYPT_MODE, secretKeySpec, gcmParameterSpec)
 
         cryptInput.buffer = aesCipher.doFinal(secretBytes)
