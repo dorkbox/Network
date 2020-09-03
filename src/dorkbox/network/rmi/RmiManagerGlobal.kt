@@ -182,7 +182,6 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
      * Manages ALL OF THE RMI stuff!
      */
     @Suppress("DuplicatedCode")
-    @Throws(IllegalArgumentException::class)
     suspend fun manage(endPoint: EndPoint<CONNECTION>, connection: CONNECTION, message: Any, logger: KLogger) {
         when (message) {
             is ConnectionObjectCreateRequest -> {
