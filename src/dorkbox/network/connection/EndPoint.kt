@@ -292,7 +292,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         val aeronDirectory = config.aeronLogDirectory!!.absolutePath
 
         if (!isRunning()) {
-            logger.debug { "Starting Aeron Media driver..."}
+            logger.debug("Starting Aeron Media driver...")
 
             mediaDriverContext
                 .dirDeleteOnStart(true)
@@ -719,16 +719,18 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             aeron?.close()
             mediaDriver?.close()
 
-            // the storage is closed via this as well
-            settingsStore.close()
-
-            rmiGlobalSupport.close()
-
             runBlocking {
                 connections.forEach {
                     it.close()
                 }
             }
+
+
+            // the storage is closed via this as well.
+            settingsStore.close()
+            // Connections are closed first, because we want to make sure that no RMI messages can be received
+            // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
+            rmiGlobalSupport.close()
 
             close0()
 
