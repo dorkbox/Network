@@ -390,10 +390,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      */
     internal fun finishInit(type: Class<*>, settingsStore: SettingsStore, kryoRegistrationDetailsFromServer: ByteArray = ByteArray(0)): Boolean {
         logger = KotlinLogging.logger(type.simpleName)
-logger.error("*********************ININT")
-logger.error("*********************ININT")
-logger.error("*********************ININT")
-logger.error("*********************ININT")
+
         // this will set up the class registration information
         return if (type == Server::class.java) {
             if (!initialized.compareAndSet(expect = false, update = true)) {
