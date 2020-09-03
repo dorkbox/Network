@@ -189,7 +189,7 @@ class RmiNestedTest : BaseTest() {
                 client.connect(LOOPBACK, 5000)
             }
         }
-        waitForThreads(999999)
+        waitForThreads()
     }
 
     @Test
@@ -249,7 +249,68 @@ class RmiNestedTest : BaseTest() {
                 client.connect(LOOPBACK, 5000)
             }
         }
-        waitForThreads(999999)
+        waitForThreads()
+    }
+
+    @Test
+    fun singleReverseRmi() {
+        run {
+            val configuration = serverConfig()
+            configuration.serialization.registerRmi(TestObject::class.java, null)
+            configuration.serialization.register(OtherObjectImpl::class.java)
+
+            val server = Server<Connection>(configuration)
+            addEndPoint(server)
+
+            server.onConnect { connection ->
+                connection.logger.error("Connected")
+                connection.createObject<TestObject> { rmiId, remoteObject ->
+                    connection.logger.error("Starting test")
+                    remoteObject.setOtherValue(43.21f)
+
+                    // Normal remote method call.
+                    Assert.assertEquals(43.21f, remoteObject.getOtherValue(), .0001f)
+
+                    // real object
+                    val otherObject: OtherObject = remoteObject.getOtherObject()
+
+                    // Normal remote method call on the second object.
+                    val value = otherObject.value()
+                    Assert.assertEquals(43.21f, value, .0001f)
+
+
+                    // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                    // that is where that object actually exists.
+                    connection.send(otherObject)
+                }
+            }
+
+            server.bind()
+        }
+
+
+        run {
+            val configuration = clientConfig()
+            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+
+            val client = Client<Connection>(configuration)
+            addEndPoint(client)
+
+            client.onMessage<OtherObject> { connection, message ->
+                // The test is complete when the client sends the OtherObject instance.
+                // this 'object' is the REAL object
+                if (message.value() == 43.21f) {
+                    stopEndPoints()
+                } else {
+                    Assert.fail("Incorrect object value")
+                }
+            }
+
+            runBlocking {
+                client.connect(LOOPBACK, 5000)
+            }
+        }
+        waitForThreads()
     }
 
 

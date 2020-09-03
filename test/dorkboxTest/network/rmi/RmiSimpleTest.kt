@@ -187,7 +187,7 @@ class RmiSimpleTest : BaseTest() {
                 // this creates a GLOBAL object on the server (instead of a connection specific object)
                 client.createObject<TestCow>(44) { rmiId, remoteObject ->
                     System.err.println("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(client.getConnection(), remoteObject, 44)
+                    RmiCommonTest.runTests(client.connection, remoteObject, 44)
                     System.err.println("Done with test for: Client -> Server")
                 }
             }
