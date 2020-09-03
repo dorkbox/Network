@@ -107,6 +107,53 @@ class SerializationValidationTest : BaseTest() {
         waitForThreads()
     }
 
+    @Test
+    fun checkOutOfOrder2() {
+        run {
+            val configuration = serverConfig()
+            configuration.serialization.registerRmi(TestObject::class.java)
+            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+
+            val server = Server<Connection>(configuration)
+            addEndPoint(server)
+
+            server.onMessage<TestObject> { connection, message ->
+                stopEndPoints()
+            }
+            server.bind()
+        }
+
+
+        run {
+            val configuration = clientConfig()
+
+            val client = Client<Connection>(configuration)
+            addEndPoint(client)
+
+            client.onConnect { connection ->
+                connection.logger.error("Connected")
+                connection.createObject<TestObject> { rmiId, remoteObject ->
+                    connection.logger.error("Starting test")
+                    remoteObject.setValue(43.21f)
+
+                    // Normal remote method call.
+                    Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
+
+                    // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
+                    // that is where that object actually exists.
+                    connection.send(remoteObject)
+                }
+            }
+
+
+            runBlocking {
+                client.connect(LOOPBACK)
+            }
+        }
+
+        waitForThreads()
+    }
+
     private fun register(serialization: Serialization) {
         serialization.register(Command1::class.java)
         serialization.register(Command2::class.java)
