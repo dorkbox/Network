@@ -140,7 +140,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         // only change LOCALHOST -> IPC if the media driver is ALREADY running!
         val canAutoChangeToIpc = config.enableIpcForLoopback && isRunning()
         if (canAutoChangeToIpc) {
-            logger.trace { "Media driver is running. Support for enable auto-switch from LOCALHOST -> IPC enabled" }
+            logger.info("Media driver is running. Support for enable auto-switch from LOCALHOST -> IPC enabled")
         }
 
         this.connectionTimeoutMS = connectionTimeoutMS
