@@ -200,13 +200,13 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             val clientAddress = IPv4.toInt(clientAddressString)
 
             val message = readHandshakeMessage(buffer, offset, length, header)
-            handshake.processHandshakeMessageServer(this@Server,
-                                                    handshakePublication,
-                                                    sessionId,
-                                                    clientAddressString,
-                                                    clientAddress,
-                                                    message,
-                                                    aeron)
+            handshake.processUdpHandshakeMessageServer(this@Server,
+                                                       handshakePublication,
+                                                       sessionId,
+                                                       clientAddressString,
+                                                       clientAddress,
+                                                       message,
+                                                       aeron)
         }
 
         val ipcHandshakeHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
@@ -217,11 +217,11 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             val sessionId = header.sessionId()
 
             val message = readHandshakeMessage(buffer, offset, length, header)
-            handshake.processHandshakeMessageServer(this@Server,
-                                                    ipcHandshakePublication,
-                                                    sessionId,
-                                                    message,
-                                                    aeron)
+            handshake.processIpcHandshakeMessageServer(this@Server,
+                                                       ipcHandshakePublication,
+                                                       sessionId,
+                                                       message,
+                                                       aeron)
         }
 
         actionDispatch.launch {

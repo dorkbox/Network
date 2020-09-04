@@ -169,11 +169,11 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
 
     // note: CANNOT be called in action dispatch
-    fun processHandshakeMessageServer(server: Server<CONNECTION>,
-                                      handshakePublication: Publication,
-                                      sessionId: Int,
-                                      message: Any?,
-                                      aeron: Aeron) {
+    fun processIpcHandshakeMessageServer(server: Server<CONNECTION>,
+                                         handshakePublication: Publication,
+                                         sessionId: Int,
+                                         message: Any?,
+                                         aeron: Aeron) {
 
         val connectionString = "IPC"
 
@@ -183,7 +183,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         message as HandshakeMessage
 
         val serialization = config.serialization
-
 
         /////
         /////
@@ -322,13 +321,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     }
 
     // note: CANNOT be called in action dispatch
-    fun processHandshakeMessageServer(server: Server<CONNECTION>,
-                                      handshakePublication: Publication,
-                                      sessionId: Int,
-                                      clientAddressString: String,
-                                      clientAddress: Int,
-                                      message: Any?,
-                                      aeron: Aeron) {
+    fun processUdpHandshakeMessageServer(server: Server<CONNECTION>,
+                                         handshakePublication: Publication,
+                                         sessionId: Int,
+                                         clientAddressString: String,
+                                         clientAddress: Int,
+                                         message: Any?,
+                                         aeron: Aeron) {
 
         if (!validateMessageTypeAndDoPending(server, handshakePublication, message, sessionId, clientAddressString)) {
             return

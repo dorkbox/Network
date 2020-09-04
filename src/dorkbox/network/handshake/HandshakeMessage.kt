@@ -122,6 +122,6 @@ internal class HandshakeMessage private constructor() {
         }
 
 
-        return "HandshakeMessage(oneTimePad=$oneTimePad, sid= $sessionId $stateStr$errorMsg)"
+        return "HandshakeMessage($sessionId : oneTimePad=$oneTimePad $stateStr$errorMsg)"
     }
 }
