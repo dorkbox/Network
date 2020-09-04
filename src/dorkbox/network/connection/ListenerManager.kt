@@ -70,6 +70,39 @@ internal class ListenerManager<CONNECTION: Connection> {
                 throwable.stackTrace = stackTrace.copyOfRange(0, 1)
             }
         }
+
+        /**
+         * Remove from the stacktrace (going in reverse), kotlin coroutine info ONLY. This is for internal logs when a problem happens INSIDE the network stack
+         *
+         * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
+         */
+        fun cleanStackTraceInternal(throwable: Throwable) {
+            // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+            val stackTrace = throwable.stackTrace
+            var newEndIndex = stackTrace.size -1  // offset by 1 because we have to adjust for the access index
+
+            for (i in newEndIndex downTo 0) {
+                val stackName = stackTrace[i].className
+                if (i == newEndIndex) {
+                    if (stackName.startsWith("kotlinx.coroutines.") ||
+                        stackName.startsWith("kotlin.coroutines.")) {
+                        newEndIndex--
+                    } else {
+                        break
+                    }
+                }
+            }
+
+            newEndIndex++ // have to add 1 back, because a copy must be by size (and we access from 0)
+
+            if (newEndIndex > 0) {
+                // newEndIndex will also remove the VERY LAST CachedMethod or CachedAsmMethod access invocation (because it's offset by 1)
+                throwable.stackTrace = stackTrace.copyOfRange(0, newEndIndex)
+            } else {
+                // keep just one, since it's a stack frame INSIDE our network library, and we need that!
+                throwable.stackTrace = stackTrace.copyOfRange(0, 1)
+            }
+        }
     }
 
     // initialize a emtpy arrays
