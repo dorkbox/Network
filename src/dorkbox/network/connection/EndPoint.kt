@@ -465,7 +465,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal suspend fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage) {
         // The sessionId is globally unique, and is assigned by the server.
         logger.trace {
-            "[${publication.sessionId()}] send: $message"
+            "[${publication.sessionId()}] send HS: $message"
         }
 
         // we are not thread-safe!
@@ -486,7 +486,18 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                     return
                 }
 
-                if (result == Publication.BACK_PRESSURED || result == Publication.ADMIN_ACTION) {
+                /**
+                 * The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
+                 *  val NOT_CONNECTED: Long = -1
+                 *
+                 * The offer failed due to back pressure from the subscribers preventing further transmission.
+                 *  val BACK_PRESSURED: Long = -2
+                 *
+                 * The offer failed due to an administration action and should be retried.
+                 * The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
+                 *  val ADMIN_ACTION: Long = -3
+                 */
+                if (result >= Publication.ADMIN_ACTION) {
                     // we should retry.
                     sendIdleStrategy.idle()
                     continue
@@ -494,7 +505,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
                 // more critical error sending the message. we shouldn't retry or anything.
                 val exception = newException("[${publication.sessionId()}] Error sending handshake message. $message (${errorCodeName(result)})")
-                ListenerManager.cleanStackTrace(exception)
+                ListenerManager.cleanStackTraceInternal(exception)
                 listenerManager.notifyError(exception)
                 return
             }
@@ -520,7 +531,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         try {
             val message = serialization.readHandshakeMessage(buffer, offset, length)
             logger.trace {
-                "[${header.sessionId()}] received: $message"
+                "[${header.sessionId()}] received HS: $message"
             }
 
             return message
@@ -713,7 +724,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     fun isRunning(): Boolean {
         // if the media driver is running, it will be a quick connection. Usually 100ms or so
-        return mediaDriverContext.isDriverActive(1_000, logger::debug)
+        return mediaDriverContext.isDriverActive(1_000) { }
     }
 
     final override fun close() {
