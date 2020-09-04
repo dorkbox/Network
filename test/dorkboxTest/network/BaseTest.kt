@@ -74,7 +74,6 @@ abstract class BaseTest {
             val configuration = Configuration()
             configuration.subscriptionPort = 2000
             configuration.publicationPort = 2001
-            configuration.enableIpcForLoopback = false
 
             return configuration
         }
@@ -88,7 +87,6 @@ abstract class BaseTest {
 
             configuration.maxClientCount = 5
             configuration.maxConnectionsPerIpAddress = 5
-            configuration.enableIpcForLoopback = false
 
             return configuration
         }
