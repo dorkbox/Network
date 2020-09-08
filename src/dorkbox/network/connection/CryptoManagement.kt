@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IP
 import dorkbox.network.Configuration
 import dorkbox.network.handshake.ClientConnectionInfo
 import dorkbox.network.other.CryptoEccNative
@@ -26,6 +26,7 @@ import dorkbox.util.Sys
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.exceptions.SecurityException
 import mu.KLogger
+import java.net.InetAddress
 import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -122,21 +123,21 @@ internal class CryptoManagement(val logger: KLogger,
 
 
     /**
-     * If the key does not match AND we have disabled remote key validation, then metachannel.changedRemoteKey = true. OTHERWISE, key validation is REQUIRED!
+     * If the key does not match AND we have disabled remote key validation -- key validation is REQUIRED!
      *
      * @return true if all is OK (the remote address public key matches the one saved or we disabled remote key validation.)
      *         false if we should abort
      */
-    internal fun validateRemoteAddress(remoteAddress: Int, publicKey: ByteArray?): PublicKeyValidationState {
+    internal fun validateRemoteAddress(remoteAddress: InetAddress, publicKey: ByteArray?): PublicKeyValidationState {
         if (publicKey == null) {
-            logger.error("Error validating public key for ${IPv4.toString(remoteAddress)}! It was null (and should not have been)")
+            logger.error("Error validating public key for ${IP.toString(remoteAddress)}! It was null (and should not have been)")
             return PublicKeyValidationState.INVALID
         }
 
         try {
             val savedPublicKey = settingsStore.getRegisteredServerKey(remoteAddress)
             if (savedPublicKey == null) {
-                logger.info("Adding new remote IP address key for ${IPv4.toString(remoteAddress)} : ${Sys.bytesToHex(publicKey)}")
+                logger.info("Adding new signature for ${IP.toString(remoteAddress)} : ${Sys.bytesToHex(publicKey)}")
 
                 settingsStore.addRegisteredServerKey(remoteAddress, publicKey)
             } else {
@@ -144,18 +145,18 @@ internal class CryptoManagement(val logger: KLogger,
                 if (!publicKey.contentEquals(savedPublicKey)) {
                     return if (enableRemoteSignatureValidation) {
                         // keys do not match, abort!
-                        logger.error("The public key for remote connection ${IPv4.toString(remoteAddress)} does not match. Denying connection attempt")
+                        logger.error("The public key for remote connection ${IP.toString(remoteAddress)} does not match. Denying connection attempt")
                         PublicKeyValidationState.INVALID
                     }
                     else {
-                        logger.warn("The public key for remote connection ${IPv4.toString(remoteAddress)} does not match. Permitting connection attempt.")
+                        logger.warn("The public key for remote connection ${IP.toString(remoteAddress)} does not match. Permitting connection attempt.")
                         PublicKeyValidationState.TAMPERED
                     }
                 }
             }
         } catch (e: SecurityException) {
             // keys do not match, abort!
-            logger.error("Error validating public key for ${IPv4.toString(remoteAddress)}!", e)
+            logger.error("Error validating public key for ${IP.toString(remoteAddress)}!", e)
             return PublicKeyValidationState.INVALID
         }
 

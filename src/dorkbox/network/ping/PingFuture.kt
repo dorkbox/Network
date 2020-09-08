@@ -13,11 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.ping
+package dorkbox.network.ping
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.Ping
-import dorkbox.network.connection.PingListener
 import java.util.concurrent.atomic.AtomicInteger
 
 class PingFuture internal constructor() : Ping {

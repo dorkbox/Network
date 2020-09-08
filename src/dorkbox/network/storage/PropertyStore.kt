@@ -15,10 +15,13 @@
  */
 package dorkbox.network.storage
 
+import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.serialization.Serialization
 import dorkbox.util.storage.Storage
-import org.agrona.collections.Int2ObjectHashMap
+import org.agrona.collections.Object2NullableObjectHashMap
+import java.net.InetAddress
 import java.security.SecureRandom
 
 /**
@@ -26,7 +29,15 @@ import java.security.SecureRandom
  */
 class PropertyStore : SettingsStore() {
     private lateinit var storage: Storage
-    private lateinit var servers: Int2ObjectHashMap<DB_Server>
+    private lateinit var servers: Object2NullableObjectHashMap<InetAddress, DB_Server>
+
+    /**
+     * Address 0.0.0.0 or ::0 may be used as a source address for this host on this network.
+     *
+     * Because we assigned BOTH to the same thing, it doesn't matter which one we use
+     */
+    private val ipv4Host = IPv4.WILDCARD
+    private val ipv6Host = IPv6.WILDCARD
 
     /**
      * Method of preference for creating/getting this connection store.
@@ -35,13 +46,20 @@ class PropertyStore : SettingsStore() {
      */
     override fun init(serializationManager: Serialization, storage: Storage) {
         this.storage = storage
-        servers = this.storage.get(DB_Server.STORAGE_KEY, Int2ObjectHashMap())
+        servers = this.storage.get(DB_Server.STORAGE_KEY, Object2NullableObjectHashMap())
 
         // this will always be null and is here to help people that copy/paste code
-        var localServer = servers[DB_Server.IP_SELF]
+        var localServer = servers[ipv4Host]
         if (localServer == null) {
             localServer = DB_Server()
-            servers[DB_Server.IP_SELF] = localServer
+            servers[ipv4Host] = localServer
+
+            // have to always specify what we are saving
+            this.storage.put(DB_Server.STORAGE_KEY, servers)
+        }
+
+        if (servers[ipv6Host] == null) {
+            servers[ipv6Host] = localServer
 
             // have to always specify what we are saving
             this.storage.put(DB_Server.STORAGE_KEY, servers)
@@ -54,7 +72,7 @@ class PropertyStore : SettingsStore() {
     @Synchronized
     override fun getPrivateKey(): ByteArray? {
         checkAccess(CryptoManagement::class.java)
-        return servers[DB_Server.IP_SELF]!!.privateKey
+        return servers[ipv4Host]!!.privateKey
     }
 
     /**
@@ -63,7 +81,7 @@ class PropertyStore : SettingsStore() {
     @Synchronized
     override fun savePrivateKey(serverPrivateKey: ByteArray) {
         checkAccess(CryptoManagement::class.java)
-        servers[DB_Server.IP_SELF]!!.privateKey = serverPrivateKey
+        servers[ipv4Host]!!.privateKey = serverPrivateKey
 
         // have to always specify what we are saving
         storage.put(DB_Server.STORAGE_KEY, servers)
@@ -74,7 +92,7 @@ class PropertyStore : SettingsStore() {
      */
     @Synchronized
     override fun getPublicKey(): ByteArray? {
-        return servers[DB_Server.IP_SELF]!!.publicKey
+        return servers[ipv4Host]!!.publicKey
     }
 
     /**
@@ -83,7 +101,7 @@ class PropertyStore : SettingsStore() {
     @Synchronized
     override fun savePublicKey(serverPublicKey: ByteArray) {
         checkAccess(CryptoManagement::class.java)
-        servers[DB_Server.IP_SELF]!!.publicKey = serverPublicKey
+        servers[ipv4Host]!!.publicKey = serverPublicKey
 
         // have to always specify what we are saving
         storage.put(DB_Server.STORAGE_KEY, servers)
@@ -94,7 +112,7 @@ class PropertyStore : SettingsStore() {
      */
     @Synchronized
     override fun getSalt(): ByteArray {
-        val localServer = servers[DB_Server.IP_SELF]
+        val localServer = servers[ipv4Host]
         var salt = localServer!!.salt
 
         // we don't care who gets the server salt
@@ -118,7 +136,7 @@ class PropertyStore : SettingsStore() {
      * Simple, property based method to getting a connected computer by host IP address
      */
     @Synchronized
-    override fun getRegisteredServerKey(hostAddress: Int): ByteArray? {
+    override fun getRegisteredServerKey(hostAddress: InetAddress): ByteArray? {
         return servers[hostAddress]?.publicKey
     }
 
@@ -126,7 +144,7 @@ class PropertyStore : SettingsStore() {
      * Saves a connected computer by host IP address and public key
      */
     @Synchronized
-    override fun addRegisteredServerKey(hostAddress: Int, publicKey: ByteArray) {
+    override fun addRegisteredServerKey(hostAddress: InetAddress, publicKey: ByteArray) {
         // checkAccess(RegistrationWrapper.class);
         var db_server = servers[hostAddress]
         if (db_server == null) {
@@ -144,7 +162,7 @@ class PropertyStore : SettingsStore() {
      * Deletes a registered computer by host IP address
      */
     @Synchronized
-    override fun removeRegisteredServerKey(hostAddress: Int): Boolean {
+    override fun removeRegisteredServerKey(hostAddress: InetAddress): Boolean {
         // checkAccess(RegistrationWrapper.class);
         val db_server = servers.remove(hostAddress)
 

@@ -16,26 +16,26 @@
 package dorkbox.network
 
 import dorkbox.netUtil.IPv4
-import dorkbox.netUtil.IPv6
-import dorkbox.network.aeron.client.ClientException
-import dorkbox.network.aeron.client.ClientRejectedException
-import dorkbox.network.aeron.client.ClientTimedOutException
+import dorkbox.network.aeron.IpcMediaDriverConnection
+import dorkbox.network.aeron.UdpMediaDriverConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.IpcMediaDriverConnection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
-import dorkbox.network.connection.UdpMediaDriverConnection
+import dorkbox.network.exceptions.ClientException
+import dorkbox.network.exceptions.ClientRejectedException
+import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.other.coroutines.SuspendWaiter
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
-import dorkbox.util.exceptions.SecurityException
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.launch
+import java.net.Inet4Address
+import java.net.InetAddress
 
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
@@ -59,16 +59,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * For the IPC (Inter-Process-Communication) address. it must be:
      * - the IPC integer ID, "0x1337c0de", "0x12312312", etc.
      */
-    private var remoteAddress0 = ""
+    private var remoteAddress0: InetAddress? = IPv4.LOCALHOST
 
     @Volatile
     private var isConnected = false
 
     // is valid when there is a connection to the server, otherwise it is null
     private var connection0: CONNECTION? = null
-
-    @Volatile
-    private var connectionTimeoutMS: Long = 5_000 // default is 5 seconds
 
     private val previousClosedConnectionActivity: Long = 0
 
@@ -107,9 +104,12 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * ### For a network address, it can be:
      *  - a network name ("localhost", "loopback", "lo", "bob.example.org")
      *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
+     *  - an InetAddress address
      *
      * ### For the IPC (Inter-Process-Communication) it must be:
-     * - EMPTY. ie: just call `connect()`
+     * - EMPTY.
+     *  - `connect()`
+     *  - `connect("")`
      *
      * ### Case does not matter, and "localhost" is the default. IPC address must be in HEX notation (starting with '0x')
      *
@@ -121,8 +121,113 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
      */
+    suspend fun connect(remoteAddress: String,
+                        connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
+        when {
+            // this is default IPC settings
+            remoteAddress.isEmpty() -> connect(connectionTimeoutMS = connectionTimeoutMS)
+
+            IPv4.isPreferred -> connect(remoteAddress = Inet4Address.getAllByName(remoteAddress)[0],
+                                        connectionTimeoutMS = connectionTimeoutMS,
+                                        reliable = reliable)
+
+            else -> connect(remoteAddress = Inet4Address.getAllByName(remoteAddress)[0],
+                            connectionTimeoutMS = connectionTimeoutMS,
+                            reliable = reliable)
+        }
+    }
+
+    /**
+     * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
+     *
+     * Default connection is to localhost
+     *
+     * ### For a network address, it can be:
+     *  - a network name ("localhost", "loopback", "lo", "bob.example.org")
+     *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
+     *  - an InetAddress address
+     *
+     * ### For the IPC (Inter-Process-Communication) it must be:
+     * - EMPTY.
+     *  - `connect()`
+     *  - `connect("")`
+     *
+     * ### Case does not matter, and "localhost" is the default. IPC address must be in HEX notation (starting with '0x')
+     *
+     * @param remoteAddress The network or if localhost, IPC address for the client to connect to
+     * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely
+     * @param reliable true if we want to create a reliable connection. IPC connections are always reliable
+     *
+     * @throws IllegalArgumentException if the remote address is invalid
+     * @throws ClientTimedOutException if the client is unable to connect in x amount of time
+     * @throws ClientRejectedException if the client connection is rejected
+     */
+    suspend fun connect(remoteAddress: InetAddress,
+                        connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
+        // Default IPC ports are flipped because they are in the perspective of the SERVER
+        connect(remoteAddress = remoteAddress,
+                ipcPublicationId = IPC_HANDSHAKE_STREAM_ID_SUB,
+                ipcSubscriptionId = IPC_HANDSHAKE_STREAM_ID_PUB,
+                connectionTimeoutMS = connectionTimeoutMS,
+                reliable = reliable)
+    }
+
+    /**
+     * Will attempt to connect to the server via IPC, with a default 30 second connection timeout and will block until completed.
+     *
+     * @param ipcPublicationId The IPC publication address for the client to connect to
+     * @param ipcSubscriptionId The IPC subscription address for the client to connect to
+     * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely.
+     *
+     * @throws IllegalArgumentException if the remote address is invalid
+     * @throws ClientTimedOutException if the client is unable to connect in x amount of time
+     * @throws ClientRejectedException if the client connection is rejected
+     */
     @Suppress("DuplicatedCode")
-    suspend fun connect(remoteAddress: String = IPv4.LOCALHOST.hostAddress, connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
+    suspend fun connect(ipcPublicationId: Int = IPC_HANDSHAKE_STREAM_ID_SUB,
+                        ipcSubscriptionId: Int = IPC_HANDSHAKE_STREAM_ID_PUB,
+                        connectionTimeoutMS: Long = 30_000L) {
+        // Default IPC ports are flipped because they are in the perspective of the SERVER
+
+        require(ipcPublicationId != ipcSubscriptionId) { "IPC publication and subscription ports cannot be the same! The must match the server's configuration." }
+
+        connect(remoteAddress = null, // required!
+                ipcPublicationId = ipcPublicationId,
+                ipcSubscriptionId = ipcSubscriptionId,
+                connectionTimeoutMS = connectionTimeoutMS)
+    }
+
+    /**
+     * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
+     *
+     * Default connection is to localhost
+     *
+     * ### For a network address, it can be:
+     *  - a network name ("localhost", "loopback", "lo", "bob.example.org")
+     *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
+     *
+     * ### For the IPC (Inter-Process-Communication) it must be:
+     * - EMPTY. ie: just call `connect()`
+     * - Specified EMPTY. ie: just call `connect()`
+     *
+     * ### Case does not matter, and "localhost" is the default. IPC address must be in HEX notation (starting with '0x')
+     *
+     * @param remoteAddress The network or if localhost, IPC address for the client to connect to
+     * @param ipcPublicationId The IPC publication address for the client to connect to
+     * @param ipcSubscriptionId The IPC subscription address for the client to connect to
+     * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely.
+     * @param reliable true if we want to create a reliable connection. IPC connections are always reliable
+     *
+     * @throws IllegalArgumentException if the remote address is invalid
+     * @throws ClientTimedOutException if the client is unable to connect in x amount of time
+     * @throws ClientRejectedException if the client connection is rejected
+     */
+    @Suppress("DuplicatedCode")
+    private suspend fun connect(remoteAddress: InetAddress? = null,
+                                // Default IPC ports are flipped because they are in the perspective of the SERVER
+                                ipcPublicationId: Int = IPC_HANDSHAKE_STREAM_ID_SUB,
+                                ipcSubscriptionId: Int = IPC_HANDSHAKE_STREAM_ID_PUB,
+                                connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
         // this will exist ONLY if we are reconnecting via a "disconnect" callback
         lockStepForReconnect.value?.doWait()
 
@@ -143,80 +248,31 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             logger.info("Media driver is running. Support for enable auto-switch from LOCALHOST -> IPC enabled")
         }
 
-        this.connectionTimeoutMS = connectionTimeoutMS
-        val isIpcConnection: Boolean
-
         // NETWORK OR IPC ADDRESS
-        // if we connect to "loopback", then we substitute if for IPC (with log message)
+        // if we connect to "loopback", then MAYBE we substitute if for IPC (with log message)
 
         // localhost/loopback IP might not always be 127.0.0.1 or ::1
-        when (remoteAddress) {
-            "0.0.0.0" -> throw IllegalArgumentException("0.0.0.0 is an invalid address to connect to!")
-            "loopback", "localhost", "lo", "" -> {
-                if (canAutoChangeToIpc) {
-                    isIpcConnection = true
-                    logger.info { "Auto-changing network connection from $remoteAddress -> IPC" }
-                    this.remoteAddress0 = "ipc"
-                } else {
-                    isIpcConnection = false
-                    this.remoteAddress0 = IPv4.LOCALHOST.hostAddress
-                }
+        when {
+            remoteAddress == null           -> this.remoteAddress0 = null
+            remoteAddress.isAnyLocalAddress -> throw IllegalArgumentException("0.0.0.0 is an invalid address to connect to!")
+            canAutoChangeToIpc && remoteAddress.isLoopbackAddress -> {
+                logger.info { "Auto-changing network connection from $remoteAddress -> IPC" }
+                this.remoteAddress0 = null
             }
-            "0x" -> {
-                isIpcConnection = true
-                this.remoteAddress0 = "ipc"
-            }
-            else -> when {
-                IPv4.isLoopback(remoteAddress) -> {
-                    if (canAutoChangeToIpc) {
-                        isIpcConnection = true
-                        logger.info { "Auto-changing network connection from $remoteAddress -> IPC" }
-                        this.remoteAddress0 = "ipc"
-                    } else {
-                        isIpcConnection = false
-                        this.remoteAddress0 = IPv4.LOCALHOST.hostAddress
-                    }
-                }
-                IPv6.isLoopback(remoteAddress) -> {
-                    if (canAutoChangeToIpc) {
-                        isIpcConnection = true
-                        logger.info { "Auto-changing network connection from $remoteAddress -> IPC" }
-                        this.remoteAddress0 = "ipc"
-                    } else {
-                        isIpcConnection = false
-                        this.remoteAddress0 = IPv6.LOCALHOST.hostAddress
-                    }
-                }
-                else -> {
-                    isIpcConnection = false
-                    this.remoteAddress0 = remoteAddress
-                }
-            }
+            else                            -> this.remoteAddress0 = remoteAddress
         }
 
-
-        if (IPv6.isValid(this.remoteAddress0)) {
-            // "[" and "]" are valid for ipv6 addresses... we want to make sure it is so
-
-            // if we are IPv6, the IP must be in '[]'
-            if (this.remoteAddress0.count { it == '[' } < 1 &&
-                this.remoteAddress0.count { it == ']' } < 1) {
-
-                this.remoteAddress0 = """[${this.remoteAddress0}]"""
-            }
-        }
 
         val handshake = ClientHandshake(logger, config, crypto, this)
 
 
-        // initially we only connect to the handshake connect ports. Ports are flipped because they are in the perspective of the SERVER
-        val handshakeConnection = if (isIpcConnection) {
-            IpcMediaDriverConnection(streamIdSubscription = IPC_HANDSHAKE_STREAM_ID_PUB,
-                                     streamId = IPC_HANDSHAKE_STREAM_ID_SUB,
+        val handshakeConnection = if (this.remoteAddress0 == null) {
+            IpcMediaDriverConnection(streamIdSubscription = ipcSubscriptionId,
+                                     streamId = ipcPublicationId,
                                      sessionId = RESERVED_SESSION_ID_INVALID)
         }
         else {
-            UdpMediaDriverConnection(address = this.remoteAddress0,
+            UdpMediaDriverConnection(address = this.remoteAddress0!!,
                                      publicationPort = config.subscriptionPort,
                                      subscriptionPort = config.publicationPort,
                                      streamId = UDP_HANDSHAKE_STREAM_ID,
@@ -227,7 +283,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
 
         // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
-        handshakeConnection.buildClient(aeron)
+        handshakeConnection.buildClient(aeron, logger)
         logger.info(handshakeConnection.clientInfo())
 
 
@@ -238,10 +294,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
-        val validateRemoteAddress = if (isIpcConnection) {
+        val validateRemoteAddress = if (this.remoteAddress0 == null) {
             PublicKeyValidationState.VALID
         } else {
-            crypto.validateRemoteAddress(IPv4.toInt(this.remoteAddress0), connectionInfo.publicKey)
+            crypto.validateRemoteAddress(this.remoteAddress0!!, connectionInfo.publicKey)
         }
 
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
@@ -258,7 +314,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
 
         // we are now connected, so we can connect to the NEW client-specific ports
-        val reliableClientConnection = if (isIpcConnection) {
+        val reliableClientConnection = if (this.remoteAddress0 == null) {
             IpcMediaDriverConnection(sessionId = connectionInfo.sessionId,
                                      // NOTE: pub/sub must be switched!
                                      streamIdSubscription = connectionInfo.publicationPort,
@@ -266,7 +322,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                                      connectionTimeoutMS = connectionTimeoutMS)
         }
         else {
-            UdpMediaDriverConnection(address = handshakeConnection.address,
+            UdpMediaDriverConnection(address = handshakeConnection.address!!,
                                      // NOTE: pub/sub must be switched!
                                      subscriptionPort = connectionInfo.publicationPort,
                                      publicationPort = connectionInfo.subscriptionPort,
@@ -277,7 +333,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
 
         // we have to construct how the connection will communicate!
-        reliableClientConnection.buildClient(aeron)
+        reliableClientConnection.buildClient(aeron, logger)
 
         // only the client connects to the server, so here we have to connect. The server (when creating the new "connection" object)
         // does not need to do anything
@@ -302,7 +358,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
 
 
-        val newConnection = if (isIpcConnection) {
+        val newConnection = if (this.remoteAddress0 == null) {
             newConnection(ConnectionParams(this, reliableClientConnection, PublicKeyValidationState.VALID))
         } else {
             newConnection(ConnectionParams(this, reliableClientConnection, validateRemoteAddress))
@@ -407,10 +463,16 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         get() = connection.hasRemoteKeyChanged()
 
     /**
+     * the remote address
+     */
+    val remoteAddress: InetAddress?
+        get() = remoteAddress0
+
+    /**
      * the remote address, as a string.
      */
-    val remoteAddress: String
-        get() = remoteAddress0
+    val remoteAddressString: String
+        get() = remoteAddress0?.hostAddress ?: "ipc"
 
     /**
      * true if this connection is an IPC connection
@@ -464,12 +526,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     /**
      * Removes the specified host address from the list of registered server keys.
      */
-    @Throws(SecurityException::class)
-    fun removeRegisteredServerKey(hostAddress: String) {
-        val address = IPv4.toInt(hostAddress)
+    fun removeRegisteredServerKey(address: InetAddress) {
         val savedPublicKey = settingsStore.getRegisteredServerKey(address)
         if (savedPublicKey != null) {
-            logger.debug { "Deleting remote IP address key $hostAddress" }
+            logger.debug { "Deleting remote IP address key $address" }
             settingsStore.removeRegisteredServerKey(address)
         }
     }

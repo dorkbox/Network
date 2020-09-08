@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.ping
+package dorkbox.network.exceptions
 
-import java.io.IOException
-
-object PingCanceledException : IOException() {
-    private const val serialVersionUID = 9045461384091038605L
-}
+/**
+ * A port could not be allocated.
+ */
+class PortAllocationException(message: String) : ServerException(message)

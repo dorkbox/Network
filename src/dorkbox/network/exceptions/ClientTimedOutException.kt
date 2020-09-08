@@ -13,8 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.ping
+package dorkbox.network.exceptions
 
-import dorkbox.network.connection.Connection
+/**
+ * The client timed out when it attempted to connect to the server.
+ */
+class ClientTimedOutException : ClientException {
+    /**
+     * Create an exception.
+     *
+     * @param message The message
+     */
+    constructor(message: String) : super(message)
 
-class PingTuple<C : Connection?>(var connection: C, var responseTime: Int) 
+    /**
+     * Create an exception.
+     *
+     * @param cause The cause
+     */
+    constructor(cause: Throwable) : super(cause)
+}

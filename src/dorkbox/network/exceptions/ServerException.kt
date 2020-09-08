@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.aeron.client
+package dorkbox.network.exceptions
 
 /**
- * The type of exceptions raised by the client.
+ * The type of exceptions raised by the server.
  */
-open class ClientException : Exception {
+open class ServerException : Exception {
     /**
      * Create an exception.
      *

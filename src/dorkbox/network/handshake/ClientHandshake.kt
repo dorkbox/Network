@@ -16,12 +16,12 @@
 package dorkbox.network.handshake
 
 import dorkbox.network.Configuration
-import dorkbox.network.aeron.client.ClientException
-import dorkbox.network.aeron.client.ClientTimedOutException
+import dorkbox.network.aeron.MediaDriverConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.MediaDriverConnection
+import dorkbox.network.exceptions.ClientException
+import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header

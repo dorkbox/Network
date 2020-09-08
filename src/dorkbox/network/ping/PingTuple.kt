@@ -13,9 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.aeron.server
+package dorkbox.network.ping
 
-/**
- * A session/stream could not be allocated.
- */
-class AllocationException(message: String) : ServerException(message)
+import dorkbox.network.connection.Connection
+
+class PingTuple<C : Connection?>(var connection: C, var responseTime: Int) 

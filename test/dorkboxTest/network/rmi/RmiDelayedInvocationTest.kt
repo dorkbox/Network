@@ -32,7 +32,7 @@ class RmiDelayedInvocationTest : BaseTest() {
     @Test
     fun rmiNetwork() {
         runBlocking {
-            rmi() { configuration ->
+            rmi { configuration ->
                 configuration.enableIpcForLoopback = false
             }
         }
@@ -108,7 +108,7 @@ class RmiDelayedInvocationTest : BaseTest() {
             client.connect(LOOPBACK)
         }
 
-        waitForThreads(9999999)
+        waitForThreads()
     }
 
     private interface TestObject {

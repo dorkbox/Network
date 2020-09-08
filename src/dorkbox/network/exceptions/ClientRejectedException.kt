@@ -13,12 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection
+package dorkbox.network.exceptions
 
-enum class MediaDriverType(private val type: String) {
-    IPC("ipc"), UDP("udp");
-
-    override fun toString(): String {
-        return type
-    }
-}
+/**
+ * The server rejected this client when it tried to connect.
+ */
+class ClientRejectedException(message: String, cause: Throwable? = null) : ClientException(message, cause)

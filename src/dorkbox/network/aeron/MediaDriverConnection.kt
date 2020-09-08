@@ -13,19 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection
+@file:Suppress("DuplicatedCode")
 
-import dorkbox.network.aeron.client.ClientException
-import dorkbox.network.aeron.client.ClientTimedOutException
-import dorkbox.network.aeron.server.ServerException
+package dorkbox.network.aeron
+
+import dorkbox.network.connection.EndPoint
+import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.Aeron
 import io.aeron.ChannelUriStringBuilder
 import io.aeron.Publication
 import io.aeron.Subscription
 import kotlinx.coroutines.delay
+import mu.KLogger
+import java.net.Inet4Address
+import java.net.InetAddress
 
 interface MediaDriverConnection : AutoCloseable {
-    val address: String
+    val address: InetAddress?
     val streamId: Int
     val sessionId: Int
 
@@ -38,9 +42,8 @@ interface MediaDriverConnection : AutoCloseable {
     val isReliable: Boolean
 
     @Throws(ClientTimedOutException::class)
-    suspend fun buildClient(aeron: Aeron)
-
-    fun buildServer(aeron: Aeron)
+    suspend fun buildClient(aeron: Aeron, logger: KLogger)
+    fun buildServer(aeron: Aeron, logger: KLogger)
 
     fun clientInfo() : String
     fun serverInfo() : String
@@ -49,7 +52,7 @@ interface MediaDriverConnection : AutoCloseable {
 /**
  * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER
  */
-class UdpMediaDriverConnection(override val address: String,
+class UdpMediaDriverConnection(override val address: InetAddress,
                                override val publicationPort: Int,
                                override val subscriptionPort: Int,
                                override val streamId: Int,
@@ -62,6 +65,19 @@ class UdpMediaDriverConnection(override val address: String,
 
     var success: Boolean = false
 
+    val addressString: String by lazy {
+        if (address is Inet4Address) {
+            address.hostAddress
+        } else {
+            // IPv6 requires the address to be bracketed by [...]
+            val host = address.hostAddress
+            if (host[0] == '[') {
+                host
+            } else {
+                "[${address.hostAddress}]"
+            }
+        }
+    }
 
     private fun uri(): ChannelUriStringBuilder {
         val builder = ChannelUriStringBuilder().reliable(isReliable).media("udp")
@@ -73,27 +89,33 @@ class UdpMediaDriverConnection(override val address: String,
     }
 
     @Suppress("DuplicatedCode")
-    override suspend fun buildClient(aeron: Aeron) {
-        if (address.isEmpty()) {
-            throw ClientException("Invalid address : '$address'")
-        }
-
-        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
-        val subscriptionUri = uri()
-                .controlEndpoint("$address:$subscriptionPort")
-                .controlMode("dynamic")
-
-
+    override suspend fun buildClient(aeron: Aeron, logger: KLogger) {
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
-                .endpoint("$address:$publicationPort")
+                .endpoint("$addressString:$publicationPort")
 
+        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
+        val subscriptionUri = uri()
+                .controlEndpoint("$addressString:$subscriptionPort")
+                .controlMode("dynamic")
+
+
+
+        if (logger.isTraceEnabled) {
+            if (address is Inet4Address) {
+                logger.trace("IPV4 client pub URI: ${publicationUri.build()}")
+                logger.trace("IPV4 client sub URI: ${subscriptionUri.build()}")
+            } else {
+                logger.trace("IPV6 client pub URI: ${publicationUri.build()}")
+                logger.trace("IPV6 client sub URI: ${subscriptionUri.build()}")
+            }
+        }
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
-        val subscription =  aeron.addSubscription(subscriptionUri.build(), streamId)
         val publication = aeron.addPublication(publicationUri.build(), streamId)
+        val subscription =  aeron.addSubscription(subscriptionUri.build(), streamId)
 
         var success = false
 
@@ -139,27 +161,33 @@ class UdpMediaDriverConnection(override val address: String,
         this.publication = publication
     }
 
-    override fun buildServer(aeron: Aeron) {
-        if (address.isEmpty()) {
-            throw ServerException("Invalid address. It is empty!")
-        }
-
-        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
-        val subscriptionUri = uri()
-                .endpoint("$address:$subscriptionPort")
-
-
+    override fun buildServer(aeron: Aeron, logger: KLogger) {
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
-                .controlEndpoint("$address:$publicationPort")
+                .controlEndpoint("$addressString:$publicationPort")
                 .controlMode("dynamic")
 
+        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
+        val subscriptionUri = uri()
+                .endpoint("$addressString:$subscriptionPort")
+
+
+
+        if (logger.isTraceEnabled) {
+            if (address is Inet4Address) {
+                logger.trace("IPV4 server pub URI: ${publicationUri.build()}")
+                logger.trace("IPV4 server sub URI: ${subscriptionUri.build()}")
+            } else {
+                logger.trace("IPV6 server pub URI: ${publicationUri.build()}")
+                logger.trace("IPV6 server sub URI: ${subscriptionUri.build()}")
+            }
+        }
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
-        subscription = aeron.addSubscription(subscriptionUri.build(), streamId)
         publication = aeron.addPublication(publicationUri.build(), streamId)
+        subscription = aeron.addSubscription(subscriptionUri.build(), streamId)
     }
 
 
@@ -187,7 +215,7 @@ class UdpMediaDriverConnection(override val address: String,
     }
 
     override fun toString(): String {
-        return "$address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
+        return "$addressString [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
     }
 }
 
@@ -200,8 +228,8 @@ class IpcMediaDriverConnection(override val streamId: Int,
                                private val connectionTimeoutMS: Long = 30_000,
                                ) : MediaDriverConnection {
 
+    override val address: InetAddress? = null
     override val isReliable = true
-    override val address = "ipc"
     override val subscriptionPort = 0
     override val publicationPort = 0
 
@@ -220,19 +248,24 @@ class IpcMediaDriverConnection(override val streamId: Int,
     }
 
     @Throws(ClientTimedOutException::class)
-    override suspend fun buildClient(aeron: Aeron) {
-        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
-        val subscriptionUri = uri()
-
+    override suspend fun buildClient(aeron: Aeron, logger: KLogger) {
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
 
+        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
+        val subscriptionUri = uri()
+
+
+        if (logger.isTraceEnabled) {
+            logger.trace("IPC client pub URI: ${publicationUri.build()}")
+            logger.trace("IPC server sub URI: ${subscriptionUri.build()}")
+        }
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
-        val subscription =  aeron.addSubscription(subscriptionUri.build(), streamIdSubscription)
         val publication = aeron.addPublication(publicationUri.build(), streamId)
+        val subscription =  aeron.addSubscription(subscriptionUri.build(), streamIdSubscription)
 
         var success = false
 
@@ -278,25 +311,31 @@ class IpcMediaDriverConnection(override val streamId: Int,
         this.publication = publication
     }
 
-    override fun buildServer(aeron: Aeron) {
-        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
-        val subscriptionUri = uri()
-
+    override fun buildServer(aeron: Aeron, logger: KLogger) {
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
 
+        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
+        val subscriptionUri = uri()
+
+
+        if (logger.isTraceEnabled) {
+            logger.trace("IPC server pub URI: ${publicationUri.build()}")
+            logger.trace("IPC server sub URI: ${subscriptionUri.build()}")
+        }
+
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
-        subscription = aeron.addSubscription(subscriptionUri.build(), streamIdSubscription)
         publication = aeron.addPublication(publicationUri.build(), streamId)
+        subscription = aeron.addSubscription(subscriptionUri.build(), streamIdSubscription)
     }
 
     override fun clientInfo() : String {
         return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
             "[$sessionId] aeron connection established to [$streamIdSubscription|$streamId]"
         } else {
-            "Connecting IPC with handshake to [$streamIdSubscription|$streamId]"
+            "Connecting handshake to IPC [$streamIdSubscription|$streamId]"
         }
     }
 
@@ -304,7 +343,7 @@ class IpcMediaDriverConnection(override val streamId: Int,
         return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
             "[$sessionId] IPC listening on [$streamIdSubscription|$streamId] "
         } else {
-            "IPC listening with handshake on [$streamIdSubscription|$streamId]"
+            "Listening handshake on IPC [$streamIdSubscription|$streamId]"
         }
     }
 

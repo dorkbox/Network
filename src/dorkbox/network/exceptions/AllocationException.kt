@@ -13,23 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.aeron.client
+package dorkbox.network.exceptions
 
 /**
- * The client timed out when it attempted to connect to the server.
+ * A session/stream could not be allocated.
  */
-class ClientTimedOutException : ClientException {
-    /**
-     * Create an exception.
-     *
-     * @param message The message
-     */
-    constructor(message: String) : super(message)
-
-    /**
-     * Create an exception.
-     *
-     * @param cause The cause
-     */
-    constructor(cause: Throwable) : super(cause)
-}
+class AllocationException(message: String) : ServerException(message)

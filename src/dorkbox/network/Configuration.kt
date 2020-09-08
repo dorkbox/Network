@@ -18,6 +18,7 @@ package dorkbox.network
 import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.PropertyStore
 import dorkbox.network.storage.SettingsStore
@@ -31,20 +32,45 @@ import java.io.File
 
 class ServerConfiguration : dorkbox.network.Configuration() {
     /**
+     * Enables the ability to use the IPv4 network stack.
+     */
+    var enableIPv4 = true
+
+    /**
+     * Enables the ability to use the IPv6 network stack.
+     */
+    var enableIPv6 = true
+
+    /**
+     * Enables the ability use IPC (Inter Process Communication)
+     */
+    var enableIPC = true
+
+    /**
      * The address for the server to listen on. "*" will accept connections from all interfaces, otherwise specify
      * the hostname (or IP) to bind to.
      */
     var listenIpAddress = "*"
 
     /**
-     * The maximum number of clients allowed for a server
+     * The maximum number of clients allowed for a server. IPC is unlimited
      */
     var maxClientCount = 0
 
     /**
-     * The maximum number of client connection allowed per IP address
+     * The maximum number of client connection allowed per IP address. IPC is unlimited
      */
     var maxConnectionsPerIpAddress = 0
+
+    /**
+     * The IPC Publication ID is used to define what ID the server will send data on. The client IPC subscription ID must match this value.
+     */
+    var ipcPublicationId = EndPoint.IPC_HANDSHAKE_STREAM_ID_PUB
+
+    /**
+     * The IPC Subscription ID is used to define what ID the server will receive data on. The client IPC publication ID must match this value.
+     */
+    var ipcSubscriptionId = EndPoint.IPC_HANDSHAKE_STREAM_ID_SUB
 }
 
 open class Configuration {

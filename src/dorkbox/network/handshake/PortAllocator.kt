@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.aeron.server
+package dorkbox.network.handshake
 
 import org.agrona.collections.IntArrayList
 

@@ -21,24 +21,24 @@ import com.github.benmanes.caffeine.cache.RemovalCause
 import com.github.benmanes.caffeine.cache.RemovalListener
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
-import dorkbox.network.aeron.client.ClientRejectedException
-import dorkbox.network.aeron.client.ClientTimedOutException
-import dorkbox.network.aeron.server.AllocationException
-import dorkbox.network.aeron.server.RandomIdAllocator
-import dorkbox.network.aeron.server.ServerException
+import dorkbox.network.aeron.IpcMediaDriverConnection
+import dorkbox.network.aeron.UdpMediaDriverConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.IpcMediaDriverConnection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
-import dorkbox.network.connection.UdpMediaDriverConnection
+import dorkbox.network.exceptions.AllocationException
+import dorkbox.network.exceptions.ClientRejectedException
+import dorkbox.network.exceptions.ClientTimedOutException
+import dorkbox.network.exceptions.ServerException
 import io.aeron.Aeron
 import io.aeron.Publication
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
-import org.agrona.collections.Int2IntCounterMap
+import java.net.Inet4Address
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
@@ -53,7 +53,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                                         private val listenerManager: ListenerManager<CONNECTION>) {
 
     private val pendingConnectionsLock = ReentrantReadWriteLock()
-    private val pendingConnections: Cache<Int,CONNECTION> = Caffeine.newBuilder()
+    private val pendingConnections: Cache<Int, CONNECTION> = Caffeine.newBuilder()
         .expireAfterAccess(config.connectionCloseTimeoutInSeconds.toLong(), TimeUnit.SECONDS)
         .removalListener(RemovalListener<Any?, Any?> { _, value, cause ->
             if (cause == RemovalCause.EXPIRED) {
@@ -67,17 +67,17 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             }
         }).build()
 
-    private val connectionsPerIpCounts = Int2IntCounterMap(0)
+    private val connectionsPerIpCounts = ConnectionCounts()
 
     // guarantee that session/stream ID's will ALWAYS be unique! (there can NEVER be a collision!)
-    private val sessionIdAllocator = RandomIdAllocator(EndPoint.RESERVED_SESSION_ID_LOW,
-                                                       EndPoint.RESERVED_SESSION_ID_HIGH)
+    private val sessionIdAllocator = RandomIdAllocator(EndPoint.RESERVED_SESSION_ID_LOW, EndPoint.RESERVED_SESSION_ID_HIGH)
     private val streamIdAllocator = RandomIdAllocator(1, Integer.MAX_VALUE)
 
 
     /**
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
+    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     private fun validateMessageTypeAndDoPending(server: Server<CONNECTION>,
                                                 handshakePublication: Publication,
                                                 message: Any?,
@@ -126,11 +126,17 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     /**
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
-    private fun validateConnectionInfo(server: Server<CONNECTION>,
-                                       handshakePublication: Publication,
-                                       config: ServerConfiguration,
-                                       clientAddressString: String,
-                                       clientAddress: Int): Boolean {
+    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+    private fun validateUdpConnectionInfo(server: Server<CONNECTION>,
+                                          handshakePublication: Publication,
+                                          config: ServerConfiguration,
+                                          clientAddressString: String,
+                                          clientAddress: InetAddress): Boolean {
+
+        if (clientAddress.isLoopbackAddress) {
+            // we do not want to limit loopback addresses
+            return true
+        }
 
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
@@ -143,11 +149,12 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 return false
             }
 
+
             // VALIDATE:: we are now connected to the client and are going to create a new connection.
-            val currentCountForIp = connectionsPerIpCounts.getAndIncrement(clientAddress)
+            val currentCountForIp = connectionsPerIpCounts.get(clientAddress)
             if (currentCountForIp >= config.maxConnectionsPerIpAddress) {
                 // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
-                connectionsPerIpCounts.getAndDecrement(clientAddress)
+                connectionsPerIpCounts.decrement(clientAddress, currentCountForIp)
 
                 listenerManager.notifyError(ClientRejectedException("Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}"))
                 server.actionDispatch.launch {
@@ -156,6 +163,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
                 return false
             }
+            connectionsPerIpCounts.increment(clientAddress, currentCountForIp)
         } catch (e: Exception) {
             listenerManager.notifyError(ClientRejectedException("could not validate client message", e))
             server.actionDispatch.launch {
@@ -168,7 +176,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     }
 
 
-    // note: CANNOT be called in action dispatch
+    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     fun processIpcHandshakeMessageServer(server: Server<CONNECTION>,
                                          handshakePublication: Publication,
                                          sessionId: Int,
@@ -243,7 +251,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                                             connectionTimeoutMS = 0)
 
             // we have to construct how the connection will communicate!
-            clientConnection.buildServer(aeron)
+            clientConnection.buildServer(aeron, logger)
 
             logger.info {
                 "[${clientConnection.sessionId}] aeron IPC connection established to $clientConnection"
@@ -264,8 +272,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 listenerManager.notifyError(connection, exception)
 
                 server.actionDispatch.launch {
-                    server.writeHandshakeMessage(handshakePublication,
-                                                 HandshakeMessage.error("Connection was not permitted!"))
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection was not permitted!"))
                 }
 
                 return
@@ -320,14 +327,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
     }
 
-    // note: CANNOT be called in action dispatch
+    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     fun processUdpHandshakeMessageServer(server: Server<CONNECTION>,
                                          handshakePublication: Publication,
                                          sessionId: Int,
                                          clientAddressString: String,
-                                         clientAddress: Int,
+                                         clientAddress: InetAddress,
                                          message: Any?,
-                                         aeron: Aeron) {
+                                         aeron: Aeron,
+                                         isIpv6Wildcard: Boolean) {
 
         if (!validateMessageTypeAndDoPending(server, handshakePublication, message, sessionId, clientAddressString)) {
             return
@@ -345,7 +353,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             return
         }
 
-        if (!validateConnectionInfo(server, handshakePublication, config, clientAddressString, clientAddress)) {
+        if (!validateUdpConnectionInfo(server, handshakePublication, config, clientAddressString, clientAddress)) {
             return
         }
 
@@ -363,7 +371,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             connectionSessionId = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
             // have to unwind actions!
-            connectionsPerIpCounts.getAndDecrement(clientAddress)
+            connectionsPerIpCounts.decrementSlow(clientAddress)
 
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a session ID for the client connection!"))
             server.actionDispatch.launch {
@@ -378,7 +386,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             connectionStreamId = streamIdAllocator.allocate()
         } catch (e: AllocationException) {
             // have to unwind actions!
-            connectionsPerIpCounts.getAndDecrement(clientAddress)
+            connectionsPerIpCounts.decrementSlow(clientAddress)
             sessionIdAllocator.free(connectionSessionId)
 
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a stream ID for the client connection!"))
@@ -388,8 +396,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             return
         }
 
-        val serverAddress = config.listenIpAddress // TODO :: my IP address?? this should be the IP of the box?
-
         // the pub/sub do not necessarily have to be the same. The can be ANY port
         val publicationPort = config.publicationPort
         val subscriptionPort = config.subscriptionPort
@@ -398,16 +404,29 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         // create a new connection. The session ID is encrypted.
         try {
             // connection timeout of 0 doesn't matter. it is not used by the server
-            val clientConnection = UdpMediaDriverConnection(serverAddress,
-                                                            publicationPort,
-                                                            subscriptionPort,
-                                                            connectionStreamId,
-                                                            connectionSessionId,
-                                                            0,
-                                                            message.isReliable)
+            // the client address WILL BE either IPv4 or IPv6
+
+            val clientConnection = if (clientAddress is Inet4Address && !isIpv6Wildcard) {
+                UdpMediaDriverConnection(server.listenIPv4Address!!,
+                                         publicationPort,
+                                         subscriptionPort,
+                                         connectionStreamId,
+                                         connectionSessionId,
+                                         0,
+                                         message.isReliable)
+            } else {
+                // wildcard is SPECIAL, in that if we bind wildcard, it will ALSO bind to IPv4, so we can't bind both!
+                UdpMediaDriverConnection(server.listenIPv6Address!!,
+                                         publicationPort,
+                                         subscriptionPort,
+                                         connectionStreamId,
+                                         connectionSessionId,
+                                         0,
+                                         message.isReliable)
+            }
 
             // we have to construct how the connection will communicate!
-            clientConnection.buildServer(aeron)
+            clientConnection.buildServer(aeron, logger)
 
             logger.info {
                 "Creating new connection from $clientConnection"
@@ -420,7 +439,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             val permitConnection = listenerManager.notifyFilter(connection)
             if (!permitConnection) {
                 // have to unwind actions!
-                connectionsPerIpCounts.getAndDecrement(clientAddress)
+                connectionsPerIpCounts.decrementSlow(clientAddress)
                 sessionIdAllocator.free(connectionSessionId)
                 streamIdAllocator.free(connectionStreamId)
 
@@ -429,8 +448,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 listenerManager.notifyError(connection, exception)
 
                 server.actionDispatch.launch {
-                    server.writeHandshakeMessage(handshakePublication,
-                                                 HandshakeMessage.error("Connection was not permitted!"))
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection was not permitted!"))
                 }
 
                 return
@@ -470,7 +488,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             }
         } catch (e: Exception) {
             // have to unwind actions!
-            connectionsPerIpCounts.getAndDecrement(clientAddress)
+            connectionsPerIpCounts.decrementSlow(clientAddress)
             sessionIdAllocator.free(connectionSessionId)
             streamIdAllocator.free(connectionStreamId)
 
@@ -482,7 +500,17 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
      * Free up resources from the closed connection
      */
     fun cleanup(connection: CONNECTION) {
+        // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
         connection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
+    }
+
+    /**
+     * Reset and clear all connection information
+     */
+    fun clear() {
+        // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+        sessionIdAllocator.clear()
+        streamIdAllocator.clear()
         pendingConnections.invalidateAll()
     }
 }

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.connectionType
+package dorkbox.network.connectionType
 
 import java.math.BigInteger
 import java.net.Inet4Address

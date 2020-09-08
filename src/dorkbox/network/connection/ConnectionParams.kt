@@ -15,6 +15,8 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.network.aeron.MediaDriverConnection
+
 data class ConnectionParams<C : Connection>(val endPoint: EndPoint<C>,
                                             val mediaDriverConnection: MediaDriverConnection,
                                             val publicKeyValidation: PublicKeyValidationState)

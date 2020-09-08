@@ -13,12 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.ping
+package dorkbox.network.exceptions
 
 /**
- * Internal message to determine round trip time.
+ * thrown when a message is received, and does not have any registered 'onMessage' handlers.
  */
-class PingMessage {
-    var id = 0
-    var isReply = false
-}
+class MessageNotRegisteredException(errorMessage: String) : Exception(errorMessage)

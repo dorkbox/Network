@@ -13,23 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.aeron.server
+package dorkbox.network.handshake
 
+import dorkbox.network.exceptions.AllocationException
 import org.agrona.collections.IntHashSet
 import java.security.SecureRandom
 
 /**
- * An allocator for session IDs. The allocator randomly selects values from
- * the given range `[min, max]` and will not return a previously-returned value `x`
- * until `x` has been freed with `{ SessionAllocator#free(int)}.
- * </p>
+ * An allocator for session IDs.
  *
- * <p>
+ * The allocator randomly selects values from the given range `[min, max]` and will not return a previously-returned value `x`
+ * until `x` has been freed with `{ SessionAllocator#free(int)}.
+ *
  * This implementation uses storage proportional to the number of currently-allocated
  * values. Allocation time is bounded by { max - min}, will be { O(1)}
  * with no allocated values, and will increase to { O(n)} as the number
  * of allocated values approached { max - min}.
- * </p>`
+ *
+ * NOTE: THIS IS NOT THREAD SAFE!
  *
  * @param min The minimum session ID (inclusive)
  * @param max The maximum session ID (exclusive)
@@ -55,7 +56,6 @@ class RandomIdAllocator(private val min: Int, max: Int) {
      *
      * @throws AllocationException If there are no non-allocated sessions left
      */
-    @Throws(AllocationException::class)
     fun allocate(): Int {
         if (used.size == maxAssignments) {
             throw AllocationException("No session IDs left to allocate")
@@ -80,5 +80,13 @@ class RandomIdAllocator(private val min: Int, max: Int) {
      */
     fun free(session: Int) {
         used.remove(session)
+    }
+
+
+    /**
+     * Removes all used sessions from the internal data structures
+     */
+    fun clear() {
+        used.clear()
     }
 }

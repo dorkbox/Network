@@ -20,10 +20,11 @@ import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.CoroutineIdleStrategy
-import dorkbox.network.connection.ping.PingMessage
+import dorkbox.network.exceptions.MessageNotRegisteredException
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.other.coroutines.SuspendWaiter
+import dorkbox.network.ping.PingMessage
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
 import dorkbox.network.rmi.messages.RmiMessage
@@ -145,8 +146,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
 
     init {
-        logger.error("NETWORK STACK IS ONLY IPV4 AT THE MOMENT. IPV6 is in progress!")
-
         runBlocking {
             // our default onError handler. All error messages go though this
             listenerManager.onError { throwable ->

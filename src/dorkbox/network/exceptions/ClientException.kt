@@ -13,27 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection.connectionType
-
-import dorkbox.network.handshake.UpgradeType
+package dorkbox.network.exceptions
 
 /**
- * Used in [IpConnectionTypeRule] to decide what kind of connection a matching IP Address should have.
+ * The type of exceptions raised by the client.
  */
-enum class ConnectionProperties(val type: Byte) {
+open class ClientException : Exception {
     /**
-     * No compression, no encryption
+     * Create an exception.
+     *
+     * @param message The message
      */
-    NOTHING(UpgradeType.NONE),
+    constructor(message: String) : super(message)
 
     /**
-     * Only compression
+     * Create an exception.
+     *
+     * @param cause The cause
      */
-    COMPRESS(UpgradeType.COMPRESS),
+    constructor(cause: Throwable) : super(cause)
 
     /**
-     * Compression + encryption
+     * Create an exception.
+     *
+     * @param message The message
+     *  @param cause The cause
      */
-    COMPRESS_AND_ENCRYPT(UpgradeType.ENCRYPT);
-
+    constructor(message: String, cause: Throwable?) : super(message, cause)
 }

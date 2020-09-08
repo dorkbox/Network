@@ -13,7 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection
+package dorkbox.network.ping
+
+import dorkbox.network.connection.Connection
 
 interface Ping {
     /**

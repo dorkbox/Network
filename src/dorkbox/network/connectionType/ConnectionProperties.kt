@@ -13,9 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection
+package dorkbox.network.connectionType
+
+import dorkbox.network.handshake.UpgradeType
 
 /**
- * thrown when a message is received, and does not have any registered 'onMessage' handlers.
+ * Used in [IpConnectionTypeRule] to decide what kind of connection a matching IP Address should have.
  */
-class MessageNotRegisteredException(errorMessage: String) : Exception(errorMessage)
+enum class ConnectionProperties(val type: Byte) {
+    /**
+     * No compression, no encryption
+     */
+    NOTHING(UpgradeType.NONE),
+
+    /**
+     * Only compression
+     */
+    COMPRESS(UpgradeType.COMPRESS),
+
+    /**
+     * Compression + encryption
+     */
+    COMPRESS_AND_ENCRYPT(UpgradeType.ENCRYPT);
+
+}

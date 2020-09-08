@@ -18,6 +18,7 @@ package dorkbox.network.storage
 import dorkbox.network.serialization.Serialization
 import dorkbox.util.exceptions.SecurityException
 import dorkbox.util.storage.Storage
+import java.net.InetAddress
 import java.security.SecureRandom
 
 class NullSettingsStore : SettingsStore() {
@@ -54,17 +55,17 @@ class NullSettingsStore : SettingsStore() {
     }
 
     @Throws(SecurityException::class)
-    override fun getRegisteredServerKey(hostAddress: Int): ByteArray {
+    override fun getRegisteredServerKey(hostAddress: InetAddress): ByteArray {
         TODO("not impl")
     }
 
     @Throws(SecurityException::class)
-    override fun addRegisteredServerKey(hostAddress: Int, publicKey: ByteArray) {
+    override fun addRegisteredServerKey(hostAddress: InetAddress, publicKey: ByteArray) {
         TODO("not impl")
     }
 
     @Throws(SecurityException::class)
-    override fun removeRegisteredServerKey(hostAddress: Int): Boolean {
+    override fun removeRegisteredServerKey(hostAddress: InetAddress): Boolean {
         return true
     }
 

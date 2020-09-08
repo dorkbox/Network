@@ -81,7 +81,6 @@ abstract class BaseTest {
         fun serverConfig(): ServerConfiguration {
             val configuration = ServerConfiguration()
 
-            configuration.listenIpAddress = LOOPBACK
             configuration.subscriptionPort = 2000
             configuration.publicationPort = 2001
 

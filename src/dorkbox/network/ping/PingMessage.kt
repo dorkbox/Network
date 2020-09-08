@@ -13,31 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.aeron.server
+package dorkbox.network.ping
 
 /**
- * The type of exceptions raised by the server.
+ * Internal message to determine round trip time.
  */
-open class ServerException : Exception {
-    /**
-     * Create an exception.
-     *
-     * @param message The message
-     */
-    constructor(message: String) : super(message)
-
-    /**
-     * Create an exception.
-     *
-     * @param cause The cause
-     */
-    constructor(cause: Throwable) : super(cause)
-
-    /**
-     * Create an exception.
-     *
-     * @param message The message
-     *  @param cause The cause
-     */
-    constructor(message: String, cause: Throwable?) : super(message, cause)
+class PingMessage {
+    var id = 0
+    var isReply = false
 }

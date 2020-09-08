@@ -15,10 +15,13 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.netUtil.IPv4
-import dorkbox.network.aeron.server.RandomIdAllocator
-import dorkbox.network.connection.ping.PingFuture
-import dorkbox.network.connection.ping.PingMessage
+import dorkbox.network.aeron.IpcMediaDriverConnection
+import dorkbox.network.aeron.UdpMediaDriverConnection
+import dorkbox.network.handshake.ConnectionCounts
+import dorkbox.network.handshake.RandomIdAllocator
+import dorkbox.network.ping.Ping
+import dorkbox.network.ping.PingFuture
+import dorkbox.network.ping.PingMessage
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.TimeoutException
@@ -33,8 +36,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
-import org.agrona.collections.Int2IntCounterMap
 import java.io.IOException
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
 /**
@@ -62,14 +65,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     val id: Int
 
     /**
-     * the remote address, as a string. Will be "ipc" for IPC connections
+     * the remote address, as a string. Will be null for IPC connections
      */
-    val remoteAddress: String
+    val remoteAddress: InetAddress?
 
     /**
-     * the remote address, as an integer. Can be 0 for IPC connections
+     * the remote address, as a string. Will be "ipc" for IPC connections
      */
-    private val remoteAddressInt: Int
+    val remoteAddressString: String
 
     /**
      * @return true if this connection is an IPC connection
@@ -125,7 +128,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // a record of how many messages are in progress of being sent. When closing the connection, this number must be 0
     private val messagesInProgress = atomic(0)
 
-    val toString0: () -> String
+    // we customize the toString() value for this connection, and it's just better to cache it's value (since it's a modestly complex string)
+    private val toString0: String
 
     init {
         val mediaDriverConnection = connectionParameters.mediaDriverConnection
@@ -141,16 +145,19 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             streamId = 0 // this is because with IPC, we have stream sub/pub (which are replaced as port sub/pub)
             subscriptionPort = mediaDriverConnection.streamIdSubscription
             publicationPort = mediaDriverConnection.streamId
-            remoteAddressInt = 0
+            remoteAddressString = "ipc"
 
-            toString0 = { "[$id] IPC [$subscriptionPort|$publicationPort]" }
+            toString0 = "[$id] IPC [$subscriptionPort|$publicationPort]"
         } else {
+            mediaDriverConnection as UdpMediaDriverConnection
+
             streamId = mediaDriverConnection.streamId // NOTE: this is UNIQUE per server!
             subscriptionPort = mediaDriverConnection.subscriptionPort
             publicationPort = mediaDriverConnection.publicationPort
-            remoteAddressInt = IPv4.toInt(mediaDriverConnection.address)
 
-            toString0 = { "[$id] $remoteAddress [$publicationPort|$subscriptionPort]" }
+            remoteAddressString = mediaDriverConnection.addressString
+
+            toString0 = "[$id] $remoteAddressString [$publicationPort|$subscriptionPort]"
         }
 
 
@@ -412,7 +419,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     //
     //
     override fun toString(): String {
-        return toString0()
+        return toString0
     }
 
     override fun hashCode(): Int {
@@ -435,13 +442,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     // cleans up the connection information
-    fun cleanup(connectionsPerIpCounts: Int2IntCounterMap, sessionIdAllocator: RandomIdAllocator, streamIdAllocator: RandomIdAllocator) {
+    internal fun cleanup(connectionsPerIpCounts: ConnectionCounts, sessionIdAllocator: RandomIdAllocator, streamIdAllocator: RandomIdAllocator) {
+        // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
         if (isIpc) {
             sessionIdAllocator.free(subscriptionPort)
             sessionIdAllocator.free(publicationPort)
             streamIdAllocator.free(streamId)
         } else {
-            connectionsPerIpCounts.getAndDecrement(remoteAddressInt)
+            connectionsPerIpCounts.decrementSlow(remoteAddress!!)
             sessionIdAllocator.free(id)
             streamIdAllocator.free(streamId)
         }

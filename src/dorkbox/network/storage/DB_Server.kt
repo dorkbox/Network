@@ -24,11 +24,6 @@ class DB_Server {
          * The storage key used to save all server connections
          */
         val STORAGE_KEY = StorageKey("servers")
-
-        /**
-         * Address 0.0.0.0/32 may be used as a source address for this host on this network.
-         */
-        const val IP_SELF = 0
     }
 
 

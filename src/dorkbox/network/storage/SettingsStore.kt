@@ -20,6 +20,7 @@ import dorkbox.util.bytes.ByteArrayWrapper
 import dorkbox.util.exceptions.SecurityException
 import dorkbox.util.storage.Storage
 import org.slf4j.LoggerFactory
+import java.net.InetAddress
 import java.util.*
 
 /**
@@ -77,13 +78,13 @@ abstract class SettingsStore : AutoCloseable {
      * Gets a previously registered computer by host IP address
      */
     @Throws(SecurityException::class)
-    abstract fun getRegisteredServerKey(hostAddress: Int): ByteArray?
+    abstract fun getRegisteredServerKey(hostAddress: InetAddress): ByteArray?
 
     /**
      * Saves a registered computer by host IP address and public key
      */
     @Throws(SecurityException::class)
-    abstract fun addRegisteredServerKey(hostAddress: Int, publicKey: ByteArray)
+    abstract fun addRegisteredServerKey(hostAddress: InetAddress, publicKey: ByteArray)
 
     /**
      * Deletes a registered computer by host IP address
@@ -91,7 +92,7 @@ abstract class SettingsStore : AutoCloseable {
      * @return true if successful, false if there were problems (or it didn't exist)
      */
     @Throws(SecurityException::class)
-    abstract fun removeRegisteredServerKey(hostAddress: Int): Boolean
+    abstract fun removeRegisteredServerKey(hostAddress: InetAddress): Boolean
 
     /**
      * Take the proper steps to close the storage system.
