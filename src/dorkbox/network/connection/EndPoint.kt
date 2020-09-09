@@ -656,8 +656,19 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                     return
                 }
 
-                if (result == Publication.BACK_PRESSURED || result == Publication.ADMIN_ACTION) {
-                    // we should retry.
+                /**
+                 * The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
+                 *  val NOT_CONNECTED: Long = -1
+                 *
+                 * The offer failed due to back pressure from the subscribers preventing further transmission.
+                 *  val BACK_PRESSURED: Long = -2
+                 *
+                 * The offer failed due to an administration action and should be retried.
+                 * The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
+                 *  val ADMIN_ACTION: Long = -3
+                 */
+                if (result >= Publication.ADMIN_ACTION) {
+                    // we should retry, BUT we want suspend ANYONE ELSE trying to write at the same time!
                     sendIdleStrategy.idle()
                     continue
                 }
