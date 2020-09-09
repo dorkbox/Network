@@ -17,6 +17,7 @@
 
 package dorkbox.network.aeron
 
+import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.connection.EndPoint
@@ -195,9 +196,9 @@ class UdpMediaDriverConnection(override val address: InetAddress,
 
     override fun clientInfo(): String {
         return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
-            "Connecting to $address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
+            "Connecting to ${IP.toString(address)} [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
-            "Connecting handshake to $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
+            "Connecting handshake to ${IP.toString(address)} [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
         }
     }
 
@@ -209,7 +210,7 @@ class UdpMediaDriverConnection(override val address: InetAddress,
                 IPv4.WILDCARD.hostAddress + "/" + address.hostAddress
             }
         } else {
-            address.hostAddress
+            IP.toString(address)
         }
 
         return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
