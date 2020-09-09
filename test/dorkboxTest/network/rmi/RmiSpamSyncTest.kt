@@ -16,8 +16,6 @@
 package dorkboxTest.network.rmi
 
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.joran.JoranConfigurator
 import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
@@ -27,55 +25,21 @@ import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
-import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicLong
 
-class RmiDelayedInvocationSpamTest : BaseTest() {
+class RmiSpamSyncTest : BaseTest() {
     private val counter = AtomicLong(0)
 
     private val RMI_ID = 12251
 
-    var async = true
-
-    private fun setupLogBefore() {
-        // assume SLF4J is bound to logback in the current environment
-        val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
-        val context = rootLogger.loggerContext
-        val jc = JoranConfigurator()
-        jc.context = context
-        context.reset() // override default configuration
-
+    init {
         // the logger cannot keep-up if it's on trace
-        rootLogger.level = Level.DEBUG
-    }
-
-    private fun setupLogAfter() {
-        // assume SLF4J is bound to logback in the current environment
-        val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
-        val context = rootLogger.loggerContext
-        val jc = JoranConfigurator()
-        jc.context = context
-        context.reset() // override default configuration
-
-        // the logger cannot keep-up if it's on trace
-        rootLogger.level = Level.TRACE
+        setLogLevel(Level.DEBUG)
     }
 
     @Test
     fun rmiNetwork() {
         runBlocking {
-            async = false
-            rmi { configuration ->
-                configuration.enableIpcForLoopback = false
-            }
-        }
-    }
-
-    @Test
-    fun rmiNetworkAync() {
-        setupLogBefore()
-        runBlocking {
-            async = true
             rmi { configuration ->
                 configuration.enableIpcForLoopback = false
             }
@@ -85,19 +49,10 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
     @Test
     fun rmiIpc() {
         runBlocking {
-            async = false
             rmi()
         }
     }
 
-    @Test
-    fun rmiIpcAsync() {
-        setupLogBefore()
-        runBlocking {
-            async = true
-            rmi()
-        }
-    }
 
     /**
      * In this test the server has two objects in an object space. The client
@@ -106,8 +61,8 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
     suspend fun rmi(config: (Configuration) -> Unit = {}) {
         val server: Server<Connection>
 
-        val mod = if (async) 10_000L else 200L
-        val totalRuns = if (async) 1_000_000 else 1_000
+        val mod = 400L
+        val totalRuns = 1_000
 
         run {
             val configuration = serverConfig()
@@ -123,23 +78,24 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
         }
 
 
+        val client: Client<Connection>
         run {
             val configuration = clientConfig()
             config(configuration)
 
-            val client = Client<Connection>(configuration)
+            client = Client(configuration)
             addEndPoint(client)
 
             client.onConnect { connection ->
                 val remoteObject = connection.getGlobalObject<TestObject>(RMI_ID)
                 val obj = remoteObject as RemoteObject
-                obj.async = async
+                obj.async = false
 
                 var started = false
                 for (i in 0 until totalRuns) {
                     if (!started) {
                         started = true
-                        System.err.println("Running for $totalRuns iterations....")
+                        connection.logger.error("Running for $totalRuns iterations....")
                     }
 
                     if (i % mod == 0L) {
@@ -150,7 +106,7 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
                     try {
                         remoteObject.setOther(i.toLong())
                     } catch (e: Exception) {
-                        System.err.println("Timeout when calling RMI method")
+                        connection.logger.error("Timeout when calling RMI method")
                         e.printStackTrace()
                     }
                 }
@@ -163,8 +119,10 @@ class RmiDelayedInvocationSpamTest : BaseTest() {
             client.connect()
         }
 
-        waitForThreads(200)
+        waitForThreads()
         Assert.assertEquals(totalRuns.toLong(), counter.get())
+        client.logger.error("kryos generated: ${client.config.serialization.getInitializedKryoCount()}")
+        server.logger.error("kryos generated: ${server.config.serialization.getInitializedKryoCount()}")
     }
 
     private interface TestObject {

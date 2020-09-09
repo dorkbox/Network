@@ -128,6 +128,12 @@ abstract class BaseTest {
     init {
         println("---- " + this.javaClass.simpleName)
 
+//        setLogLevel(Level.INFO)
+        setLogLevel(Level.TRACE)
+//        setLogLevel(Level.DEBUG)
+    }
+
+    fun setLogLevel(level: Level) {
         // assume SLF4J is bound to logback in the current environment
         val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
         val context = rootLogger.loggerContext
@@ -135,13 +141,7 @@ abstract class BaseTest {
         jc.context = context
         context.reset() // override default configuration
 
-//        rootLogger.setLevel(Level.OFF)
-
-//        rootLogger.level = Level.INFO
-        rootLogger.level = Level.TRACE
-//            rootLogger.level = Level.DEBUG
-//        rootLogger.level = Level.ALL
-
+        rootLogger.level = level
 
         // we only want error messages
         val kryoLogger = LoggerFactory.getLogger("com.esotericsoftware") as Logger

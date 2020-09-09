@@ -78,7 +78,7 @@ class RmiDelayedInvocationTest : BaseTest() {
 
                 val totalRuns = 100
                 var abort = false
-                System.err.println("Running for $totalRuns iterations....")
+                connection.logger.error("Running for $totalRuns iterations....")
 
                 for (i in 0 until totalRuns) {
                     if (abort) {
@@ -94,13 +94,13 @@ class RmiDelayedInvocationTest : BaseTest() {
                         try {
                             (iterateLock as Object).wait(1)
                         } catch (e: InterruptedException) {
-                            System.err.println("Failed after: $i")
+                            connection.logger.error("Failed after: $i")
                             e.printStackTrace()
                             abort = true
                         }
                     }
                 }
-                System.err.println("Done with delay invocation test")
+                connection.logger.error("Done with delay invocation test")
 
                 stopEndPoints()
             }
