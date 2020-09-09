@@ -155,7 +155,7 @@ object RmiUtils {
             var iface_OR_ImplMethodAccess = ifaceAsmMethodAccess
 
             // reflectAsm doesn't like "Object" class methods
-            val canUseAsm = asmEnabled && method.declaringClass != Any::class.java
+            val canUseAsm = asmEnabled && declaringClass != Any::class.java
             var overwrittenMethod: Method? = null
 
             // this is how we detect if the method has been changed from the interface -> implementation + connection parameter
@@ -447,6 +447,7 @@ object RmiUtils {
         return packedInt.toShort().toInt()
     }
 
+    @Suppress("EXPERIMENTAL_API_USAGE")
     fun unpackUnsignedRight(packedInt: Int): Int {
         return packedInt.toUShort().toInt()
     }

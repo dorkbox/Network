@@ -417,6 +417,8 @@ open class Serialization(private val references: Boolean = true, private val fac
             classesToRegister.forEach { registration ->
                 require(registration is ClassRegistrationForRmi) { "Unable to initialize a class registrations for anything OTHER than RMI!! To fix this, remove ${registration.clazz}" }
             }
+
+            @Suppress("UNCHECKED_CAST")
             val classesToRegisterForRmi = listOf(*classesToRegister.toTypedArray()) as List<ClassRegistrationForRmi>
             classesToRegister.clear()
 
