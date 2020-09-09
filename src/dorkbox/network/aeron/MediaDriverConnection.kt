@@ -17,6 +17,8 @@
 
 package dorkbox.network.aeron
 
+import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.Aeron
@@ -200,6 +202,16 @@ class UdpMediaDriverConnection(override val address: InetAddress,
     }
 
     override fun serverInfo(): String {
+        val address = if (address == IPv4.WILDCARD || address == IPv6.WILDCARD) {
+            if (address == IPv4.WILDCARD) {
+                address.hostAddress
+            } else {
+                IPv4.WILDCARD.hostAddress + "/" + address.hostAddress
+            }
+        } else {
+            address.hostAddress
+        }
+
         return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
             "Listening on $address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
