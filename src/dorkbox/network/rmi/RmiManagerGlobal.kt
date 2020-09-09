@@ -115,7 +115,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
         return success as T?
     }
 
-    fun close() {
+    suspend fun close() {
         rmiResponseManager.close()
         remoteObjectCreationCallbacks.close()
     }

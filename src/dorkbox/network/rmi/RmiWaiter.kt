@@ -30,6 +30,9 @@ internal data class RmiWaiter(val id: Int) {
     var channel: Channel<Unit> = Channel(0)
     var isCancelled = false
 
+    // holds the RMI result. This is ALWAYS accessed from within a lock!
+    var result: Any? = null
+
 
     /**
      * this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
