@@ -61,22 +61,14 @@ class CoroutineSleepingMillisIdleStrategy : CoroutineIdleStrategy {
         if (workCount > 0) {
             return
         }
-        try {
-            delay(sleepPeriodMs)
-        } catch (ignore: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
+        delay(sleepPeriodMs)
     }
 
     /**
      * {@inheritDoc}
      */
     override suspend fun idle() {
-        try {
-            delay(sleepPeriodMs)
-        } catch (ignore: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
+        delay(sleepPeriodMs)
     }
 
     /**
