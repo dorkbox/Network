@@ -27,7 +27,7 @@ internal data class RmiWaiter(val id: Int) {
     // "send" suspends until another coroutine invokes "receive".
     //
     // these are wrapped in a try/catch, because cancel will cause exceptions to be thrown (which we DO NOT want)
-    var channel: Channel<Unit> = Channel(0)
+    var channel: Channel<Unit> = Channel(Channel.RENDEZVOUS)
     var isCancelled = false
 
     // holds the RMI result. This is ALWAYS accessed from within a lock!
