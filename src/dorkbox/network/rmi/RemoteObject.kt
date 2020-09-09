@@ -47,15 +47,14 @@ interface RemoteObject {
     var responseTimeout: Int
 
     /**
-     * Sets the behavior when invoking a remote method. DEFAULT is false.
+     * Sets the behavior when invoking a remote method. DEFAULT is false. This is not thread safe!
      *
      * If true, the invoking thread will not wait for a response. The method will return immediately and the return value
      *    should be ignored.
      *
-     * If false, the invoking thread will wait (if called via suspend, then it will use coroutines) for the remote method to return or
-     * timeout.
+     * If false, the invoking thread will wait for the remote method to return or timeout.
      *
-     * If the return value or exception needs to be retrieved, then DO NOT set async, and change the response timeout
+     * If the return value or an exception needs to be retrieved, then DO NOT set async=true, and change the response timeout to 0 instead
      */
     var async: Boolean
 

@@ -133,60 +133,63 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
     /**
      * @return the result (can be null) or timeout exception
      */
-    suspend fun waitForReply(isAsync: Boolean, rmiWaiter: RmiWaiter, timeoutMillis: Long): Any? {
-        if (isAsync) {
-            return null
-        }
-
-        @Suppress("EXPERIMENTAL_API_USAGE")
+    suspend fun waitForReply(rmiWaiter: RmiWaiter, timeoutMillis: Long): Any? {
         val rmiId = RmiUtils.unpackUnsignedRight(rmiWaiter.id)  // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
-
-        // NOTE: we ALWAYS send a response from the remote end.
-        //
-        // 'async' -> DO NOT WAIT (and no response)
-        // 'timeout > 0' -> WAIT
-        // 'timeout <= 0' -> same as async (DO NOT WAIT)
-
-
-        @Suppress("EXPERIMENTAL_API_USAGE")
-        val responseTimeoutJob = actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
-            // NOTE: UNDISPATCHED means that this coroutine will start when `rmiWaiter.doWait()` is called (the first suspension point)
-            //   we want this behavior INSTEAD OF automatically starting this on a new thread.
-            delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
-
-            // check if we have a result or not
-            val maybeResult = pendingLock.read {
-                val prev = pending[rmiId]
-                // maybeResult cannot be null, because the only thing that removes it is after the job cancel!
-                if (prev!!.result == null) {
-                    prev
-                } else {
-                    null
-                }
-            }
-
-            if (maybeResult != null) {
-                // maybeResult cannot be null, because the only thing that removes it is after the job cancel!
-                logger.trace { "RMI timeout ($timeoutMillis) cancel: $rmiId" }
-
-                maybeResult.cancel()
-            }
-        }
 
         logger.trace {
             "RMI waiting: $rmiId"
         }
 
-        // wait for the response.
+        // NOTE: we ALWAYS send a response from the remote end.
         //
-        // If the response is ALREADY here, the doWait() returns instantly (with result)
-        // if no response yet, it will suspend and either
-        //   A) get response
-        //   B) timeout
-        rmiWaiter.doWait()
+        // 'async' -> DO NOT WAIT
+        // 'timeout > 0' -> WAIT w/ TIMEOUT
+        // 'timeout == 0' -> WAIT FOREVER
+        if (timeoutMillis > 0) {
+            @Suppress("EXPERIMENTAL_API_USAGE")
+            val responseTimeoutJob = actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
+                // NOTE: UNDISPATCHED means that this coroutine will start when `rmiWaiter.doWait()` is called (the first suspension point)
+                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
+                delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
-        // always cancel the timeout
-        responseTimeoutJob.cancel()
+                // check if we have a result or not
+                val maybeResult = pendingLock.read {
+                    val prev = pending[rmiId]
+                    // maybeResult cannot be null, because the only thing that removes it is after the job cancel!
+                    if (prev!!.result == null) {
+                        prev
+                    } else {
+                        null
+                    }
+                }
+
+                if (maybeResult != null) {
+                    // maybeResult cannot be null, because the only thing that removes it is after the job cancel!
+                    logger.trace { "RMI timeout ($timeoutMillis) cancel: $rmiId" }
+
+                    maybeResult.cancel()
+                }
+            }
+
+            // wait for the response.
+            //
+            // If the response is ALREADY here, the doWait() returns instantly (with result)
+            // if no response yet, it will suspend and either
+            //   A) get response
+            //   B) timeout
+            rmiWaiter.doWait()
+
+            // always cancel the timeout
+            responseTimeoutJob.cancel()
+        } else {
+            // wait for the response --- THIS WAITS FOREVER!
+            //
+            // If the response is ALREADY here, the doWait() returns instantly (with result)
+            // if no response yet, it will suspend and
+            //   A) get response
+            rmiWaiter.doWait()
+        }
+
 
         val pendingResult = pendingLock.write {
             // inside a lock because we HAVE to already use a memory fence, might as well reuse it instead of an extra @Volatile

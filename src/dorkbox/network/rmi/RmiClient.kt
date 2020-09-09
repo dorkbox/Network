@@ -96,9 +96,8 @@ internal class RmiClient(val isGlobal: Boolean,
         // NOTE: we ALWAYS send a response from the remote end.
         //
         // 'async' -> DO NOT WAIT
-        // 'timeout > 0' -> WAIT
-        // 'timeout == 0' -> same as async (DO NOT WAIT)
-        val isAsync = isAsync || timeoutMillis <= 0L
+        // 'timeout > 0' -> WAIT w/ TIMEOUT
+        // 'timeout == 0' -> WAIT FOREVER
 
 
         // If we are async, we ignore the response....
@@ -112,7 +111,11 @@ internal class RmiClient(val isGlobal: Boolean,
         connection.send(invokeMethod)
 
         // if we are async, then this will immediately return
-        return responseManager.waitForReply(isAsync, rmiWaiter, timeoutMillis)
+        return if (isAsync) {
+            null
+        } else {
+            responseManager.waitForReply(rmiWaiter, timeoutMillis)
+        }
     }
 
     private fun returnAsyncOrSync(method: Method, returnValue: Any?): Any? {
@@ -173,6 +176,7 @@ internal class RmiClient(val isGlobal: Boolean,
 
                 setResponseTimeoutMethod -> {
                     timeoutMillis = (args!![0] as Int).toLong()
+                    require(timeoutMillis >= 0) { "ResponseTimeout must be >= 0"}
                     return null
                 }
                 getResponseTimeoutMethod -> {
