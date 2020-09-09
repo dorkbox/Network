@@ -30,7 +30,7 @@ plugins {
     java
 
     id("com.dorkbox.GradleUtils") version "1.12"
-    id("com.dorkbox.Licensing") version "2.5"
+    id("com.dorkbox.Licensing") version "2.5.1"
     id("com.dorkbox.VersionUpdate") version "2.0"
     id("com.dorkbox.GradlePublish") version "1.8"
     id("com.dorkbox.GradleModuleInfo") version "1.1"
@@ -42,7 +42,7 @@ object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.0-beta1"
+    const val version = "5.0-beta3"
 
     // set as project.ext
     const val name = "Network"
@@ -202,6 +202,7 @@ dependencies {
 
     // https://github.com/real-logic/aeron
     val aeronVer = "1.29.0"
+    // REMOVE UdpChannel when ISSUE https://github.com/real-logic/aeron/issues/1057 is resolved! (hopefully in 1.30.0)
     implementation("io.aeron:aeron-client:$aeronVer")
     implementation("io.aeron:aeron-driver:$aeronVer")
 
@@ -227,7 +228,7 @@ dependencies {
     implementation("com.dorkbox:Annotations:3.1")
     implementation("com.dorkbox:MinLog-SLF4J:2.0")
     implementation("com.dorkbox:Utilities:1.8")
-    implementation("com.dorkbox:NetworkUtils:1.3")
+    implementation("com.dorkbox:NetworkUtils:1.4")
 
     // Caffeine High-throughput Timeout Cache
     // https://github.com/ben-manes/caffeine
