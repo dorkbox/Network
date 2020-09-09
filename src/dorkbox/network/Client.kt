@@ -16,6 +16,7 @@
 package dorkbox.network
 
 import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverConnection
 import dorkbox.network.connection.Connection
@@ -35,6 +36,7 @@ import dorkbox.network.rmi.TimeoutException
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.launch
 import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 
 /**
@@ -242,24 +244,36 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         val aeron = initEndpointState()
 
-        // only change LOCALHOST -> IPC if the media driver is ALREADY running!
+        // only change LOCALHOST -> IPC if the media driver is ALREADY running LOCALLY!
         val canAutoChangeToIpc = config.enableIpcForLoopback && isRunning()
         if (canAutoChangeToIpc) {
-            logger.info("Media driver is running. Support for enable auto-switch from LOCALHOST -> IPC enabled")
+            logger.info("Media driver is already running. Support for auto-switch LOCALHOST -> IPC is enabled")
         }
+
+        // only try to connect via IPv4 if we have a network interface that supports it!
+        if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
+            require(false) { "Unable to connect to the IPv4 address $remoteAddress, there are no IPv4 interfaces available!"}
+        }
+
+        // only try to connect via IPv6 if we have a network interface that supports it!
+        if (remoteAddress is Inet6Address && !IPv6.isAvailable) {
+            require(false) { "Unable to connect to the IPv6 address $remoteAddress, there are no IPv6 interfaces available!"}
+        }
+
 
         // NETWORK OR IPC ADDRESS
         // if we connect to "loopback", then MAYBE we substitute if for IPC (with log message)
 
         // localhost/loopback IP might not always be 127.0.0.1 or ::1
-        when {
-            remoteAddress == null           -> this.remoteAddress0 = null
-            remoteAddress.isAnyLocalAddress -> throw IllegalArgumentException("0.0.0.0 is an invalid address to connect to!")
-            canAutoChangeToIpc && remoteAddress.isLoopbackAddress -> {
-                logger.info { "Auto-changing network connection from $remoteAddress -> IPC" }
-                this.remoteAddress0 = null
-            }
-            else                            -> this.remoteAddress0 = remoteAddress
+        if (remoteAddress == null) {
+            this.remoteAddress0 = null
+        } else if (remoteAddress.isAnyLocalAddress) {
+            throw IllegalArgumentException("Cannot connect to $remoteAddress It is an invalid address!")
+        } else if (canAutoChangeToIpc && remoteAddress.isLoopbackAddress) {
+            logger.info { "Auto-changing network connection from $remoteAddress -> IPC" }
+            this.remoteAddress0 = null
+        } else {
+            this.remoteAddress0 = remoteAddress
         }
 
 
