@@ -145,7 +145,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         if (config.maxConnectionsPerIpAddress == 0) { config.maxConnectionsPerIpAddress = config.maxClientCount}
 
         // we are done with initial configuration, now finish serialization
-        serialization.finishInit(type, settingsStore)
+        serialization.finishInit(type, settingsStore, ByteArray(0), actionDispatch)
     }
 
     override fun newException(message: String, cause: Throwable?): Throwable {
@@ -368,7 +368,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     // val port = remoteIpAndPort.substring(splitPoint+1)
 
                     // this should never be null, because we are feeding it a valid IP address from aeron
-                    // maybe IPv4, maybe IPv6!!!
+                    // maybe IPv4, maybe IPv6! This is slower than if we ALREADY know what it is.
                     val clientAddress = IP.getByName(clientAddressString)!!
 
 
