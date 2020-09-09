@@ -128,6 +128,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     val serialization: Serialization
 
+    private val handshakeKryo: KryoExtra
+
+
     private val sendIdleStrategy: CoroutineIdleStrategy
 
     /**
@@ -279,6 +282,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         // serialization stuff
         serialization = config.serialization
         sendIdleStrategy = config.sendIdleStrategy
+        handshakeKryo = serialization.initHandshakeKryo()
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
         settingsStore = config.settingsStore
@@ -461,27 +465,28 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         }
     }
 
+
+    @Suppress("DuplicatedCode")
+    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     internal suspend fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage) {
         // The sessionId is globally unique, and is assigned by the server.
         logger.trace {
             "[${publication.sessionId()}] send HS: $message"
         }
 
-        // we are not thread-safe!
-        val kryo = serialization.takeHandshakeKryo()
-
         try {
-            kryo.write(message)
+            // we are not thread-safe!
+            handshakeKryo.write(message)
 
-            val buffer = kryo.writerBuffer
+            val buffer = handshakeKryo.writerBuffer
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
             var result: Long
             while (true) {
                 result = publication.offer(internalBuffer, 0, objectSize)
-                // success!
-                if (result > 0) {
+                if (result >= 0) {
+                    // success!
                     return
                 }
 
@@ -514,7 +519,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             listenerManager.notifyError(exception)
         } finally {
             sendIdleStrategy.reset()
-            serialization.returnHandshakeKryo(kryo)
         }
     }
 
@@ -526,9 +530,11 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * @return the message
      */
+    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
         try {
-            val message = serialization.readHandshakeMessage(buffer, offset, length)
+            val message = handshakeKryo.read(buffer, offset, length)
+
             logger.trace {
                 "[${header.sessionId()}] received HS: $message"
             }
@@ -633,6 +639,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     }
 
     // NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
+    @Suppress("DuplicatedCode")
     internal suspend fun send(message: Any, publication: Publication, connection: Connection) {
         // The sessionId is globally unique, and is assigned by the server.
         logger.trace {
@@ -651,8 +658,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             var result: Long
             while (true) {
                 result = publication.offer(internalBuffer, 0, objectSize)
-                // success!
-                if (result > 0) {
+                if (result >= 0) {
+                    // success!
                     return
                 }
 
@@ -746,14 +753,14 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 connections.forEach {
                     it.close()
                 }
+
+                // the storage is closed via this as well.
+                settingsStore.close()
+
+                // Connections are closed first, because we want to make sure that no RMI messages can be received
+                // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
+                rmiGlobalSupport.close()
             }
-
-
-            // the storage is closed via this as well.
-            settingsStore.close()
-            // Connections are closed first, because we want to make sure that no RMI messages can be received
-            // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
-            rmiGlobalSupport.close()
 
             close0()
 

@@ -110,9 +110,9 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
         }
     }
 
+    // called from the connect thread
     suspend fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {
         val registrationMessage = HandshakeMessage.helloFromClient(oneTimePad, config.settingsStore.getPublicKey()!!)
-
 
         // Send the one-time pad to the server.
         endPoint.writeHandshakeMessage(handshakeConnection.publication, registrationMessage)
@@ -156,6 +156,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
         return connectionHelloInfo!!
     }
 
+    // called from the connect thread
     suspend fun handshakeDone(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long): Boolean {
         val registrationMessage = HandshakeMessage.doneFromClient()
 

@@ -44,6 +44,7 @@ import dorkbox.os.OS
 import dorkbox.util.serialization.SerializationDefaults
 import dorkbox.util.serialization.SerializationManager
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
@@ -93,8 +94,6 @@ open class Serialization(private val references: Boolean = true, private val fac
 
     private var initialized = atomic(false)
     private val initializedKryoCount = atomic(0)
-    private val kryoPool = MultithreadConcurrentQueue<KryoExtra>(1024)  // reasonable size of available kryo's
-    private val kryoHandshakePool = MultithreadConcurrentQueue<KryoExtra>(1024)  // reasonable size of available kryo's
 
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class)
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
@@ -119,14 +118,15 @@ open class Serialization(private val references: Boolean = true, private val fac
 
     val rmiHolder = RmiHolder()
 
-
     // reflectASM doesn't work on android
     private val useAsm = !OS.isAndroid()
 
     // These are GLOBAL, single threaded only kryo instances.
     // The readKryo WILL RE-CONFIGURED during the client handshake! (it is all the same thread, so object visibility is not a problem)
+    // NOTE: These following can ONLY be called on a single thread!
     private var readKryo = initGlobalKryo()
-    private var readHandshakeKryo = initHandshakeKryo()
+    private val kryoPool = MultithreadConcurrentQueue<KryoExtra>(1024)  // reasonable size of available kryo's?
+
 
     /**
      * Registers the class using the lowest, next available integer ID and the [default serializer][Kryo.getDefaultSerializer].
@@ -268,7 +268,7 @@ open class Serialization(private val references: Boolean = true, private val fac
     /**
      * Kryo specifically for handshakes
      */
-    private fun initHandshakeKryo(): KryoExtra {
+    internal fun initHandshakeKryo(): KryoExtra {
         val kryo = KryoExtra()
 
         kryo.instantiatorStrategy = instantiatorStrategy
@@ -614,22 +614,6 @@ open class Serialization(private val references: Boolean = true, private val fac
     }
 
     /**
-     * @return takes a kryo instance from the pool, or creates one if the pool was empty
-     */
-    fun takeHandshakeKryo(): KryoExtra {
-        // ALWAYS get as many as needed. Recycle them to prevent too many getting created
-        return kryoHandshakePool.poll() ?: initHandshakeKryo()
-    }
-
-    /**
-     * Returns a kryo instance to the pool for re-use later on
-     */
-    fun returnHandshakeKryo(kryo: KryoExtra) {
-        // return as much as we can. don't suspend if the pool is full, we just throw it away.
-        kryoHandshakePool.offer(kryo)
-    }
-
-    /**
      * @return The number of kryo instances created. This does not reflect the size of the pool, just the number of
      * existing kryo instances.
      *
@@ -819,9 +803,6 @@ open class Serialization(private val references: Boolean = true, private val fac
     }
 
     // NOTE: These following functions are ONLY called on a single thread!
-    fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int): Any? {
-        return readHandshakeKryo.read(buffer, offset, length)
-    }
     fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, connection: Connection): Any? {
         return readKryo.read(buffer, offset, length, connection)
     }

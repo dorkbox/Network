@@ -45,7 +45,7 @@ import kotlin.concurrent.write
 
 
 /**
- * @throws IllegalArgumentException If the port range is not valid
+ * 'notifyConnect' must be THE ONLY THING in this class to use the action dispatch!
  */
 @Suppress("DuplicatedCode")
 internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLogger,
@@ -88,7 +88,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         if (message !is HandshakeMessage) {
             listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $connectionString not allowed! Invalid connection request"))
 
-            server.actionDispatch.launch {
+            runBlocking {
                 server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection request"))
             }
             return false
@@ -110,9 +110,12 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 // this enables the connection to start polling for messages
                 server.connections.add(pendingConnection)
 
-                server.actionDispatch.launch {
-                    // now tell the client we are done
+                // now tell the client we are done
+                runBlocking {
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(sessionId))
+                }
+                server.actionDispatch.launch {
+                    // this must be THE ONLY THING in this class to use the action dispatch!
                     listenerManager.notifyConnect(pendingConnection)
                 }
             }
@@ -143,7 +146,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             if (server.connections.connectionCount() >= config.maxClientCount) {
                 listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}"))
 
-                server.actionDispatch.launch {
+                runBlocking {
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
                 }
                 return false
@@ -157,16 +160,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 connectionsPerIpCounts.decrement(clientAddress, currentCountForIp)
 
                 listenerManager.notifyError(ClientRejectedException("Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}"))
-                server.actionDispatch.launch {
+                runBlocking {
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Too many connections for IP address"))
                 }
-
                 return false
             }
             connectionsPerIpCounts.increment(clientAddress, currentCountForIp)
         } catch (e: Exception) {
             listenerManager.notifyError(ClientRejectedException("could not validate client message", e))
-            server.actionDispatch.launch {
+            runBlocking {
                 server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
             }
             return false
@@ -205,7 +207,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             connectionSessionId = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
             listenerManager.notifyError(ClientRejectedException("Connection from $connectionString not allowed! Unable to allocate a session ID for the client connection!"))
-            server.actionDispatch.launch {
+            runBlocking {
                 server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
             }
             return
@@ -220,7 +222,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             sessionIdAllocator.free(connectionSessionId)
 
             listenerManager.notifyError(ClientRejectedException("Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!"))
-            server.actionDispatch.launch {
+            runBlocking {
                 server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
             }
             return
@@ -235,7 +237,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             sessionIdAllocator.free(connectionStreamPubId)
 
             listenerManager.notifyError(ClientRejectedException("Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!"))
-            server.actionDispatch.launch {
+            runBlocking {
                 server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
             }
             return
@@ -271,10 +273,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 ListenerManager.cleanStackTrace(exception)
                 listenerManager.notifyError(connection, exception)
 
-                server.actionDispatch.launch {
+                runBlocking {
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection was not permitted!"))
                 }
-
                 return
             }
 
@@ -314,7 +315,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             }
 
             // this tells the client all of the info to connect.
-            server.actionDispatch.launch {
+            runBlocking {
                 server.writeHandshakeMessage(handshakePublication, successMessage)
             }
         } catch (e: Exception) {
@@ -374,7 +375,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             connectionsPerIpCounts.decrementSlow(clientAddress)
 
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a session ID for the client connection!"))
-            server.actionDispatch.launch {
+            runBlocking {
                 server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
             }
             return
@@ -390,7 +391,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             sessionIdAllocator.free(connectionSessionId)
 
             listenerManager.notifyError(ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a stream ID for the client connection!"))
-            server.actionDispatch.launch {
+            runBlocking {
                 server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
             }
             return
@@ -447,10 +448,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 ListenerManager.cleanStackTrace(exception)
                 listenerManager.notifyError(connection, exception)
 
-                server.actionDispatch.launch {
+                runBlocking {
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection was not permitted!"))
                 }
-
                 return
             }
 
@@ -483,7 +483,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             }
 
             // this tells the client all of the info to connect.
-            server.actionDispatch.launch {
+            runBlocking {
                 server.writeHandshakeMessage(handshakePublication, successMessage)
             }
         } catch (e: Exception) {
