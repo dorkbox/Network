@@ -169,7 +169,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         if (config.maxConnectionsPerIpAddress == 0) { config.maxConnectionsPerIpAddress = config.maxClientCount}
 
         // we are done with initial configuration, now finish serialization
-        serialization.finishInit(type, settingsStore, ByteArray(0), actionDispatch)
+        serialization.finishInit(type, settingsStore, ByteArray(0))
     }
 
     override fun newException(message: String, cause: Throwable?): Throwable {

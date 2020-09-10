@@ -361,7 +361,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         ///////////////
 
         // we setup our kryo information once we connect to a server (using the server's kryo registration details)
-        if (!serialization.finishInit(type, settingsStore, connectionInfo.kryoRegistrationDetails, actionDispatch)) {
+        if (!serialization.finishInit(type, settingsStore, connectionInfo.kryoRegistrationDetails)) {
             handshakeConnection.close()
 
             // because we are getting the class registration details from the SERVER, this should never be the case.
