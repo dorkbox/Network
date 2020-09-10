@@ -615,15 +615,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         shutdownLatch.doWait()
     }
 
-//    /**
-//     * Checks to see if an endpoint (using the current configuration) is running.
-//     *
-//     * @return true if the media driver is active and running
-//     */
-//    fun isRunning(): Boolean {
-//        // if the media driver is running, it will be a quick connection. Usually 100ms or so
-//        return configureMediaDriverContext().isDriverActive(1_000) { }
-//    }
+    /**
+     * Checks to see if an endpoint (using the current configuration) is running.
+     *
+     * @return true if the media driver is active and running
+     */
+    fun isRunning(): Boolean {
+        // if the media driver is running, it will be a quick connection. Usually 100ms or so
+        return mediaDriverContext.isDriverActive(1_000) { }
+    }
 
     /**
      * Checks to see if an endpoint (using the specified configuration) is running.
