@@ -50,7 +50,7 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
     private val rmiWaiterCache = Channel<RmiWaiter>(maxValuesInCache)
 
     private val pendingLock = ReentrantReadWriteLock()
-    private val pending = arrayOfNulls<Any?>(maxValuesInCache)
+    private val pending = arrayOfNulls<Any?>(maxValuesInCache+1) // +1 because it's possible to have the value 65535 in the cache
 
     init {
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
