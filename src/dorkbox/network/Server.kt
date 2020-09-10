@@ -18,6 +18,7 @@ package dorkbox.network
 import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
+import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverConnection
@@ -64,12 +65,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
          * @return true if the configuration matches and can connect (but not verify) to the TCP control socket.
          */
         fun isRunning(configuration: ServerConfiguration): Boolean {
-            val server = Server<Connection>(configuration)
-
-            val running = server.isRunning()
-            server.close()
-
-            return running
+            val context = AeronConfig.createContext(configuration)
+            return AeronConfig.isRunning(context)
         }
     }
 
@@ -112,18 +109,22 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         require(config.listenIpAddress.isNotBlank()) { "Blank listen IP address, cannot continue"}
 
         // can't disable everything!
-        if (!config.enableIPC && !config.enableIPv4 && !config.enableIPv6) {
+        if (!config.enableIpc && !config.enableIPv4 && !config.enableIPv6) {
             require(false) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
         }
 
         // have to verify if it's the only thing specified, is IPv4 available...
-        if (!config.enableIPC && !config.enableIPv6 && config.enableIPv4 && !IPv4.isAvailable) {
+        if (!config.enableIpc && !config.enableIPv6 && config.enableIPv4 && !IPv4.isAvailable) {
             require(false) { "IPC/IPv6 are disabled and IPv4 is enabled, but there is no IPv4 interface available!" }
         }
 
         // have to verify if it's the only thing specified, is IPv4 available...
-        if (!config.enableIPC && !config.enableIPv4 && config.enableIPv6 && !IPv6.isAvailable) {
+        if (!config.enableIpc && !config.enableIPv4 && config.enableIPv6 && !IPv6.isAvailable) {
             require(false) { "IPC/IPv4 are disabled and IPv6 is enabled, but there is no IPv6 interface available!" }
+        }
+
+        if (config.enableIpc && config.aeronDirectoryForceUnique) {
+            require(false) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
         }
 
 
@@ -178,10 +179,10 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
 
     private fun getIpcPoller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
-        val poller = if (config.enableIPC) {
+        val poller = if (config.enableIpc) {
             val driver = IpcMediaDriverConnection(streamIdSubscription = config.ipcSubscriptionId,
                                                   streamId = config.ipcPublicationId,
-                                                  sessionId = RESERVED_SESSION_ID_INVALID)
+                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
             driver.buildServer(aeron, logger)
             val publication = driver.publication
             val subscription = driver.subscription
@@ -223,8 +224,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             val driver = UdpMediaDriverConnection(address = listenIPv4Address!!,
                                                   publicationPort = config.publicationPort,
                                                   subscriptionPort = config.subscriptionPort,
-                                                  streamId = UDP_HANDSHAKE_STREAM_ID,
-                                                  sessionId = RESERVED_SESSION_ID_INVALID)
+                                                  streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
 
             driver.buildServer(aeron, logger)
             val publication = driver.publication
@@ -291,8 +292,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             val driver = UdpMediaDriverConnection(address = listenIPv6Address!!,
                                                   publicationPort = config.publicationPort,
                                                   subscriptionPort = config.subscriptionPort,
-                                                  streamId = UDP_HANDSHAKE_STREAM_ID,
-                                                  sessionId = RESERVED_SESSION_ID_INVALID)
+                                                  streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
 
             driver.buildServer(aeron, logger)
             val publication = driver.publication
@@ -358,8 +359,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         val driver = UdpMediaDriverConnection(address = listenIPv6Address!!,
                                               publicationPort = config.publicationPort,
                                               subscriptionPort = config.subscriptionPort,
-                                              streamId = UDP_HANDSHAKE_STREAM_ID,
-                                              sessionId = RESERVED_SESSION_ID_INVALID)
+                                              streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                                              sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
 
         driver.buildServer(aeron, logger)
         val publication = driver.publication
@@ -604,34 +605,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             it.send(message)
         }
     }
-
-    /**
-     * TODO: when adding a "custom" connection, it's super important to not have to worry about the sessionID (which is what we key off of)
-     * Adds a custom connection to the server.
-     *
-     * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
-     * you want *this* server instance to manage listeners + message dispatch
-     *
-     * @param connection the connection to add
-     */
-    fun addConnection(connection: CONNECTION) {
-        connections.add(connection)
-    }
-
-    /**
-     * TODO: when adding a "custom" connection, it's super important to not have to worry about the sessionID (which is what we key off of)
-     * Removes a custom connection to the server.
-     *
-     *
-     * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
-     * you want *this* server instance to manage listeners + message dispatch
-     *
-     * @param connection the connection to remove
-     */
-    fun removeConnection(connection: CONNECTION) {
-        connections.remove(connection)
-    }
-
 
     /**
      * Closes the server and all it's connections. After a close, you may call 'bind' again.

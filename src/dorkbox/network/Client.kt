@@ -15,8 +15,10 @@
  */
 package dorkbox.network
 
+import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
+import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverConnection
 import dorkbox.network.connection.Connection
@@ -85,6 +87,11 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         if (config.networkMtuSize <= 0) { throw ClientException("configuration networkMtuSize must be > 0") }
         if (config.networkMtuSize >= 9 * 1024) { throw ClientException("configuration networkMtuSize must be < ${9 * 1024}") }
+
+
+        if (config.enableIpc && config.aeronDirectoryForceUnique) {
+            require(false) { "IPC and forcing a unique Aeron directory are incompatible!" }
+        }
     }
 
     override fun newException(message: String, cause: Throwable?): Throwable {
@@ -168,8 +175,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                         connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
         // Default IPC ports are flipped because they are in the perspective of the SERVER
         connect(remoteAddress = remoteAddress,
-                ipcPublicationId = IPC_HANDSHAKE_STREAM_ID_SUB,
-                ipcSubscriptionId = IPC_HANDSHAKE_STREAM_ID_PUB,
+                ipcPublicationId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB,
+                ipcSubscriptionId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB,
                 connectionTimeoutMS = connectionTimeoutMS,
                 reliable = reliable)
     }
@@ -186,8 +193,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @throws ClientRejectedException if the client connection is rejected
      */
     @Suppress("DuplicatedCode")
-    suspend fun connect(ipcPublicationId: Int = IPC_HANDSHAKE_STREAM_ID_SUB,
-                        ipcSubscriptionId: Int = IPC_HANDSHAKE_STREAM_ID_PUB,
+    suspend fun connect(ipcPublicationId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB,
+                        ipcSubscriptionId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB,
                         connectionTimeoutMS: Long = 30_000L) {
         // Default IPC ports are flipped because they are in the perspective of the SERVER
 
@@ -227,8 +234,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     @Suppress("DuplicatedCode")
     private suspend fun connect(remoteAddress: InetAddress? = null,
                                 // Default IPC ports are flipped because they are in the perspective of the SERVER
-                                ipcPublicationId: Int = IPC_HANDSHAKE_STREAM_ID_SUB,
-                                ipcSubscriptionId: Int = IPC_HANDSHAKE_STREAM_ID_PUB,
+                                ipcPublicationId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB,
+                                ipcSubscriptionId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB,
                                 connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
         // this will exist ONLY if we are reconnecting via a "disconnect" callback
         lockStepForReconnect.value?.doWait()
@@ -239,65 +246,96 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
 
         lockStepForReconnect.lazySet(null)
+
+        // localhost/loopback IP might not always be 127.0.0.1 or ::1
+        this.remoteAddress0 = remoteAddress
         connection0 = null
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         val aeron = initEndpointState()
 
-        // only change LOCALHOST -> IPC if the media driver is ALREADY running LOCALLY!
-        val canAutoChangeToIpc = config.enableIpcForLoopback && isRunning()
-        if (canAutoChangeToIpc) {
-            logger.info("Media driver is already running. Support for auto-switch LOCALHOST -> IPC is enabled")
+        if (config.enableIpc && config.aeronDirectoryForceUnique) {
+            require(false) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
         }
 
         // only try to connect via IPv4 if we have a network interface that supports it!
         if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
-            require(false) { "Unable to connect to the IPv4 address $remoteAddress, there are no IPv4 interfaces available!"}
+            require(false) { "Unable to connect to the IPv4 address ${IPv4.toString(remoteAddress)}, there are no IPv4 interfaces available!" }
         }
 
         // only try to connect via IPv6 if we have a network interface that supports it!
         if (remoteAddress is Inet6Address && !IPv6.isAvailable) {
-            require(false) { "Unable to connect to the IPv6 address $remoteAddress, there are no IPv6 interfaces available!"}
+            require(false) { "Unable to connect to the IPv6 address ${IPv6.toString(remoteAddress)}, there are no IPv6 interfaces available!" }
+        }
+
+        if (remoteAddress != null && remoteAddress.isAnyLocalAddress) {
+            require(false) { "Cannot connect to ${IP.toString(remoteAddress)} It is an invalid address!" }
+        }
+
+        // only change LOCALHOST -> IPC if the media driver is ALREADY running LOCALLY!
+        var usingIPC = config.enableIpc && remoteAddress == null
+        val autoChangeToIpc = !usingIPC && config.enableIpcForLoopback &&
+                              remoteAddress != null && remoteAddress.isLoopbackAddress && isRunning(mediaDriverContext)
+        if (autoChangeToIpc) {
+            logger.info {"IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC" }
         }
 
 
-        // NETWORK OR IPC ADDRESS
-        // if we connect to "loopback", then MAYBE we substitute if for IPC (with log message)
+        val handshake = ClientHandshake(config, crypto, this)
+        val handshakeConnection = if (autoChangeToIpc || usingIPC) {
+            // MAYBE the server doesn't have IPC enabled? If no, we need to connect via UDP instead
+            val test = IpcMediaDriverConnection(streamIdSubscription = ipcSubscriptionId,
+                                                streamId = ipcPublicationId,
+                                                sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                                                // "fast" connection timeout, since this is IPC
+                                                connectionTimeoutMS = 1000)
 
-        // localhost/loopback IP might not always be 127.0.0.1 or ::1
-        if (remoteAddress == null) {
-            this.remoteAddress0 = null
-        } else if (remoteAddress.isAnyLocalAddress) {
-            throw IllegalArgumentException("Cannot connect to $remoteAddress It is an invalid address!")
-        } else if (canAutoChangeToIpc && remoteAddress.isLoopbackAddress) {
-            logger.info { "Auto-changing network connection from $remoteAddress -> IPC" }
-            this.remoteAddress0 = null
-        } else {
-            this.remoteAddress0 = remoteAddress
-        }
+            var success = false
 
+            // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
+            try {
+                test.buildClient(aeron, logger)
+                success = true
+            } catch (e: Exception) {
+                // if we specified that we want to use IPC, then we have to throw the timeout exception, because there is no IPC
+                if (usingIPC) {
+                    throw e
+                }
+            }
 
-        val handshake = ClientHandshake(logger, config, crypto, this)
+            if (success) {
+                usingIPC = true
+                test
+            } else {
+                logger.info { "IPC for loopback enabled, but unable to connect. Retrying with address ${IP.toString(remoteAddress!!)}" }
 
-
-        val handshakeConnection = if (this.remoteAddress0 == null) {
-            IpcMediaDriverConnection(streamIdSubscription = ipcSubscriptionId,
-                                     streamId = ipcPublicationId,
-                                     sessionId = RESERVED_SESSION_ID_INVALID)
+                // try a UDP connection instead
+                val test = UdpMediaDriverConnection(address = this.remoteAddress0!!,
+                                                    publicationPort = config.subscriptionPort,
+                                                    subscriptionPort = config.publicationPort,
+                                                    streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                                                    sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                                                    connectionTimeoutMS = connectionTimeoutMS,
+                                                    isReliable = reliable)
+                // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
+                test.buildClient(aeron, logger)
+                test
+            }
         }
         else {
-            UdpMediaDriverConnection(address = this.remoteAddress0!!,
-                                     publicationPort = config.subscriptionPort,
-                                     subscriptionPort = config.publicationPort,
-                                     streamId = UDP_HANDSHAKE_STREAM_ID,
-                                     sessionId = RESERVED_SESSION_ID_INVALID,
-                                     connectionTimeoutMS = connectionTimeoutMS,
-                                     isReliable = reliable)
+            val test = UdpMediaDriverConnection(address = this.remoteAddress0!!,
+                                                publicationPort = config.subscriptionPort,
+                                                subscriptionPort = config.publicationPort,
+                                                streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                                                sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                                                connectionTimeoutMS = connectionTimeoutMS,
+                                                isReliable = reliable)
+            // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
+            test.buildClient(aeron, logger)
+            test
         }
 
 
-        // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
-        handshakeConnection.buildClient(aeron, logger)
         logger.info(handshakeConnection.clientInfo())
 
 
@@ -308,7 +346,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
-        val validateRemoteAddress = if (this.remoteAddress0 == null) {
+        val validateRemoteAddress = if (usingIPC) {
             PublicKeyValidationState.VALID
         } else {
             crypto.validateRemoteAddress(this.remoteAddress0!!, connectionInfo.publicKey)
@@ -316,7 +354,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
             handshakeConnection.close()
-            val exception = ClientRejectedException("Connection to $remoteAddress not allowed! Public key mismatch.")
+            val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} not allowed! Public key mismatch.")
             listenerManager.notifyError(exception)
             throw exception
         }
@@ -328,7 +366,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
 
         // we are now connected, so we can connect to the NEW client-specific ports
-        val reliableClientConnection = if (this.remoteAddress0 == null) {
+        val reliableClientConnection = if (usingIPC) {
             IpcMediaDriverConnection(sessionId = connectionInfo.sessionId,
                                      // NOTE: pub/sub must be switched!
                                      streamIdSubscription = connectionInfo.publicationPort,
@@ -366,13 +404,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             // because we are getting the class registration details from the SERVER, this should never be the case.
             // It is still and edge case where the reconstruction of the registration details fails (maybe because of custom serializers)
-            val exception = ClientRejectedException("Connection to $remoteAddress has incorrect class registration details!!")
+            val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} has incorrect class registration details!!")
             listenerManager.notifyError(exception)
             throw exception
         }
 
 
-        val newConnection = if (this.remoteAddress0 == null) {
+        val newConnection = if (usingIPC) {
             newConnection(ConnectionParams(this, reliableClientConnection, PublicKeyValidationState.VALID))
         } else {
             newConnection(ConnectionParams(this, reliableClientConnection, validateRemoteAddress))
@@ -383,7 +421,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         val permitConnection = listenerManager.notifyFilter(newConnection)
         if (!permitConnection) {
             handshakeConnection.close()
-            val exception = ClientRejectedException("Connection to $remoteAddress was not permitted!")
+            val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} was not permitted!")
             listenerManager.notifyError(exception)
             throw exception
         }
@@ -414,11 +452,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
 
         connection0 = newConnection
-        connections.add(newConnection)
+        addConnection(newConnection)
 
         // tell the server our connection handshake is done, and the connection can now listen for data.
         val canFinishConnecting = handshake.handshakeDone(handshakeConnection, connectionTimeoutMS)
-
         if (canFinishConnecting) {
             isConnected = true
 

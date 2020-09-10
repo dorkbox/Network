@@ -765,8 +765,9 @@ open class Serialization(private val references: Boolean = true, private val fac
      * # BLOCKING
      *
      * Waits until a kryo is available to write, using CAS operations to prevent having to synchronize.
+     *
+     * @throws IOException
      */
-    @Throws(IOException::class)
     override fun write(buffer: DirectBuffer, message: Any) {
         runBlocking {
             val kryo = takeKryo()

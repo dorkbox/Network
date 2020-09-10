@@ -20,7 +20,6 @@ package dorkbox.network.aeron
 import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
-import dorkbox.network.connection.EndPoint
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.Aeron
 import io.aeron.ChannelUriStringBuilder
@@ -84,7 +83,7 @@ class UdpMediaDriverConnection(override val address: InetAddress,
 
     private fun uri(): ChannelUriStringBuilder {
         val builder = ChannelUriStringBuilder().reliable(isReliable).media("udp")
-        if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
+        if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
             builder.sessionId(sessionId)
         }
 
@@ -195,7 +194,7 @@ class UdpMediaDriverConnection(override val address: InetAddress,
 
 
     override fun clientInfo(): String {
-        return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
+        return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
             "Connecting to ${IP.toString(address)} [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
             "Connecting handshake to ${IP.toString(address)} [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
@@ -213,7 +212,7 @@ class UdpMediaDriverConnection(override val address: InetAddress,
             IP.toString(address)
         }
 
-        return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
+        return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
             "Listening on $address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
             "Listening handshake on $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
@@ -253,7 +252,7 @@ class IpcMediaDriverConnection(override val streamId: Int,
 
     private fun uri(): ChannelUriStringBuilder {
         val builder = ChannelUriStringBuilder().media("ipc")
-        if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
+        if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
             builder.sessionId(sessionId)
         }
 
@@ -345,7 +344,7 @@ class IpcMediaDriverConnection(override val streamId: Int,
     }
 
     override fun clientInfo() : String {
-        return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
+        return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
             "[$sessionId] aeron connection established to [$streamIdSubscription|$streamId]"
         } else {
             "Connecting handshake to IPC [$streamIdSubscription|$streamId]"
@@ -353,7 +352,7 @@ class IpcMediaDriverConnection(override val streamId: Int,
     }
 
     override fun serverInfo() : String {
-        return if (sessionId != EndPoint.RESERVED_SESSION_ID_INVALID) {
+        return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
             "[$sessionId] IPC listening on [$streamIdSubscription|$streamId] "
         } else {
             "Listening handshake on IPC [$streamIdSubscription|$streamId]"

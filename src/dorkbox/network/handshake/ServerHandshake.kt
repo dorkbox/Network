@@ -22,11 +22,11 @@ import com.github.benmanes.caffeine.cache.RemovalListener
 import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
+import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.AllocationException
@@ -71,7 +71,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     private val connectionsPerIpCounts = ConnectionCounts()
 
     // guarantee that session/stream ID's will ALWAYS be unique! (there can NEVER be a collision!)
-    private val sessionIdAllocator = RandomIdAllocator(EndPoint.RESERVED_SESSION_ID_LOW, EndPoint.RESERVED_SESSION_ID_HIGH)
+    private val sessionIdAllocator = RandomIdAllocator(AeronConfig.RESERVED_SESSION_ID_LOW, AeronConfig.RESERVED_SESSION_ID_HIGH)
     private val streamIdAllocator = RandomIdAllocator(1, Integer.MAX_VALUE)
 
 
@@ -109,7 +109,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 logger.trace { "[${pendingConnection.id}] Connection from client $connectionString done with handshake." }
 
                 // this enables the connection to start polling for messages
-                server.connections.add(pendingConnection)
+                server.addConnection(pendingConnection)
 
                 // now tell the client we are done
                 runBlocking {

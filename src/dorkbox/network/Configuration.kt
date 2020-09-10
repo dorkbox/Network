@@ -15,10 +15,10 @@
  */
 package dorkbox.network
 
+import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
-import dorkbox.network.connection.EndPoint
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.PropertyStore
 import dorkbox.network.storage.SettingsStore
@@ -31,21 +31,6 @@ import mu.KLogger
 import java.io.File
 
 class ServerConfiguration : dorkbox.network.Configuration() {
-    /**
-     * Enables the ability to use the IPv4 network stack.
-     */
-    var enableIPv4 = true
-
-    /**
-     * Enables the ability to use the IPv6 network stack.
-     */
-    var enableIPv6 = true
-
-    /**
-     * Enables the ability use IPC (Inter Process Communication)
-     */
-    var enableIPC = true
-
     /**
      * The address for the server to listen on. "*" will accept connections from all interfaces, otherwise specify
      * the hostname (or IP) to bind to.
@@ -65,15 +50,39 @@ class ServerConfiguration : dorkbox.network.Configuration() {
     /**
      * The IPC Publication ID is used to define what ID the server will send data on. The client IPC subscription ID must match this value.
      */
-    var ipcPublicationId = EndPoint.IPC_HANDSHAKE_STREAM_ID_PUB
+    var ipcPublicationId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB
 
     /**
      * The IPC Subscription ID is used to define what ID the server will receive data on. The client IPC publication ID must match this value.
      */
-    var ipcSubscriptionId = EndPoint.IPC_HANDSHAKE_STREAM_ID_SUB
+    var ipcSubscriptionId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB
 }
 
 open class Configuration {
+    /**
+     * Enables the ability to use the IPv4 network stack.
+     */
+    var enableIPv4 = true
+
+    /**
+     * Enables the ability to use the IPv6 network stack.
+     */
+    var enableIPv6 = true
+
+    /**
+     * Enables the ability use IPC (Inter Process Communication).
+     *
+     * Aeron must be running in the same location for the client/server in order for this to work
+     */
+    var enableIpc = true
+
+    /**
+     * Permit loopback connections to use IPC instead of UDP for communicating, if possible. IPC is about 4x faster than UDP in loopback situations.
+     *
+     * This configuration only affects the client
+     */
+    var enableIpcForLoopback: Boolean = true
+
     /**
      * When connecting to a remote client/server, should connections be allowed if the remote machine signature has changed?
      *
@@ -100,13 +109,6 @@ open class Configuration {
      * Must be greater than 0
      */
     var subscriptionPort: Int = 0
-
-    /**
-     * Permit loopback connections to use IPC instead of UDP for communicating. IPC is about 4x faster than UDP in loopback situations.
-     *
-     * This configuration only affects the client
-     */
-    var enableIpcForLoopback: Boolean = true
 
     /**
      * How long a connection must be disconnected before we cleanup the memory associated with it
@@ -181,9 +183,14 @@ open class Configuration {
     var threadingMode = ThreadingMode.SHARED
 
     /**
-     * Log Buffer Locations for the Media Driver. The default location is a TEMP dir. This must be unique PER application and instance!
+     * Aeron location for the Media Driver. The default location is a TEMP dir.
      */
-    var aeronLogDirectory: File? = null
+    var aeronDirectory: File? = null
+
+    /**
+     * Should we force the Aeron location to be unique for every instance? This is mutually exclusive with IPC.
+     */
+    var aeronDirectoryForceUnique = false
 
     /**
      * The Aeron MTU value impacts a lot of things.

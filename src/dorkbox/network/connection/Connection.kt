@@ -120,7 +120,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // The IV for AES-GCM must be 12 bytes, since it's 4 (salt) + 8 (external counter) + 4 (GCM counter)
     // The 12 bytes IV is created during connection registration, and during the AES-GCM crypto, we override the last 8 with this
     // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
-    private val aes_gcm_iv = atomic(0)
+//    private val aes_gcm_iv = atomic(0)
 
     // RMI support for this connection
     internal val rmiConnectionSupport = endPoint.getRmiConnectionSupport()
@@ -338,16 +338,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             }
 
             // on close, we want to make sure this file is DELETED!
-            val logFile = endPoint.mediaDriverContext.aeronDirectory().resolve("publications").resolve("${publication.registrationId()}.logbuffer")
-
+            val logFile = endPoint.getMediaDriverPublicationFile(publication.registrationId())
             publication.close()
-
 
             closeTimeoutTime = System.currentTimeMillis() + timeOut
             while (logFile.exists() && System.currentTimeMillis() < closeTimeoutTime) {
                 if (logFile.delete()) {
                     break
                 }
+                delay(100)
             }
 
             if (logFile.exists()) {
@@ -355,6 +354,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             }
 
             rmiConnectionSupport.clearProxyObjects()
+
+            endPoint.removeConnection(this)
+
 
             // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other

@@ -19,6 +19,7 @@ import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
+import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.exceptions.MessageNotRegisteredException
 import dorkbox.network.handshake.HandshakeMessage
@@ -31,7 +32,6 @@ import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.SettingsStore
-import dorkbox.util.NamedThreadFactory
 import dorkbox.util.exceptions.SecurityException
 import io.aeron.Aeron
 import io.aeron.Publication
@@ -67,51 +67,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     protected constructor(config: Configuration) : this(Client::class.java, config)
     protected constructor(config: ServerConfiguration) : this(Server::class.java, config)
 
-
-    companion object {
-        /**
-         * Identifier for invalid sessions. This must be < RESERVED_SESSION_ID_LOW
-         */
-        const val RESERVED_SESSION_ID_INVALID = 0
-
-        /**
-         * The inclusive lower bound of the reserved sessions range. THIS SHOULD NEVER BE <= 0!
-         */
-        const val RESERVED_SESSION_ID_LOW = 1
-
-        /**
-         * The inclusive upper bound of the reserved sessions range.
-         */
-        const val RESERVED_SESSION_ID_HIGH = Integer.MAX_VALUE
-
-        const val UDP_HANDSHAKE_STREAM_ID: Int = 0x1337cafe
-        const val IPC_HANDSHAKE_STREAM_ID_PUB: Int = 0x1337c0de
-        const val IPC_HANDSHAKE_STREAM_ID_SUB: Int = 0x1337c0d3
-
-
-        private fun errorCodeName(result: Long): String {
-            return when (result) {
-                // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-                Publication.NOT_CONNECTED -> "Not connected"
-
-                // The offer failed due to back pressure from the subscribers preventing further transmission.
-                Publication.BACK_PRESSURED -> "Back pressured"
-
-                // The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-                Publication.ADMIN_ACTION -> "Administrative action"
-
-                // The Publication has been closed and should no longer be used.
-                Publication.CLOSED -> "Publication is closed"
-
-                // If this happens then the publication should be closed and a new one added. To make it less likely to happen then increase the term buffer length.
-                Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
-
-                else -> throw IllegalStateException("Unknown error code: $result")
-            }
-        }
-    }
-
-
     val logger: KLogger = KotlinLogging.logger(type.simpleName)
 
     internal val actionDispatch = CoroutineScope(Dispatchers.Default)
@@ -119,9 +74,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val listenerManager = ListenerManager<CONNECTION>()
     internal val connections = ConnectionManager<CONNECTION>()
 
-    internal val mediaDriverContext: MediaDriver.Context
+    internal lateinit var mediaDriverContext: MediaDriver.Context
     private var mediaDriver: MediaDriver? = null
-    private var aeron: Aeron? = null
+    internal var aeron: Aeron? = null
 
     /**
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basic types.
@@ -160,125 +115,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
         }
 
-        // Aeron configuration
-
-        /*
-         * Linux
-         * Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and
-         * net.core.wmem_max to allow larger SO_SNDBUF values to be set.
-         *
-         * Windows
-         * Windows tends to use SO_SNDBUF values that are too small. It is recommended to use values more like 1MB or so.
-         *
-         * Mac/Darwin
-         *
-         * Mac tends to use SO_SNDBUF values that are too small. It is recommended to use larger values, like 16KB.
-         */
-        if (config.receiveBufferSize == 0) {
-            config.receiveBufferSize = io.aeron.driver.Configuration.SOCKET_RCVBUF_LENGTH_DEFAULT
-//            when {
-//                OS.isLinux() ->
-//                OS.isWindows() ->
-//                OS.isMacOsX() ->
-//            }
-
-//            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
-//            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
-        }
-
-
-        if (config.sendBufferSize == 0) {
-            config.receiveBufferSize = io.aeron.driver.Configuration.SOCKET_SNDBUF_LENGTH_DEFAULT
-//            when {
-//                OS.isLinux() ->
-//                OS.isWindows() ->
-//                OS.isMacOsX() ->
-//            }
-
-//            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
-//            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
-        }
-
-
-        /*
-         * Note: Since Mac OS does not have a built-in support for /dev/shm it is advised to create a RAM disk for the Aeron directory (aeron.dir).
-         *
-         * You can create a RAM disk with the following command:
-         *
-         * $ diskutil erasevolume HFS+ "DISK_NAME" `hdiutil attach -nomount ram://$((2048 * SIZE_IN_MB))`
-         *
-         * where:
-         *
-         * DISK_NAME should be replaced with a name of your choice.
-         * SIZE_IN_MB is the size in megabytes for the disk (e.g. 4096 for a 4GB disk).
-         *
-         * For example, the following command creates a RAM disk named DevShm which is 2GB in size:
-         *
-         * $ diskutil erasevolume HFS+ "DevShm" `hdiutil attach -nomount ram://$((2048 * 2048))`
-         *
-         * After this command is executed the new disk will be mounted under /Volumes/DevShm.
-         */
-        var aeronDirAlreadyExists = false
-        if (config.aeronLogDirectory == null) {
-            val baseFileLocation = config.suggestAeronLogLocation(logger)
-
-//            val aeronLogDirectory = File(baseFileLocation, "aeron-" + type.simpleName)
-            val aeronLogDirectory = File(baseFileLocation, "aeron")
-            aeronDirAlreadyExists = aeronLogDirectory.exists()
-            config.aeronLogDirectory = aeronLogDirectory
-        }
-
-        logger.info("Aeron log directory: ${config.aeronLogDirectory}")
-        if (aeronDirAlreadyExists) {
-            logger.warn("Aeron log directory already exists! This might not be what you want!")
-        }
-
-        val threadFactory = NamedThreadFactory("Aeron", false)
-
-        // LOW-LATENCY SETTINGS
-        // .termBufferSparseFile(false)
-        //             .useWindowsHighResTimer(true)
-        //             .threadingMode(ThreadingMode.DEDICATED)
-        //             .conductorIdleStrategy(BusySpinIdleStrategy.INSTANCE)
-        //             .receiverIdleStrategy(NoOpIdleStrategy.INSTANCE)
-        //             .senderIdleStrategy(NoOpIdleStrategy.INSTANCE);
-        //     setProperty(DISABLE_BOUNDS_CHECKS_PROP_NAME, "true");
-        //    setProperty("aeron.mtu.length", "16384");
-        //    setProperty("aeron.socket.so_sndbuf", "2097152");
-        //    setProperty("aeron.socket.so_rcvbuf", "2097152");
-        //    setProperty("aeron.rcv.initial.window.length", "2097152");
-
-        // driver context must happen in the initializer, because we have a Server.isRunning() method that uses the mediaDriverContext (without bind)
-        val mDrivercontext = MediaDriver.Context()
-            .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
-            .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
-            .conductorThreadFactory(threadFactory)
-            .receiverThreadFactory(threadFactory)
-            .senderThreadFactory(threadFactory)
-            .sharedNetworkThreadFactory(threadFactory)
-            .sharedThreadFactory(threadFactory)
-            .threadingMode(config.threadingMode)
-            .mtuLength(config.networkMtuSize)
-            .socketSndbufLength(config.sendBufferSize)
-            .socketRcvbufLength(config.receiveBufferSize)
-
-        mDrivercontext
-            .aeronDirectoryName(config.aeronLogDirectory!!.absolutePath)
-            .concludeAeronDirectory()
-
-        if (mDrivercontext.ipcTermBufferLength() != io.aeron.driver.Configuration.ipcTermBufferLength()) {
-            // default 64 megs each is HUGE
-            mDrivercontext.ipcTermBufferLength(8 * 1024 * 1024)
-        }
-
-        if (mDrivercontext.publicationTermBufferLength() != io.aeron.driver.Configuration.termBufferLength()) {
-            // default 16 megs each is HUGE (we run out of space in production w/ lots of clients)
-            mDrivercontext.publicationTermBufferLength(2 * 1024 * 1024)
-        }
-
-        mediaDriverContext = mDrivercontext
-
-
         // serialization stuff
         serialization = config.serialization
         sendIdleStrategy = config.sendIdleStrategy
@@ -292,27 +128,33 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     }
 
     internal fun initEndpointState(): Aeron {
-        val aeronDirectory = config.aeronLogDirectory!!.absolutePath
+        // Aeron configuration
+        val context: MediaDriver.Context = AeronConfig.createContext(config, logger)
 
-        if (!isRunning()) {
-            logger.debug("Starting Aeron Media driver...")
+        logger.info { "Aeron log directory: ${context.aeronDirectory()}" }
 
-            mediaDriverContext
+
+        if (!AeronConfig.isRunning(context)) {
+            logger.debug("Starting Aeron Media driver in ${context.aeronDirectory()}")
+
+            context
                 .dirDeleteOnStart(true)
                 .dirDeleteOnShutdown(true)
 
             // the server always creates a the media driver.
             try {
-                mediaDriver = MediaDriver.launch(mediaDriverContext)
+                mediaDriver = MediaDriver.launch(context)
             } catch (e: Exception) {
                 listenerManager.notifyError(e)
                 throw e
             }
         }
 
+
+
         val aeronContext = Aeron.Context()
         aeronContext
-            .aeronDirectoryName(aeronDirectory)
+            .aeronDirectoryName(context.aeronDirectory().path)
             .concludeAeronDirectory()
 
         try {
@@ -328,6 +170,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             throw e
         }
 
+        mediaDriverContext = context
+
         shutdown.getAndSet(false)
 
         shutdownLatch = SuspendWaiter()
@@ -335,8 +179,45 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         return aeron!!
     }
 
+    /**
+     * @return the aeron media driver log file for a specific publication. This should be removed when a publication is closed (but is not always!)
+     */
+    internal fun getMediaDriverPublicationFile(publicationRegId: Long): File {
+        return mediaDriverContext.aeronDirectory().resolve("publications").resolve("${publicationRegId}.logbuffer")
+    }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
+
+    // used internally to remove a connection
+    internal fun removeConnection(connection: Connection) {
+        @Suppress("UNCHECKED_CAST")
+        removeConnection(connection as CONNECTION)
+    }
+
+
+    /**
+     * Adds a custom connection to the server.
+     *
+     * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
+     * you want *this* endpoint to manage listeners + message dispatch
+     *
+     * @param connection the connection to add
+     */
+    fun addConnection(connection: CONNECTION) {
+        connections.add(connection)
+    }
+
+    /**
+     * Removes a custom connection to the server.
+     *
+     * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
+     * you want *this* endpoint to manage listeners + message dispatch
+     *
+     * @param connection the connection to remove
+     */
+    fun removeConnection(connection: CONNECTION) {
+        connections.remove(connection)
+    }
 
     /**
      * Returns the property store used by this endpoint. The property store can store via properties,
@@ -508,7 +389,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                val exception = newException("[${publication.sessionId()}] Error sending handshake message. $message (${errorCodeName(result)})")
+                val exception = newException("[${publication.sessionId()}] Error sending handshake message. $message (${AeronConfig.errorCodeName(result)})")
                 ListenerManager.cleanStackTraceInternal(exception)
                 listenerManager.notifyError(exception)
                 return
@@ -681,7 +562,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                logger.error("[${publication.sessionId()}] Error sending message. $message (${errorCodeName(result)})")
+                logger.error("[${publication.sessionId()}] Error sending message. $message (${AeronConfig.errorCodeName(result)})")
 
                 return
             }
@@ -734,14 +615,24 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         shutdownLatch.doWait()
     }
 
+//    /**
+//     * Checks to see if an endpoint (using the current configuration) is running.
+//     *
+//     * @return true if the media driver is active and running
+//     */
+//    fun isRunning(): Boolean {
+//        // if the media driver is running, it will be a quick connection. Usually 100ms or so
+//        return configureMediaDriverContext().isDriverActive(1_000) { }
+//    }
+
     /**
      * Checks to see if an endpoint (using the specified configuration) is running.
      *
-     * @return true if the client/server is active and running
+     * @return true if the media driver is active and running
      */
-    fun isRunning(): Boolean {
+    fun isRunning(context: MediaDriver.Context): Boolean {
         // if the media driver is running, it will be a quick connection. Usually 100ms or so
-        return mediaDriverContext.isDriverActive(1_000) { }
+        return context.isDriverActive(1_000) { }
     }
 
     final override fun close() {
