@@ -25,16 +25,19 @@ import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
-import mu.KLogger
 import org.agrona.DirectBuffer
 import java.security.SecureRandom
 
-internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogger,
-                                                       private val config: Configuration,
+internal class ClientHandshake<CONNECTION: Connection>(private val config: Configuration,
                                                        private val crypto: CryptoManagement,
                                                        private val endPoint: EndPoint<CONNECTION>) {
+
+    // @Volatile is used BECAUSE suspension of coroutines can continue on a DIFFERENT thread. We want to make sure that thread visibility is
+    // correct when this happens. There are no race-conditions to be wary of.
+
     // a one-time key for connecting
     private val oneTimePad = SecureRandom().nextInt()
+    private val handler: FragmentHandler
 
     @Volatile
     private var connectionHelloInfo: ClientConnectionInfo? = null
@@ -45,7 +48,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val logger: KLogg
     @Volatile
     private var failed: Exception? = null
 
-    private var handler: FragmentHandler
+    @Volatile
     private var sessionId: Int = 0
 
     init {
