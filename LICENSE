@@ -100,6 +100,12 @@
        Copyright 2020
          Jonathan Halterman and friends
 
+     - Caffeine - Caffeine is a high performance, near optimal caching library based on Java 8.
+       [The Apache Software License, Version 2.0]
+       https://github.com/ben-manes/caffeine
+       Copyright 2020
+         Ben Manes
+
      - kotlin-logging - Lightweight logging framework for Kotlin
        [The Apache Software License, Version 2.0]
        https://github.com/MicroUtils/kotlin-logging
