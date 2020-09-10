@@ -66,7 +66,7 @@ class MultipleServerTest : BaseTest() {
             val configuration = serverConfig()
             configuration.subscriptionPort += offset
             configuration.publicationPort += offset
-            configuration.aeronLogDirectory = serverAeronDir
+            configuration.aeronDirectory = serverAeronDir
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
@@ -85,7 +85,7 @@ class MultipleServerTest : BaseTest() {
 
             server.bind()
 
-            serverAeronDir = File(configuration.aeronLogDirectory.toString() + count)
+            serverAeronDir = File(configuration.aeronDirectory.toString() + count)
         }
 
         var clientAeronDir: File? = null
@@ -98,12 +98,12 @@ class MultipleServerTest : BaseTest() {
             val configuration = clientConfig()
             configuration.subscriptionPort += offset
             configuration.publicationPort += offset
-            configuration.aeronLogDirectory = clientAeronDir
+            configuration.aeronDirectory = clientAeronDir
 
             val client: Client<Connection> = Client(configuration)
             addEndPoint(client)
 
-            clientAeronDir = File(configuration.aeronLogDirectory.toString() + count)
+            clientAeronDir = File(configuration.aeronDirectory.toString() + count)
 
             client.onConnect { connection ->
                 didSend[count].set(true)
