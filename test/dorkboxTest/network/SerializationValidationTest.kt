@@ -18,6 +18,7 @@ package dorkboxTest.network
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
@@ -57,6 +58,20 @@ class SerializationValidationTest : BaseTest() {
         }
 
         waitForThreads()
+    }
+
+    @Test
+    fun checkTakeKryo() {
+        val serialization = serverConfig().serialization
+
+        val kryos = mutableListOf<KryoExtra>()
+        for (i in 0 until 17) {
+            kryos.add(serialization.takeKryo())
+        }
+
+        kryos.forEach {
+            serialization.returnKryo(it)
+        }
     }
 
 
