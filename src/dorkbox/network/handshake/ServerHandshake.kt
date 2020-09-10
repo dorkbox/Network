@@ -19,6 +19,7 @@ import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.cache.RemovalCause
 import com.github.benmanes.caffeine.cache.RemovalListener
+import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.IpcMediaDriverConnection
@@ -430,7 +431,8 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             clientConnection.buildServer(aeron, logger)
 
             logger.info {
-                "Creating new connection from $clientConnection"
+                //   (reliable:$isReliable)"
+                "Creating new connection from ${IP.toString(clientAddress)} [$subscriptionPort|$publicationPort] [$connectionStreamId|$connectionSessionId] (reliable:${message.isReliable})"
             }
 
             val connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress))
