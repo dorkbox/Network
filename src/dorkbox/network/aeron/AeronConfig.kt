@@ -174,11 +174,11 @@ internal object AeronConfig {
     fun createContext(config: Configuration, logger: KLogger = KotlinLogging.logger("AeronConfig")): MediaDriver.Context {
         var context = create(config, logger)
 
-        // will setup the aeron directory or throw IllegalArgumentException if it cannot be configured
-        var aeronDir = context.aeronDirectory()
-
         // this happens EXACTLY once. Must be BEFORE the "isRunning" check!
         context.concludeAeronDirectory()
+
+        // will setup the aeron directory or throw IllegalArgumentException if it cannot be configured
+        var aeronDir = context.aeronDirectory()
 
         var isRunning = isRunning(context)
 
