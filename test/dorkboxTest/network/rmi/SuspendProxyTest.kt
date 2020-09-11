@@ -19,9 +19,10 @@ class SuspendProxyTest : TestCase() {
 
     class SuspendHandler(private val delegate:Adder):InvocationHandler {
         override fun invoke(proxy: Any, method: Method, arguments: Array<Any>): Any {
-            val suspendCoroutineObject = arguments?.lastOrNull()
+            val suspendCoroutineObject = arguments.lastOrNull()
             return if (suspendCoroutineObject is Continuation<*>) {
                 val parameters = arguments.copyOf(arguments.size - 1)
+                @Suppress("UNCHECKED_CAST")
                 val continuation = suspendCoroutineObject as Continuation<Any?>
                 val retVal = method.invoke(delegate, *parameters, Continuation<Any?>(EmptyCoroutineContext) {
                     val continuationResult = it.getOrNull()
@@ -30,8 +31,7 @@ class SuspendProxyTest : TestCase() {
 
                 retVal
             } else {
-                val parameters = arguments ?: arrayOf()
-                method.invoke(delegate, *parameters)
+                method.invoke(delegate, *arguments)
             }
         }
     }

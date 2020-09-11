@@ -130,7 +130,7 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
 
     private class TestObjectImpl(private val counter: AtomicLong) : TestObject {
         @Override
-        override suspend fun setOther(aFloat: Long): Boolean {
+        override suspend fun setOther(value: Long): Boolean {
             counter.getAndIncrement()
             return true
         }
