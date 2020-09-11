@@ -25,6 +25,7 @@ import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.Client
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
+import dorkboxTest.network.rmi.RmiCommonTest
 import dorkboxTest.network.rmi.cows.TestCow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
@@ -64,22 +65,25 @@ object TestClient {
     fun main(args: Array<String>) {
         setup()
 
-        val configuration = BaseTest.clientConfig()
-        configuration.enableRemoteSignatureValidation = false
+        val config = BaseTest.clientConfig()
+        config.enableRemoteSignatureValidation = false
+        config.enableIpc = false
+        config.aeronDirectoryForceUnique = true
 
-        val client = Client<Connection>(configuration)
+
+        val client = Client<Connection>(config)
 
         client.onConnect { connection ->
             System.err.println("Starting test for: Client -> Server")
 
             connection.createObject<TestCow>(124123) { _, remoteObject ->
-//                RmiTest.runTests(connection, remoteObject, 124123)
-//                System.err.println("DONE")
+                RmiCommonTest.runTests(connection, remoteObject, 124123)
+                client.logger.error("DONE")
 
                 // now send this remote object ACROSS the wire to the server (on the server, this is where the IMPLEMENTATION lives)
                 connection.send(remoteObject)
 
-//                client.close()
+                client.close()
             }
         }
 

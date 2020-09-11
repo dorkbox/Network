@@ -50,7 +50,7 @@ object TestServer {
             val `object` = m.testCow
             val id = `object`.id()
             Assert.assertEquals(124123, id.toLong())
-            System.err.println("Finished test for: Client -> Server")
+            connection.logger.error("Finished test for: Client -> Server")
 
 //
 //            System.err.println("Starting test for: Server -> Client")
@@ -62,7 +62,7 @@ object TestServer {
         }
 
         server.onMessage<TestCow> { connection, test ->
-            System.err.println("Received test cow from client")
+            connection.logger.error("Received test cow from client")
             // this object LIVES on the server.
 
             try {
