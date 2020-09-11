@@ -46,7 +46,7 @@ object TestServer {
         val server = Server<Connection>(configuration)
 
         server.onMessage<MessageWithTestCow> { connection, m ->
-            System.err.println("Received finish signal for test for: Client -> Server")
+            connection.logger.error("Received finish signal for test for: Client -> Server")
             val `object` = m.testCow
             val id = `object`.id()
             Assert.assertEquals(124123, id.toLong())
