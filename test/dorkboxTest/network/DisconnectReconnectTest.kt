@@ -125,4 +125,49 @@ class DisconnectReconnectTest : BaseTest() {
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)
     }
+
+    @Test
+    fun disconenctedMediaDriver() {
+        val server: Server<Connection>
+        run {
+            val config = serverConfig()
+            config.enableIpc = false
+            config.aeronDirectoryForceUnique = true
+
+            server = Server(config)
+            addEndPoint(server)
+            server.bind()
+
+            server.onConnect { connection ->
+                connection.logger.error("Connected!")
+            }
+        }
+
+        val client: Client<Connection>
+        run {
+            val config = clientConfig()
+            config.enableIpc = false
+            config.aeronDirectoryForceUnique = true
+
+            client = Client(config)
+            addEndPoint(client)
+
+            client.onConnect { connection ->
+                connection.logger.error("Connected!")
+            }
+
+            client.onDisconnect {
+                stopEndPoints()
+            }
+
+            runBlocking {
+                client.connect(LOOPBACK)
+            }
+        }
+
+        server.close()
+
+
+        waitForThreads()
+    }
 }
