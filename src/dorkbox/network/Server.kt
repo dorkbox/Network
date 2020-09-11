@@ -480,44 +480,32 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     pollCount += ipcPoller.poll()
 
 
-                    // this manages existing clients (for cleanup + connection polling)
-                    connections.forEachWithCleanup({ connection ->
-                        // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                        var shouldCleanupConnection = false
-
+                    // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
+                    // so we can modify this as we go
+                    connections.forEach { connection ->
                         if (connection.isClosed()) {
-                            logger.trace {"[${connection.id}] connection closed"}
-                            shouldCleanupConnection = true
-                        }
+                            // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
+                            logger.debug { "[${connection.id}] connection closed" }
 
-                        if (shouldCleanupConnection) {
-                            // remove this connection so there won't be an attempt to poll it again
-                            true
+                            // have to free up resources!
+                            handshake.cleanup(connection)
+
+                            connection.close()
+
+                            // have to manually notify the server-listenerManager that this connection was closed
+                            // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
+                            // instantly notified and on cleanup, the server-listenermanager is called
+
+                            // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                            actionDispatch.launch {
+                                listenerManager.notifyDisconnect(connection)
+                            }
                         }
                         else {
                             // Otherwise, poll the connection for messages
                             pollCount += connection.pollSubscriptions()
-                            false
                         }
-                    }, { connectionToClean ->
-                        logger.info {"[${connectionToClean.id}] cleaned-up connection"}
-
-                        // have to free up resources!
-                        handshake.cleanup(connectionToClean)
-
-                        // there are 2 ways to call close.
-                        //   MANUALLY
-                        //   when a connection is disconnected via a timeout/expire.
-                        // the compareAndSet is used to make sure that if we call close() MANUALLY, when the auto-cleanup/disconnect is called -- it doesn't
-                        // try to do it again.
-                        connectionToClean.close()
-
-                        // have to manually notify the server-listenerManager that this connection was closed
-                        // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
-                        // instantly notified and on cleanup, the server-listenermanager is called
-                        listenerManager.notifyDisconnect(connectionToClean)
-                    })
-
+                    }
 
                     // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
                     pollIdleStrategy.idle(pollCount)

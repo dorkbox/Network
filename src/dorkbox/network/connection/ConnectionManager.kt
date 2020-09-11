@@ -66,28 +66,6 @@ internal open class ConnectionManager<CONNECTION: Connection>() {
         }
     }
 
-    /**
-     * Performs an action on each connection in the list.
-     */
-    internal inline fun forEachWithCleanup(function: (connection: CONNECTION) -> Boolean,
-                                           cleanup: (connection: CONNECTION) -> Unit) {
-
-        val head = headREF.get(connections) as ConcurrentEntry<CONNECTION>?
-        var current: ConcurrentEntry<CONNECTION>? = head
-
-        var connection: CONNECTION
-        while (current != null) {
-            connection = current.value
-            current = current.next()
-
-            if (function(connection)) {
-                // Concurrent iteration...
-                connections.remove(connection)
-                cleanup(connection)
-            }
-        }
-    }
-
     fun connectionCount(): Int {
         return connections.size()
     }

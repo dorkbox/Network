@@ -284,17 +284,17 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         val handshake = ClientHandshake(config, crypto, this)
         val handshakeConnection = if (autoChangeToIpc || usingIPC) {
             // MAYBE the server doesn't have IPC enabled? If no, we need to connect via UDP instead
-            val test = IpcMediaDriverConnection(streamIdSubscription = ipcSubscriptionId,
-                                                streamId = ipcPublicationId,
-                                                sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
-                                                // "fast" connection timeout, since this is IPC
-                                                connectionTimeoutMS = 1000)
+            val ipcConnection = IpcMediaDriverConnection(streamIdSubscription = ipcSubscriptionId,
+                                                         streamId = ipcPublicationId,
+                                                         sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                                                        // "fast" connection timeout, since this is IPC
+                                                         connectionTimeoutMS = 1000)
 
             var success = false
 
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
             try {
-                test.buildClient(aeron, logger)
+                ipcConnection.buildClient(aeron, logger)
                 success = true
             } catch (e: Exception) {
                 // if we specified that we want to use IPC, then we have to throw the timeout exception, because there is no IPC
@@ -305,21 +305,21 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             if (success) {
                 usingIPC = true
-                test
+                ipcConnection
             } else {
                 logger.info { "IPC for loopback enabled, but unable to connect. Retrying with address ${IP.toString(remoteAddress!!)}" }
 
                 // try a UDP connection instead
-                val test = UdpMediaDriverConnection(address = this.remoteAddress0!!,
-                                                    publicationPort = config.subscriptionPort,
-                                                    subscriptionPort = config.publicationPort,
-                                                    streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                                                    sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
-                                                    connectionTimeoutMS = connectionTimeoutMS,
-                                                    isReliable = reliable)
+                val udpConnection = UdpMediaDriverConnection(address = this.remoteAddress0!!,
+                                                             publicationPort = config.subscriptionPort,
+                                                             subscriptionPort = config.publicationPort,
+                                                             streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                                                             sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                                                             connectionTimeoutMS = connectionTimeoutMS,
+                                                             isReliable = reliable)
                 // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
-                test.buildClient(aeron, logger)
-                test
+                udpConnection.buildClient(aeron, logger)
+                udpConnection
             }
         }
         else {
@@ -455,6 +455,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         addConnection(newConnection)
 
         // tell the server our connection handshake is done, and the connection can now listen for data.
+        // also closes the handshake (will also throw connect timeout exception)
         val canFinishConnecting = handshake.handshakeDone(handshakeConnection, connectionTimeoutMS)
         if (canFinishConnecting) {
             isConnected = true
@@ -471,15 +472,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 val pollIdleStrategy = config.pollIdleStrategy
 
                 while (!isShutdown()) {
-                    // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                    var shouldCleanupConnection = false
-
                     if (newConnection.isClosed()) {
+                        // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                         logger.debug {"[${newConnection.id}] connection closed"}
-                        shouldCleanupConnection = true
-                    }
-
-                    if (shouldCleanupConnection) {
                         close()
                         return@launch
                     }
