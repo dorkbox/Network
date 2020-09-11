@@ -474,16 +474,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                     var shouldCleanupConnection = false
 
-                    if (newConnection.isExpired()) {
-                        logger.debug {"[${newConnection.id}] connection expired"}
-                        shouldCleanupConnection = true
-                    }
-
-                    else if (newConnection.isClosed()) {
+                    if (newConnection.isClosed()) {
                         logger.debug {"[${newConnection.id}] connection closed"}
                         shouldCleanupConnection = true
                     }
-
 
                     if (shouldCleanupConnection) {
                         close()

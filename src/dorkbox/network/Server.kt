@@ -485,16 +485,10 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                         var shouldCleanupConnection = false
 
-                        if (connection.isExpired()) {
-                            logger.trace {"[${connection.id}] connection expired"}
-                            shouldCleanupConnection = true
-                        }
-
-                        else if (connection.isClosed()) {
+                        if (connection.isClosed()) {
                             logger.trace {"[${connection.id}] connection closed"}
                             shouldCleanupConnection = true
                         }
-
 
                         if (shouldCleanupConnection) {
                             // remove this connection so there won't be an attempt to poll it again

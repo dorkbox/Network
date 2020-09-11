@@ -98,7 +98,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     internal var postCloseAction: suspend () -> Unit = {}
 
     // only accessed on a single thread!
-    private var previousConnectionStartTime = Long.MAX_VALUE
+    private val connectionInitTime = System.nanoTime()
 
     private val isClosed = atomic(false)
 
@@ -292,24 +292,16 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
-     * @return `true` if this connection has no subscribers (which means this connection does not have a remote connection)
-     */
-    internal fun isExpired(): Boolean {
-        return if (subscription.isConnected) {
-            previousConnectionStartTime = System.nanoTime()
-            false
-        }
-        else {
-            // images can be in a state of flux. Sometimes they come and go VERY quickly
-            System.nanoTime() - previousConnectionStartTime >= TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
-        }
-    }
-
-    /**
      * @return `true` if this connection has been closed
      */
     fun isClosed(): Boolean {
-        return isClosed.value
+        val hasNoImages = subscription.hasNoImages()
+        if (hasNoImages) {
+            // 1) connections take a little bit of time from polling -> connecting (because of how we poll connections before 'connecting' them).
+            return System.nanoTime() - connectionInitTime >= TimeUnit.SECONDS.toNanos(1)
+        }
+
+        return hasNoImages
     }
 
     /**
