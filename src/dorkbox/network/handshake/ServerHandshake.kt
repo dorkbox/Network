@@ -257,7 +257,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             clientConnection.buildServer(aeron, logger)
 
             logger.info {
-                "[${clientConnection.sessionId}] aeron IPC connection established to $clientConnection"
+                "[${clientConnection.sessionId}] IPC connection established to [${clientConnection.streamIdSubscription}|${clientConnection.streamId}]"
             }
 
             val connection = server.newConnection(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))

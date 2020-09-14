@@ -348,7 +348,7 @@ class IpcMediaDriverConnection(override val streamId: Int,
 
     override fun clientInfo() : String {
         return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
-            "[$sessionId] aeron connection established to [$streamIdSubscription|$streamId]"
+            "[$sessionId] IPC connection established to [$streamIdSubscription|$streamId]"
         } else {
             "Connecting handshake to IPC [$streamIdSubscription|$streamId]"
         }
