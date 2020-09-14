@@ -29,6 +29,7 @@ import kotlinx.coroutines.delay
 import mu.KLogger
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 
 interface MediaDriverConnection : AutoCloseable {
     val address: InetAddress?
@@ -52,7 +53,8 @@ interface MediaDriverConnection : AutoCloseable {
 }
 
 /**
- * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER
+ * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER.
+ * A connection timeout of 0, means to wait forever
  */
 class UdpMediaDriverConnection(override val address: InetAddress,
                                override val publicationPort: Int,
@@ -122,8 +124,9 @@ class UdpMediaDriverConnection(override val address: InetAddress,
         var success = false
 
         // this will wait for the server to acknowledge the connection (all via aeron)
-        var startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
+        val timoutInNanos = TimeUnit.MILLISECONDS.toNanos(connectionTimeoutMS)
+        var startTime = System.nanoTime()
+        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
             if (subscription.isConnected && subscription.imageCount() > 0) {
                 success = true
                 break
@@ -141,8 +144,8 @@ class UdpMediaDriverConnection(override val address: InetAddress,
         success = false
 
         // this will wait for the server to acknowledge the connection (all via aeron)
-        startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
+        startTime = System.nanoTime()
+        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
             if (publication.isConnected) {
                 success = true
                 break
