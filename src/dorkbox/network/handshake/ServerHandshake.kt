@@ -407,25 +407,20 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         try {
             // connection timeout of 0 doesn't matter. it is not used by the server
             // the client address WILL BE either IPv4 or IPv6
-
-            val clientConnection = if (clientAddress is Inet4Address && !isIpv6Wildcard) {
-                UdpMediaDriverConnection(server.listenIPv4Address!!,
-                                         publicationPort,
-                                         subscriptionPort,
-                                         connectionStreamId,
-                                         connectionSessionId,
-                                         0,
-                                         message.isReliable)
+            val listenAddress = if (clientAddress is Inet4Address && !isIpv6Wildcard) {
+                server.listenIPv4Address!!
             } else {
                 // wildcard is SPECIAL, in that if we bind wildcard, it will ALSO bind to IPv4, so we can't bind both!
-                UdpMediaDriverConnection(server.listenIPv6Address!!,
-                                         publicationPort,
-                                         subscriptionPort,
-                                         connectionStreamId,
-                                         connectionSessionId,
-                                         0,
-                                         message.isReliable)
+                server.listenIPv6Address!!
             }
+
+            val clientConnection = UdpMediaDriverConnection(listenAddress,
+                                                            publicationPort,
+                                                            subscriptionPort,
+                                                            connectionStreamId,
+                                                            connectionSessionId,
+                                                            0,
+                                                            message.isReliable)
 
             // we have to construct how the connection will communicate!
             clientConnection.buildServer(aeron, logger)
