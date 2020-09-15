@@ -36,6 +36,7 @@ import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import java.net.Inet4Address
 import java.net.Inet6Address
@@ -78,20 +79,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     private val lockStepForReconnect = atomic<SuspendWaiter?>(null)
 
     init {
-        // have to do some basic validation of our configuration
-        if (config.publicationPort <= 0) { throw ClientException("configuration port must be > 0") }
-        if (config.publicationPort >= 65535) { throw ClientException("configuration port must be < 65535") }
-
-        if (config.subscriptionPort <= 0) { throw ClientException("configuration controlPort must be > 0") }
-        if (config.subscriptionPort >= 65535) { throw ClientException("configuration controlPort must be < 65535") }
-
-        if (config.networkMtuSize <= 0) { throw ClientException("configuration networkMtuSize must be > 0") }
-        if (config.networkMtuSize >= 9 * 1024) { throw ClientException("configuration networkMtuSize must be < ${9 * 1024}") }
-
-
-        if (config.enableIpc && config.aeronDirectoryForceUnique) {
-            require(false) { "IPC and forcing a unique Aeron directory are incompatible!" }
-        }
+        config.validate()
     }
 
     override fun newException(message: String, cause: Throwable?): Throwable {
@@ -251,12 +239,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         this.remoteAddress0 = remoteAddress
         connection0 = null
 
+
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         val aeron = initEndpointState()
-
-        if (config.enableIpc && config.aeronDirectoryForceUnique) {
-            require(false) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
-        }
 
         // only try to connect via IPv4 if we have a network interface that supports it!
         if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
@@ -271,6 +256,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         if (remoteAddress != null && remoteAddress.isAnyLocalAddress) {
             require(false) { "Cannot connect to ${IP.toString(remoteAddress)} It is an invalid address!" }
         }
+
 
         // only change LOCALHOST -> IPC if the media driver is ALREADY running LOCALLY!
         var usingIPC = config.enableIpc && remoteAddress == null
@@ -442,7 +428,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             // manually call it.
             // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            actionDispatch.launch {
+            actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
+                // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
+                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
                 listenerManager.notifyDisconnect(connection)
             }
 
@@ -475,7 +463,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                     if (newConnection.isClosed()) {
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                         logger.debug {"[${newConnection.id}] connection closed"}
-                        close()
+
+                        // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
+                        newConnection.close()
                         return@launch
                     }
                     else {

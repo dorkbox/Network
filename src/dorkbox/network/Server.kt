@@ -36,6 +36,7 @@ import io.aeron.Aeron
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -44,6 +45,7 @@ import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
 
 /**
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
@@ -65,8 +67,13 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
          * @return true if the configuration matches and can connect (but not verify) to the TCP control socket.
          */
         fun isRunning(configuration: ServerConfiguration): Boolean {
-            val context = AeronConfig.createContext(configuration)
-            return AeronConfig.isRunning(context)
+            if (configuration.context == null) {
+                AeronConfig.createContext(configuration)
+            }
+
+            require(configuration.context != null) { "Configuration context cannot be properly created. Unable to continue!" }
+
+            return AeronConfig.isRunning(configuration.context!!)
         }
     }
 
@@ -103,30 +110,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     internal val listenIPv6Address: InetAddress?
 
     init {
-        // have to do some basic validation of our configuration
-        config.listenIpAddress = config.listenIpAddress.toLowerCase()
-
-        require(config.listenIpAddress.isNotBlank()) { "Blank listen IP address, cannot continue"}
-
-        // can't disable everything!
-        if (!config.enableIpc && !config.enableIPv4 && !config.enableIPv6) {
-            require(false) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
-        }
-
-        // have to verify if it's the only thing specified, is IPv4 available...
-        if (!config.enableIpc && !config.enableIPv6 && config.enableIPv4 && !IPv4.isAvailable) {
-            require(false) { "IPC/IPv6 are disabled and IPv4 is enabled, but there is no IPv4 interface available!" }
-        }
-
-        // have to verify if it's the only thing specified, is IPv4 available...
-        if (!config.enableIpc && !config.enableIPv4 && config.enableIPv6 && !IPv6.isAvailable) {
-            require(false) { "IPC/IPv4 are disabled and IPv6 is enabled, but there is no IPv6 interface available!" }
-        }
-
-        if (config.enableIpc && config.aeronDirectoryForceUnique) {
-            require(false) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
-        }
-
+        config.validate()
 
         // localhost/loopback IP might not always be 127.0.0.1 or ::1
         // We want to listen on BOTH IPv4 and IPv6 (config option lets us configure this)
@@ -158,17 +142,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             null
         }
 
-        if (config.publicationPort <= 0) { throw ServerException("configuration port must be > 0") }
-        if (config.publicationPort >= 65535) { throw ServerException("configuration port must be < 65535") }
-
-        if (config.subscriptionPort <= 0) { throw ServerException("configuration controlPort must be > 0") }
-        if (config.subscriptionPort >= 65535) { throw ServerException("configuration controlPort must be < 65535") }
-
-        if (config.networkMtuSize <= 0) { throw ServerException("configuration networkMtuSize must be > 0") }
-        if (config.networkMtuSize >= 9 * 1024) { throw ServerException("configuration networkMtuSize must be < ${9 * 1024}") }
-
-        if (config.maxConnectionsPerIpAddress == 0) { config.maxConnectionsPerIpAddress = config.maxClientCount}
-
         // we are done with initial configuration, now finish serialization
         serialization.finishInit(type, settingsStore, ByteArray(0))
     }
@@ -178,7 +151,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
 
-    private fun getIpcPoller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
+    private suspend fun getIpcPoller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
         val poller = if (config.enableIpc) {
             val driver = IpcMediaDriverConnection(streamIdSubscription = config.ipcSubscriptionId,
                                                   streamId = config.ipcPublicationId,
@@ -219,13 +192,15 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         return poller
     }
 
-    private fun getIpv4Poller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
+    @Suppress("DuplicatedCode")
+    private suspend fun getIpv4Poller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
         val poller = if (canUseIPv4) {
             val driver = UdpMediaDriverConnection(address = listenIPv4Address!!,
                                                   publicationPort = config.publicationPort,
                                                   subscriptionPort = config.subscriptionPort,
                                                   streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
+                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                                                  connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
 
             driver.buildServer(aeron, logger)
             val publication = driver.publication
@@ -287,13 +262,15 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         return poller
     }
 
-    private fun getIpv6Poller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
+    @Suppress("DuplicatedCode")
+    private suspend fun getIpv6Poller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
         val poller = if (canUseIPv6) {
             val driver = UdpMediaDriverConnection(address = listenIPv6Address!!,
                                                   publicationPort = config.publicationPort,
                                                   subscriptionPort = config.subscriptionPort,
                                                   streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
+                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                                                  connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
 
             driver.buildServer(aeron, logger)
             val publication = driver.publication
@@ -355,12 +332,14 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         return poller
     }
 
-    private fun getIpv6WildcardPoller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
+    @Suppress("DuplicatedCode")
+    private suspend fun getIpv6WildcardPoller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
         val driver = UdpMediaDriverConnection(address = listenIPv6Address!!,
                                               publicationPort = config.publicationPort,
                                               subscriptionPort = config.subscriptionPort,
                                               streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                                              sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
+                                              sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                                              connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
 
         driver.buildServer(aeron, logger)
         val publication = driver.publication
@@ -426,41 +405,45 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             return
         }
 
-        // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         val aeron = initEndpointState()
-        bindAlreadyCalled = true
 
         config as ServerConfiguration
 
 
-        val ipcPoller: AeronPoller = getIpcPoller(aeron, config)
+        // we are done with initial configuration, now initialize aeron and the general state of this endpoint
+        bindAlreadyCalled = true
 
-        // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
-        val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address != IPv6.WILDCARD
-        val ipv4Poller: AeronPoller
-        val ipv6Poller: AeronPoller
+        val waiter = SuspendWaiter()
+        actionDispatch.launch {
+            val ipcPoller: AeronPoller = getIpcPoller(aeron, config)
 
-        if (isWildcard) {
-            // IPv6 will bind to IPv4 wildcard as well!!
-            if (canUseIPv4 && canUseIPv6) {
-                ipv4Poller = object : AeronPoller {
-                    override fun poll(): Int { return 0 }
-                    override fun close() {}
-                    override fun serverInfo(): String { return "IPv4 Disabled" }
+            // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
+            val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address != IPv6.WILDCARD
+            val ipv4Poller: AeronPoller
+            val ipv6Poller: AeronPoller
+
+            if (isWildcard) {
+                // IPv6 will bind to IPv4 wildcard as well!!
+                if (canUseIPv4 && canUseIPv6) {
+                    ipv4Poller = object : AeronPoller {
+                        override fun poll(): Int { return 0 }
+                        override fun close() {}
+                        override fun serverInfo(): String { return "IPv4 Disabled" }
+                    }
+                    ipv6Poller = getIpv6WildcardPoller(aeron, config)
+                } else {
+                    // only 1 will be a real poller
+                    ipv4Poller = getIpv4Poller(aeron, config)
+                    ipv6Poller = getIpv6Poller(aeron, config)
                 }
-                ipv6Poller = getIpv6WildcardPoller(aeron, config)
             } else {
-                // only 1 will be a real poller
                 ipv4Poller = getIpv4Poller(aeron, config)
                 ipv6Poller = getIpv6Poller(aeron, config)
             }
-        } else {
-            ipv4Poller = getIpv4Poller(aeron, config)
-            ipv6Poller = getIpv6Poller(aeron, config)
-        }
+
+            waiter.doNotify()
 
 
-        actionDispatch.launch {
             val pollIdleStrategy = config.pollIdleStrategy
 
             try {
@@ -490,6 +473,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                             // have to free up resources!
                             handshake.cleanup(connection)
 
+                            removeConnection(connection)
+
+                            // this will call removeConnection again, but that is ok
                             connection.close()
 
                             // have to manually notify the server-listenerManager that this connection was closed
@@ -497,7 +483,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                             // instantly notified and on cleanup, the server-listenermanager is called
 
                             // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                            actionDispatch.launch {
+                            actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
+                                // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
+                                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
                                 listenerManager.notifyDisconnect(connection)
                             }
                         }
@@ -537,7 +525,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     // NOTE: this must be the LAST thing happening!
 
                     // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    val job = actionDispatch.launch {
+                    val job = actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
+                        // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
+                        //   we want this behavior INSTEAD OF automatically starting this on a new thread.
                         listenerManager.notifyDisconnect(connection)
                     }
                     jobs.add(job)
@@ -549,7 +539,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 // when we close a client or a server, we want to make sure that ALL notifications are finished.
                 // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
                 jobs.forEach { it.join() }
-
+            } catch (e: Exception) {
+                logger.error("Unexpected error during server message polling!", e)
+                listenerManager.notifyError(e)
             } finally {
                 ipv4Poller.close()
                 ipv6Poller.close()
@@ -558,6 +550,10 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 // finish closing -- this lets us make sure that we don't run into race conditions on the thread that calls close()
                 shutdownEventWaiter.doNotify()
             }
+        }
+
+        runBlocking {
+            waiter.doWait()
         }
     }
 

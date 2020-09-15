@@ -2,8 +2,9 @@ package dorkbox.network.aeron
 
 import dorkbox.network.Configuration
 import dorkbox.util.NamedThreadFactory
-import io.aeron.Publication
 import io.aeron.driver.MediaDriver
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import java.io.File
@@ -11,49 +12,27 @@ import java.io.File
 /**
  *
  */
-internal object AeronConfig {
+object AeronConfig {
     /**
      * Identifier for invalid sessions. This must be < RESERVED_SESSION_ID_LOW
      */
-    const val RESERVED_SESSION_ID_INVALID = 0
+    internal const val RESERVED_SESSION_ID_INVALID = 0
 
     /**
      * The inclusive lower bound of the reserved sessions range. THIS SHOULD NEVER BE <= 0!
      */
-    const val RESERVED_SESSION_ID_LOW = 1
+    internal const val RESERVED_SESSION_ID_LOW = 1
 
     /**
      * The inclusive upper bound of the reserved sessions range.
      */
-    const val RESERVED_SESSION_ID_HIGH = Integer.MAX_VALUE
+    internal const val RESERVED_SESSION_ID_HIGH = Integer.MAX_VALUE
 
     const val UDP_HANDSHAKE_STREAM_ID: Int = 0x1337cafe
     const val IPC_HANDSHAKE_STREAM_ID_PUB: Int = 0x1337c0de
     const val IPC_HANDSHAKE_STREAM_ID_SUB: Int = 0x1337c0d3
 
-
-    fun errorCodeName(result: Long): String {
-        return when (result) {
-            // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-            Publication.NOT_CONNECTED -> "Not connected"
-
-            // The offer failed due to back pressure from the subscribers preventing further transmission.
-            Publication.BACK_PRESSURED -> "Back pressured"
-
-            // The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-            Publication.ADMIN_ACTION -> "Administrative action"
-
-            // The Publication has been closed and should no longer be used.
-            Publication.CLOSED -> "Publication is closed"
-
-            // If this happens then the publication should be closed and a new one added. To make it less likely to happen then increase the term buffer length.
-            Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
-
-            else -> throw IllegalStateException("Unknown error code: $result")
-        }
-    }
-
-    private fun create(config: Configuration, logger: KLogger = KotlinLogging.logger("AeronConfig")): MediaDriver.Context {
+    private fun create(config: Configuration, logger: KLogger): MediaDriver.Context {
         /*
         * Linux
         * Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and
@@ -118,8 +97,6 @@ internal object AeronConfig {
             config.aeronDirectory = aeronLogDirectory
         }
 
-        val threadFactory = NamedThreadFactory("Aeron", false)
-
         // LOW-LATENCY SETTINGS
         // .termBufferSparseFile(false)
         //             .useWindowsHighResTimer(true)
@@ -137,11 +114,6 @@ internal object AeronConfig {
         val context = MediaDriver.Context()
             .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
             .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
-            .conductorThreadFactory(threadFactory)
-            .receiverThreadFactory(threadFactory)
-            .senderThreadFactory(threadFactory)
-            .sharedNetworkThreadFactory(threadFactory)
-            .sharedThreadFactory(threadFactory)
             .threadingMode(config.threadingMode)
             .mtuLength(config.networkMtuSize)
             .socketSndbufLength(config.sendBufferSize)
@@ -160,6 +132,12 @@ internal object AeronConfig {
             context.publicationTermBufferLength(2 * 1024 * 1024)
         }
 
+        // we DO NOT want to abort the JVM if there are errors.
+        context.errorHandler { error ->
+            logger.error("Error in Aeron", error)
+        }
+
+
         val aeronDir = File(context.aeronDirectoryName()).absoluteFile
         context.aeronDirectoryName(aeronDir.path)
 
@@ -169,16 +147,22 @@ internal object AeronConfig {
     /**
      * Creates the Aeron Media Driver context
      *
+     * @throws IllegalStateException if the configuration has already been used to create a context
      * @throws IllegalArgumentException if the aeron media driver directory cannot be setup
      */
-    fun createContext(config: Configuration, logger: KLogger = KotlinLogging.logger("AeronConfig")): MediaDriver.Context {
+    fun createContext(config: Configuration, logger: KLogger = KotlinLogging.logger("AeronConfig")) {
+        if (config.context != null) {
+            logger.warn { "Unable to recreate a context for a configuration that has already been created" }
+            return
+        }
+
         var context = create(config, logger)
 
         // this happens EXACTLY once. Must be BEFORE the "isRunning" check!
         context.concludeAeronDirectory()
 
         // will setup the aeron directory or throw IllegalArgumentException if it cannot be configured
-        var aeronDir = context.aeronDirectory()
+        val aeronDir = context.aeronDirectory()
 
         var isRunning = isRunning(context)
 
@@ -204,20 +188,19 @@ internal object AeronConfig {
 
                 isRunning = isRunning(context)
             }
-        }
 
-        aeronDir = context.aeronDirectory()
-
-
-        // make sure we start over!
-        if (!isRunning && aeronDir.exists()) {
-            // try to delete the dir
-            if (!aeronDir.deleteRecursively()) {
-                logger.warn { "Unable to delete the aeron directory $aeronDir. Aeron was not running when this was attempted." }
+            if (!isRunning) {
+                // NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
+                //   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
+                // since we are forcing a unique directory, we should ALSO delete it when we are done!
+                context.dirDeleteOnShutdown()
             }
         }
 
-        return context
+        logger.info { "Aeron directory: '${context.aeronDirectory()}'" }
+
+        // once we do this, we cannot change any of the config values!
+        config.context = context
     }
 
     /**
@@ -227,6 +210,92 @@ internal object AeronConfig {
      */
     fun isRunning(context: MediaDriver.Context): Boolean {
         // if the media driver is running, it will be a quick connection. Usually 100ms or so
-        return context.isDriverActive(1_000) { }
+        return context.isDriverActive(context.driverTimeoutMs()) { }
+    }
+
+    /**
+     * If the driver is not already running, this will start the driver
+     *
+     * @throws Exception if there is a problem starting the media driver
+     */
+    fun startDriver(config: Configuration,
+                    type: Class<*> = AeronConfig::class.java,
+                    logger: KLogger = KotlinLogging.logger("AeronConfig")): MediaDriver? {
+
+        config.validate()
+
+        if (config.context == null) {
+            createContext(config, logger)
+        }
+
+        require(config.context != null) { "Configuration context cannot be properly created. Unable to continue!" }
+
+        val context = config.context!!
+
+        if (!isRunning(context)) {
+            logger.debug("Starting Aeron Media driver in '${context.aeronDirectory()}'")
+
+            val threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronDriver"), true)
+            context
+                .conductorThreadFactory(threadFactory)
+                .receiverThreadFactory(threadFactory)
+                .senderThreadFactory(threadFactory)
+                .sharedNetworkThreadFactory(threadFactory)
+                .sharedThreadFactory(threadFactory)
+
+
+            // try to start. If we start/stop too quickly, it's a problem
+            var count = 10
+            while (count-- > 0) {
+                try {
+                    return MediaDriver.launch(context)
+                } catch (e: Exception) {
+                    logger.warn(e) { "Unable to start the Aeron Media driver. Retrying $count more times..." }
+                    runBlocking {
+                        delay(context.driverTimeoutMs())
+                    }
+                }
+            }
+        } else {
+            logger.debug("Not starting Aeron Media driver. It was already running in '${context.aeronDirectory()}'")
+        }
+
+        return null
+    }
+
+    /**
+     * A safer way to try to close the media driver
+     *
+     * NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
+     *   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
+     */
+    internal fun stopDriver(mediaDriver: MediaDriver?, logger: KLogger = KotlinLogging.logger("AeronConfig")) {
+        if (mediaDriver == null) {
+            return
+        }
+
+        val context = mediaDriver.context()
+        if (!isRunning(context)) {
+            // not running
+            return
+        }
+
+        try {
+            mediaDriver.close()
+            (context.sharedThreadFactory() as NamedThreadFactory).group.destroy()
+
+            // wait for the media driver to actually stop
+            var count = 10
+            while (count-- >= 0 && isRunning(context)) {
+                logger.warn { "Aeron Media driver still running. Waiting for it to stop. Trying $count more times." }
+                runBlocking {
+                    delay(context.driverTimeoutMs())
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Error closing the media driver", e)
+        }
+
+        logger.debug { "Closed the media driver at '${context.aeronDirectory()}'" }
     }
 }

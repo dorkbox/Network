@@ -254,7 +254,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                                             connectionTimeoutMS = 0)
 
             // we have to construct how the connection will communicate!
-            clientConnection.buildServer(aeron, logger)
+            runBlocking {
+                clientConnection.buildServer(aeron, logger)
+            }
 
             logger.info {
                 "[${clientConnection.sessionId}] IPC connection established to [${clientConnection.streamIdSubscription}|${clientConnection.streamId}]"
@@ -423,7 +425,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                                             message.isReliable)
 
             // we have to construct how the connection will communicate!
-            clientConnection.buildServer(aeron, logger)
+            runBlocking {
+                clientConnection.buildServer(aeron, logger)
+            }
 
             logger.info {
                 //   (reliable:$isReliable)"

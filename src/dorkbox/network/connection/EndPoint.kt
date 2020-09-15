@@ -32,6 +32,7 @@ import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.SettingsStore
+import dorkbox.util.NamedThreadFactory
 import dorkbox.util.exceptions.SecurityException
 import io.aeron.Aeron
 import io.aeron.Publication
@@ -45,6 +46,7 @@ import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
+import org.agrona.concurrent.BackoffIdleStrategy
 import java.io.File
 
 
@@ -74,9 +76,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val listenerManager = ListenerManager<CONNECTION>()
     internal val connections = ConnectionManager<CONNECTION>()
 
-    internal lateinit var mediaDriverContext: MediaDriver.Context
+    internal val aeron: Aeron
     private var mediaDriver: MediaDriver? = null
-    internal var aeron: Aeron? = null
+    internal val mediaDriverContext: MediaDriver.Context
 
     /**
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basic types.
@@ -125,37 +127,32 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         settingsStore.init(serialization, config.settingsStorageSystem.build())
 
         crypto = CryptoManagement(logger, settingsStore, type, config)
-    }
 
-    internal fun initEndpointState(): Aeron {
-        // Aeron configuration
-        val context: MediaDriver.Context = AeronConfig.createContext(config, logger)
-
-        logger.info { "Aeron log directory: ${context.aeronDirectory()}" }
-
-
-        if (!AeronConfig.isRunning(context)) {
-            logger.debug("Starting Aeron Media driver in ${context.aeronDirectory()}")
-
-            context
-                .dirDeleteOnStart(true)
-                .dirDeleteOnShutdown(true)
-
-            // the server always creates a the media driver.
-            try {
-                mediaDriver = MediaDriver.launch(context)
-            } catch (e: Exception) {
-                listenerManager.notifyError(e)
-                throw e
-            }
+        // Only starts the media driver if we are NOT already running!
+        try {
+            mediaDriver = AeronConfig.startDriver(config, type, logger)
+        } catch (e: Exception) {
+            listenerManager.notifyError(e)
+            throw e
         }
 
-
+        require(config.context != null) { "Configuration context cannot be properly created. Unable to continue!" }
+        mediaDriverContext = config.context!!
 
         val aeronContext = Aeron.Context()
         aeronContext
-            .aeronDirectoryName(context.aeronDirectory().path)
+            .aeronDirectoryName(mediaDriverContext.aeronDirectory().path)
             .concludeAeronDirectory()
+
+        val threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronClient"),true)
+        aeronContext
+            .threadFactory(threadFactory)
+            .idleStrategy(BackoffIdleStrategy())
+
+        // we DO NOT want to abort the JVM if there are errors.
+        aeronContext.errorHandler { error ->
+            logger.error("Error in Aeron", error)
+        }
 
         try {
             aeron = Aeron.connect(aeronContext)
@@ -169,14 +166,12 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             listenerManager.notifyError(e)
             throw e
         }
+    }
 
-        mediaDriverContext = context
-
+    internal fun initEndpointState(): Aeron {
         shutdown.getAndSet(false)
-
         shutdownLatch = SuspendWaiter()
-
-        return aeron!!
+        return aeron
     }
 
     /**
@@ -389,7 +384,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                val exception = newException("[${publication.sessionId()}] Error sending handshake message. $message (${AeronConfig.errorCodeName(result)})")
+                val exception = newException("[${publication.sessionId()}] Error sending handshake message. $message (${errorCodeName(result)})")
                 ListenerManager.cleanStackTraceInternal(exception)
                 listenerManager.notifyError(exception)
                 return
@@ -562,7 +557,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                logger.error("[${publication.sessionId()}] Error sending message. $message (${AeronConfig.errorCodeName(result)})")
+                logger.error("[${publication.sessionId()}] Error sending message. $message (${errorCodeName(result)})")
 
                 return
             }
@@ -574,6 +569,30 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         }
     }
 
+
+    /**
+     * @return the error code text for the specified number
+     */
+    private fun errorCodeName(result: Long): String {
+        return when (result) {
+            // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
+            Publication.NOT_CONNECTED -> "Not connected"
+
+            // The offer failed due to back pressure from the subscribers preventing further transmission.
+            Publication.BACK_PRESSURED -> "Back pressured"
+
+            // The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
+            Publication.ADMIN_ACTION -> "Administrative action"
+
+            // The Publication has been closed and should no longer be used.
+            Publication.CLOSED -> "Publication is closed"
+
+            // If this happens then the publication should be closed and a new one added. To make it less likely to happen then increase the term buffer length.
+            Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
+
+            else -> throw IllegalStateException("Unknown error code: $result")
+        }
+    }
 
     override fun toString(): String {
         return "EndPoint [${type.simpleName}]"
@@ -637,8 +656,11 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     final override fun close() {
         if (shutdown.compareAndSet(expect = false, update = true)) {
-            aeron?.close()
-            mediaDriver?.close()
+            logger.info { "Shutting down..." }
+
+            aeron.close()
+            (aeron.context().threadFactory() as NamedThreadFactory).group.destroy()
+            AeronConfig.stopDriver(mediaDriver, logger)
 
             runBlocking {
                 connections.forEach {

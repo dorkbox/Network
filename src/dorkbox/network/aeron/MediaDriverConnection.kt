@@ -46,7 +46,7 @@ interface MediaDriverConnection : AutoCloseable {
 
     @Throws(ClientTimedOutException::class)
     suspend fun buildClient(aeron: Aeron, logger: KLogger)
-    fun buildServer(aeron: Aeron, logger: KLogger)
+    suspend fun buildServer(aeron: Aeron, logger: KLogger)
 
     fun clientInfo() : String
     fun serverInfo() : String
@@ -166,7 +166,7 @@ class UdpMediaDriverConnection(override val address: InetAddress,
         this.publication = publication
     }
 
-    override fun buildServer(aeron: Aeron, logger: KLogger) {
+    override suspend fun buildServer(aeron: Aeron, logger: KLogger) {
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
@@ -191,8 +191,29 @@ class UdpMediaDriverConnection(override val address: InetAddress,
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
-        publication = aeron.addPublication(publicationUri.build(), streamId)
-        subscription = aeron.addSubscription(subscriptionUri.build(), streamId)
+
+        // If we start/stop too quickly, we might have the address already in use! Retry a few times.
+        var count = 10
+        while (count-- > 0) {
+            try {
+                publication = aeron.addPublication(publicationUri.build(), streamId)
+                break
+            } catch (e: Exception) {
+                logger.warn(e) { "Unable to add a publication to Aeron. Retrying $count more times..." }
+                delay(5000)
+            }
+        }
+
+        count = 10
+        while (count-- > 0) {
+            try {
+                subscription = aeron.addSubscription(subscriptionUri.build(), streamId)
+                break
+            } catch (e: Exception) {
+                logger.warn(e) { "Unable to add a publication to Aeron. Retrying $count more times..." }
+                delay(5000)
+            }
+        }
     }
 
 
@@ -326,7 +347,7 @@ class IpcMediaDriverConnection(override val streamId: Int,
         this.publication = publication
     }
 
-    override fun buildServer(aeron: Aeron, logger: KLogger) {
+    override suspend fun buildServer(aeron: Aeron, logger: KLogger) {
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
@@ -342,6 +363,8 @@ class IpcMediaDriverConnection(override val streamId: Int,
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
+
+        // NOTE: IPC doesn't have address bind issues if we start/stop too quickly
         publication = aeron.addPublication(publicationUri.build(), streamId)
         subscription = aeron.addSubscription(subscriptionUri.build(), streamIdSubscription)
     }

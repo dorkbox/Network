@@ -15,10 +15,14 @@
  */
 package dorkbox.network
 
+import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
+import dorkbox.network.exceptions.ClientException
+import dorkbox.network.exceptions.ServerException
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.PropertyStore
 import dorkbox.network.storage.SettingsStore
@@ -26,6 +30,7 @@ import dorkbox.os.OS
 import dorkbox.util.storage.StorageBuilder
 import dorkbox.util.storage.StorageSystem
 import io.aeron.driver.Configuration
+import io.aeron.driver.MediaDriver
 import io.aeron.driver.ThreadingMode
 import mu.KLogger
 import java.io.File
@@ -36,38 +41,119 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      * the hostname (or IP) to bind to.
      */
     var listenIpAddress = "*"
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * The maximum number of clients allowed for a server. IPC is unlimited
      */
     var maxClientCount = 0
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * The maximum number of client connection allowed per IP address. IPC is unlimited
      */
     var maxConnectionsPerIpAddress = 0
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * The IPC Publication ID is used to define what ID the server will send data on. The client IPC subscription ID must match this value.
      */
     var ipcPublicationId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * The IPC Subscription ID is used to define what ID the server will receive data on. The client IPC publication ID must match this value.
      */
     var ipcSubscriptionId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
+
+    /**
+     * Validates the current configuration
+     */
+    @Suppress("DuplicatedCode")
+    override fun validate() {
+        // have to do some basic validation of our configuration
+        if (listenIpAddress != listenIpAddress.toLowerCase()) {
+            // only do this once!
+            listenIpAddress = listenIpAddress.toLowerCase()
+        }
+
+        require(listenIpAddress.isNotBlank()) { "Blank listen IP address, cannot continue"}
+
+        // can't disable everything!
+        if (!enableIpc && !enableIPv4 && !enableIPv6) {
+            require(false) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
+        }
+
+        // have to verify if it's the only thing specified, is IPv4 available...
+        if (!enableIpc && !enableIPv6 && enableIPv4 && !IPv4.isAvailable) {
+            require(false) { "IPC/IPv6 are disabled and IPv4 is enabled, but there is no IPv4 interface available!" }
+        }
+
+        // have to verify if it's the only thing specified, is IPv4 available...
+        if (!enableIpc && !enableIPv4 && enableIPv6 && !IPv6.isAvailable) {
+            require(false) { "IPC/IPv4 are disabled and IPv6 is enabled, but there is no IPv6 interface available!" }
+        }
+
+        if (enableIpc && aeronDirectoryForceUnique) {
+            require(false) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
+        }
+
+        if (publicationPort <= 0) { throw ServerException("configuration port must be > 0") }
+        if (publicationPort >= 65535) { throw ServerException("configuration port must be < 65535") }
+
+        if (subscriptionPort <= 0) { throw ServerException("configuration controlPort must be > 0") }
+        if (subscriptionPort >= 65535) { throw ServerException("configuration controlPort must be < 65535") }
+
+        if (networkMtuSize <= 0) { throw ServerException("configuration networkMtuSize must be > 0") }
+        if (networkMtuSize >= 9 * 1024) { throw ServerException("configuration networkMtuSize must be < ${9 * 1024}") }
+
+        if (maxConnectionsPerIpAddress == 0) { maxConnectionsPerIpAddress = maxClientCount}
+    }
 }
 
 open class Configuration {
+    companion object {
+        internal const val errorMessage = "Cannot set a property after the configuration context has been created!"
+    }
+
+    /**
+     * Internal property that prohibits changing values after this configuration has been validated
+     */
+    internal var isValidated = false
+
     /**
      * Enables the ability to use the IPv4 network stack.
      */
     var enableIPv4 = true
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Enables the ability to use the IPv6 network stack.
      */
     var enableIPv6 = true
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Enables the ability use IPC (Inter Process Communication).
@@ -75,6 +161,10 @@ open class Configuration {
      * Aeron must be running in the same location for the client/server in order for this to work
      */
     var enableIpc = true
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Permit loopback connections to use IPC instead of UDP for communicating, if possible. IPC is about 4x faster than UDP in loopback situations.
@@ -82,6 +172,10 @@ open class Configuration {
      * This configuration only affects the client
      */
     var enableIpcForLoopback: Boolean = true
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * When connecting to a remote client/server, should connections be allowed if the remote machine signature has changed?
@@ -89,6 +183,10 @@ open class Configuration {
      * Setting this to false is not recommended as it is a security risk
      */
     var enableRemoteSignatureValidation: Boolean = true
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Specify the UDP port to use. This port is used to establish client-server connections, and is from the
@@ -99,6 +197,10 @@ open class Configuration {
      * Must be greater than 0
      */
     var publicationPort: Int = 0
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Specify the UDP MDC subscription port to use. This port is used to establish client-server connections, and is from the
@@ -109,26 +211,46 @@ open class Configuration {
      * Must be greater than 0
      */
     var subscriptionPort: Int = 0
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * How long a connection must be disconnected before we cleanup the memory associated with it
      */
     var connectionCloseTimeoutInSeconds: Int = 10
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Allows the end user to change how endpoint settings are stored. For example, a custom database instead of the default.
      */
     var settingsStore: SettingsStore = PropertyStore()
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Specify the type of storage used for the endpoint settings , the options are Disk and Memory
      */
     var settingsStorageSystem: StorageBuilder = StorageSystem.Memory()
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Specify the serialization manager to use.
      */
     var serialization: Serialization = Serialization()
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * The idle strategy used when polling the Media Driver for new messages. BackOffIdleStrategy is the DEFAULT.
@@ -142,6 +264,10 @@ open class Configuration {
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
     var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(maxSpins = 100, maxYields = 10, minParkPeriodMs = 1, maxParkPeriodMs = 100)
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * The idle strategy used when polling the Media Driver for new messages. BackOffIdleStrategy is the DEFAULT.
@@ -155,6 +281,10 @@ open class Configuration {
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
     var sendIdleStrategy: CoroutineIdleStrategy = CoroutineSleepingMillisIdleStrategy(sleepPeriodMs = 100)
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * ## A Media Driver, whether being run embedded or not, needs 1-3 threads to perform its operation.
@@ -181,16 +311,28 @@ open class Configuration {
      * media driver to carry out its duty cycle on a regular interval.
      */
     var threadingMode = ThreadingMode.SHARED
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Aeron location for the Media Driver. The default location is a TEMP dir.
      */
     var aeronDirectory: File? = null
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * Should we force the Aeron location to be unique for every instance? This is mutually exclusive with IPC.
      */
     var aeronDirectoryForceUnique = false
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * The Aeron MTU value impacts a lot of things.
@@ -221,6 +363,10 @@ open class Configuration {
      * Default value is 1408 for internet; for a LAN, 9k is possible with jumbo frames (if the routers/interfaces support it)
      */
     var networkMtuSize = Configuration.MTU_LENGTH_DEFAULT
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * This option (ultimately SO_SNDBUF for the network socket) can impact loss rate. Loss can occur on the sender side due
@@ -236,6 +382,10 @@ open class Configuration {
      * A value of 0 will 'auto-configure' this setting
      */
     var sendBufferSize = 0
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
 
     /**
      * This option (ultimately SO_RCVBUF for the network socket) can impact loss rates when too small for the given processing.
@@ -249,6 +399,15 @@ open class Configuration {
      * A value of 0 will 'auto-configure' this setting.
      */
     var receiveBufferSize = 0
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
+
+    /**
+     * Internal property that tells us if this configuration has already been configured and used to create and start the Media Driver
+     */
+    internal var context: MediaDriver.Context? = null
 
     /**
      * Depending on the OS, different base locations for the Aeron log directory are preferred.
@@ -275,5 +434,25 @@ open class Configuration {
                 File(System.getProperty("java.io.tmpdir"))
             }
         }
+    }
+
+    /**
+     * Validates the current configuration
+     */
+    @Suppress("DuplicatedCode")
+    open fun validate() {
+        if (enableIpc && aeronDirectoryForceUnique) {
+            require(false) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
+        }
+
+        // have to do some basic validation of our configuration
+        if (publicationPort <= 0) { throw ClientException("configuration port must be > 0") }
+        if (publicationPort >= 65535) { throw ClientException("configuration port must be < 65535") }
+
+        if (subscriptionPort <= 0) { throw ClientException("configuration controlPort must be > 0") }
+        if (subscriptionPort >= 65535) { throw ClientException("configuration controlPort must be < 65535") }
+
+        if (networkMtuSize <= 0) { throw ClientException("configuration networkMtuSize must be > 0") }
+        if (networkMtuSize >= 9 * 1024) { throw ClientException("configuration networkMtuSize must be < ${9 * 1024}") }
     }
 }

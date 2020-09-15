@@ -32,6 +32,7 @@ import io.aeron.Subscription
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -355,7 +356,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             preCloseAction()
 
             // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            endPoint.actionDispatch.launch {
+            endPoint.actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
+                // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
+                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
                 // a connection might have also registered for disconnect events
                 listenerManager.value?.notifyDisconnect(this@Connection)
             }
