@@ -42,7 +42,7 @@ object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.0-beta5"
+    const val version = "5.0-beta6"
 
     // set as project.ext
     const val name = "Network"
@@ -227,7 +227,7 @@ dependencies {
     // https://github.com/dorkbox
     implementation("com.dorkbox:Annotations:3.1")
     implementation("com.dorkbox:MinLog-SLF4J:2.0")
-    implementation("com.dorkbox:Utilities:1.8")
+    implementation("com.dorkbox:Utilities:1.8.2")
     implementation("com.dorkbox:NetworkUtils:1.5")
 
     // Caffeine High-throughput Timeout Cache
