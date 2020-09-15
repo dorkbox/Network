@@ -24,10 +24,8 @@ import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.serialization.Serialization
-import dorkbox.network.storage.PropertyStore
 import dorkbox.network.storage.SettingsStore
 import dorkbox.os.OS
-import dorkbox.util.storage.StorageBuilder
 import dorkbox.util.storage.StorageSystem
 import io.aeron.driver.Configuration
 import io.aeron.driver.MediaDriver
@@ -226,18 +224,11 @@ open class Configuration {
         }
 
     /**
-     * Allows the end user to change how endpoint settings are stored. For example, a custom database instead of the default.
+     * Allows the end user to change how endpoint settings are stored.
+     *
+     * For example, a custom database instead of the default, in-memory storage. Another built-in option is StorageSystem.Disk()
      */
-    var settingsStore: SettingsStore = PropertyStore()
-        set(value) {
-            require(context == null) { errorMessage }
-            field = value
-        }
-
-    /**
-     * Specify the type of storage used for the endpoint settings , the options are Disk and Memory
-     */
-    var settingsStorageSystem: StorageBuilder = StorageSystem.Memory()
+    var settingsStore: SettingsStore = SettingsStore(StorageSystem.Memory())
         set(value) {
             require(context == null) { errorMessage }
             field = value

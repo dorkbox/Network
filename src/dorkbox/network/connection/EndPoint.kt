@@ -34,6 +34,7 @@ import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.SettingsStore
 import dorkbox.util.NamedThreadFactory
 import dorkbox.util.exceptions.SecurityException
+import dorkbox.util.storage.StorageSystem
 import io.aeron.Aeron
 import io.aeron.Publication
 import io.aeron.driver.MediaDriver
@@ -124,7 +125,13 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         // we have to be able to specify WHAT property store we want to use, since it can change!
         settingsStore = config.settingsStore
-        settingsStore.init(serialization, config.settingsStorageSystem.build())
+        settingsStore.init()
+
+        when (val builder = settingsStore.builder) {
+            is StorageSystem.DiskBuilder -> logger.info("Disk storage system initialized at: '${builder.file}'")
+            is StorageSystem.MemoryBuilder -> logger.info("Memory storage system initialized")
+            else -> logger.info("${builder::class.java.simpleName} storage system initialized")
+        }
 
         crypto = CryptoManagement(logger, settingsStore, type, config)
 

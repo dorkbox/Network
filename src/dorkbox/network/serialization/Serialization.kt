@@ -408,7 +408,7 @@ open class Serialization(private val references: Boolean = true, private val fac
                 return false
             }
 
-            settingsStore.getSerializationTypes().forEach {
+            settingsStore.getSerializationRegistrations().forEach {
                 classesToRegister.add(ClassRegistration3(it))
             }
 
