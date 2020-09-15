@@ -143,7 +143,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         }
 
         // we are done with initial configuration, now finish serialization
-        serialization.finishInit(type, settingsStore, ByteArray(0))
+        serialization.finishInit(type, ByteArray(0))
     }
 
     override fun newException(message: String, cause: Throwable?): Throwable {

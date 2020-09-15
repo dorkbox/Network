@@ -15,6 +15,7 @@
  */
 package dorkbox.network.storage
 
+import com.esotericsoftware.kryo.serializers.MapSerializer
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.connection.CryptoManagement
@@ -22,8 +23,11 @@ import dorkbox.util.bytes.ByteArrayWrapper
 import dorkbox.util.exceptions.SecurityException
 import dorkbox.util.storage.Storage
 import dorkbox.util.storage.StorageBuilder
+import dorkbox.util.storage.StorageSystem
 import org.agrona.collections.Object2NullableObjectHashMap
 import org.slf4j.LoggerFactory
+import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.security.SecureRandom
 
@@ -48,6 +52,18 @@ open class SettingsStore(internal val builder: StorageBuilder) : AutoCloseable {
      * Initialize using the provided serialization manager.
      */
     fun init() {
+        if (builder is StorageSystem.DiskBuilder) {
+            // NOTE: there are problems if our serializer is THE SAME serializer used by the network stack!
+            // make sure our custom types are registered!
+            builder.serializationManager.register(Object2NullableObjectHashMap::class.java, MapSerializer())
+            builder.serializationManager.register(ByteArrayWrapper::class.java)
+            builder.serializationManager.register(DB_Server::class.java)
+
+            // NOTE: These only serialize the IP address, not the hostname!
+            builder.serializationManager.register(Inet4Address::class.java, Inet4AddressIpSerializer())
+            builder.serializationManager.register(Inet6Address::class.java, Inet6AddressIpSerializer())
+        }
+
         this.storage = builder.build()
 
         servers = this.storage.get(DB_Server.STORAGE_KEY, Object2NullableObjectHashMap())
