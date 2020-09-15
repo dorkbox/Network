@@ -603,7 +603,7 @@ open class Serialization(private val references: Boolean = true, private val fac
                         classesToRegister.add(ClassRegistrationForRmi(clazz, implClass, rmiServerSerializer))
 
                     }
-                    else -> throw IllegalStateException("Unable to manage class registrations for unkown registration type $typeId")
+                    else -> throw IllegalStateException("Unable to manage class registrations for unknown registration type $typeId")
                 }
 
                 // now all of our classes to register will be the same (except for RMI class registrations
