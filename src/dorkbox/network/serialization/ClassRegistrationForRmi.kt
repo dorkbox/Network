@@ -105,7 +105,12 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
      */
     override fun register(kryo: KryoExtra, rmi: RmiHolder) {
         // we override this, because we ALWAYS will call our RMI registration!
-        if (id != 0) {
+        if (id == IGNORE_REGISTRATION) {
+            // we have previously specified that this registration should be ignored!
+            return
+        }
+
+        if (id > 0) {
             // our ID will always be > 0
             // this means that this registration was PREVIOUSLY registered on a different kryo. Shortcut the logic.
 

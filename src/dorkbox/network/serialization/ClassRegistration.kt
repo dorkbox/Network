@@ -33,8 +33,12 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
      */
     open fun register(kryo: KryoExtra, rmi: RmiHolder) {
         // ClassRegistrationForRmi overrides this method
+        if (id == IGNORE_REGISTRATION) {
+            // we have previously specified that this registration should be ignored!
+            return
+        }
 
-        if (id != 0) {
+        if (id > 0) {
             // our ID will always be > 0
             // this means that this registration was PREVIOUSLY registered on a different kryo. Shortcut the logic.
 
