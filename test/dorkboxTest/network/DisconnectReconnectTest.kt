@@ -2,6 +2,7 @@ package dorkboxTest.network
 
 import dorkbox.network.Client
 import dorkbox.network.Server
+import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.connection.Connection
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
@@ -69,6 +70,66 @@ class DisconnectReconnectTest : BaseTest() {
     }
 
     @Test
+    fun manualMediaDriverAndReconnectClient() {
+        val serverConfiguration = serverConfig()
+        val mediaDriver = runBlocking {
+            AeronConfig.startDriver(serverConfiguration)
+        }
+
+        run {
+            val server: Server<Connection> = Server(serverConfiguration)
+            addEndPoint(server)
+            server.bind()
+
+            server.onConnect { connection ->
+                connection.logger.error("Disconnecting after 2 seconds.")
+                delay(2000)
+
+                connection.logger.error("Disconnecting....")
+                connection.close()
+            }
+        }
+
+        run {
+            val config = clientConfig()
+
+            val client: Client<Connection> = Client(config)
+            addEndPoint(client)
+
+
+            client.onDisconnect { connection ->
+                connection.logger.error("Disconnected!")
+
+                val count = reconnectCount.getAndIncrement()
+                if (count == 3) {
+                    connection.logger.error("Shutting down")
+                    stopEndPoints()
+                }
+                else {
+                    connection.logger.error("Reconnecting: $count")
+                    try {
+                        client.connect(LOOPBACK)
+                    } catch (e: IOException) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+
+            runBlocking {
+                client.connect(LOOPBACK)
+            }
+        }
+
+
+        waitForThreads()
+
+        AeronConfig.stopDriver(mediaDriver)
+
+        System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
+        Assert.assertEquals(4, reconnectCount.value)
+    }
+
+    @Test
     fun reconnectWithFallbackClient() {
         run {
             val config = serverConfig()
@@ -127,7 +188,7 @@ class DisconnectReconnectTest : BaseTest() {
     }
 
     @Test
-    fun disconenctedMediaDriver() {
+    fun disconnectedMediaDriver() {
         val server: Server<Connection>
         run {
             val config = serverConfig()
