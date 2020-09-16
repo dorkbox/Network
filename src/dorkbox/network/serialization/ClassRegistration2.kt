@@ -15,11 +15,12 @@
  */
 package dorkbox.network.serialization
 
+import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 
 internal class ClassRegistration2(clazz: Class<*>, serializer: Serializer<*>, id: Int) : ClassRegistration(clazz, serializer, id) {
 
-    override fun register(kryo: KryoExtra) {
+    override fun register(kryo: Kryo) {
         kryo.register(clazz, serializer, id)
         info = "Registered $id -> (specified) ${clazz.name} using ${serializer!!.javaClass.name}"
     }

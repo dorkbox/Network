@@ -15,9 +15,11 @@
  */
 package dorkbox.network.serialization
 
+import com.esotericsoftware.kryo.Kryo
+
 internal open class ClassRegistration3(clazz: Class<*>) : ClassRegistration(clazz) {
 
-    override fun register(kryo: KryoExtra) {
+    override fun register(kryo: Kryo) {
         id = kryo.register(clazz).id
         info = "Registered $id -> ${clazz.name}"
     }

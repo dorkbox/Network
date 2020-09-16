@@ -15,6 +15,7 @@
  */
 package dorkbox.network.serialization
 
+import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import dorkbox.network.rmi.messages.RmiServerSerializer
 
@@ -91,7 +92,7 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
         rmi.implToId[clazz] = id
     }
 
-    open fun register(kryo: KryoExtra) {}
+    open fun register(kryo: Kryo) {}
 
     abstract fun getInfoArray(): Array<Any>
 }
