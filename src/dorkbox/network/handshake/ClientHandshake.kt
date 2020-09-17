@@ -74,7 +74,8 @@ internal class ClientHandshake<CONNECTION: Connection>(private val config: Confi
 
 
             if (this@ClientHandshake.sessionId != message.sessionId) {
-                failed = ClientException("[$message.sessionId] ignored message intended for another client (mine is: ${this@ClientHandshake.sessionId}")
+                failed = ClientException("[$message.sessionId] ignored message intended for another client (mine is: " +
+                                         "${this@ClientHandshake.sessionId})")
                 return@FragmentAssembler
             }
 
