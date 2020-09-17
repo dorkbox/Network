@@ -27,7 +27,7 @@ import org.agrona.DirectBuffer
 class KryoExtra() : Kryo() {
     // for kryo serialization
     private val readerBuffer = AeronInput()
-    val writerBuffer = AeronOutput()
+    private val writerBuffer = AeronOutput()
 
     // crypto + compression have to work with native byte arrays, so here we go...
 //    private val reader = Input(ABSOLUTE_MAX_SIZE_OBJECT)
@@ -74,9 +74,10 @@ class KryoExtra() : Kryo() {
      * ++++++++++++++++++++++++++
      */
     @Throws(Exception::class)
-    fun write(message: Any) {
+    fun write(message: Any): AeronOutput {
         writerBuffer.reset()
         writeClassAndObject(writerBuffer, message)
+        return writerBuffer
     }
 
     /**
@@ -86,12 +87,28 @@ class KryoExtra() : Kryo() {
      * ++++++++++++++++++++++++++
      */
     @Throws(Exception::class)
-    fun write(connection: Connection, message: Any) {
+    fun write(connection: Connection, message: Any): AeronOutput {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
         writerBuffer.reset()
         writeClassAndObject(writerBuffer, message)
+        return writerBuffer
+    }
+
+    /**
+     * NOTE: THIS CANNOT BE USED FOR ANYTHING RELATED TO RMI!
+     *
+     * INPUT:
+     * ++++++++++++++++++++++++++
+     * + class and object bytes +
+     * ++++++++++++++++++++++++++
+     */
+    @Throws(Exception::class)
+    fun read(buffer: DirectBuffer): Any {
+        // this properly sets the buffer info
+        readerBuffer.setBuffer(buffer, 0, buffer.capacity())
+        return readClassAndObject(readerBuffer)
     }
 
     /**
@@ -106,7 +123,6 @@ class KryoExtra() : Kryo() {
     fun read(buffer: DirectBuffer, offset: Int, length: Int): Any {
         // this properly sets the buffer info
         readerBuffer.setBuffer(buffer, offset, length)
-
         return readClassAndObject(readerBuffer)
     }
 
@@ -123,9 +139,10 @@ class KryoExtra() : Kryo() {
 
         // this properly sets the buffer info
         readerBuffer.setBuffer(buffer, offset, length)
-
         return readClassAndObject(readerBuffer)
     }
+
+
 
 
     ////////////////

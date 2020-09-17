@@ -359,9 +359,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         try {
             // we are not thread-safe!
-            handshakeKryo.write(message)
-
-            val buffer = handshakeKryo.writerBuffer
+            val buffer = handshakeKryo.write(message)
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
@@ -532,9 +530,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         // since ANY thread can call 'send', we have to take kryo instances in a safe way
         val kryo: KryoExtra = serialization.takeKryo()
         try {
-            kryo.write(connection, message)
-
-            val buffer = kryo.writerBuffer
+            val buffer = kryo.write(connection, message)
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
