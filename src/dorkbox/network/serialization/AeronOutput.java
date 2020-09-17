@@ -126,6 +126,15 @@ public class AeronOutput extends Output {
     /**
      * Sets a new buffer to write to. The max size is the buffer's length.
      */
+    public void setBuffer (MutableDirectBuffer buffer) {
+        internalBuffer = buffer;
+        position = 0;
+        capacity = buffer.capacity();
+    }
+
+    /**
+     * Sets a new buffer to write to. The max size is the buffer's length.
+     */
     @Override
     public void setBuffer (byte[] buffer) {
         internalBuffer = new UnsafeBuffer(buffer);

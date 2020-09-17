@@ -147,7 +147,14 @@ class AeronInput extends Input {
     }
 
     /**
-     * Throws {@link UnsupportedOperationException} because this input uses a ByteBuffer, not a byte[].
+     * Sets the internal buffer (and properties based on that buffer)
+     */
+    public void setBuffer(DirectBuffer buffer) {
+        setBuffer(buffer, 0, buffer.capacity());
+    }
+
+    /**
+     * Sets the internal buffer (and properties based on that buffer)
      */
     public void setBuffer (DirectBuffer buffer, int offset, int length) {
         this.internalBuffer = buffer;
