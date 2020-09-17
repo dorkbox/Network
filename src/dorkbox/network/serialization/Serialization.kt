@@ -140,7 +140,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      *
      * This must happen before the creation of the client/server
      */
-    fun <T> register(clazz: Class<T>): Serialization {
+    open fun <T> register(clazz: Class<T>): Serialization {
         require(!initialized.value) { "Serialization 'register(class)' cannot happen after client/server initialization!" }
 
         // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
@@ -165,7 +165,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      * @param id Must be >= 0. Smaller IDs are serialized more efficiently. IDs 0-8 are used by default for primitive types and String, but
      * these IDs can be repurposed.
      */
-    fun <T> register(clazz: Class<T>, id: Int): Serialization {
+    open fun <T> register(clazz: Class<T>, id: Int): Serialization {
         require(!initialized.value) { "Serialization 'register(Class, int)' cannot happen after client/server initialization!" }
 
         // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
@@ -188,7 +188,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      * method. The order must be the same at deserialization as it was for serialization.
      */
     @Synchronized
-    fun <T> register(clazz: Class<T>, serializer: Serializer<T>): Serialization {
+    open fun <T> register(clazz: Class<T>, serializer: Serializer<T>): Serialization {
         require(!initialized.value) { "Serialization 'register(Class, Serializer)' cannot happen after client/server initialization!" }
 
         // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
@@ -213,7 +213,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      * these IDs can be repurposed.
      */
     @Synchronized
-    fun <T> register(clazz: Class<T>, serializer: Serializer<T>, id: Int): Serialization {
+    open fun <T> register(clazz: Class<T>, serializer: Serializer<T>, id: Int): Serialization {
         require(!initialized.value) { "Serialization 'register(Class, Serializer, int)' cannot happen after client/server initialization!" }
 
         // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
@@ -239,7 +239,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      * @throws IllegalArgumentException if the iface/impl have previously been overridden
      */
     @Synchronized
-    fun <Iface, Impl : Iface> registerRmi(ifaceClass: Class<Iface>, implClass: Class<Impl>? = null): Serialization {
+    open fun <Iface, Impl : Iface> registerRmi(ifaceClass: Class<Iface>, implClass: Class<Impl>? = null): Serialization {
         require(!initialized.value) { "Serialization 'registerRmi(Class, Class)' cannot happen after client/server initialization!" }
 
         require(ifaceClass.isInterface) { "Cannot register an implementation for RMI access. It must be an interface." }
@@ -395,7 +395,7 @@ open class Serialization(private val references: Boolean = true, private val fac
         // this will set up the class registration information
         return if (type == Server::class.java) {
             if (!initialized.compareAndSet(expect = false, update = true)) {
-                logger.error("Unable to initialize serialization more than once!")
+                require(false) { "Unable to initialize serialization more than once!" }
                 return false
             }
 
