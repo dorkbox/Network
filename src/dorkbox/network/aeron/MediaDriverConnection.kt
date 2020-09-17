@@ -118,6 +118,8 @@ class UdpMediaDriverConnection(override val address: InetAddress,
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
+        // on close, the publication CAN linger (in case a client goes away, and then comes back)
+        // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
         val publication = aeron.addPublication(publicationUri.build(), streamId)
         val subscription =  aeron.addSubscription(subscriptionUri.build(), streamId)
 
@@ -132,12 +134,12 @@ class UdpMediaDriverConnection(override val address: InetAddress,
                 break
             }
 
-            delay(timeMillis = 10L)
+            delay(timeMillis = 100L)
         }
 
         if (!success) {
             subscription.close()
-            throw ClientTimedOutException("Creating subscription connection to aeron")
+            throw ClientTimedOutException("Cannot create subscription!")
         }
 
 
@@ -151,7 +153,7 @@ class UdpMediaDriverConnection(override val address: InetAddress,
                 break
             }
 
-            delay(timeMillis = 10L)
+            delay(timeMillis = 100L)
         }
 
         if (!success) {
@@ -191,6 +193,8 @@ class UdpMediaDriverConnection(override val address: InetAddress,
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
+        // on close, the publication CAN linger (in case a client goes away, and then comes back)
+        // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
         // If we start/stop too quickly, we might have the address already in use! Retry a few times.
         var count = 10
@@ -200,7 +204,7 @@ class UdpMediaDriverConnection(override val address: InetAddress,
                 break
             } catch (e: Exception) {
                 logger.warn(e) { "Unable to add a publication to Aeron. Retrying $count more times..." }
-                delay(5000)
+                delay(5_000)
             }
         }
 
@@ -313,7 +317,7 @@ class IpcMediaDriverConnection(override val streamId: Int,
                 break
             }
 
-            delay(timeMillis = 10L)
+            delay(timeMillis = 100L)
         }
 
         if (!success) {
@@ -332,7 +336,7 @@ class IpcMediaDriverConnection(override val streamId: Int,
                 break
             }
 
-            delay(timeMillis = 10L)
+            delay(timeMillis = 100L)
         }
 
         if (!success) {
