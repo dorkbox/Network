@@ -18,7 +18,6 @@ package dorkbox.network.connection
 import dorkbox.netUtil.IP
 import dorkbox.network.Configuration
 import dorkbox.network.handshake.ClientConnectionInfo
-import dorkbox.network.other.CryptoEccNative
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
 import dorkbox.network.storage.SettingsStore
@@ -26,19 +25,17 @@ import dorkbox.util.Sys
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.exceptions.SecurityException
 import mu.KLogger
+import java.math.BigInteger
 import java.net.InetAddress
 import java.security.KeyFactory
-import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.PrivateKey
 import java.security.PublicKey
 import java.security.SecureRandom
-import java.security.interfaces.XECPrivateKey
-import java.security.interfaces.XECPublicKey
 import java.security.spec.NamedParameterSpec
-import java.security.spec.PKCS8EncodedKeySpec
-import java.security.spec.X509EncodedKeySpec
+import java.security.spec.XECPrivateKeySpec
+import java.security.spec.XECPublicKeySpec
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.spec.GCMParameterSpec
@@ -48,17 +45,17 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Management for all of the crypto stuff used
  */
-internal class CryptoManagement(val logger: KLogger,
-                                private val settingsStore: SettingsStore,
-                                type: Class<*>,
-                                config: Configuration) {
+internal class CryptoManagement(val logger: KLogger, private val settingsStore: SettingsStore, type: Class<*>, config: Configuration) {
 
-    private val keyFactory = KeyFactory.getInstance("X25519")
+    private val X25519 = "X25519"
+    private val X25519KeySpec = NamedParameterSpec(X25519)
+    private val keyFactory = KeyFactory.getInstance(X25519)  // key size is 32 bytes
     private val keyAgreement = KeyAgreement.getInstance("XDH")
     private val aesCipher = Cipher.getInstance("AES/GCM/PKCS5Padding")
     private val hash = MessageDigest.getInstance("SHA-256");
 
     companion object {
+        const val curve25519 = "curve25519"
         const val AES_KEY_SIZE = 256
         const val GCM_IV_LENGTH = 12
         const val GCM_TAG_LENGTH = 16
@@ -89,13 +86,16 @@ internal class CryptoManagement(val logger: KLogger,
         if (privateKeyBytes == null || publicKeyBytes == null) {
             try {
                 // seed our RNG based off of this and create our ECC keys
-                val seedBytes = Entropy.get("There are no ECC keys for the " + type.simpleName + " yet")
-                logger.info("Now generating ECC (" + CryptoEccNative.curve25519 + ") keys. Please wait!")
+                val seedBytes = Entropy.get("There are no ECC keys for the ${type.simpleName} yet")
+                logger.info("Now generating ECC ($curve25519) keys. Please wait!")
 
                 secureRandom.nextBytes(seedBytes)
-                val generateKeyPair = createKeyPair(secureRandom)
-                privateKeyBytes = generateKeyPair.private.encoded
-                publicKeyBytes = generateKeyPair.public.encoded
+
+                // see: https://stackoverflow.com/questions/60303561/how-do-i-pass-a-44-bytes-x25519-public-key-created-by-openssl-to-cryptokit-which
+                val (xdhPublic, xdhPrivate) = createKeyPair(secureRandom)
+
+                publicKeyBytes = xdhPublic.u.toByteArray()
+                privateKeyBytes = xdhPrivate.scalar
 
                 // save to properties file
                 settingsStore.savePrivateKey(privateKeyBytes)
@@ -109,18 +109,22 @@ internal class CryptoManagement(val logger: KLogger,
 
         logger.info("ECC public key: ${Sys.bytesToHex(publicKeyBytes)}")
 
-        this.privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privateKeyBytes)) as XECPrivateKey
-        this.publicKey = keyFactory.generatePublic(X509EncodedKeySpec(publicKeyBytes)) as XECPublicKey
+        this.publicKey = keyFactory.generatePublic(XECPublicKeySpec(X25519KeySpec, BigInteger(publicKeyBytes)))
+        this.privateKey = keyFactory.generatePrivate(XECPrivateKeySpec(X25519KeySpec, privateKeyBytes))
         this.publicKeyBytes = publicKeyBytes!!
     }
 
-    private fun createKeyPair(secureRandom: SecureRandom): KeyPair {
+    private fun createKeyPair(secureRandom: SecureRandom): Pair<XECPublicKeySpec, XECPrivateKeySpec> {
         val kpg: KeyPairGenerator = KeyPairGenerator.getInstance("XDH")
         kpg.initialize(NamedParameterSpec.X25519, secureRandom)
-        return kpg.generateKeyPair()
+        val keyPair = kpg.generateKeyPair()
+
+        // get the ACTUAL key spec, so we can get the ACTUAL key byte arrays
+        val xdhPublic: XECPublicKeySpec = keyFactory.getKeySpec(keyPair.public, XECPublicKeySpec::class.java)
+        val xdhPrivate: XECPrivateKeySpec = keyFactory.getKeySpec(keyPair.private, XECPrivateKeySpec::class.java)
+
+        return Pair(xdhPublic, xdhPrivate)
     }
-
-
 
     /**
      * If the key does not match AND we have disabled remote key validation -- key validation is REQUIRED!
@@ -136,11 +140,7 @@ internal class CryptoManagement(val logger: KLogger,
 
         try {
             val savedPublicKey = settingsStore.getRegisteredServerKey(remoteAddress)
-            if (savedPublicKey == null) {
-                logger.info("Adding new signature for ${IP.toString(remoteAddress)} : ${Sys.bytesToHex(publicKey)}")
-
-                settingsStore.addRegisteredServerKey(remoteAddress, publicKey)
-            } else {
+            if (savedPublicKey != null) {
                 // COMPARE!
                 if (!publicKey.contentEquals(savedPublicKey)) {
                     return if (enableRemoteSignatureValidation) {
@@ -167,8 +167,7 @@ internal class CryptoManagement(val logger: KLogger,
      * Generate the AES key based on ECDH
      */
     private fun generateAesKey(remotePublicKeyBytes: ByteArray, bytesA: ByteArray, bytesB: ByteArray): SecretKeySpec {
-        val clientPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(remotePublicKeyBytes)) as XECPublicKey
-
+        val clientPublicKey = keyFactory.generatePublic(XECPublicKeySpec(X25519KeySpec, BigInteger(remotePublicKeyBytes)))
         keyAgreement.init(privateKey)
         keyAgreement.doPhase(clientPublicKey, true)
         val sharedSecret = keyAgreement.generateSecret()
@@ -216,12 +215,10 @@ internal class CryptoManagement(val logger: KLogger,
         val secretKeySpec = generateAesKey(serverPublicKeyBytes, publicKeyBytes, serverPublicKeyBytes)
 
         // now read the encrypted data
-        registrationData.copyInto(destination = iv,
-                                  endIndex = GCM_IV_LENGTH)
+        registrationData.copyInto(destination = iv, endIndex = GCM_IV_LENGTH)
 
         val secretBytes = ByteArray(registrationData.size - GCM_IV_LENGTH)
-        registrationData.copyInto(destination = secretBytes,
-                                  startIndex = GCM_IV_LENGTH)
+        registrationData.copyInto(destination = secretBytes, startIndex = GCM_IV_LENGTH)
 
 
         // now decrypt the data
