@@ -24,6 +24,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.Client
 import dorkbox.network.connection.Connection
+import dorkbox.network.storage.types.MemoryStore
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.RmiCommonTest
 import dorkboxTest.network.rmi.cows.TestCow
@@ -66,6 +67,7 @@ object TestClient {
         setup()
 
         val config = BaseTest.clientConfig()
+        config.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
         config.enableRemoteSignatureValidation = false
         config.enableIpc = false
         config.aeronDirectoryForceUnique = true

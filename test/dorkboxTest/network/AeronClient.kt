@@ -24,6 +24,7 @@ import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.connection.Connection
+import dorkbox.network.storage.types.MemoryStore
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
@@ -95,6 +96,7 @@ object AeronClient {
     @JvmStatic
     fun main(args: Array<String>) {
         val configuration = Configuration()
+        configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
         configuration.subscriptionPort = 2000
         configuration.publicationPort = 2001
         val client = Client<Connection>(configuration)

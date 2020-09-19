@@ -17,6 +17,7 @@ package dorkboxTest.network.rmi.multiJVM
 
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import dorkbox.network.storage.types.MemoryStore
 import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestBabyCowImpl
@@ -34,6 +35,7 @@ object TestServer {
         setup()
 
         val configuration = BaseTest.serverConfig()
+        configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
 
         configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
         configuration.serialization.register(MessageWithTestCow::class.java)

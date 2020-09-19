@@ -34,7 +34,6 @@ import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.SettingsStore
 import dorkbox.util.NamedThreadFactory
 import dorkbox.util.exceptions.SecurityException
-import dorkbox.util.storage.StorageSystem
 import io.aeron.Aeron
 import io.aeron.Publication
 import io.aeron.driver.MediaDriver
@@ -99,7 +98,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     private val shutdown = atomic(false)
 
     @Volatile
-    private var shutdownLatch: SuspendWaiter = SuspendWaiter()
+    private var shutdownWaiter: SuspendWaiter = SuspendWaiter()
 
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
@@ -107,6 +106,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
 
     init {
+        require(!config.previouslyUsed) { "${type.simpleName} configuration cannot be reused!" }
+        config.validate()
+
         runBlocking {
             // our default onError handler. All error messages go though this
             listenerManager.onError { throwable ->
@@ -123,15 +125,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         sendIdleStrategy = config.sendIdleStrategy
         handshakeKryo = serialization.initHandshakeKryo()
 
-        // we have to be able to specify WHAT property store we want to use, since it can change!
-        settingsStore = config.settingsStore
-        settingsStore.init()
-
-        when (val builder = settingsStore.builder) {
-            is StorageSystem.DiskBuilder -> logger.info("Disk storage system initialized at: '${builder.file}'")
-            is StorageSystem.MemoryBuilder -> logger.info("Memory storage system initialized")
-            else -> logger.info("${builder::class.java.simpleName} storage system initialized")
-        }
+        // we have to be able to specify the property store
+        settingsStore = config.settingsStore.create(logger)
 
         crypto = CryptoManagement(logger, settingsStore, type, config)
 
@@ -177,7 +172,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     internal fun initEndpointState(): Aeron {
         shutdown.getAndSet(false)
-        shutdownLatch = SuspendWaiter()
+        shutdownWaiter = SuspendWaiter()
         return aeron
     }
 
@@ -634,7 +629,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * Waits for this endpoint to be closed
      */
     suspend fun waitForClose() {
-        shutdownLatch.doWait()
+        shutdownWaiter.doWait()
     }
 
     /**
@@ -663,9 +658,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
             aeron.close()
             (aeron.context().threadFactory() as NamedThreadFactory).group.destroy()
-            AeronConfig.stopDriver(mediaDriver, logger)
 
             runBlocking {
+                AeronConfig.stopDriver(mediaDriver, logger)
+
                 connections.forEach {
                     it.close()
                 }
@@ -681,7 +677,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             close0()
 
             // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
-            shutdownLatch.cancel()
+            shutdownWaiter.cancel()
         }
     }
 

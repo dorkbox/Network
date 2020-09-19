@@ -24,9 +24,9 @@ import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.serialization.Serialization
-import dorkbox.network.storage.SettingsStore
+import dorkbox.network.storage.StorageType
+import dorkbox.network.storage.types.PropertyStore
 import dorkbox.os.OS
-import dorkbox.util.storage.StorageSystem
 import io.aeron.driver.Configuration
 import io.aeron.driver.MediaDriver
 import io.aeron.driver.ThreadingMode
@@ -131,11 +131,6 @@ open class Configuration {
     }
 
     /**
-     * Internal property that prohibits changing values after this configuration has been validated
-     */
-    internal var isValidated = false
-
-    /**
      * Enables the ability to use the IPv4 network stack.
      */
     var enableIPv4 = true
@@ -224,11 +219,17 @@ open class Configuration {
         }
 
     /**
-     * Allows the end user to change how endpoint settings are stored.
+     * Allows the user to change how endpoint settings and public key information are saved.
      *
-     * For example, a custom database instead of the default, in-memory storage. Another built-in option is StorageSystem.Disk()
+     * For example, a custom database instead of the default, in-memory storage.
+     *
+     * Included types are:
+     *  * ChronicleMapStore.type(file)  -- high performance, but non-transactional and not recommended to be shared
+     *  * LmdbStore.type(file)          -- high performance, ACID, and can be shared
+     *  * MemoryStore.type()            -- v. high performance, but not persistent
+     *  * PropertyStore.type(file)      -- slow performance on write, but can easily be edited by user (similar to how openSSH server key info is)
      */
-    var settingsStore: SettingsStore = SettingsStore(StorageSystem.Memory())
+    var settingsStore: StorageType = PropertyStore.type("settings.db")
         set(value) {
             require(context == null) { errorMessage }
             field = value
@@ -398,7 +399,14 @@ open class Configuration {
     /**
      * Internal property that tells us if this configuration has already been configured and used to create and start the Media Driver
      */
+    @Volatile
     internal var context: MediaDriver.Context? = null
+
+    /**
+     * Internal property that tells us if this configuration has already been used in an endpoint
+     */
+    @Volatile
+    internal var previouslyUsed = false
 
     /**
      * Depending on the OS, different base locations for the Aeron log directory are preferred.

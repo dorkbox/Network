@@ -45,6 +45,7 @@ import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.storage.types.MemoryStore
 import dorkbox.os.OS
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
@@ -72,6 +73,7 @@ abstract class BaseTest {
         const val LOOPBACK = "loopback"
         fun clientConfig(): Configuration {
             val configuration = Configuration()
+            configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
             configuration.subscriptionPort = 2000
             configuration.publicationPort = 2001
 
@@ -80,6 +82,7 @@ abstract class BaseTest {
 
         fun serverConfig(): ServerConfiguration {
             val configuration = ServerConfiguration()
+            configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
 
             configuration.subscriptionPort = 2000
             configuration.publicationPort = 2001
