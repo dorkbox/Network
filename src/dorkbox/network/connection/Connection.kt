@@ -356,6 +356,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             preCloseAction()
 
             // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+            @Suppress("EXPERIMENTAL_API_USAGE")
             endPoint.actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
                 // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
                 //   we want this behavior INSTEAD OF automatically starting this on a new thread.
