@@ -35,6 +35,7 @@ import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
+import dorkbox.util.Sys
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -77,10 +78,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     private val rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, serialization)
 
     private val lockStepForReconnect = atomic<SuspendWaiter?>(null)
-
-    init {
-        config.validate()
-    }
 
     override fun newException(message: String, cause: Throwable?): Throwable {
         return ClientException(message, cause)
@@ -390,27 +387,39 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             // because we are getting the class registration details from the SERVER, this should never be the case.
             // It is still and edge case where the reconstruction of the registration details fails (maybe because of custom serializers)
-            val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} has incorrect class registration details!!")
+            val exception = if (usingIPC) {
+                ClientRejectedException("Connection to IPC has incorrect class registration details!!")
+            } else {
+                ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} has incorrect class registration details!!")
+            }
+
             listenerManager.notifyError(exception)
             throw exception
         }
 
 
-        val newConnection = if (usingIPC) {
-            newConnection(ConnectionParams(this, reliableClientConnection, PublicKeyValidationState.VALID))
+        val newConnection: CONNECTION
+        if (usingIPC) {
+            newConnection = newConnection(ConnectionParams(this, reliableClientConnection, PublicKeyValidationState.VALID))
         } else {
-            newConnection(ConnectionParams(this, reliableClientConnection, validateRemoteAddress))
+            newConnection = newConnection(ConnectionParams(this, reliableClientConnection, validateRemoteAddress))
+
+            remoteAddress!!
+
+            // VALIDATE are we allowed to connect to this server (now that we have the initial server information)
+            @Suppress("UNCHECKED_CAST")
+            val permitConnection = listenerManager.notifyFilter(newConnection)
+            if (!permitConnection) {
+                handshakeConnection.close()
+                val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress)} was not permitted!")
+                listenerManager.notifyError(exception)
+                throw exception
+            }
+
+            logger.info("Adding new signature for ${IP.toString(remoteAddress)} : ${Sys.bytesToHex(connectionInfo.publicKey)}")
+            settingsStore.addRegisteredServerKey(remoteAddress, connectionInfo.publicKey)
         }
 
-        // VALIDATE are we allowed to connect to this server (now that we have the initial server information)
-        @Suppress("UNCHECKED_CAST")
-        val permitConnection = listenerManager.notifyFilter(newConnection)
-        if (!permitConnection) {
-            handshakeConnection.close()
-            val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} was not permitted!")
-            listenerManager.notifyError(exception)
-            throw exception
-        }
 
         //////////////
         ///  Extra Close action
@@ -428,6 +437,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             // manually call it.
             // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+            @Suppress("EXPERIMENTAL_API_USAGE")
             actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
                 // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
                 //   we want this behavior INSTEAD OF automatically starting this on a new thread.
