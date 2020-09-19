@@ -165,9 +165,10 @@ public final class UdpChannel
             {
                 hasExplicitEndpoint = false;
                 if (explicitControlAddress == null || explicitControlAddress.getAddress() instanceof Inet4Address) {
-                    endpointAddress = new InetSocketAddress(InetAddress.getByAddress("", new byte[]{0,0,0,0}), 0);
+                    endpointAddress = new InetSocketAddress(InetAddress.getByAddress(null, new byte[]{0,0,0,0}), 0);
                  } else {
-                    endpointAddress = new InetSocketAddress(InetAddress.getByAddress("", new byte[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}), 0);
+                    endpointAddress = new InetSocketAddress(InetAddress.getByAddress(null, new byte[]{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}),
+                                                            0);
                  }
             }
 
