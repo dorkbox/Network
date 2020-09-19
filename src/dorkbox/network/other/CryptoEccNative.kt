@@ -1,10 +1,23 @@
 package dorkbox.network.other
 
 import java.math.BigInteger
-import java.security.*
+import java.security.GeneralSecurityException
+import java.security.KeyFactory
+import java.security.KeyPair
+import java.security.KeyPairGenerator
+import java.security.PrivateKey
+import java.security.SecureRandom
 import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
-import java.security.spec.*
+import java.security.spec.ECField
+import java.security.spec.ECFieldFp
+import java.security.spec.ECParameterSpec
+import java.security.spec.ECPoint
+import java.security.spec.ECPublicKeySpec
+import java.security.spec.EllipticCurve
+import java.security.spec.NamedParameterSpec
+import java.security.spec.PKCS8EncodedKeySpec
+import java.security.spec.X509EncodedKeySpec
 import javax.crypto.Cipher
 
 
@@ -12,7 +25,7 @@ import javax.crypto.Cipher
 /**
  *
  */
-object CryptoEccNative {
+private object CryptoEccNative {
     // see: https://openjdk.java.net/jeps/324
 
     const val curve25519 = "curve25519"
