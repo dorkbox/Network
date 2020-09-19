@@ -221,7 +221,6 @@ object AeronConfig {
     fun startDriver(config: Configuration,
                     type: Class<*> = AeronConfig::class.java,
                     logger: KLogger = KotlinLogging.logger("AeronConfig")): MediaDriver? {
-
         config.validate()
 
         if (config.context == null) {
@@ -269,7 +268,7 @@ object AeronConfig {
      * NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
      *   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
      */
-    internal fun stopDriver(mediaDriver: MediaDriver?, logger: KLogger = KotlinLogging.logger("AeronConfig")) {
+    internal suspend fun stopDriver(mediaDriver: MediaDriver?, logger: KLogger = KotlinLogging.logger("AeronConfig")) {
         if (mediaDriver == null) {
             return
         }
@@ -282,15 +281,19 @@ object AeronConfig {
 
         try {
             mediaDriver.close()
+
+            // on close, the publication CAN linger (in case a client goes away, and then comes back)
+            // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+            delay(5_000)
+
+
             (context.sharedThreadFactory() as NamedThreadFactory).group.destroy()
 
             // wait for the media driver to actually stop
             var count = 10
             while (count-- >= 0 && isRunning(context)) {
                 logger.warn { "Aeron Media driver still running. Waiting for it to stop. Trying $count more times." }
-                runBlocking {
-                    delay(context.driverTimeoutMs())
-                }
+                delay(context.driverTimeoutMs())
             }
         } catch (e: Exception) {
             logger.error("Error closing the media driver", e)

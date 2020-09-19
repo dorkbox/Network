@@ -123,7 +123,9 @@ class DisconnectReconnectTest : BaseTest() {
 
         waitForThreads()
 
-        AeronConfig.stopDriver(mediaDriver)
+        runBlocking {
+            AeronConfig.stopDriver(mediaDriver)
+        }
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)
