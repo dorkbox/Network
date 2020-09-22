@@ -15,7 +15,6 @@
  */
 package dorkbox.network.handshake
 
-import dorkbox.network.Configuration
 import dorkbox.network.aeron.MediaDriverConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
@@ -28,9 +27,7 @@ import io.aeron.logbuffer.Header
 import org.agrona.DirectBuffer
 import java.security.SecureRandom
 
-internal class ClientHandshake<CONNECTION: Connection>(private val config: Configuration,
-                                                       private val crypto: CryptoManagement,
-                                                       private val endPoint: EndPoint<CONNECTION>) {
+internal class ClientHandshake<CONNECTION: Connection>(private val crypto: CryptoManagement, private val endPoint: EndPoint<CONNECTION>) {
 
     // @Volatile is used BECAUSE suspension of coroutines can continue on a DIFFERENT thread. We want to make sure that thread visibility is
     // correct when this happens. There are no race-conditions to be wary of.
