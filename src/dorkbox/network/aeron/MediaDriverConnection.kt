@@ -304,8 +304,29 @@ class IpcMediaDriverConnection(override val streamId: Int,
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
-        val publication = aeron.addPublication(publicationUri.build(), streamId)
-        val subscription =  aeron.addSubscription(subscriptionUri.build(), streamIdSubscription)
+
+        // If we start/stop too quickly, we might have the aeron connectivity issues! Retry a few times.
+        var count = 10
+        while (count-- > 0) {
+            try {
+                publication = aeron.addPublication(publicationUri.build(), streamId)
+                break
+            } catch (e: Exception) {
+                logger.warn(e) { "Unable to add a publication to Aeron. Retrying $count more times..." }
+                delay(5_000)
+            }
+        }
+
+        count = 10
+        while (count-- > 0) {
+            try {
+                subscription = aeron.addSubscription(subscriptionUri.build(), streamIdSubscription)
+                break
+            } catch (e: Exception) {
+                logger.warn(e) { "Unable to add a publication to Aeron. Retrying $count more times..." }
+                delay(5000)
+            }
+        }
 
         var success = false
 
@@ -368,9 +389,31 @@ class IpcMediaDriverConnection(override val streamId: Int,
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
 
-        // NOTE: IPC doesn't have address bind issues if we start/stop too quickly
-        publication = aeron.addPublication(publicationUri.build(), streamId)
-        subscription = aeron.addSubscription(subscriptionUri.build(), streamIdSubscription)
+        // on close, the publication CAN linger (in case a client goes away, and then comes back)
+        // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+
+        // If we start/stop too quickly, we might have the aeron connectivity issues! Retry a few times.
+        var count = 10
+        while (count-- > 0) {
+            try {
+                publication = aeron.addPublication(publicationUri.build(), streamId)
+                break
+            } catch (e: Exception) {
+                logger.warn(e) { "Unable to add a publication to Aeron. Retrying $count more times..." }
+                delay(5_000)
+            }
+        }
+
+        count = 10
+        while (count-- > 0) {
+            try {
+                subscription = aeron.addSubscription(subscriptionUri.build(), streamIdSubscription)
+                break
+            } catch (e: Exception) {
+                logger.warn(e) { "Unable to add a publication to Aeron. Retrying $count more times..." }
+                delay(5000)
+            }
+        }
     }
 
     override fun clientInfo() : String {
