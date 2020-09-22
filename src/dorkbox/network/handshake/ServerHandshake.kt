@@ -137,11 +137,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                           clientAddressString: String,
                                           clientAddress: InetAddress): Boolean {
 
-        if (clientAddress.isLoopbackAddress) {
-            // we do not want to limit loopback addresses
-            return true
-        }
-
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
             if (server.connections.connectionCount() >= config.maxClientCount) {
@@ -357,7 +352,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             return
         }
 
-        if (!validateUdpConnectionInfo(server, handshakePublication, config, clientAddressString, clientAddress)) {
+        if (!clientAddress.isLoopbackAddress &&
+            !validateUdpConnectionInfo(server, handshakePublication, config, clientAddressString, clientAddress)) {
+            // we do not want to limit loopback addresses!
             return
         }
 
