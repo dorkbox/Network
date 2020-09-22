@@ -24,6 +24,7 @@ import dorkboxTest.network.rmi.cows.TestBabyCowImpl
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
 import dorkboxTest.network.rmi.multiJVM.TestClient.setup
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 
 /**
@@ -85,5 +86,9 @@ object TestServer {
         }
 
         server.bind()
+
+        runBlocking {
+            server.waitForClose()
+        }
     }
 }
