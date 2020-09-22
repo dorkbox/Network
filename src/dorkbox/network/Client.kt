@@ -125,6 +125,11 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                                         connectionTimeoutMS = connectionTimeoutMS,
                                         reliable = reliable)
 
+            IPv6.isPreferred -> connect(remoteAddress = Inet6Address.getAllByName(remoteAddress)[0],
+                                        connectionTimeoutMS = connectionTimeoutMS,
+                                        reliable = reliable)
+
+            // if there is no preference, then try to connect via IPv4
             else -> connect(remoteAddress = Inet4Address.getAllByName(remoteAddress)[0],
                             connectionTimeoutMS = connectionTimeoutMS,
                             reliable = reliable)
