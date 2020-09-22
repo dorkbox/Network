@@ -26,9 +26,9 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connectionType.ConnectionRule
+import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
-import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.TimeoutException
@@ -581,6 +581,15 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     suspend fun send(message: Any) {
         connections.forEach {
             it.send(message)
+        }
+    }
+
+    /**
+     * Execute the unit function against all existing connections
+     */
+    fun forEachConnection(function: (connection: CONNECTION) -> Unit) {
+        connections.forEach {
+            function(it)
         }
     }
 
