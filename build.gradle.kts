@@ -35,14 +35,14 @@ plugins {
     id("com.dorkbox.GradlePublish") version "1.8"
     id("com.dorkbox.GradleModuleInfo") version "1.1"
 
-    kotlin("jvm") version "1.4.0"
+    kotlin("jvm") version "1.4.10"
 }
 
 object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.0-beta6"
+    const val version = "5.0-beta7"
 
     // set as project.ext
     const val name = "Network"
@@ -201,7 +201,7 @@ dependencies {
 
 
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.29.0"
+    val aeronVer = "1.30.0"
     // REMOVE UdpChannel when ISSUE https://github.com/real-logic/aeron/issues/1057 is resolved! (hopefully in 1.30.0)
     implementation("io.aeron:aeron-client:$aeronVer")
     implementation("io.aeron:aeron-driver:$aeronVer")
@@ -228,7 +228,14 @@ dependencies {
     implementation("com.dorkbox:Annotations:3.1")
     implementation("com.dorkbox:MinLog-SLF4J:2.0")
     implementation("com.dorkbox:Utilities:1.8.2")
-    implementation("com.dorkbox:NetworkUtils:1.5")
+    implementation("com.dorkbox:NetworkUtils:2.0")
+
+    // really fast storage
+    // https://github.com/lmdbjava/lmdbjava
+    implementation("org.lmdbjava:lmdbjava:0.8.1")
+    // https://github.com/OpenHFT/Chronicle-Map
+    implementation("net.openhft:chronicle-map:3.20.3")
+
 
     // Caffeine High-throughput Timeout Cache
     // https://github.com/ben-manes/caffeine
@@ -237,10 +244,11 @@ dependencies {
         exclude("com.google.errorprone", "error_prone_annotations")
     }
 
-
     // https://github.com/MicroUtils/kotlin-logging
-    implementation("io.github.microutils:kotlin-logging:1.8.3")
+    implementation("io.github.microutils:kotlin-logging:2.0.3")
     implementation("org.slf4j:slf4j-api:1.7.30")
+
+
 
     testImplementation("junit:junit:4.13")
     testImplementation("ch.qos.logback:logback-classic:1.2.3")
