@@ -58,7 +58,7 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
             proxyObject = RmiManagerGlobal.createProxyObject(false,
                                                              connection,
                                                              serialization,
-                                                             rmiGlobalSupport.rmiResponseManager,
+                                                             rmiGlobalSupport.responseManager,
                                                              kryoId,
                                                              rmiId,
                                                              interfaceClass)

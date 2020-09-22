@@ -26,15 +26,14 @@ import dorkbox.network.rmi.messages.MethodRequest
 import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.serialization.Serialization
 import dorkbox.util.classes.ClassHelper
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
 
 internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
-                                                         actionDispatch: CoroutineScope,
-                                                         internal val serialization: Serialization) : RmiObjectCache(logger) {
+                                                         internal val responseManager: ResponseManager,
+                                                         private val serialization: Serialization) : RmiObjectCache(logger) {
 
     companion object {
         /**
@@ -55,7 +54,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
         internal fun createProxyObject(isGlobalObject: Boolean,
                                        connection: Connection,
                                        serialization: Serialization,
-                                       responseManager: RmiResponseManager,
+                                       responseManager: ResponseManager,
                                        kryoId: Int,
                                        rmiId: Int,
                                        interfaceClass: Class<*>): RemoteObject {
@@ -77,8 +76,6 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
             return Proxy.newProxyInstance(RmiManagerGlobal::class.java.classLoader, interfaces, proxyObject) as RemoteObject
         }
     }
-
-    val rmiResponseManager = RmiResponseManager(logger, actionDispatch)
 
     // this is used for all connection specific ones as well.
     private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
@@ -116,7 +113,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
     }
 
     suspend fun close() {
-        rmiResponseManager.close()
+        responseManager.close()
         remoteObjectCreationCallbacks.close()
     }
 
@@ -143,7 +140,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
         var proxyObject = connection.rmiConnectionSupport.getProxyObject(rmiId)
         if (proxyObject == null) {
             val kryoId = endPoint.serialization.getKryoIdForRmiClient(interfaceClass)
-            proxyObject = createProxyObject(isGlobal, connection, serialization, rmiResponseManager, kryoId, rmiId, interfaceClass)
+            proxyObject = createProxyObject(isGlobal, connection, serialization, responseManager, kryoId, rmiId, interfaceClass)
             connection.rmiConnectionSupport.saveProxyObject(rmiId, proxyObject)
         }
 
@@ -170,7 +167,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
         // so we can just instantly create the proxy object (or get the cached one). This MUST be an object that is saved for the connection
         var proxyObject = connection.rmiConnectionSupport.getProxyObject(objectId)
         if (proxyObject == null) {
-            proxyObject = createProxyObject(true, connection, serialization, rmiResponseManager, kryoId, objectId, interfaceClass)
+            proxyObject = createProxyObject(true, connection, serialization, responseManager, kryoId, objectId, interfaceClass)
             connection.rmiConnectionSupport.saveProxyObject(objectId, proxyObject)
         }
 
@@ -346,7 +343,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
             }
             is MethodResponse -> {
                 // notify the pending proxy requests that we have a response!
-                rmiResponseManager.onMessage(message)
+                responseManager.onRmiMessage(message)
             }
         }
     }

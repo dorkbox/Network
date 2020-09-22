@@ -50,7 +50,7 @@ internal class RmiClient(val isGlobal: Boolean,
                          val rmiObjectId: Int,
                          private val connection: Connection,
                          private val proxyString: String,
-                         private val responseManager: RmiResponseManager,
+                         private val responseManager: ResponseManager,
                          private val cachedMethods: Array<CachedMethod>) : InvocationHandler {
 
     companion object {
@@ -256,7 +256,7 @@ internal class RmiClient(val isGlobal: Boolean,
             return (suspendFunction as Function1<Continuation<Any?>, Any?>).invoke(Continuation(EmptyCoroutineContext) {
                 val any = it.getOrNull()
                 when (any) {
-                    RmiResponseManager.TIMEOUT_EXCEPTION -> {
+                    ResponseManager.TIMEOUT_EXCEPTION -> {
                         val fancyName = RmiUtils.makeFancyMethodName(method)
                         val exception = TimeoutException("Response timed out: $fancyName")
                         // from top down, clean up the coroutine stack
@@ -279,7 +279,7 @@ internal class RmiClient(val isGlobal: Boolean,
                 sendRequest(invokeMethod)
             }
             when (any) {
-                RmiResponseManager.TIMEOUT_EXCEPTION -> {
+                ResponseManager.TIMEOUT_EXCEPTION -> {
                     val fancyName = RmiUtils.makeFancyMethodName(method)
                     val exception = TimeoutException("Response timed out: $fancyName")
                     // from top down, clean up the coroutine stack

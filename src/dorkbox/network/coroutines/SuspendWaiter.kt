@@ -1,4 +1,4 @@
-package dorkbox.network.other.coroutines
+package dorkbox.network.coroutines
 
 import kotlinx.coroutines.channels.Channel
 

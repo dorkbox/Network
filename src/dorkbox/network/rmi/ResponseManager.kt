@@ -32,7 +32,7 @@ import kotlin.concurrent.write
  *
  * response ID's and the memory they hold will leak if the response never arrives!
  */
-internal class RmiResponseManager(private val logger: KLogger, private val actionDispatch: CoroutineScope) {
+internal class ResponseManager(private val logger: KLogger, private val actionDispatch: CoroutineScope) {
     companion object {
         val TIMEOUT_EXCEPTION = Exception()
         val ASYNC_WAITER = ResponseWaiter(RemoteObjectStorage.ASYNC_RMI) // this is never waited on, we just need this to optimize how we assigned waiters.
@@ -47,7 +47,7 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
     //   1 is reserved for ASYNC
     private val maxValuesInCache = 65535
     private val rmiWaitersInUse = atomic(0)
-    private val rmiWaiterCache = Channel<ResponseWaiter>(maxValuesInCache)
+    private val waiterCache = Channel<ResponseWaiter>(maxValuesInCache)
 
     private val pendingLock = ReentrantReadWriteLock()
     private val pending = arrayOfNulls<Any?>(maxValuesInCache+1) // +1 because it's possible to have the value 65535 in the cache
@@ -73,15 +73,17 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
         // populate the array of randomly assigned ID's + waiters. This can happen in a new thread
         actionDispatch.launch {
             for (it in ids) {
-                rmiWaiterCache.offer(ResponseWaiter(it))
+                waiterCache.offer(ResponseWaiter(it))
             }
         }
     }
 
 
-    // resume any pending remote object method invocations (if they are not async, or not manually waiting)
-    // async RMI will never get here!
-    suspend fun onMessage(message: MethodResponse) {
+    /**
+     * resume any pending remote object method invocations (if they are not async, or not manually waiting)
+     * NOTE: async RMI will never call this (because async doesn't return a response)
+     */
+    suspend fun onRmiMessage(message: MethodResponse) {
         val rmiId = RmiUtils.unpackUnsignedRight(message.packedId)
         val result = message.result
 
@@ -103,7 +105,7 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
     }
 
     /**
-     * gets the RmiWaiter (id + waiter).
+     * gets the ResponseWaiter (id + waiter) and prepares the pending response map
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
@@ -111,7 +113,7 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
         return if (isAsync) {
             ASYNC_WAITER
         } else {
-            val responseRmi = rmiWaiterCache.receive()
+            val responseRmi = waiterCache.receive()
             rmiWaitersInUse.getAndIncrement()
             logger.trace { "RMI count: ${rmiWaitersInUse.value}" }
 
@@ -185,7 +187,7 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
         }
 
         // always return the waiter to the cache
-        rmiWaiterCache.send(responseWaiter)
+        waiterCache.send(responseWaiter)
         rmiWaitersInUse.getAndDecrement()
 
         if (resultOrWaiter is ResponseWaiter) {
@@ -197,13 +199,81 @@ internal class RmiResponseManager(private val logger: KLogger, private val actio
         return resultOrWaiter
     }
 
+
+
+    ///////
+    ///////
+    //// Callback waiting/execution. This is part of this class only because we want to use the SAME RMI SYSTEM for other things,
+    ////    namely, being able to have an easier time setting up message responses
+    ///////
+    ///////
+
+
+
+
+
+    /**
+     * on response, runs the waiting callback
+     * NOTE: This uses the RMI-ID mechanism to know what the response ID is (the name is left alone)
+     */
+    suspend fun onCallbackMessage(message: MethodResponse) {
+        val rmiId = RmiUtils.unpackUnsignedRight(message.packedId)
+        val result = message.result
+
+        logger.trace { "RMI return: $rmiId" }
+
+        val previous = pendingLock.write {
+            val previous = pending[rmiId]
+            pending[rmiId] = result
+            previous
+        }
+
+        // if NULL, since either we don't exist (because we were async), or it was cancelled
+        if (previous is ResponseWaiter) {
+            logger.trace { "RMI valid-cancel: $rmiId" }
+
+            // this means we were NOT timed out! (we cannot be timed out here)
+            previous.doNotify()
+        }
+    }
+
+
+
+
+    /**
+     * gets the ResponseWaiter (id + waiter) and prepares the pending response map
+     *
+     * We ONLY care about the ID to get the correct response info.
+     * NOTE: This uses the RMI-ID mechanism to know what the response ID is (the name is left alone)
+     */
+    internal suspend fun prepForCallback(callback: (Any) -> Unit): ResponseWaiter {
+        val responseRmi = waiterCache.receive()
+        rmiWaitersInUse.getAndIncrement()
+        logger.trace { "RMI2 count: ${rmiWaitersInUse.value}" }
+
+
+        // this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
+        responseRmi.prep()
+
+        // assign the callback that will be notified when the return message is received
+        responseRmi.result = callback
+
+        pendingLock.write {
+            // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
+            pending[RmiUtils.unpackUnsignedRight(responseRmi.id)] = responseRmi
+        }
+
+        return responseRmi
+    }
+
+
     suspend fun close() {
         // wait for responses, or wait for timeouts!
         while (rmiWaitersInUse.value > 0) {
             delay(100)
         }
 
-        rmiWaiterCache.close()
+        waiterCache.close()
 
         pendingLock.write {
             pending.forEachIndexed { index, _ ->

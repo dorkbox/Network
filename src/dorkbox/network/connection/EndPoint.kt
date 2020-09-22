@@ -21,11 +21,12 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.CoroutineIdleStrategy
+import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.MessageNotRegisteredException
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ipFilter.IpFilterRule
-import dorkbox.network.other.coroutines.SuspendWaiter
 import dorkbox.network.ping.PingMessage
+import dorkbox.network.rmi.ResponseManager
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
 import dorkbox.network.rmi.messages.RmiMessage
@@ -103,7 +104,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
 
-    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
+    private val responseManager = ResponseManager(logger, actionDispatch)
+    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, responseManager, config.serialization)
 
     init {
         require(!config.previouslyUsed) { "${type.simpleName} configuration cannot be reused!" }

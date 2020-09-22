@@ -28,7 +28,7 @@ import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
-import dorkbox.network.other.coroutines.SuspendWaiter
+import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.TimeoutException
