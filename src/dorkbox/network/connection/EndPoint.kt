@@ -336,20 +336,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         }
     }
 
-    /**
-     * Runs an action for each connection
-     */
-    suspend fun forEachConnection(function: suspend (connection: CONNECTION) -> Unit) {
-        connections.forEach {
-            function(it)
-        }
-    }
-
-
     @Suppress("DuplicatedCode")
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     internal suspend fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage) {
-        // The sessionId is globally unique, and is assigned by the server.
+        // The handshake sessionId IS NOT globally unique
         logger.trace {
             "[${publication.sessionId()}] send HS: $message"
         }
@@ -419,7 +409,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
             return message
         } catch (e: Exception) {
-            // The sessionId is globally unique, and is assigned by the server.
+            // The handshake sessionId IS NOT globally unique
             val sessionId = header.sessionId()
 
             val exception = newException("[${sessionId}] Error de-serializing message", e)
@@ -452,7 +442,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 "[${header.sessionId()}] received: $message"
             }
         } catch (e: Exception) {
-            // The sessionId is globally unique, and is assigned by the server.
+            // The handshake sessionId IS NOT globally unique
             val sessionId = header.sessionId()
 
             val exception = newException("[${sessionId}] Error de-serializing message", e)
@@ -519,7 +509,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     // NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
     @Suppress("DuplicatedCode")
     internal suspend fun send(message: Any, publication: Publication, connection: Connection) {
-        // The sessionId is globally unique, and is assigned by the server.
+        // The handshake sessionId IS NOT globally unique
         logger.trace {
             "[${publication.sessionId()}] send: $message"
         }

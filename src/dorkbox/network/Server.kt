@@ -585,7 +585,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
     /**
-     * Execute the unit function against all existing connections
+     * Runs an action for each connection
      */
     fun forEachConnection(function: (connection: CONNECTION) -> Unit) {
         connections.forEach {
