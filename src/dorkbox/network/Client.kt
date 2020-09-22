@@ -543,14 +543,40 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
 
     /**
+     * Sends a message to the server, if the connection is closed for any reason, this returns false.
+     *
+     * If you want to be notified via an exception (instead of returning true/false), use [sendWithException]
+     *
+     * @return true if the message was sent successfully, false if the connection has been closed
+     */
+    suspend fun send(message: Any): Boolean {
+        val c = connection0
+
+        return if (c != null) {
+            c.send(message)
+            true
+        } else {
+            val exception = ClientException("Cannot send a message when there is no connection!")
+            listenerManager.notifyError(exception)
+            false
+        }
+    }
+
+    /**
+     * Sends a message to the server, if the connection is closed for any reason, this throws an exception.
+     *
+     * If you want to be notified if there is a problem without an exception getting thrown, use [send]
+     *
      * @throws ClientException when a message cannot be sent
      */
-    suspend fun send(message: Any) {
+    suspend fun sendWithException(message: Any) {
         val c = connection0
         if (c != null) {
             c.send(message)
         } else {
-            throw ClientException("Cannot send a message when there is no connection!")
+            val exception = ClientException("Cannot send a message when there is no connection!")
+            listenerManager.notifyError(exception)
+            throw exception
         }
     }
 
