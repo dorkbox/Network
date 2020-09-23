@@ -115,7 +115,7 @@ class MultipleServerTest : BaseTest() {
             }
         }
 
-        waitForThreads(30)
+        waitForThreads()
 
         didSend.forEach {
             assertTrue(it.get())

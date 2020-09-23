@@ -205,6 +205,8 @@ abstract class BaseTest {
     /**
      * Wait for network client/server threads to shutdown for the specified time.
      *
+     * it should close as close to naturally as possible, otherwise there are problems
+     *
      * @param stopAfterSeconds how many seconds to wait, the default is 2 minutes.
      */
     fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT) {
