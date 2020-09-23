@@ -50,7 +50,8 @@ internal class HandshakeMessage private constructor() {
     var registrationRmiIdData: IntArray? = null
 
     companion object {
-        const val INVALID = -1
+        const val INVALID = -2
+        const val RETRY = -1
         const val HELLO = 0
         const val HELLO_ACK = 1
         const val HELLO_ACK_IPC = 2
@@ -99,9 +100,17 @@ internal class HandshakeMessage private constructor() {
             return error
         }
 
+        fun retry(errorMessage: String): HandshakeMessage {
+            val error = HandshakeMessage()
+            error.state = RETRY
+            error.errorMessage = errorMessage
+            return error
+        }
+
         fun toStateString(state: Int) : String {
             return when(state) {
                 INVALID -> "INVALID"
+                RETRY -> "RETRY"
                 HELLO -> "HELLO"
                 HELLO_ACK -> "HELLO_ACK"
                 HELLO_ACK_IPC -> "HELLO_ACK_IPC"

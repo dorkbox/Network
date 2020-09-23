@@ -31,18 +31,14 @@ import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
-interface MediaDriverConnection : AutoCloseable {
-    val address: InetAddress?
-    val streamId: Int
-    val sessionId: Int
+abstract class MediaDriverConnection(val address: InetAddress?,
+                                     val publicationPort: Int, val subscriptionPort: Int,
+                                     val streamId: Int, val sessionId: Int,
+                                     val connectionTimeoutMS: Long, val isReliable: Boolean) : AutoCloseable {
 
-    val subscriptionPort: Int
-    val publicationPort: Int
+    lateinit var subscription: Subscription
+    lateinit var publication: Publication
 
-    val subscription: Subscription
-    val publication: Publication
-
-    val isReliable: Boolean
 
     suspend fun addSubscriptionWithRetry(aeron: Aeron, uri: String, streamId: Int, logger: KLogger): Subscription {
         // If we start/stop too quickly, we might have the address already in use! Retry a few times.
@@ -79,27 +75,25 @@ interface MediaDriverConnection : AutoCloseable {
     }
 
     @Throws(ClientTimedOutException::class)
-    suspend fun buildClient(aeron: Aeron, logger: KLogger)
-    suspend fun buildServer(aeron: Aeron, logger: KLogger)
+    abstract suspend fun buildClient(aeron: Aeron, logger: KLogger)
+    abstract suspend fun buildServer(aeron: Aeron, logger: KLogger)
 
-    fun clientInfo() : String
-    fun serverInfo() : String
+    abstract fun clientInfo() : String
+    abstract fun serverInfo() : String
 }
 
 /**
  * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER.
  * A connection timeout of 0, means to wait forever
  */
-class UdpMediaDriverConnection(override val address: InetAddress,
-                               override val publicationPort: Int,
-                               override val subscriptionPort: Int,
-                               override val streamId: Int,
-                               override val sessionId: Int,
-                               private val connectionTimeoutMS: Long = 0,
-                               override val isReliable: Boolean = true) : MediaDriverConnection {
-
-    override lateinit var subscription: Subscription
-    override lateinit var publication: Publication
+class UdpMediaDriverConnection(address: InetAddress,
+                               publicationPort: Int,
+                               subscriptionPort: Int,
+                               streamId: Int,
+                               sessionId: Int,
+                               connectionTimeoutMS: Long = 0,
+                               isReliable: Boolean = true) :
+        MediaDriverConnection(address, publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutMS, isReliable) {
 
     var success: Boolean = false
 
@@ -163,7 +157,7 @@ class UdpMediaDriverConnection(override val address: InetAddress,
         val timoutInNanos = TimeUnit.MILLISECONDS.toNanos(connectionTimeoutMS)
         var startTime = System.nanoTime()
         while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
-            if (subscription.isConnected && subscription.imageCount() > 0) {
+            if (subscription.isConnected) {
                 success = true
                 break
             }
@@ -198,8 +192,8 @@ class UdpMediaDriverConnection(override val address: InetAddress,
 
         this.success = true
 
-        this.subscription = subscription
         this.publication = publication
+        this.subscription = subscription
     }
 
     override suspend fun buildServer(aeron: Aeron, logger: KLogger) {
@@ -236,6 +230,8 @@ class UdpMediaDriverConnection(override val address: InetAddress,
     }
 
     override fun clientInfo(): String {
+        address!!
+
         return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
             "Connecting to ${IP.toString(address)} [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
@@ -251,7 +247,7 @@ class UdpMediaDriverConnection(override val address: InetAddress,
                 IPv4.WILDCARD.hostAddress + "/" + address.hostAddress
             }
         } else {
-            IP.toString(address)
+            IP.toString(address!!)
         }
 
         return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
@@ -275,20 +271,13 @@ class UdpMediaDriverConnection(override val address: InetAddress,
 
 /**
  * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
+ * NOTE: IPC connection will ALWAYS have a timeout of 1 second to connect. This is IPC, it should connect fast
  */
-class IpcMediaDriverConnection(override val streamId: Int,
+class IpcMediaDriverConnection(streamId: Int,
                                val streamIdSubscription: Int,
-                               override val sessionId: Int,
-                               private val connectionTimeoutMS: Long = 30_000,
-                               ) : MediaDriverConnection {
-
-    override val address: InetAddress? = null
-    override val isReliable = true
-    override val subscriptionPort = 0
-    override val publicationPort = 0
-
-    override lateinit var subscription: Subscription
-    override lateinit var publication: Publication
+                               sessionId: Int,
+                               ) :
+        MediaDriverConnection(null, 0, 0, streamId, sessionId, 1_000, true) {
 
     var success: Boolean = false
 
@@ -301,7 +290,11 @@ class IpcMediaDriverConnection(override val streamId: Int,
         return builder
     }
 
-    @Throws(ClientTimedOutException::class)
+    /**
+     * Set up the subscription + publication channels to the server
+     *
+     * @throws ClientTimedOutException if we cannot connect to the server in the designated time
+     */
     override suspend fun buildClient(aeron: Aeron, logger: KLogger) {
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
@@ -366,6 +359,9 @@ class IpcMediaDriverConnection(override val streamId: Int,
         this.subscription = subscription
     }
 
+    /**
+     * Setup the subscription + publication channels on the server
+     */
     override suspend fun buildServer(aeron: Aeron, logger: KLogger) {
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.

@@ -27,7 +27,9 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.coroutines.SuspendWaiter
+import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ServerException
+import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
@@ -167,6 +169,17 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     val sessionId = header.sessionId()
 
                     val message = readHandshakeMessage(buffer, offset, length, header)
+
+                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                    if (message !is HandshakeMessage) {
+                        listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from IPC not allowed! Invalid connection request"))
+
+                        actionDispatch.launch {
+                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                        }
+                        return@FragmentAssembler
+                    }
+
                     handshake.processIpcHandshakeMessageServer(this@Server,
                                                                publication,
                                                                sessionId,
@@ -234,6 +247,17 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
 
                     val message = readHandshakeMessage(buffer, offset, length, header)
+
+                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                    if (message !is HandshakeMessage) {
+                        listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"))
+
+                        actionDispatch.launch {
+                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                        }
+                        return@FragmentAssembler
+                    }
+
                     handshake.processUdpHandshakeMessageServer(this@Server,
                                                                publication,
                                                                sessionId,
@@ -304,6 +328,17 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
 
                     val message = readHandshakeMessage(buffer, offset, length, header)
+
+                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                    if (message !is HandshakeMessage) {
+                        listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"))
+
+                        actionDispatch.launch {
+                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                        }
+                        return@FragmentAssembler
+                    }
+
                     handshake.processUdpHandshakeMessageServer(this@Server,
                                                                publication,
                                                                sessionId,
@@ -374,6 +409,17 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
 
                 val message = readHandshakeMessage(buffer, offset, length, header)
+
+                // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                if (message !is HandshakeMessage) {
+                    listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"))
+
+                    actionDispatch.launch {
+                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                    }
+                    return@FragmentAssembler
+                }
+
                 handshake.processUdpHandshakeMessageServer(this@Server,
                                                            publication,
                                                            sessionId,
@@ -464,7 +510,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
                     // so we can modify this as we go
                     connections.forEach { connection ->
-                        if (connection.isClosed()) {
+                        if (connection.isClosedViaAeron()) {
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                             logger.debug { "[${connection.id}] connection expired" }
 

@@ -293,16 +293,59 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
-     * @return `true` if this connection has been closed
+     * Adds a function that will be called when a client/server "disconnects" with
+     * each other
+     *
+     * For a server, this function will be called for ALL clients.
+     *
+     * It is POSSIBLE to add a server CONNECTION only (ie, not global) listener
+     * (via connection.addListener), meaning that ONLY that listener attached to
+     * the connection is notified on that event (ie, admin type listeners)
      */
-    fun isClosed(): Boolean {
-        val hasNoImages = subscription.hasNoImages()
-        if (hasNoImages) {
+    suspend fun onDisconnect(function: suspend (Connection) -> Unit) {
+        // make sure we atomically create the listener manager, if necessary
+        listenerManager.getAndUpdate { origManager ->
+            origManager ?: ListenerManager()
+        }
+
+        listenerManager.value!!.onDisconnect(function)
+    }
+
+    /**
+     * Adds a function that will be called only for this connection, when a client/server receives a message
+     */
+    suspend fun <MESSAGE> onMessage(function: suspend (Connection, MESSAGE) -> Unit) {
+        // make sure we atomically create the listener manager, if necessary
+        listenerManager.getAndUpdate { origManager ->
+            origManager ?: ListenerManager()
+        }
+
+        listenerManager.value!!.onMessage(function)
+    }
+
+    /**
+     * Invoked when a message object was received from a remote peer.
+     *
+     * This is ALWAYS called on a new dispatch
+     */
+    internal suspend fun notifyOnMessage(message: Any): Boolean {
+        return listenerManager.value?.notifyOnMessage(this, message) ?: false
+    }
+
+    /**
+     * We must account for network blips. They blips will be recovered by aeron, but we want to make sure that we are actually
+     * disconnected for a set period of time before we start the close process for a connection
+     *
+     * @return `true` if this connection has been closed via aeron
+     */
+    fun isClosedViaAeron(): Boolean {
+        val isNotConnected = !subscription.isConnected && !publication.isConnected
+        if (isNotConnected) {
             // 1) connections take a little bit of time from polling -> connecting (because of how we poll connections before 'connecting' them).
             return System.nanoTime() - connectionInitTime >= TimeUnit.SECONDS.toNanos(1)
         }
 
-        return hasNoImages
+        return isNotConnected
     }
 
     /**
@@ -369,47 +412,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             postCloseAction()
         }
     }
-
-    /**
-     * Adds a function that will be called when a client/server "disconnects" with
-     * each other
-     *
-     * For a server, this function will be called for ALL clients.
-     *
-     * It is POSSIBLE to add a server CONNECTION only (ie, not global) listener
-     * (via connection.addListener), meaning that ONLY that listener attached to
-     * the connection is notified on that event (ie, admin type listeners)
-     */
-    suspend fun onDisconnect(function: suspend (Connection) -> Unit) {
-        // make sure we atomically create the listener manager, if necessary
-        listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager()
-        }
-
-        listenerManager.value!!.onDisconnect(function)
-    }
-
-    /**
-     * Adds a function that will be called only for this connection, when a client/server receives a message
-     */
-    suspend fun <MESSAGE> onMessage(function: suspend (Connection, MESSAGE) -> Unit) {
-        // make sure we atomically create the listener manager, if necessary
-        listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager()
-        }
-
-        listenerManager.value!!.onMessage(function)
-    }
-
-    /**
-     * Invoked when a message object was received from a remote peer.
-     *
-     * This is ALWAYS called on a new dispatch
-     */
-    internal suspend fun notifyOnMessage(message: Any): Boolean {
-        return listenerManager.value?.notifyOnMessage(this, message) ?: false
-    }
-
 
     //
     //

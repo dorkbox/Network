@@ -115,6 +115,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
      */
+    @Suppress("BlockingMethodInNonBlockingContext")
     suspend fun connect(remoteAddress: String,
                         connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
         when {
@@ -270,14 +271,12 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
 
 
-        val handshake = ClientHandshake(config, crypto, this)
+        val handshake = ClientHandshake(crypto, this)
         val handshakeConnection = if (autoChangeToIpc || canUseIPC) {
             // MAYBE the server doesn't have IPC enabled? If no, we need to connect via UDP instead
             val ipcConnection = IpcMediaDriverConnection(streamIdSubscription = ipcSubscriptionId,
                                                          streamId = ipcPublicationId,
-                                                         sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
-                                                        // "fast" connection timeout, since this is IPC
-                                                         connectionTimeoutMS = 1000)
+                                                         sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
 
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
             try {
@@ -356,14 +355,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             IpcMediaDriverConnection(sessionId = connectionInfo.sessionId,
                                      // NOTE: pub/sub must be switched!
                                      streamIdSubscription = connectionInfo.publicationPort,
-                                     streamId = connectionInfo.subscriptionPort,
-                                     connectionTimeoutMS = connectionTimeoutMS)
+                                     streamId = connectionInfo.subscriptionPort)
         }
         else {
             UdpMediaDriverConnection(address = handshakeConnection.address!!,
                                      // NOTE: pub/sub must be switched!
-                                     subscriptionPort = connectionInfo.publicationPort,
                                      publicationPort = connectionInfo.subscriptionPort,
+                                     subscriptionPort = connectionInfo.publicationPort,
                                      streamId = connectionInfo.streamId,
                                      sessionId = connectionInfo.sessionId,
                                      connectionTimeoutMS = connectionTimeoutMS,
@@ -473,7 +471,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 val pollIdleStrategy = config.pollIdleStrategy
 
                 while (!isShutdown()) {
-                    if (newConnection.isClosed()) {
+                    if (newConnection.isClosedViaAeron()) {
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                         logger.debug {"[${newConnection.id}] connection expired"}
 

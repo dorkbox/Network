@@ -30,11 +30,13 @@ import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.AllocationException
+import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.exceptions.ServerException
 import io.aeron.Aeron
 import io.aeron.Publication
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
@@ -42,6 +44,7 @@ import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 
@@ -78,21 +81,32 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     /**
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
-    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
     private fun validateMessageTypeAndDoPending(server: Server<CONNECTION>,
+                                                actionDispatch: CoroutineScope,
                                                 handshakePublication: Publication,
-                                                message: Any?,
+                                                message: HandshakeMessage,
                                                 sessionId: Int,
                                                 connectionString: String): Boolean {
 
-        // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-        if (message !is HandshakeMessage) {
-            listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $connectionString not allowed! Invalid connection request"))
-
-            runBlocking {
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection request"))
+        // check to see if this sessionId is ALREADY in use by another connection!
+        // this can happen if there are multiple connections from the SAME ip address (ie: localhost)
+        if (message.state == HandshakeMessage.HELLO) {
+            val hasExistingSessionId = pendingConnectionsLock.read {
+                pendingConnections.getIfPresent(sessionId) != null
             }
-            return false
+
+            if (hasExistingSessionId) {
+                // WHOOPS! tell the client that it needs to retry, since a DIFFERENT client has a handshake in progress with the same sessionId
+                listenerManager.notifyError(ClientException("[$sessionId] Connection from $connectionString had an in-use session ID! Telling client to retry."))
+
+                actionDispatch.launch {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.retry("Handshake already in progress for sessionID!"))
+                }
+                return false
+            }
+
+            return true
         }
 
         // check to see if this is a pending connection
@@ -112,11 +126,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 server.addConnection(pendingConnection)
 
                 // now tell the client we are done
-                runBlocking {
+                actionDispatch.launch {
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(sessionId))
-                }
-                server.actionDispatch.launch {
-                    // this must be THE ONLY THING in this class to use the action dispatch!
+
                     listenerManager.notifyConnect(pendingConnection)
                 }
             }
@@ -178,15 +190,14 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     fun processIpcHandshakeMessageServer(server: Server<CONNECTION>,
                                          handshakePublication: Publication,
                                          sessionId: Int,
-                                         message: Any?,
+                                         message: HandshakeMessage,
                                          aeron: Aeron) {
 
         val connectionString = "IPC"
 
-        if (!validateMessageTypeAndDoPending(server, handshakePublication, message, sessionId, connectionString)) {
+        if (!validateMessageTypeAndDoPending(server, server.actionDispatch, handshakePublication, message, sessionId, connectionString)) {
             return
         }
-        message as HandshakeMessage
 
         val serialization = config.serialization
 
@@ -242,11 +253,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
         // create a new connection. The session ID is encrypted.
         try {
-            // connection timeout of 0 doesn't matter. it is not used by the server
             val clientConnection = IpcMediaDriverConnection(streamId = connectionStreamPubId,
                                                             streamIdSubscription = connectionStreamSubId,
-                                                            sessionId = connectionSessionId,
-                                                            connectionTimeoutMS = 0)
+                                                            sessionId = connectionSessionId)
 
             // we have to construct how the connection will communicate!
             runBlocking {
@@ -332,14 +341,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                          sessionId: Int,
                                          clientAddressString: String,
                                          clientAddress: InetAddress,
-                                         message: Any?,
+                                         message: HandshakeMessage,
                                          aeron: Aeron,
                                          isIpv6Wildcard: Boolean) {
 
-        if (!validateMessageTypeAndDoPending(server, handshakePublication, message, sessionId, clientAddressString)) {
+        if (!validateMessageTypeAndDoPending(server, server.actionDispatch, handshakePublication, message, sessionId, clientAddressString)) {
             return
         }
-        message as HandshakeMessage
 
         val clientPublicKeyBytes = message.publicKey
         val validateRemoteAddress: PublicKeyValidationState

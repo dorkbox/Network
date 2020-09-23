@@ -43,6 +43,9 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
     private var connectionDone = false
 
     @Volatile
+    private var needToRetry = false
+
+    @Volatile
     private var failed: Exception? = null
 
     @Volatile
@@ -64,8 +67,15 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
             }
 
             // this is an error message
-            if (message.sessionId == 0) {
+            if (message.state == HandshakeMessage.INVALID) {
                 failed = ClientException("[$sessionId] error: ${message.errorMessage}")
+                return@FragmentAssembler
+            }
+
+            // this is an retry message
+            // this can happen if there are multiple connections from the SAME ip address (ie: localhost)
+            if (message.state == HandshakeMessage.RETRY) {
+                needToRetry = true
                 return@FragmentAssembler
             }
 
@@ -172,7 +182,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
         val subscription = handshakeConnection.subscription
         val pollIdleStrategy = endPoint.config.pollIdleStrategy
 
-        val startTime = System.currentTimeMillis()
+        var startTime = System.currentTimeMillis()
         while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
@@ -182,6 +192,13 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
                 // no longer necessary to hold this connection open
                 handshakeConnection.close()
                 throw failed as Exception
+            }
+
+            if (needToRetry) {
+                needToRetry = false
+
+                // start over with the timeout!
+                startTime = System.currentTimeMillis()
             }
 
             if (connectionDone) {
