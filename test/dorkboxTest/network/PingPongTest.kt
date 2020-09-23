@@ -67,7 +67,7 @@ class PingPongTest : BaseTest() {
                 fail = "Error during processing. $throwable"
             }
 
-            server.onConnect { connection ->
+            server.onConnect { _ ->
                 server.forEachConnection { connection ->
                     connection.logger.error("server connection: $connection")
                 }
@@ -87,9 +87,7 @@ class PingPongTest : BaseTest() {
 
 
             client.onConnect { connection ->
-                client.forEachConnection { connection ->
-                    connection.logger.error("client connection: $connection")
-                }
+                connection.logger.error("client connection: $connection")
 
                 fail = null
                 connection.send(data)
