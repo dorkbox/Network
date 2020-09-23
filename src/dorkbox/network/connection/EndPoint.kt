@@ -648,12 +648,14 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         if (shutdown.compareAndSet(expect = false, update = true)) {
             logger.info { "Shutting down..." }
 
-            aeron.close()
-            (aeron.context().threadFactory() as NamedThreadFactory).group.destroy()
+            try {
+                aeron.close()
+            } catch (e: Exception) {
+                logger.error("Error stopping aeron.", e)
+            }
 
             runBlocking {
                 AeronConfig.stopDriver(mediaDriver, logger)
-
                 connections.forEach {
                     it.close()
                 }
@@ -667,6 +669,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
 
             close0()
+
+            (aeron.context().threadFactory() as NamedThreadFactory).group.destroy()
 
             // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
             shutdownWaiter.cancel()
