@@ -30,7 +30,7 @@ plugins {
     java
 
     id("com.dorkbox.GradleUtils") version "1.12"
-    id("com.dorkbox.Licensing") version "2.5.1"
+    id("com.dorkbox.Licensing") version "2.5.2"
     id("com.dorkbox.VersionUpdate") version "2.0"
     id("com.dorkbox.GradlePublish") version "1.8"
     id("com.dorkbox.GradleModuleInfo") version "1.1"
@@ -232,9 +232,9 @@ dependencies {
 
     // really fast storage
     // https://github.com/lmdbjava/lmdbjava
-    implementation("org.lmdbjava:lmdbjava:0.8.1")
+    compileOnly("org.lmdbjava:lmdbjava:0.8.1")
     // https://github.com/OpenHFT/Chronicle-Map
-    implementation("net.openhft:chronicle-map:3.20.3")
+    compileOnly("net.openhft:chronicle-map:3.20.3")
 
 
     // Caffeine High-throughput Timeout Cache
