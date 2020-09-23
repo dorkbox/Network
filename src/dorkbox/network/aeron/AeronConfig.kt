@@ -32,6 +32,11 @@ object AeronConfig {
     const val IPC_HANDSHAKE_STREAM_ID_PUB: Int = 0x1337c0de
     const val IPC_HANDSHAKE_STREAM_ID_SUB: Int = 0x1337c0d3
 
+
+    // on close, the publication CAN linger (in case a client goes away, and then comes back)
+    // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+    private const val AERON_PUBLICATION_LINGER_TIMEOUT = 5_000L  // in MS
+
     private fun create(config: Configuration, logger: KLogger): MediaDriver.Context {
         /*
         * Linux
@@ -270,12 +275,16 @@ object AeronConfig {
      */
     internal suspend fun stopDriver(mediaDriver: MediaDriver?, logger: KLogger = KotlinLogging.logger("AeronConfig")) {
         if (mediaDriver == null) {
+            logger.debug { "No driver started for this instance. Not Stopping." }
             return
         }
 
         val context = mediaDriver.context()
+        logger.debug("Stopping driver at '${context.aeronDirectory()}'...")
+
         if (!isRunning(context)) {
             // not running
+            logger.debug { "Driver is not running at '${context.aeronDirectory()}' for this context. Not Stopping." }
             return
         }
 
@@ -284,20 +293,19 @@ object AeronConfig {
 
             // on close, the publication CAN linger (in case a client goes away, and then comes back)
             // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-            delay(5_000)
-
-
-            (context.sharedThreadFactory() as NamedThreadFactory).group.destroy()
+            delay(AERON_PUBLICATION_LINGER_TIMEOUT)
 
             // wait for the media driver to actually stop
             var count = 10
             while (count-- >= 0 && isRunning(context)) {
-                logger.warn { "Aeron Media driver still running. Waiting for it to stop. Trying $count more times." }
+                logger.warn { "Aeron Media driver at '${context.aeronDirectory()}' is still running. Waiting for it to stop. Trying $count more times." }
                 delay(context.driverTimeoutMs())
             }
         } catch (e: Exception) {
-            logger.error("Error closing the media driver", e)
+            logger.error("Error closing the media driver at '${context.aeronDirectory()}'", e)
         }
+
+        (context.sharedThreadFactory() as NamedThreadFactory).group.destroy()
 
         logger.debug { "Closed the media driver at '${context.aeronDirectory()}'" }
     }
