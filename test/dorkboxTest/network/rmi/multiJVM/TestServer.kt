@@ -36,6 +36,7 @@ object TestServer {
         setup()
 
         val configuration = BaseTest.serverConfig()
+        configuration.enableRemoteSignatureValidation = false
         configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
 
         configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
@@ -44,7 +45,6 @@ object TestServer {
 
         configuration.serialization.register(TestBabyCowImpl::class.java)
         configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
-        configuration.enableRemoteSignatureValidation = false
 
         val server = Server<Connection>(configuration)
 
