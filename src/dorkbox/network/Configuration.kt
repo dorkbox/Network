@@ -32,6 +32,7 @@ import io.aeron.driver.MediaDriver
 import io.aeron.driver.ThreadingMode
 import mu.KLogger
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class ServerConfiguration : dorkbox.network.Configuration() {
     /**
@@ -217,6 +218,35 @@ open class Configuration {
             require(context == null) { errorMessage }
             field = value
         }
+
+    /**
+     * How often to check if the underlying aeron publication/subscription is connected or not.
+     *
+     * Aeron Publications and Subscriptions are, and can be, constantly in flux (because of UDP!).
+     *
+     * Too low and it's wasting CPU cycles, too high and there will be some lag when detecting if a connection has been disconnected.
+     */
+    var connectionCheckIntervalInMS = TimeUnit.MILLISECONDS.toNanos(200)
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
+
+
+    /**
+     * How long a connection must be disconnected (via Aeron) before we actually consider it disconnected.
+     *
+     * Aeron Publications and Subscriptions are, and can be, constantly in flux (because of UDP!).
+     *
+     * Too low and it's likely to get false-positives, too high and there will be some lag when detecting if a connection has been disconnected.
+     */
+    var connectionExpirationTimoutInMS = TimeUnit.SECONDS.toNanos(2)
+        set(value) {
+            require(context == null) { errorMessage }
+            field = value
+        }
+
+
 
     /**
      * Allows the user to change how endpoint settings and public key information are saved.

@@ -99,9 +99,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     internal var postCloseAction: suspend () -> Unit = {}
 
     // only accessed on a single thread!
-    private val connectionInitTime = System.nanoTime()
+    private var connectionLastCheckTime = 0L
+    private var connectionTimeoutTime = 0L
 
     private val isClosed = atomic(false)
+
+
+    private val connectionCheckIntervalInMS = connectionParameters.endPoint.config.connectionCheckIntervalInMS
+    private val connectionExpirationTimoutInMS = connectionParameters.endPoint.config.connectionExpirationTimoutInMS
 
     /**
     //     * Returns the last calculated TCP return trip time, or -1 if or the [PingMessage] response has not yet been received.
@@ -339,13 +344,37 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * @return `true` if this connection has been closed via aeron
      */
     fun isClosedViaAeron(): Boolean {
-        val isNotConnected = !subscription.isConnected && !publication.isConnected
-        if (isNotConnected) {
-            // 1) connections take a little bit of time from polling -> connecting (because of how we poll connections before 'connecting' them).
-            return System.nanoTime() - connectionInitTime >= TimeUnit.SECONDS.toNanos(1)
+        // we ONLY want to actually, legit check, 1 time every XXX ms.
+        val now = System.nanoTime()
+
+        if (now - connectionLastCheckTime < connectionCheckIntervalInMS) {
+            // we haven't waited long enough for another check. always return false (true means we are closed)
+            return false
+        }
+        connectionLastCheckTime = now
+
+        // if there is a network blip, we want to make sure that it is a network blip for a while, instead of just once or twice.
+        if (subscription.isConnected && publication.isConnected) {
+            // reset connection timeout
+            connectionTimeoutTime = 0L
+
+            // we are still connected (true means we are closed)
+            return false
         }
 
-        return isNotConnected
+        //
+        // aeron is not connected
+        //
+
+        if (connectionTimeoutTime == 0L) {
+            connectionTimeoutTime = now
+        }
+
+        // make sure that our "isConnected" state lasts LONGER than the expiry timeout!
+
+        // 1) connections take a little bit of time from polling -> connecting (because of how we poll connections before 'connecting' them).
+        // 2) network blips happen. Aeron will recover, and we want to make sure that WE don't instantly DC
+        return now - connectionTimeoutTime >= connectionExpirationTimoutInMS
     }
 
     /**
