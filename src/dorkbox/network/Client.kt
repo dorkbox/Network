@@ -475,7 +475,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 while (!isShutdown()) {
                     if (newConnection.isClosed()) {
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                        logger.debug {"[${newConnection.id}] connection closed"}
+                        logger.debug {"[${newConnection.id}] connection expired"}
 
                         // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
                         newConnection.close()

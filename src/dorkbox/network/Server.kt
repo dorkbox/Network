@@ -466,7 +466,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     connections.forEach { connection ->
                         if (connection.isClosed()) {
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                            logger.debug { "[${connection.id}] connection closed" }
+                            logger.debug { "[${connection.id}] connection expired" }
 
                             // have to free up resources!
                             handshake.cleanup(connection)

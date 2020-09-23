@@ -317,7 +317,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (isClosed.compareAndSet(expect = false, update = true)) {
-            logger.info {"[$id] closed connection"}
+            logger.info {"[$id] connection closed"}
 
             subscription.close()
 
