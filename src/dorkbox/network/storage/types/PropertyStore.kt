@@ -113,14 +113,17 @@ class PropertyStore(val dbFile: File, val logger: KLogger): GenericStore {
      * Setting to NULL removes it
      */
     override operator fun set(key: Any, bytes: ByteArray?) {
-        if (bytes == null) {
-            loadedProps.remove(key)
+        val hasChanged = if (bytes == null) {
+            loadedProps.remove(key) != null
         } else {
-            loadedProps[key] = bytes
+            val prev = loadedProps.put(key, bytes)
+            !prev.contentEquals(bytes)
         }
 
         // every time we set info, we want to save it to disk (so the file on disk will ALWAYS be current, and so we can modify it as we choose)
-        save()
+        if (hasChanged) {
+            save()
+        }
     }
 
     fun save() {
