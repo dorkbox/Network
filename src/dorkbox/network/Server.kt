@@ -33,6 +33,7 @@ import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
+import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
 import io.aeron.Aeron
 import io.aeron.FragmentAssembler
@@ -146,10 +147,13 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         serialization.finishInit(type, ByteArray(0))
     }
 
-    override fun newException(message: String, cause: Throwable?): Throwable {
+    final override fun newException(message: String, cause: Throwable?): Throwable {
         return ServerException(message, cause)
     }
 
+    final override fun getRmiConnectionSupport(): RmiManagerConnections<CONNECTION> {
+        return super.getRmiConnectionSupport()
+    }
 
     private suspend fun getIpcPoller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
         val poller = if (config.enableIpc) {
@@ -642,7 +646,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     /**
      * Closes the server and all it's connections. After a close, you may call 'bind' again.
      */
-    override fun close0() {
+    final override fun close0() {
         // when we call close, it will shutdown the polling mechanism then wait for us to tell it to cleanup connections.
         //
         // Aeron + the Media Driver will have already been shutdown at this point.

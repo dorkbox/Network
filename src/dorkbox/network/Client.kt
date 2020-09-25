@@ -79,14 +79,14 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     private val lockStepForReconnect = atomic<SuspendWaiter?>(null)
 
-    override fun newException(message: String, cause: Throwable?): Throwable {
+    final override fun newException(message: String, cause: Throwable?): Throwable {
         return ClientException(message, cause)
     }
 
     /**
      * So the client class can get remote objects that are THE SAME OBJECT as if called from a connection
      */
-    override fun getRmiConnectionSupport(): RmiManagerConnections<CONNECTION> {
+    final override fun getRmiConnectionSupport(): RmiManagerConnections<CONNECTION> {
         return rmiConnectionSupport
     }
 
@@ -600,6 +600,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             settingsStore.removeRegisteredServerKey(address)
         }
     }
+
+    // no impl
+    final override fun close0() {}
+
 
     // RMI notes (in multiple places, copypasta, because this is confusing if not written down)
     //
