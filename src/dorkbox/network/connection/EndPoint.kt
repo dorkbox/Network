@@ -128,7 +128,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         handshakeKryo = serialization.initHandshakeKryo()
 
         // we have to be able to specify the property store
-        settingsStore = config.settingsStore.create(logger)
+        settingsStore = createSettingsStore(logger)
 
         crypto = CryptoManagement(logger, settingsStore, type, config)
 
@@ -171,6 +171,14 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             throw e
         }
     }
+
+    /**
+     * Open so users can override which/how a settings store is created
+     */
+    open fun createSettingsStore(logger: KLogger): SettingsStore {
+        return config.settingsStore.create(logger)
+    }
+
 
     internal fun initEndpointState(): Aeron {
         shutdown.getAndSet(false)
