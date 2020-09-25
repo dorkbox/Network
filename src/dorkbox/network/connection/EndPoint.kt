@@ -130,7 +130,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         // we have to be able to specify the property store
         settingsStore = createSettingsStore(logger)
 
-        crypto = CryptoManagement(logger, settingsStore, type, config)
+        crypto = CryptoManagement(logger, settingsStore, type, config.enableRemoteSignatureValidation)
 
         // Only starts the media driver if we are NOT already running!
         try {
