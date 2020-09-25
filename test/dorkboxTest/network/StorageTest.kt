@@ -15,22 +15,53 @@
  */
 package dorkboxTest.network
 
+import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import dorkbox.network.storage.SettingsStore
 import dorkbox.network.storage.types.ChronicleMapStore
 import dorkbox.network.storage.types.LmdbStore
 import dorkbox.network.storage.types.MemoryStore
 import dorkbox.network.storage.types.PropertyStore
+import kotlinx.coroutines.runBlocking
+import mu.KLogger
 import org.junit.Assert
 import org.junit.Test
 import java.io.File
 
 class StorageTest : BaseTest() {
     @Test
+    fun sharedStoreTest() {
+        // we want the server + client to have the SAME info
+        val store = MemoryStore.type().create()
+
+        val server = object : Server<Connection>(serverConfig()) {
+            override fun createSettingsStore(logger: KLogger): SettingsStore {
+                return store
+            }
+        }
+
+        val client = object: Client<Connection>(clientConfig()) {
+            override fun createSettingsStore(logger: KLogger): SettingsStore {
+                return store
+            }
+        }
+
+        server.bind()
+
+        runBlocking {
+            client.connect("localhost")
+            server.close()
+        }
+    }
+
+
+    @Test
     fun memoryTest() {
         val salt1 = MemoryStore.type().create().use { it.getSalt() }
-        val salt2 = Server<Connection>(serverConfig()).use { it.settingsStore.getSalt() }
-        val salt3 = Server<Connection>(serverConfig()).use { it.settingsStore.getSalt() }
+
+        val salt2 = Server<Connection>(serverConfig().apply { settingsStore = MemoryStore.type() }).use { it.settingsStore.getSalt() }
+        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = MemoryStore.type() }).use { it.settingsStore.getSalt() }
 
         Assert.assertFalse(salt1.contentEquals(salt2))
         Assert.assertFalse(salt1.contentEquals(salt3))
