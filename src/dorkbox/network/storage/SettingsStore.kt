@@ -62,7 +62,7 @@ class SettingsStore(val logger: KLogger, val store: GenericStore) : AutoCloseabl
      */
     fun getPrivateKey(): ByteArray? {
         checkAccess(CryptoManagement::class.java)
-        return store[local4Buffer]
+        return store[privateKey]
     }
 
     /**
