@@ -228,6 +228,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                                 ipcPublicationId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB,
                                 ipcSubscriptionId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB,
                                 connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
+
+        require(connectionTimeoutMS >= 0) { "connectionTimeoutMS '$connectionTimeoutMS' is invalid. It must be >0" }
+
         // this will exist ONLY if we are reconnecting via a "disconnect" callback
         lockStepForReconnect.value?.doWait()
 

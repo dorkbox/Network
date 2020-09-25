@@ -138,7 +138,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
         val pollIdleStrategy = endPoint.config.pollIdleStrategy
 
         val startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
+        while (connectionTimeoutMS == 0L || System.currentTimeMillis() - startTime < connectionTimeoutMS) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             pollCount = subscription.poll(handler, 1)
@@ -183,7 +183,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
         val pollIdleStrategy = endPoint.config.pollIdleStrategy
 
         var startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
+        while (connectionTimeoutMS == 0L || System.currentTimeMillis() - startTime < connectionTimeoutMS) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             pollCount = subscription.poll(handler, 1)
