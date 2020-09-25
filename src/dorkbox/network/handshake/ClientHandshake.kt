@@ -79,7 +79,6 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
                 return@FragmentAssembler
             }
 
-
             if (this@ClientHandshake.sessionId != message.sessionId) {
                 failed = ClientException("[$message.sessionId] ignored message intended for another client (mine is: " +
                                          "${this@ClientHandshake.sessionId})")
@@ -87,17 +86,25 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
             }
 
             // it must be the correct state
+            val registrationData = message.registrationData
+
             when (message.state) {
                 HandshakeMessage.HELLO_ACK -> {
                     // The message was intended for this client. Try to parse it as one of the available message types.
                     // this message is ENCRYPTED!
-                    connectionHelloInfo = crypto.decrypt(message.registrationData, message.publicKey)
+                    val serverPublicKeyBytes = message.publicKey
+
+                    if (registrationData != null && serverPublicKeyBytes != null) {
+                        connectionHelloInfo = crypto.decrypt(registrationData, serverPublicKeyBytes)
+                    } else {
+                        failed = ClientException("[$message.sessionId] ignored message without registration and/or public key info")
+                    }
                 }
                 HandshakeMessage.HELLO_ACK_IPC -> {
                     // The message was intended for this client. Try to parse it as one of the available message types.
                     // this message is ENCRYPTED!
                     val cryptInput = crypto.cryptInput
-                    cryptInput.buffer = message.registrationData
+                    cryptInput.buffer = registrationData
 
                     val sessId = cryptInput.readInt()
                     val streamSubId = cryptInput.readInt()
