@@ -35,6 +35,7 @@ import java.util.*
 /**
  *
  */
+@Suppress("UNUSED_ANONYMOUS_PARAMETER")
 object AeronClient {
 
     init {
