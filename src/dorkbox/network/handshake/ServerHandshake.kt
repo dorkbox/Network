@@ -127,7 +127,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
                 // now tell the client we are done
                 actionDispatch.launch {
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(sessionId))
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(message.oneTimeKey, sessionId))
 
                     listenerManager.notifyConnect(pendingConnection)
                 }
@@ -296,7 +296,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
 
             // The one-time pad is used to encrypt the session ID, so that ONLY the correct client knows what it is!
-            val successMessage = HandshakeMessage.helloAckIpcToClient(sessionId)
+            val successMessage = HandshakeMessage.helloAckIpcToClient(message.oneTimeKey, sessionId)
 
 
             // if necessary, we also send the kryo RMI id's that are registered as RMI on this endpoint, but maybe not on the other endpoint
@@ -468,7 +468,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
 
             // The one-time pad is used to encrypt the session ID, so that ONLY the correct client knows what it is!
-            val successMessage = HandshakeMessage.helloAckToClient(sessionId)
+            val successMessage = HandshakeMessage.helloAckToClient(message.oneTimeKey, sessionId)
 
 
             // Also send the RMI registration data to the client (so the client doesn't register anything)

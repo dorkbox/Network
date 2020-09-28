@@ -26,7 +26,7 @@ internal class HandshakeMessage private constructor() {
 
     // used to keep track and associate UDP/etc sessions. This is always defined by the server
     // a sessionId if '0', means we are still figuring it out.
-    var oneTimePad = 0
+    var oneTimeKey = 0
 
     // -1 means there is an error
     var state = INVALID
@@ -58,37 +58,41 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 3
         const val DONE_ACK = 4
 
-        fun helloFromClient(oneTimePad: Int, publicKey: ByteArray): HandshakeMessage {
+        fun helloFromClient(oneTimeKey: Int, publicKey: ByteArray): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
-            hello.oneTimePad = oneTimePad
+            hello.oneTimeKey = oneTimeKey
             hello.publicKey = publicKey
             return hello
         }
 
-        fun helloAckToClient(sessionId: Int): HandshakeMessage {
+        fun helloAckToClient(oneTimeKey: Int, sessionId: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO_ACK
-            hello.sessionId = sessionId // has to be the same as before (the client expects this)
+            hello.oneTimeKey = oneTimeKey // has to be the same as before (the client expects this)
+            hello.sessionId = sessionId
             return hello
         }
 
-        fun helloAckIpcToClient(sessionId: Int): HandshakeMessage {
+        fun helloAckIpcToClient(oneTimeKey: Int, sessionId: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO_ACK_IPC
-            hello.sessionId = sessionId // has to be the same as before (the client expects this)
+            hello.oneTimeKey = oneTimeKey // has to be the same as before (the client expects this)
+            hello.sessionId = sessionId
             return hello
         }
 
-        fun doneFromClient(): HandshakeMessage {
+        fun doneFromClient(oneTimeKey: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = DONE
+            hello.oneTimeKey = oneTimeKey
             return hello
         }
 
-        fun doneToClient(sessionId: Int): HandshakeMessage {
+        fun doneToClient(oneTimeKey: Int, sessionId: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = DONE_ACK
+            hello.oneTimeKey = oneTimeKey // has to be the same as before (the client expects this)
             hello.sessionId = sessionId
             return hello
         }
@@ -131,6 +135,6 @@ internal class HandshakeMessage private constructor() {
         }
 
 
-        return "HandshakeMessage($sessionId : oneTimePad=$oneTimePad $stateStr$errorMsg)"
+        return "HandshakeMessage($sessionId : oneTimePad=$oneTimeKey $stateStr$errorMsg)"
     }
 }

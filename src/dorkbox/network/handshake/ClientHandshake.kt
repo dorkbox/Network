@@ -25,16 +25,17 @@ import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
 import org.agrona.DirectBuffer
-import java.security.SecureRandom
 
 internal class ClientHandshake<CONNECTION: Connection>(private val crypto: CryptoManagement, private val endPoint: EndPoint<CONNECTION>) {
 
     // @Volatile is used BECAUSE suspension of coroutines can continue on a DIFFERENT thread. We want to make sure that thread visibility is
     // correct when this happens. There are no race-conditions to be wary of.
 
-    // a one-time key for connecting
-    private val oneTimePad = SecureRandom().nextInt()
     private val handler: FragmentHandler
+
+    // a one-time key for connecting
+    @Volatile
+    var oneTimeKey = 0
 
     @Volatile
     private var connectionHelloInfo: ClientConnectionInfo? = null
@@ -47,9 +48,6 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
 
     @Volatile
     private var failed: Exception? = null
-
-    @Volatile
-    private var sessionId: Int = 0
 
     init {
         // now we have a bi-directional connection with the server on the handshake "socket".
@@ -79,9 +77,8 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
                 return@FragmentAssembler
             }
 
-            if (this@ClientHandshake.sessionId != message.sessionId) {
-                failed = ClientException("[$message.sessionId] ignored message intended for another client (mine is: " +
-                                         "${this@ClientHandshake.sessionId})")
+            if (oneTimeKey != message.oneTimeKey) {
+                failed = ClientException("[$message.sessionId] ignored message (one-time key: ${message.oneTimeKey}) intended for another client (mine is: ${oneTimeKey})")
                 return@FragmentAssembler
             }
 
@@ -130,19 +127,21 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
 
     // called from the connect thread
     suspend fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {
-        val registrationMessage = HandshakeMessage.helloFromClient(oneTimePad, endPoint.settingsStore.getPublicKey()!!)
+        oneTimeKey = endPoint.crypto.secureRandom.nextInt()
+        val publicKey = endPoint.settingsStore.getPublicKey()!!
 
         // Send the one-time pad to the server.
-        endPoint.writeHandshakeMessage(handshakeConnection.publication, registrationMessage)
-        sessionId = handshakeConnection.publication.sessionId()
+        val publication = handshakeConnection.publication
+        val subscription = handshakeConnection.subscription
+        val pollIdleStrategy = endPoint.config.pollIdleStrategy
 
+
+        endPoint.writeHandshakeMessage(publication, HandshakeMessage.helloFromClient(oneTimeKey, publicKey))
 
         // block until we receive the connection information from the server
 
         failed = null
         var pollCount: Int
-        val subscription = handshakeConnection.subscription
-        val pollIdleStrategy = endPoint.config.pollIdleStrategy
 
         val startTime = System.currentTimeMillis()
         while (connectionTimeoutMS == 0L || System.currentTimeMillis() - startTime < connectionTimeoutMS) {
@@ -176,7 +175,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
 
     // called from the connect thread
     suspend fun handshakeDone(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long): Boolean {
-        val registrationMessage = HandshakeMessage.doneFromClient()
+        val registrationMessage = HandshakeMessage.doneFromClient(oneTimeKey)
 
         // Send the done message to the server.
         endPoint.writeHandshakeMessage(handshakeConnection.publication, registrationMessage)
