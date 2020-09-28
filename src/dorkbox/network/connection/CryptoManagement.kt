@@ -70,7 +70,7 @@ internal class CryptoManagement(val logger: KLogger,
     val privateKeyBytes: ByteArray
     val publicKeyBytes: ByteArray
 
-    private val secureRandom = SecureRandom(settingsStore.getSalt())
+    val secureRandom = SecureRandom(settingsStore.getSalt())
 
     private val iv = ByteArray(GCM_IV_LENGTH_BYTES)
     val cryptOutput = AeronOutput()
