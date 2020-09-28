@@ -53,8 +53,87 @@ class MultipleServerTest : BaseTest() {
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun multipleServers() {
+    fun multipleUDP() {
         val portOffset = 2
+        received.set(0)
+
+        var serverAeronDir: File? = null
+        val didReceive = mutableListOf<AtomicBoolean>()
+
+        for (count in 0 until total) {
+            didReceive.add(AtomicBoolean())
+            val offset = count * portOffset
+
+            val configuration = serverConfig()
+            configuration.subscriptionPort += offset
+            configuration.publicationPort += offset
+            configuration.aeronDirectory = serverAeronDir
+            configuration.enableIpc = false
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+
+            server.onMessage<String>{ connection, message ->
+                if (message != "client_$count") {
+                    Assert.fail()
+                }
+
+                didReceive[count].set(true)
+                if (received.incrementAndGet() == total) {
+                    connection.logger.error("Done, stopping endpoints")
+                    stopEndPoints()
+                }
+            }
+
+            server.bind()
+
+            serverAeronDir = File(configuration.aeronDirectory.toString() + count)
+        }
+
+        var clientAeronDir: File? = null
+        val didSend = mutableListOf<AtomicBoolean>()
+
+        for (count in 0 until total) {
+            didSend.add(AtomicBoolean())
+            val offset = count * portOffset
+
+            val configuration = clientConfig()
+            configuration.subscriptionPort += offset
+            configuration.publicationPort += offset
+            configuration.aeronDirectory = clientAeronDir
+            configuration.enableIpc = false
+
+
+            val client: Client<Connection> = Client(configuration)
+            addEndPoint(client)
+
+            clientAeronDir = File(configuration.aeronDirectory.toString() + count)
+
+            client.onConnect { connection ->
+                didSend[count].set(true)
+                connection.send("client_$count")
+            }
+
+            runBlocking {
+                client.connect(LOOPBACK)
+            }
+        }
+
+        waitForThreads()
+
+        didSend.forEach {
+            assertTrue(it.get())
+        }
+        didReceive.forEach {
+            assertTrue(it.get())
+        }
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun multipleIPC() {
+        val portOffset = 2
+        received.set(0)
 
         var serverAeronDir: File? = null
         val didReceive = mutableListOf<AtomicBoolean>()
