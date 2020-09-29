@@ -126,33 +126,15 @@ internal class RmiClient(val isGlobal: Boolean,
             val returnType = method.returnType
             if (returnType.isPrimitive) {
                 return when (returnType) {
-                    Int::class.javaPrimitiveType -> {
-                        0
-                    }
-                    Boolean::class.javaPrimitiveType -> {
-                        java.lang.Boolean.FALSE
-                    }
-                    Float::class.javaPrimitiveType -> {
-                        0.0f
-                    }
-                    Char::class.javaPrimitiveType -> {
-                        0.toChar()
-                    }
-                    Long::class.javaPrimitiveType -> {
-                        0L
-                    }
-                    Short::class.javaPrimitiveType -> {
-                        0.toShort()
-                    }
-                    Byte::class.javaPrimitiveType -> {
-                        0.toByte()
-                    }
-                    Double::class.javaPrimitiveType -> {
-                        0.0
-                    }
-                    else -> {
-                        null
-                    }
+                    Boolean::class.javaPrimitiveType -> java.lang.Boolean.FALSE
+                    Int::class.javaPrimitiveType    -> 0
+                    Float::class.javaPrimitiveType  -> 0.0f
+                    Char::class.javaPrimitiveType   -> 0.toChar()
+                    Long::class.javaPrimitiveType   -> 0L
+                    Short::class.javaPrimitiveType  -> 0.toShort()
+                    Byte::class.javaPrimitiveType   -> 0.toByte()
+                    Double::class.javaPrimitiveType -> 0.0
+                    else -> null
                 }
             }
             return null
