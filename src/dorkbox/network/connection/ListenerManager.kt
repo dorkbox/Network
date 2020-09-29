@@ -38,6 +38,16 @@ internal class ListenerManager<CONNECTION: Connection> {
         val LOAD_FACTOR = 0.8f
 
         /**
+         * Remove from the stacktrace EVERYTHING except the message. This is for propagating internal errors
+         *
+         * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
+         */
+        fun noStackTrace(throwable: Throwable) {
+            // keep just one, since it's a stack frame INSIDE our network library, and we need that!
+            throwable.stackTrace = throwable.stackTrace.copyOfRange(0, 1)
+        }
+
+        /**
          * Remove from the stacktrace (going in reverse), kotlin coroutine info + dorkbox network call stack.
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.

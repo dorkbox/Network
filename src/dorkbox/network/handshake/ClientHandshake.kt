@@ -19,6 +19,7 @@ import dorkbox.network.aeron.MediaDriverConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.FragmentAssembler
@@ -55,18 +56,21 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
             val message = endPoint.readHandshakeMessage(buffer, offset, length, header)
-
             val sessionId = header.sessionId()
 
             // it must be a registration message
             if (message !is HandshakeMessage) {
-                failed = ClientException("[$sessionId] server returned unrecognized message: $message")
+                val exception = ClientException("[$sessionId] cancelled handshake for unrecognized message: $message")
+                ListenerManager.noStackTrace(exception)
+                failed = exception
                 return@FragmentAssembler
             }
 
             // this is an error message
             if (message.state == HandshakeMessage.INVALID) {
-                failed = ClientException("[$sessionId] error: ${message.errorMessage}")
+                val exception = ClientException("[$sessionId] cancelled handshake for error: ${message.errorMessage}")
+                ListenerManager.noStackTrace(exception)
+                failed = exception
                 return@FragmentAssembler
             }
 
@@ -78,13 +82,14 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
             }
 
             if (oneTimeKey != message.oneTimeKey) {
-                failed = ClientException("[$message.sessionId] ignored message (one-time key: ${message.oneTimeKey}) intended for another client (mine is: ${oneTimeKey})")
+                val exception = ClientException("[$message.sessionId] ignored message (one-time key: ${message.oneTimeKey}) intended for another client (mine is: ${oneTimeKey})")
+                ListenerManager.noStackTrace(exception)
+                endPoint.listenerManager.notifyError(exception)
                 return@FragmentAssembler
             }
 
             // it must be the correct state
             val registrationData = message.registrationData
-
             when (message.state) {
                 HandshakeMessage.HELLO_ACK -> {
                     // The message was intended for this client. Try to parse it as one of the available message types.
@@ -94,7 +99,9 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
                     if (registrationData != null && serverPublicKeyBytes != null) {
                         connectionHelloInfo = crypto.decrypt(registrationData, serverPublicKeyBytes)
                     } else {
-                        failed = ClientException("[$message.sessionId] ignored message without registration and/or public key info")
+                        val exception = ClientException("[$message.sessionId] canceled handshake for message without registration and/or public key info")
+                        ListenerManager.noStackTrace(exception)
+                        failed = exception
                     }
                 }
                 HandshakeMessage.HELLO_ACK_IPC -> {
@@ -119,7 +126,9 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
                     connectionDone = true
                 }
                 else -> {
-                    failed = ClientException("[$sessionId] ignored message that is ${HandshakeMessage.toStateString(message.state)}")
+                    val exception = ClientException("[$sessionId] cancelled handshake for message that is ${HandshakeMessage.toStateString(message.state)}")
+                    ListenerManager.noStackTrace(exception)
+                    failed = exception
                 }
             }
         }
@@ -127,6 +136,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
 
     // called from the connect thread
     suspend fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {
+        failed = null
         oneTimeKey = endPoint.crypto.secureRandom.nextInt()
         val publicKey = endPoint.settingsStore.getPublicKey()!!
 
@@ -136,11 +146,10 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
         val pollIdleStrategy = endPoint.config.pollIdleStrategy
 
 
+
         endPoint.writeHandshakeMessage(publication, HandshakeMessage.helloFromClient(oneTimeKey, publicKey))
 
         // block until we receive the connection information from the server
-
-        failed = null
         var pollCount: Int
 
         val startTime = System.currentTimeMillis()
