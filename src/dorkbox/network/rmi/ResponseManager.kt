@@ -35,7 +35,6 @@ import kotlin.concurrent.write
 internal class ResponseManager(private val logger: KLogger, private val actionDispatch: CoroutineScope) {
     companion object {
         val TIMEOUT_EXCEPTION = Exception()
-        val ASYNC_WAITER = ResponseWaiter(RemoteObjectStorage.ASYNC_RMI) // this is never waited on, we just need this to optimize how we assigned waiters.
     }
 
 
@@ -109,24 +108,20 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
-    internal suspend fun prep(isAsync: Boolean): ResponseWaiter {
-        return if (isAsync) {
-            ASYNC_WAITER
-        } else {
-            val responseRmi = waiterCache.receive()
-            rmiWaitersInUse.getAndIncrement()
-            logger.trace { "RMI count: ${rmiWaitersInUse.value}" }
+    internal suspend fun prep(): ResponseWaiter {
+        val responseRmi = waiterCache.receive()
+        rmiWaitersInUse.getAndIncrement()
+        logger.trace { "RMI count: ${rmiWaitersInUse.value}" }
 
-            // this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
-            responseRmi.prep()
+        // this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
+        responseRmi.prep()
 
-            pendingLock.write {
-                // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
-                pending[RmiUtils.unpackUnsignedRight(responseRmi.id)] = responseRmi
-            }
-
-            responseRmi
+        pendingLock.write {
+            // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
+            pending[RmiUtils.unpackUnsignedRight(responseRmi.id)] = responseRmi
         }
+
+        return responseRmi
     }
 
     /**

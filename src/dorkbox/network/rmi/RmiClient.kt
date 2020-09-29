@@ -99,22 +99,23 @@ internal class RmiClient(val isGlobal: Boolean,
         // 'timeout > 0' -> WAIT w/ TIMEOUT
         // 'timeout == 0' -> WAIT FOREVER
 
-
-        // If we are async, we ignore the response....
-        // The response, even if there is NOT one (ie: not void) will always return a thing (so our code excution is in lockstep
-        val rmiWaiter = responseManager.prep(isAsync)
-
         invokeMethod.isGlobal = isGlobal
-        invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, rmiWaiter.id)
 
+        if (isAsync) {
+            // If we are async, we ignore the response....
 
-        connection.send(invokeMethod)
+            invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, RemoteObjectStorage.ASYNC_RMI)
 
-        // if we are async, then this will immediately return
-        return if (isAsync) {
-            null
+            connection.send(invokeMethod)
+            return null
         } else {
-            responseManager.waitForReply(rmiWaiter, timeoutMillis)
+            // The response, even if there is NOT one (ie: not void) will always return a thing (so our code execution is in lockstep
+            val rmiWaiter = responseManager.prep()
+            invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, rmiWaiter.id)
+
+            connection.send(invokeMethod)
+
+            return responseManager.waitForReply(rmiWaiter, timeoutMillis)
         }
     }
 
