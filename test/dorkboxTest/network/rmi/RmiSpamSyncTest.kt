@@ -62,7 +62,7 @@ class RmiSpamSyncTest : BaseTest() {
         val server: Server<Connection>
 
         val mod = 400L
-        val totalRuns = 1_000
+        val totalRuns = 1_000L
 
         run {
             val configuration = serverConfig()
@@ -104,7 +104,7 @@ class RmiSpamSyncTest : BaseTest() {
                     }
 
                     try {
-                        remoteObject.setOther(i.toLong())
+                        remoteObject.setOther(i)
                     } catch (e: Exception) {
                         connection.logger.error("Timeout when calling RMI method")
                         e.printStackTrace()
