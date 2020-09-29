@@ -125,6 +125,10 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
     }
 
     /**
+     * We only wait for a reply if we are SYNC.
+     *
+     * ASYNC does not send a response
+     *
      * @return the result (can be null) or timeout exception
      */
     suspend fun waitForReply(responseWaiter: ResponseWaiter, timeoutMillis: Long): Any? {
@@ -134,9 +138,9 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
             "RMI waiting: $rmiId"
         }
 
-        // NOTE: we ALWAYS send a response from the remote end.
+        // NOTE: we ALWAYS send a response from the remote end (except when async).
         //
-        // 'async' -> DO NOT WAIT
+        // 'async' -> DO NOT WAIT (no response)
         // 'timeout > 0' -> WAIT w/ TIMEOUT
         // 'timeout == 0' -> WAIT FOREVER
         if (timeoutMillis > 0) {

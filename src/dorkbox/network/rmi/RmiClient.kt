@@ -93,9 +93,9 @@ internal class RmiClient(val isGlobal: Boolean,
         // response (even if it is a void response). This simplifies our response mask, and lets us use more bits for storing the
         // response ID
 
-        // NOTE: we ALWAYS send a response from the remote end.
+        // NOTE: we ALWAYS send a response from the remote end (except when async).
         //
-        // 'async' -> DO NOT WAIT
+        // 'async' -> DO NOT WAIT (no response)
         // 'timeout > 0' -> WAIT w/ TIMEOUT
         // 'timeout == 0' -> WAIT FOREVER
 
