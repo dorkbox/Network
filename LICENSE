@@ -39,6 +39,24 @@
        Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
        See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
+     - LMDB for Java - LMDB is an ordered, embedded, durable, key-value store which uses B+ Trees.
+       [The Apache Software License, Version 2.0]
+       https://github.com/lmdbjava/lmdbjava
+       Copyright 2020
+         The LmdbJava Open Source Project
+
+       Extra license information
+         - LMDB - 
+           [The OpenLDAP Public License]
+           https://symas.com/lmdb/
+             Symas Corporation
+
+     - Chronicle Map - Chronicle Map is a super-fast, in-memory, non-blocking, key-value store
+       [The Apache Software License, Version 2.0]
+       https://github.com/OpenHFT/Chronicle-Map
+       Copyright 2020
+         Chronicle Map Contributors
+
      - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
        [The Apache Software License, Version 2.0]
        https://github.com/Kotlin/kotlinx.coroutines
@@ -79,14 +97,6 @@
        Copyright 2020
          Martin Grotzke
          Rafael Winterhalter
-
-     - LZ4 and XXhash - LZ4 compression for Java, based on Yann Collet's work
-       [The Apache Software License, Version 2.0]
-       https://github.com/jpountz/lz4-java
-       http://code.google.com/p/lz4/
-       Copyright 2020
-         Yann Collet
-         Adrien Grand
 
      - Conversant Disruptor - Disruptor is the highest performing intra-thread transfer mechanism available in Java.
        [The Apache Software License, Version 2.0]
