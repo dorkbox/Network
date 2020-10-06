@@ -119,9 +119,7 @@ class RmiSpamAsyncTest : BaseTest() {
         }
 
         waitForThreads()
-        Assert.assertEquals(totalRuns.toLong(), counter.get())
-        client.logger.error("kryos generated: ${client.config.serialization.getInitializedKryoCount()}")
-        server.logger.error("kryos generated: ${server.config.serialization.getInitializedKryoCount()}")
+        Assert.assertEquals(totalRuns, counter.get())
     }
 
     private interface TestObject {

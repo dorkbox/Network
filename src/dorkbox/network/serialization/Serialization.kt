@@ -15,7 +15,6 @@
  */
 package dorkbox.network.serialization
 
-import com.conversantmedia.util.concurrent.MultithreadConcurrentQueue
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.SerializerFactory
@@ -37,6 +36,9 @@ import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.rmi.messages.MethodResponseSerializer
 import dorkbox.network.rmi.messages.RmiClientSerializer
 import dorkbox.network.rmi.messages.RmiServerSerializer
+import dorkbox.objectPool.Pool
+import dorkbox.objectPool.ObjectPool
+import dorkbox.objectPool.PoolObject
 import dorkbox.os.OS
 import dorkbox.util.serialization.SerializationDefaults
 import kotlinx.atomicfu.atomic
@@ -85,7 +87,6 @@ open class Serialization(private val references: Boolean = true, private val fac
     private lateinit var logger: KLogger
 
     private var initialized = atomic(false)
-    private val initializedKryoCount = atomic(0)
 
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class)
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
@@ -118,12 +119,17 @@ open class Serialization(private val references: Boolean = true, private val fac
     // NOTE: These following can ONLY be called on a single thread!
     private var readKryo = initGlobalKryo()
 
-    private var kryoPoolSize = 16
+    private val kryoPool: Pool<KryoExtra>
 
-    val kryoInUse = atomic(0)
+    init {
+        val poolObject = object : PoolObject<KryoExtra>() {
+            override fun newInstance(): KryoExtra {
+                return initKryo()
+            }
+        }
 
-    @Volatile
-    private var kryoPool = MultithreadConcurrentQueue<KryoExtra>(kryoPoolSize)
+        kryoPool = ObjectPool.nonBlocking(poolObject)
+    }
 
 
     /**
@@ -334,7 +340,6 @@ open class Serialization(private val references: Boolean = true, private val fac
      * called as the first thing inside when initializing the classesToRegister
      */
     private fun initKryo(): KryoExtra {
-        initializedKryoCount.getAndIncrement()
         val kryo = KryoExtra()
 
         kryo.instantiatorStrategy = instantiatorStrategy
@@ -611,66 +616,17 @@ open class Serialization(private val references: Boolean = true, private val fac
     }
 
     /**
-     * @return The number of kryo instances created. This does not reflect the size of the pool, just the number of
-     * existing kryo instances.
-     *
-     * If there are more kryo instances than the pool size, they will end up on the heap and will contribute to GC pauses.
-     */
-    fun getInitializedKryoCount(): Int {
-        return initializedKryoCount.value
-    }
-
-    /**
-     * @return The number of kryo instances in use.
-     */
-    fun getInUseKryoCount(): Int {
-        return kryoInUse.value
-    }
-
-    /**
      * @return takes a kryo instance from the pool, or creates one if the pool was empty
      */
     fun takeKryo(): KryoExtra {
-        kryoInUse.getAndIncrement()
-
-        // ALWAYS get as many as needed. We recycle them (with an auto-growing pool) to prevent too many getting created
-        return kryoPool.poll() ?: initKryo()
+        return kryoPool.take()
     }
 
     /**
      * Returns a kryo instance to the pool for re-use later on
      */
     fun returnKryo(kryo: KryoExtra) {
-        val kryoCount = kryoInUse.getAndDecrement()
-        if (kryoCount > kryoPoolSize) {
-            // this is CLEARLY a problem, as we have more kryos in use that our pool can support.
-            // This happens when we send messages REALLY fast.
-            //
-            // We fix this by increasing the size of the pool, so kryos aren't thrown away (and create a GC hit)
-
-            synchronized(kryoInUse) {
-                // we have a double check here on purpose. only 1 will work
-                if (kryoCount > kryoPoolSize) {
-                    val oldPool = kryoPool
-                    val oldSize = kryoPoolSize
-                    val newSize = kryoPoolSize * 2
-
-                    kryoPoolSize = newSize
-                    kryoPool = MultithreadConcurrentQueue<KryoExtra>(kryoPoolSize)
-
-
-                    // take all of the old kryos and put them in the new one
-                    val array = arrayOfNulls<KryoExtra>(oldSize)
-                    val count = oldPool.remove(array)
-
-                    for (i in 0 until count) {
-                        kryoPool.offer(array[i])
-                    }
-                }
-            }
-        }
-
-        kryoPool.offer(kryo)
+        kryoPool.put(kryo)
     }
 
     /**

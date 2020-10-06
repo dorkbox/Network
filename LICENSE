@@ -579,3 +579,36 @@
                    [Public Domain, per Creative Commons CC0]
                    https://github.com/str4d/ed25519-java
                      https://github.com/str4d
+
+     - ObjectPool - Fast, lightweight, and compatible blocking/non-blocking/soft-reference object pool for Java 6+
+       [The Apache Software License, Version 2.0]
+       https://git.dorkbox.com/dorkbox/ObjectPool
+       Copyright 2020
+         Dorkbox LLC
+
+       Extra license information
+         - Kotlin - 
+           [The Apache Software License, Version 2.0]
+           https://github.com/JetBrains/kotlin
+           Copyright 2020
+             JetBrains s.r.o. and Kotlin Programming Language contributors
+           Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+           See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+         - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
+           [The Apache Software License, Version 2.0]
+           https://github.com/Kotlin/kotlinx.coroutines
+           Copyright 2020
+             JetBrains s.r.o.
+
+         - SLF4J - Simple facade or abstraction for various logging frameworks
+           [MIT License]
+           http://www.slf4j.org
+           Copyright 2020
+             QOS.ch
+
+         - Conversant Disruptor - Disruptor is the highest performing intra-thread transfer mechanism available in Java.
+           [The Apache Software License, Version 2.0]
+           https://github.com/conversant/disruptor
+           Copyright 2020
+             Conversant, Inc

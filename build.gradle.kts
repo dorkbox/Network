@@ -42,7 +42,7 @@ object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.0-beta7"
+    const val version = "5.0"
 
     // set as project.ext
     const val name = "Network"
@@ -71,6 +71,8 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) { kotlinOptions ->
 // ratelimiter, "other" package
 // ping, rest of unit tests
 // getConnectionUpgradeType
+// ability to send with a function callback (using RMI waiter type stuff for callbacks)
+// use conscrypt?!
 
 // java 14 is faster with aeron!
 // NOTE: now using aeron instead of netty
@@ -213,13 +215,13 @@ dependencies {
     implementation("de.javakaffee:kryo-serializers:0.45")
 
     // https://github.com/jpountz/lz4-java
-    implementation("net.jpountz.lz4:lz4:1.3.0")
+//    implementation("net.jpountz.lz4:lz4:1.3.0")
 
     // this is NOT the same thing as LMAX disruptor.
     // This is just a really fast queue (where LMAX is a fast queue + other things w/ a difficult DSL)
     // https://github.com/conversant/disruptor_benchmark
     // https://www.youtube.com/watch?v=jVMOgQgYzWU
-    implementation("com.conversantmedia:disruptor:1.2.17")
+    implementation("com.conversantmedia:disruptor:1.2.19")
 
     // https://github.com/jhalterman/typetools
     implementation("net.jodah:typetools:0.6.2")
@@ -227,14 +229,15 @@ dependencies {
     // https://github.com/dorkbox
     implementation("com.dorkbox:Annotations:3.1")
     implementation("com.dorkbox:MinLog-SLF4J:2.0")
-    implementation("com.dorkbox:Utilities:1.8.2")
+    implementation("com.dorkbox:Utilities:1.8.3")
     implementation("com.dorkbox:NetworkUtils:2.0")
+    implementation("com.dorkbox:ObjectPool:3.0")
 
     // really fast storage
     // https://github.com/lmdbjava/lmdbjava
     compileOnly("org.lmdbjava:lmdbjava:0.8.1")
     // https://github.com/OpenHFT/Chronicle-Map
-    compileOnly("net.openhft:chronicle-map:3.20.3")
+    compileOnly("net.openhft:chronicle-map:3.20.40")
 
 
     // Caffeine High-throughput Timeout Cache
@@ -249,6 +252,8 @@ dependencies {
     implementation("org.slf4j:slf4j-api:1.7.30")
 
 
+    testImplementation("org.lmdbjava:lmdbjava:0.8.1")
+    testImplementation("net.openhft:chronicle-map:3.20.3")
 
     testImplementation("junit:junit:4.13")
     testImplementation("ch.qos.logback:logback-classic:1.2.3")
