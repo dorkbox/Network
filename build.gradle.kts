@@ -203,7 +203,7 @@ dependencies {
 
 
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.30.0"
+    val aeronVer = "1.31.0"
     // REMOVE UdpChannel when ISSUE https://github.com/real-logic/aeron/issues/1057 is resolved! (hopefully in 1.30.0)
     implementation("io.aeron:aeron-client:$aeronVer")
     implementation("io.aeron:aeron-driver:$aeronVer")
@@ -231,7 +231,7 @@ dependencies {
     implementation("com.dorkbox:MinLog-SLF4J:2.0")
     implementation("com.dorkbox:Utilities:1.8.3")
     implementation("com.dorkbox:NetworkUtils:2.0")
-    implementation("com.dorkbox:ObjectPool:3.0")
+    implementation("com.dorkbox:ObjectPool:3.1")
 
     // really fast storage
     // https://github.com/lmdbjava/lmdbjava
@@ -242,7 +242,7 @@ dependencies {
 
     // Caffeine High-throughput Timeout Cache
     // https://github.com/ben-manes/caffeine
-    implementation("com.github.ben-manes.caffeine:caffeine:2.8.5") {
+    implementation("com.github.ben-manes.caffeine:caffeine:2.8.6") {
         exclude("org.checkerframework", "checker-qual")
         exclude("com.google.errorprone", "error_prone_annotations")
     }
@@ -255,7 +255,7 @@ dependencies {
     testImplementation("org.lmdbjava:lmdbjava:0.8.1")
     testImplementation("net.openhft:chronicle-map:3.20.3")
 
-    testImplementation("junit:junit:4.13")
+    testImplementation("junit:junit:4.13.1")
     testImplementation("ch.qos.logback:logback-classic:1.2.3")
 }
 
