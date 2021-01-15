@@ -71,8 +71,8 @@ class PropertyStore(val dbFile: File, val logger: KLogger): GenericStore {
                 val value = it.value  as String
 
                 when (key) {
-                    "_salt" -> loadedProps["_salt"] = Sys.hexToBytes(value)
-                    "_private" -> loadedProps["_private"] = Sys.hexToBytes(value)
+                    SettingsStore.saltKey -> loadedProps[SettingsStore.saltKey] = Sys.hexToBytes(value)
+                    SettingsStore.privateKey -> loadedProps[SettingsStore.privateKey] = Sys.hexToBytes(value)
                     else -> {
                         val address: InetAddress? = IP.fromString(key)
                         if (address != null) {
