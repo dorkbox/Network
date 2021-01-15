@@ -44,8 +44,8 @@ class PropertyStore(val dbFile: File, val logger: KLogger): GenericStore {
     }
 
     @Volatile
-    var lastModifiedTime = 0L
-    val loadedProps = Object2ObjectHashMap<Any, ByteArray>()
+    private var lastModifiedTime = 0L
+    private val loadedProps = Object2ObjectHashMap<Any, ByteArray>()
 
     init {
         load()
