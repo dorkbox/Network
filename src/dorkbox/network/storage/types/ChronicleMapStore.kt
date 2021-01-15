@@ -23,7 +23,11 @@ import net.openhft.chronicle.map.ChronicleMap
 import java.io.File
 import java.net.InetAddress
 
-
+/**
+ * Chronicle Map is a super-fast, in-memory, non-blocking, key-value store
+ *
+ * https://github.com/OpenHFT/Chronicle-Map
+ */
 class ChronicleMapStore(val dbFile: File, val logger: KLogger): GenericStore {
     companion object {
         fun type(dbFile: String) : StorageType {

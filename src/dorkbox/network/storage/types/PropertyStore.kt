@@ -30,6 +30,9 @@ import java.io.IOException
 import java.net.InetAddress
 import java.util.*
 
+/**
+ * Java property files
+ */
 class PropertyStore(val dbFile: File, val logger: KLogger): GenericStore {
     companion object {
         fun type(dbFile: String) : StorageType {

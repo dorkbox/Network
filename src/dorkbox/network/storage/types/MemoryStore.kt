@@ -21,6 +21,9 @@ import dorkbox.network.storage.StorageType
 import mu.KLogger
 import org.agrona.collections.Object2ObjectHashMap
 
+/**
+ * In-Memory store
+ */
 object MemoryStore {
     fun type() = object : StorageType {
         override fun create(logger: KLogger): SettingsStore {

@@ -27,7 +27,11 @@ import org.lmdbjava.EnvFlags
 import java.io.File
 import java.net.InetAddress
 
-
+/**
+ * Lightning Memory Database
+ *
+ * https://github.com/lmdbjava/lmdbjava
+ */
 class LmdbStore(val dbFile: File, val logger: KLogger): GenericStore {
     companion object {
         fun type(dbFile: String) : StorageType {
