@@ -120,6 +120,11 @@ licensing {
             it.author("Nathan Sweet")
             it.url("https://github.com/EsotericSoftware/kryonet")
         }
+        extra("Kryo Serialization", License.BSD_3) {
+            it.copyright(2020)
+            it.author("Nathan Sweet")
+            it.url("https://github.com/EsotericSoftware/kryo")
+        }
         extra("LAN HostDiscovery from Apache Commons JCS", License.APACHE_2) {
             it.copyright(2014)
             it.author("The Apache Software Foundation")
