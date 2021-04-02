@@ -411,7 +411,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             remoteAddress!!
 
             // VALIDATE are we allowed to connect to this server (now that we have the initial server information)
-            @Suppress("UNCHECKED_CAST")
             val permitConnection = listenerManager.notifyFilter(newConnection)
             if (!permitConnection) {
                 handshakeConnection.close()

@@ -29,11 +29,7 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
-import dorkbox.network.exceptions.AllocationException
-import dorkbox.network.exceptions.ClientException
-import dorkbox.network.exceptions.ClientRejectedException
-import dorkbox.network.exceptions.ClientTimedOutException
-import dorkbox.network.exceptions.ServerException
+import dorkbox.network.exceptions.*
 import io.aeron.Aeron
 import io.aeron.Publication
 import kotlinx.coroutines.CoroutineScope
@@ -293,7 +289,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             val connection = server.newConnection(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
-            @Suppress("UNCHECKED_CAST")
             val permitConnection = listenerManager.notifyFilter(connection)
             if (!permitConnection) {
                 // have to unwind actions!
@@ -476,7 +471,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             val connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
-            @Suppress("UNCHECKED_CAST")
             val permitConnection = listenerManager.notifyFilter(connection)
             if (!permitConnection) {
                 // have to unwind actions!
