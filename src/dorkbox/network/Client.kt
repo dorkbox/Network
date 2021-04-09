@@ -21,11 +21,7 @@ import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverConnection
-import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.ListenerManager
-import dorkbox.network.connection.PublicKeyValidationState
+import dorkbox.network.connection.*
 import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRejectedException
@@ -35,6 +31,7 @@ import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
+import dorkbox.updates.Updates.add
 import dorkbox.util.Sys
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineStart
@@ -53,6 +50,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
          * Gets the version number.
          */
         const val version = "5.0"
+
+        init {
+            // Add this project to the updates system, which verifies this class + UUID + version information
+
+            // Add this project to the updates system, which verifies this class + UUID + version information
+            add(Client::class.java, "5be42ae40cac49fb90dea86bc513141b", version)
+        }
     }
 
     /**

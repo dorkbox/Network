@@ -78,6 +78,11 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
             return AeronConfig.isRunning(configuration.context!!)
         }
+
+        init {
+            // Add this project to the updates system, which verifies this class + UUID + version information
+            dorkbox.updates.Updates.add(Server::class.java, "90a2c3b1e4fa41ea90d31fbdf8b2c6ef", version)
+        }
     }
 
     /**

@@ -29,10 +29,10 @@ gradle.startParameter.warningMode = WarningMode.All
 plugins {
     java
 
-    id("com.dorkbox.GradleUtils") version "1.12"
-    id("com.dorkbox.Licensing") version "2.5.2"
-    id("com.dorkbox.VersionUpdate") version "2.0"
-    id("com.dorkbox.GradlePublish") version "1.8"
+    id("com.dorkbox.GradleUtils") version "1.15"
+    id("com.dorkbox.Licensing") version "2.5.5"
+    id("com.dorkbox.VersionUpdate") version "2.2"
+    id("com.dorkbox.GradlePublish") version "1.10"
     id("com.dorkbox.GradleModuleInfo") version "1.1"
 
     kotlin("jvm") version "1.4.10"
@@ -148,34 +148,20 @@ licensing {
 
 sourceSets {
     main {
-        java {
-            setSrcDirs(listOf("src"))
-
-            // want to include java files for the source. 'setSrcDirs' resets includes...
-            include("**/*.java")
-        }
-
         kotlin {
             setSrcDirs(listOf("src"))
 
-            // want to include java files for the source. 'setSrcDirs' resets includes...
-            include("**/*.java", "**/*.kt")
+            // want to add files for the source. 'setSrcDirs' resets includes...
+            include("**/*.kt")
         }
     }
 
     test {
-        java {
-            setSrcDirs(listOf("test"))
-
-            // want to include java files for the source. 'setSrcDirs' resets includes...
-            include("**/*.java")
-        }
-
         kotlin {
             setSrcDirs(listOf("test"))
 
-            // want to include java files for the source. 'setSrcDirs' resets includes...
-            include("**/*.java", "**/*.kt")
+            // want to add files for the source. 'setSrcDirs' resets includes...
+            include("**/*.kt")
         }
     }
 }
@@ -214,7 +200,7 @@ dependencies {
     implementation("io.aeron:aeron-driver:$aeronVer")
 
     // https://github.com/EsotericSoftware/kryo
-    implementation("com.esotericsoftware:kryo:5.0.0-RC8")
+    implementation("com.esotericsoftware:kryo:5.1.0")
 
     // https://github.com/magro/kryo-serializers
     implementation("de.javakaffee:kryo-serializers:0.45")
@@ -235,6 +221,7 @@ dependencies {
     implementation("com.dorkbox:Annotations:3.1")
     implementation("com.dorkbox:MinLog-SLF4J:2.0")
     implementation("com.dorkbox:Utilities:1.8.3")
+    implementation("com.dorkbox:Updates:1.0")
     implementation("com.dorkbox:NetworkUtils:2.0")
     implementation("com.dorkbox:ObjectPool:3.1")
 

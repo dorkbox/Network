@@ -87,27 +87,28 @@ client.send()
 
 Maven Info
 ---------
-```
+````
 <dependencies>
     ...
     <dependency>
       <groupId>com.dorkbox</groupId>
       <artifactId>Network</artifactId>
-      <version>4.0</version>
+      <version>5.0</version>
     </dependency>
 </dependencies>
-```
+````
 
 Gradle Info
 ---------
 ````
 dependencies {
     ...
-    compile 'com.dorkbox:Network:4.0'
+    implementation("com.dorkbox:Network:5.0")
 }
 ````
 
 License
 ---------
-This project is © 2010 dorkbox llc, and is distributed under the terms of the Apache v2.0 License. See file "LICENSE" for further references.
+This project is © 2021 dorkbox llc, and is distributed under the terms of the Apache v2.0 License. See file "LICENSE" for further 
+references.
 
