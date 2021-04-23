@@ -90,6 +90,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
 
             // it must be the correct state
             val registrationData = message.registrationData
+
             when (message.state) {
                 HandshakeMessage.HELLO_ACK -> {
                     // The message was intended for this client. Try to parse it as one of the available message types.
@@ -108,19 +109,26 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
                     // The message was intended for this client. Try to parse it as one of the available message types.
                     // this message is ENCRYPTED!
                     val cryptInput = crypto.cryptInput
-                    cryptInput.buffer = registrationData
 
-                    val sessId = cryptInput.readInt()
-                    val streamSubId = cryptInput.readInt()
-                    val streamPubId = cryptInput.readInt()
-                    val regDetailsSize = cryptInput.readInt()
-                    val regDetails = cryptInput.readBytes(regDetailsSize)
+                    if (registrationData != null) {
+                        cryptInput.buffer = registrationData
 
-                    // now read data off
-                    connectionHelloInfo = ClientConnectionInfo(sessionId = sessId,
-                                                               subscriptionPort = streamSubId,
-                                                               publicationPort = streamPubId,
-                                                               kryoRegistrationDetails = regDetails)
+                        val sessId = cryptInput.readInt()
+                        val streamSubId = cryptInput.readInt()
+                        val streamPubId = cryptInput.readInt()
+                        val regDetailsSize = cryptInput.readInt()
+                        val regDetails = cryptInput.readBytes(regDetailsSize)
+
+                        // now read data off
+                        connectionHelloInfo = ClientConnectionInfo(sessionId = sessId,
+                                                                   subscriptionPort = streamSubId,
+                                                                   publicationPort = streamPubId,
+                                                                   kryoRegistrationDetails = regDetails)
+                    } else {
+                        val exception = ClientException("[$message.sessionId] canceled handshake for message without registration data")
+                        ListenerManager.noStackTrace(exception)
+                        failed = exception
+                    }
                 }
                 HandshakeMessage.DONE_ACK -> {
                     connectionDone = true
