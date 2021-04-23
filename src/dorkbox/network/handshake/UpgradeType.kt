@@ -13,14 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.handshake;
+package dorkbox.network.handshake
 
-public
-class UpgradeType {
+object UpgradeType {
     // The check is > 0, so these MUST be all > 0
-
-    public static final byte NONE = (byte) 1;
-    public static final byte ENCRYPT = (byte) 2;
-    public static final byte COMPRESS = (byte) 3;
-    public static final byte FRAGMENTED = (byte) 4;
+    const val NONE = 1.toByte()
+    const val ENCRYPT = 2.toByte()
+    const val COMPRESS = 3.toByte()
+    const val FRAGMENTED = 4.toByte()
 }
