@@ -32,566 +32,553 @@
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package dorkbox.network.serialization;
+package dorkbox.network.serialization
 
-import java.io.DataOutput;
-import java.io.OutputStream;
-
-import org.agrona.ExpandableDirectByteBuffer;
-import org.agrona.MutableDirectBuffer;
-import org.agrona.concurrent.UnsafeBuffer;
-
-import com.esotericsoftware.kryo.KryoException;
-import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.KryoException
+import com.esotericsoftware.kryo.io.Output
+import org.agrona.ExpandableDirectByteBuffer
+import org.agrona.MutableDirectBuffer
+import org.agrona.concurrent.UnsafeBuffer
+import java.io.OutputStream
 
 /**
- * An {@link OutputStream} which writes data to a {@link MutableDirectBuffer}.
- * <p>
- * A write operation against this stream will occur at the {@code writerIndex}
- * of its underlying buffer and the {@code writerIndex} will increase during
+ * An [OutputStream] which writes data to a [MutableDirectBuffer].
+ *
+ *
+ * A write operation against this stream will occur at the `writerIndex`
+ * of its underlying buffer and the `writerIndex` will increase during
  * the write operation.
- * <p>
- * This stream implements {@link DataOutput} for your convenience.
+ *
+ *
+ * This stream implements [DataOutput] for your convenience.
  * The endianness of the stream is not always big endian but depends on
  * the endianness of the underlying buffer.
  *
- * <p>
+ *
+ *
  * Utility methods are provided for efficiently reading primitive types and strings.
  *
  * Modified from KRYO to use ByteBuf.
  */
-public class AeronOutput extends Output {
-
+class AeronOutput : Output {
+    /** Returns the buffer. The bytes between zero and [.position] are the data that has been written.  */
     // NOTE: capacity IS NOT USED!
-
-    private MutableDirectBuffer internalBuffer;
-
-    /** Creates a new Output for writing to a direct {@link MutableDirectBuffer}. */
-    public
-    AeronOutput() {
-        this(32);
-    }
-
+    var internalBuffer: MutableDirectBuffer
+        private set
     /**
-     * Creates a new Output for writing to a direct {@link MutableDirectBuffer}.
+     * Creates a new Output for writing to a direct [MutableDirectBuffer].
      *
      * @param bufferSize The size of the buffer.
      */
-    public
-    AeronOutput(int bufferSize) {
-        if (bufferSize < 0) {
-            throw new IllegalArgumentException("bufferSize must be >= 0!");
-        }
+    /** Creates a new Output for writing to a direct [MutableDirectBuffer].  */
+    @JvmOverloads
+    constructor(bufferSize: Int = 32) {
+        require(bufferSize >= 0) { "bufferSize must be >= 0!" }
         // Minimum buffer size allowed is size = 2 (because it grows by 1.5x the current size)
-        internalBuffer = new ExpandableDirectByteBuffer(Math.max(2, bufferSize));
+        internalBuffer = ExpandableDirectByteBuffer(Math.max(2, bufferSize))
     }
 
     /**
      * Creates a new Output for writing to a byte[].
-     * @see #setBuffer(byte[])
+     * @see .setBuffer
      */
-    public
-    AeronOutput(final byte[] buffer) {
-        internalBuffer = new UnsafeBuffer(buffer);
-        position = 0;
-        capacity = internalBuffer.capacity();
+    constructor(buffer: ByteArray?) {
+        internalBuffer = UnsafeBuffer(buffer)
+        position = 0
+        capacity = internalBuffer.capacity()
     }
 
     /**
      * Creates a new Output for writing to a DirectBuffer.
      */
-    public
-    AeronOutput(final MutableDirectBuffer buffer) {
-        internalBuffer = buffer;
-        position = 0;
-        capacity = internalBuffer.capacity();
+    constructor(buffer: MutableDirectBuffer) {
+        internalBuffer = buffer
+        position = 0
+        capacity = internalBuffer.capacity()
     }
 
-
-    @Override
-    public OutputStream getOutputStream () {
-        throw new UnsupportedOperationException("This input does not use an OutputStream.");
+    override fun getOutputStream(): OutputStream {
+        throw UnsupportedOperationException("This input does not use an OutputStream.")
     }
 
     /**
-     * Throws {@link UnsupportedOperationException} because this output uses a ByteBuffer, not a byte[].
-     * @deprecated
-     * @see #getInternalBuffer() */
-    @Override
-    @Deprecated
-    public byte[] getBuffer () {
-        throw new UnsupportedOperationException("This buffer does not used a byte[], see #getInternaleBuffer().");
+     * Throws [UnsupportedOperationException] because this output uses a ByteBuffer, not a byte[].
+     * @see .getInternalBuffer
+     */
+    @Deprecated(" ")
+    override fun getBuffer(): ByteArray {
+        throw UnsupportedOperationException("This buffer does not used a byte[], see #getInternaleBuffer().")
     }
 
     /**
      * Sets a new buffer to write to. The max size is the buffer's length.
      */
-    public void setBuffer (MutableDirectBuffer buffer) {
-        internalBuffer = buffer;
-        position = 0;
-        capacity = buffer.capacity();
+    fun setBuffer(buffer: MutableDirectBuffer) {
+        internalBuffer = buffer
+        position = 0
+        capacity = buffer.capacity()
     }
 
     /**
      * Sets a new buffer to write to. The max size is the buffer's length.
      */
-    @Override
-    public void setBuffer (byte[] buffer) {
-        internalBuffer = new UnsafeBuffer(buffer);
-        position = 0;
-        capacity = internalBuffer.capacity();
+    override fun setBuffer(buffer: ByteArray) {
+        internalBuffer = UnsafeBuffer(buffer)
+        position = 0
+        capacity = internalBuffer.capacity()
     }
 
     /**
      * Sets a new buffer to write to. The max size is the buffer's length.
      */
-    @Override
-    @Deprecated
-    public void setBuffer (byte[] buffer, int maxBufferSize) {
-        setBuffer(buffer);
+    @Deprecated("")
+    override fun setBuffer(buffer: ByteArray, maxBufferSize: Int) {
+        setBuffer(buffer)
     }
 
-    /** Returns the buffer. The bytes between zero and {@link #position()} are the data that has been written. */
-    public MutableDirectBuffer getInternalBuffer() {
-        return internalBuffer;
+    override fun toBytes(): ByteArray {
+        val newBuffer = ByteArray(position)
+        internalBuffer.getBytes(0, newBuffer, 0, position)
+        return newBuffer
     }
 
-    @Override
-    public byte[] toBytes () {
-        byte[] newBuffer = new byte[position];
-        internalBuffer.getBytes(0, newBuffer, 0, position);
-        return newBuffer;
+    override fun setPosition(position: Int) {
+        this.position = position
     }
 
-    @Override
-    public void setPosition (int position) {
-        this.position = position;
-    }
-
-    @Override
-    public void reset () {
-        super.reset();
+    override fun reset() {
+        super.reset()
     }
 
     /**
      * Ensures the buffer is large enough to read the specified number of bytes.
      * @return true if the buffer has been resized.
      */
-    @Override
-    protected boolean require (int required) throws KryoException {
-        return false;
+    @Throws(KryoException::class)
+    override fun require(required: Int): Boolean {
+        return false
     }
 
     // OutputStream:
-
-    @Override
-    public void flush () throws KryoException {
+    @Throws(KryoException::class)
+    override fun flush() {
     }
 
-    @Override
-    public void close () throws KryoException {
-        flush();
+    @Throws(KryoException::class)
+    override fun close() {
+        flush()
     }
 
-    @Override
-    public void write (int value) throws KryoException {
-        internalBuffer.putByte(position++, (byte)value);
+    @Throws(KryoException::class)
+    override fun write(value: Int) {
+        internalBuffer.putByte(position++, value.toByte())
     }
 
-    @Override
-    public void write (byte[] bytes) throws KryoException {
-        writeBytes(bytes, 0, bytes.length);
+    @Throws(KryoException::class)
+    override fun write(bytes: ByteArray) {
+        writeBytes(bytes, 0, bytes.size)
     }
 
-    @Override
-    public void write (byte[] bytes, int offset, int length) throws KryoException {
-        writeBytes(bytes, offset, length);
+    @Throws(KryoException::class)
+    override fun write(bytes: ByteArray, offset: Int, length: Int) {
+        writeBytes(bytes, offset, length)
     }
 
     // byte:
-
-    @Override
-    public void writeByte (byte value) throws KryoException {
-        internalBuffer.putByte(position++, value);
+    @Throws(KryoException::class)
+    override fun writeByte(value: Byte) {
+        internalBuffer.putByte(position++, value)
     }
 
-    @Override
-    public void writeByte (int value) throws KryoException {
-        internalBuffer.putByte(position++, (byte)value);
+    @Throws(KryoException::class)
+    override fun writeByte(value: Int) {
+        internalBuffer.putByte(position++, value.toByte())
     }
 
-    @Override
-    public void writeBytes (byte[] bytes) throws KryoException {
-        writeBytes(bytes, 0, bytes.length);
+    @Throws(KryoException::class)
+    override fun writeBytes(bytes: ByteArray) {
+        writeBytes(bytes, 0, bytes.size)
     }
 
-    @Override
-    public void writeBytes (byte[] bytes, int offset, int length) throws KryoException {
-        internalBuffer.putBytes(position, bytes, offset, length);
-        position += length;
+    @Throws(KryoException::class)
+    override fun writeBytes(bytes: ByteArray, offset: Int, length: Int) {
+        internalBuffer.putBytes(position, bytes, offset, length)
+        position += length
     }
 
     // int:
-
-    @Override
-    public void writeInt (int value) throws KryoException {
-        internalBuffer.putInt(position, value);
-        position += 4;
+    @Throws(KryoException::class)
+    override fun writeInt(value: Int) {
+        internalBuffer.putInt(position, value)
+        position += 4
     }
 
-    @Override
-    public int writeVarInt (int value, boolean optimizePositive) throws KryoException {
-        if (!optimizePositive) value = (value << 1) ^ (value >> 31);
-        if (value >>> 7 == 0) {
-            internalBuffer.putByte(position++, (byte)value);
-            return 1;
+    @Throws(KryoException::class)
+    override fun writeVarInt(value: Int, optimizePositive: Boolean): Int {
+        var value = value
+        if (!optimizePositive) value = value shl 1 xor (value shr 31)
+        if (value ushr 7 == 0) {
+            internalBuffer.putByte(position++, value.toByte())
+            return 1
         }
-        if (value >>> 14 == 0) {
-            internalBuffer.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            internalBuffer.putByte(position++, (byte)(value >>> 7));
-            return 2;
+        if (value ushr 14 == 0) {
+            internalBuffer.putByte(position++, (value and 0x7F or 0x80).toByte())
+            internalBuffer.putByte(position++, (value ushr 7).toByte())
+            return 2
         }
-        if (value >>> 21 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 14));
-            return 3;
+        if (value ushr 21 == 0) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 14).toByte())
+            return 3
         }
-        if (value >>> 28 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 14 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 21));
-            return 4;
+        if (value ushr 28 == 0) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 21).toByte())
+            return 4
         }
-        MutableDirectBuffer byteBuf = this.internalBuffer;
-        byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 14 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 21 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 28));
-        return 5;
+        val byteBuf = internalBuffer
+        byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 28).toByte())
+        return 5
     }
 
-    @Override
-    public int writeVarIntFlag (boolean flag, int value, boolean optimizePositive) throws KryoException {
-        if (!optimizePositive) value = (value << 1) ^ (value >> 31);
-        int first = (value & 0x3F) | (flag ? 0x80 : 0); // Mask first 6 bits, bit 8 is the flag.
-        if (value >>> 6 == 0) {
-            internalBuffer.putByte(position++, (byte)first);
-            return 1;
+    @Throws(KryoException::class)
+    override fun writeVarIntFlag(flag: Boolean, value: Int, optimizePositive: Boolean): Int {
+        var value = value
+        if (!optimizePositive) value = value shl 1 xor (value shr 31)
+        val first = value and 0x3F or if (flag) 0x80 else 0 // Mask first 6 bits, bit 8 is the flag.
+        if (value ushr 6 == 0) {
+            internalBuffer.putByte(position++, first.toByte())
+            return 1
         }
-        if (value >>> 13 == 0) {
-            internalBuffer.putByte(position++, (byte)(first | 0x40)); // Set bit 7.
-            internalBuffer.putByte(position++, (byte)(value >>> 6));
-            return 2;
+        if (value ushr 13 == 0) {
+            internalBuffer.putByte(position++, (first or 0x40).toByte()) // Set bit 7.
+            internalBuffer.putByte(position++, (value ushr 6).toByte())
+            return 2
         }
-        if (value >>> 20 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)(first | 0x40)); // Set bit 7.
-            byteBuf.putByte(position++, (byte)((value >>> 6) | 0x80)); // Set bit 8.
-            byteBuf.putByte(position++, (byte)(value >>> 13));
-            return 3;
+        if (value ushr 20 == 0) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (first or 0x40).toByte()) // Set bit 7.
+            byteBuf.putByte(position++, (value ushr 6 or 0x80).toByte()) // Set bit 8.
+            byteBuf.putByte(position++, (value ushr 13).toByte())
+            return 3
         }
-        if (value >>> 27 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)(first | 0x40)); // Set bit 7.
-            byteBuf.putByte(position++, (byte)((value >>> 6) | 0x80)); // Set bit 8.
-            byteBuf.putByte(position++, (byte)((value >>> 13) | 0x80)); // Set bit 8.
-            byteBuf.putByte(position++, (byte)(value >>> 20));
-            return 4;
+        if (value ushr 27 == 0) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (first or 0x40).toByte()) // Set bit 7.
+            byteBuf.putByte(position++, (value ushr 6 or 0x80).toByte()) // Set bit 8.
+            byteBuf.putByte(position++, (value ushr 13 or 0x80).toByte()) // Set bit 8.
+            byteBuf.putByte(position++, (value ushr 20).toByte())
+            return 4
         }
-        MutableDirectBuffer byteBuf = this.internalBuffer;
-        byteBuf.putByte(position++, (byte)(first | 0x40)); // Set bit 7.
-        byteBuf.putByte(position++, (byte)((value >>> 6) | 0x80)); // Set bit 8.
-        byteBuf.putByte(position++, (byte)((value >>> 13) | 0x80)); // Set bit 8.
-        byteBuf.putByte(position++, (byte)((value >>> 20) | 0x80)); // Set bit 8.
-        byteBuf.putByte(position++, (byte)(value >>> 27));
-        return 5;
+        val byteBuf = internalBuffer
+        byteBuf.putByte(position++, (first or 0x40).toByte()) // Set bit 7.
+        byteBuf.putByte(position++, (value ushr 6 or 0x80).toByte()) // Set bit 8.
+        byteBuf.putByte(position++, (value ushr 13 or 0x80).toByte()) // Set bit 8.
+        byteBuf.putByte(position++, (value ushr 20 or 0x80).toByte()) // Set bit 8.
+        byteBuf.putByte(position++, (value ushr 27).toByte())
+        return 5
     }
 
     // long:
-
-    @Override
-    public void writeLong (long value) throws KryoException {
-        internalBuffer.putLong(position, value);
-        position += 8;
+    @Throws(KryoException::class)
+    override fun writeLong(value: Long) {
+        internalBuffer.putLong(position, value)
+        position += 8
     }
 
-    @Override
-    public int writeVarLong (long value, boolean optimizePositive) throws KryoException {
-        if (!optimizePositive) value = (value << 1) ^ (value >> 63);
-        if (value >>> 7 == 0) {
-            internalBuffer.putByte(position++, (byte)value);
-            return 1;
+    @Throws(KryoException::class)
+    override fun writeVarLong(value: Long, optimizePositive: Boolean): Int {
+        var value = value
+        if (!optimizePositive) value = value shl 1 xor (value shr 63)
+        if (value ushr 7 == 0L) {
+            internalBuffer.putByte(position++, value.toByte())
+            return 1
         }
-        if (value >>> 14 == 0) {
-            internalBuffer.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            internalBuffer.putByte(position++, (byte)(value >>> 7));
-            return 2;
+        if (value ushr 14 == 0L) {
+            internalBuffer.putByte(position++, (value and 0x7F or 0x80).toByte())
+            internalBuffer.putByte(position++, (value ushr 7).toByte())
+            return 2
         }
-        if (value >>> 21 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 14));
-            return 3;
+        if (value ushr 21 == 0L) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 14).toByte())
+            return 3
         }
-        if (value >>> 28 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 14 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 21));
-            return 4;
+        if (value ushr 28 == 0L) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 21).toByte())
+            return 4
         }
-        if (value >>> 35 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 14 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 21 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 28));
-            return 5;
+        if (value ushr 35 == 0L) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 28).toByte())
+            return 5
         }
-        if (value >>> 42 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 14 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 21 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 28 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 35));
-            return 6;
+        if (value ushr 42 == 0L) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 28 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 35).toByte())
+            return 6
         }
-        if (value >>> 49 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 14 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 21 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 28 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 35 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 42));
-            return 7;
+        if (value ushr 49 == 0L) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 28 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 35 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 42).toByte())
+            return 7
         }
-        if (value >>> 56 == 0) {
-            MutableDirectBuffer byteBuf = this.internalBuffer;
-            byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 14 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 21 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 28 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 35 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 42 | 0x80));
-            byteBuf.putByte(position++, (byte)(value >>> 49));
-            return 8;
+        if (value ushr 56 == 0L) {
+            val byteBuf = internalBuffer
+            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 28 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 35 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 42 or 0x80).toByte())
+            byteBuf.putByte(position++, (value ushr 49).toByte())
+            return 8
         }
-        MutableDirectBuffer byteBuf = this.internalBuffer;
-        byteBuf.putByte(position++, (byte)((value & 0x7F) | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 7 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 14 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 21 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 28 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 35 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 42 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 49 | 0x80));
-        byteBuf.putByte(position++, (byte)(value >>> 56));
-        return 9;
+        val byteBuf = internalBuffer
+        byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 28 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 35 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 42 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 49 or 0x80).toByte())
+        byteBuf.putByte(position++, (value ushr 56).toByte())
+        return 9
     }
 
     // float:
-
-    @Override
-    public void writeFloat (float value) throws KryoException {
-        internalBuffer.putFloat(position, value);
-        position += 4;
+    @Throws(KryoException::class)
+    override fun writeFloat(value: Float) {
+        internalBuffer.putFloat(position, value)
+        position += 4
     }
 
     // double:
-
-    @Override
-    public void writeDouble (double value) throws KryoException {
-        internalBuffer.putDouble(position, value);
-        position += 8;
+    @Throws(KryoException::class)
+    override fun writeDouble(value: Double) {
+        internalBuffer.putDouble(position, value)
+        position += 8
     }
 
     // short:
-
-    @Override
-    public void writeShort (int value) throws KryoException {
-        internalBuffer.putShort(position, (short) value);
-        position += 2;
+    @Throws(KryoException::class)
+    override fun writeShort(value: Int) {
+        internalBuffer.putShort(position, value.toShort())
+        position += 2
     }
 
     // char:
-
-    @Override
-    public void writeChar (char value) throws KryoException {
-        internalBuffer.putChar(position, value);
-        position += 2;
+    @Throws(KryoException::class)
+    override fun writeChar(value: Char) {
+        internalBuffer.putChar(position, value)
+        position += 2
     }
 
     // boolean:
-
-    @Override
-    public void writeBoolean (boolean value) throws KryoException {
-        internalBuffer.putByte(position++, (byte)(value ? 1 : 0));
+    @Throws(KryoException::class)
+    override fun writeBoolean(value: Boolean) {
+        internalBuffer.putByte(position++, (if (value) 1 else 0).toByte())
     }
 
     // String:
-
-    @Override
-    public void writeString (String value) throws KryoException {
+    @Throws(KryoException::class)
+    override fun writeString(value: String?) {
         if (value == null) {
-            writeByte(0x80); // 0 means null, bit 8 means UTF8.
-            return;
+            writeByte(0x80) // 0 means null, bit 8 means UTF8.
+            return
         }
-
-        int charCount = value.length();
+        val charCount = value.length
         if (charCount == 0) {
-            writeByte(1 | 0x80); // 1 means empty string, bit 8 means UTF8.
-            return;
+            writeByte(1 or 0x80) // 1 means empty string, bit 8 means UTF8.
+            return
         }
 
         // Detect ASCII, we only do this for small strings, but ONLY more than 1 char.
         // since 1 char is used for bit-masking if we use for 1 char string, reading the string will not work!
-        boolean permitAscii = charCount > 1 && charCount <= 32;
-
-        OUTER:
+        var permitAscii = charCount > 1 && charCount <= 32
         if (permitAscii) {
-            for (int i = 0; i < charCount; i++) {
-                if (value.charAt(i) > 127) {
-                    break OUTER; // not ascii
+            for (i in 0 until charCount) {
+                if (value[i].toInt() > 127) {
+                    permitAscii = false
+                    break  // not ascii
                 }
             }
 
-            // this is ascii
-            internalBuffer.putStringWithoutLengthAscii(position, value);
-            position += charCount;
+            if (permitAscii) {
+                // this is ascii
+                internalBuffer.putStringWithoutLengthAscii(position, value)
+                position += charCount
 
-            // mod the last written byte with 0x80 so we can use that when reading ascii bytes to see what the end of the string is
-            byte b = (byte) (internalBuffer.getByte(position - 1) | 0x80);
-            internalBuffer.putByte(position - 1, b);
-            return;
+                // mod the last written byte with 0x80 so we can use that when reading ascii bytes to see what the end of the string is
+                val b = (internalBuffer.getByte(position - 1).toInt() or 0x80).toByte()
+                internalBuffer.putByte(position - 1, b)
+                return
+            }
         }
 
         // UTF8 (or ASCII with length 1 or length > 32
-
-        writeVarIntFlag(true, charCount + 1, true);
-
-        int charIndex = 0;
+        writeVarIntFlag(true, charCount + 1, true)
+        var charIndex = 0
         // Try to write 7 bit chars.
-        MutableDirectBuffer byteBuf = this.internalBuffer;
+        val byteBuf = internalBuffer
         while (true) {
-            int c = value.charAt(charIndex);
-            if (c > 127) break;
-            byteBuf.putByte(position++, (byte)c);
-
-            charIndex++;
+            val c = value[charIndex].toInt()
+            if (c > 127) break
+            byteBuf.putByte(position++, c.toByte())
+            charIndex++
             if (charIndex == charCount) {
-                return;
+                return
             }
         }
-
-        if (charIndex < charCount) writeUtf8_slow(value, charCount, charIndex);
+        if (charIndex < charCount) writeUtf8_slow(value, charCount, charIndex)
     }
 
-    @Override
-    public void writeAscii (String value) throws KryoException {
+    @Throws(KryoException::class)
+    override fun writeAscii(value: String?) {
         if (value == null) {
-            writeByte(0x80); // 0 means null, bit 8 means UTF8.
-            return;
+            writeByte(0x80) // 0 means null, bit 8 means UTF8.
+            return
         }
-        int charCount = value.length();
+        val charCount = value.length
         if (charCount == 0) {
-            writeByte(1 | 0x80); // 1 means empty string, bit 8 means UTF8.
-            return;
+            writeByte(1 or 0x80) // 1 means empty string, bit 8 means UTF8.
+            return
         }
-
-        require(charCount); // must be able to write this number of chars
-
-        MutableDirectBuffer byteBuf = this.internalBuffer;
-        for (int i = 0, n = value.length(); i < n; ++i) {
-            byteBuf.putByte(position++, (byte)value.charAt(i));
+        require(charCount) // must be able to write this number of chars
+        val byteBuf = internalBuffer
+        var i = 0
+        val n = value.length
+        while (i < n) {
+            byteBuf.putByte(position++, value[i].toByte())
+            ++i
         }
-
-        byteBuf.putByte(position - 1, (byte)(byteBuf.getByte(position - 1) | 0x80)); // Bit 8 means end of ASCII.
+        byteBuf.putByte(position - 1, (byteBuf.getByte(position - 1).toInt() or 0x80) as Byte) // Bit 8 means end of ASCII.
     }
 
-    private void writeUtf8_slow (String value, int charCount, int charIndex) {
-        for (; charIndex < charCount; charIndex++) {
-            int c = value.charAt(charIndex);
+    private fun writeUtf8_slow(value: String, charCount: Int, charIndex: Int) {
+        var charIndex = charIndex
+        while (charIndex < charCount) {
+            val c = value[charIndex].toInt()
             if (c <= 0x007F) {
-                internalBuffer.putByte(position++, (byte)c);
-            }
-            else if (c > 0x07FF) {
-                internalBuffer.putByte(position++, (byte)(0xE0 | c >> 12 & 0x0F));
-                internalBuffer.putByte(position++, (byte)(0x80 | c >> 6 & 0x3F));
-                internalBuffer.putByte(position++, (byte)(0x80 | c & 0x3F));
+                internalBuffer.putByte(position++, c.toByte())
+            } else if (c > 0x07FF) {
+                internalBuffer.putByte(position++, (0xE0 or (c shr 12 and 0x0F)).toByte())
+                internalBuffer.putByte(position++, (0x80 or (c shr 6 and 0x3F)).toByte())
+                internalBuffer.putByte(position++, (0x80 or (c and 0x3F)).toByte())
             } else {
-                internalBuffer.putByte(position++, (byte)(0xC0 | c >> 6 & 0x1F));
-                internalBuffer.putByte(position++, (byte)(0x80 | c & 0x3F));
+                internalBuffer.putByte(position++, (0xC0 or (c shr 6 and 0x1F)).toByte())
+                internalBuffer.putByte(position++, (0x80 or (c and 0x3F)).toByte())
             }
+            charIndex++
         }
     }
 
     // Primitive arrays:
-
-    @Override
-    public void writeInts (int[] array, int offset, int count) throws KryoException {
-        for (int n = offset + count; offset < n; offset++) {
-            int value = array[offset];
-            writeInt(value);
+    @Throws(KryoException::class)
+    override fun writeInts(array: IntArray, offset: Int, count: Int) {
+        var offset = offset
+        val n = offset + count
+        while (offset < n) {
+            val value = array[offset]
+            writeInt(value)
+            offset++
         }
     }
 
-    @Override
-    public void writeLongs (long[] array, int offset, int count) throws KryoException {
-        for (int n = offset + count; offset < n; offset++) {
-            long value = array[offset];
-            writeLong(value);
+    @Throws(KryoException::class)
+    override fun writeLongs(array: LongArray, offset: Int, count: Int) {
+        var offset = offset
+        val n = offset + count
+        while (offset < n) {
+            val value = array[offset]
+            writeLong(value)
+            offset++
         }
     }
 
-    @Override
-    public void writeFloats (float[] array, int offset, int count) throws KryoException {
-        for (int n = offset + count; offset < n; offset++) {
-            int value = Float.floatToIntBits(array[offset]);
-            writeFloat(value);
+    @Throws(KryoException::class)
+    override fun writeFloats(array: FloatArray, offset: Int, count: Int) {
+        var offset = offset
+        val n = offset + count
+        while (offset < n) {
+            val value = java.lang.Float.floatToIntBits(array[offset])
+            writeFloat(value.toFloat())
+            offset++
         }
     }
 
-    @Override
-    public void writeDoubles (double[] array, int offset, int count) throws KryoException {
-        for (int n = offset + count; offset < n; offset++) {
-            long value = Double.doubleToLongBits(array[offset]);
-            writeDouble(value);
+    @Throws(KryoException::class)
+    override fun writeDoubles(array: DoubleArray, offset: Int, count: Int) {
+        var offset = offset
+        val n = offset + count
+        while (offset < n) {
+            val value = java.lang.Double.doubleToLongBits(array[offset])
+            writeDouble(value.toDouble())
+            offset++
         }
     }
 
-    @Override
-    public void writeShorts (short[] array, int offset, int count) throws KryoException {
-        for (int n = offset + count; offset < n; offset++) {
-            int value = array[offset];
-            writeShort(value);
+    @Throws(KryoException::class)
+    override fun writeShorts(array: ShortArray, offset: Int, count: Int) {
+        var offset = offset
+        val n = offset + count
+        while (offset < n) {
+            val value = array[offset].toInt()
+            writeShort(value)
+            offset++
         }
     }
 
-    @Override
-    public void writeChars (char[] array, int offset, int count) throws KryoException {
-        for (int n = offset + count; offset < n; offset++) {
-            int value = array[offset];
-            writeChar((char) value);
+    @Throws(KryoException::class)
+    override fun writeChars(array: CharArray, offset: Int, count: Int) {
+        var offset = offset
+        val n = offset + count
+        while (offset < n) {
+            val value = array[offset].toInt()
+            writeChar(value.toChar())
+            offset++
         }
     }
 
-    @Override
-    public void writeBooleans (boolean[] array, int offset, int count) throws KryoException {
-        for (int n = offset + count; offset < n; offset++) {
-            internalBuffer.putByte(position++, array[offset] ? (byte)1 : 0);
+    @Throws(KryoException::class)
+    override fun writeBooleans(array: BooleanArray, offset: Int, count: Int) {
+        var offset = offset
+        val n = offset + count
+        while (offset < n) {
+            internalBuffer.putByte(position++, if (array[offset]) 1.toByte() else 0)
+            offset++
         }
     }
 }
