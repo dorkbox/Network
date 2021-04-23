@@ -13,37 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.ping;
+package dorkbox.network.ping
 
-import dorkbox.network.connection.Connection;
+import dorkbox.network.connection.Connection
 
 // note that we specifically DO NOT implement equals/hashCode, because we cannot create two separate
 // listeners that are somehow equal to each other.
-public abstract
-class PingListener<C extends Connection>
-        // implements GenericFutureListener<Future<PingTuple<C>>>
+abstract class PingListener<C : Connection?> // implements GenericFutureListener<Future<PingTuple<C>>>
 {
-
-    public
-    PingListener() {
-    }
-
     // @Override
     // public
     // void operationComplete(Future<PingTuple<C>> future) throws Exception {
     //     PingTuple<C> pingTuple = future.get();
     //     response(pingTuple.connection, pingTuple.responseTime);
     // }
-
     /**
      * Called when the ping response has been received.
      */
-    public abstract
-    void response(C connection, int pingResponseTime);
-
-    @Override
-    public
-    String toString() {
-        return "PingListener";
+    abstract fun response(connection: C, pingResponseTime: Int)
+    override fun toString(): String {
+        return "PingListener"
     }
 }

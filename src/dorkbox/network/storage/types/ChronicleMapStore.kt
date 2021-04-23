@@ -19,7 +19,7 @@ import dorkbox.network.storage.GenericStore
 import dorkbox.network.storage.SettingsStore
 import dorkbox.network.storage.StorageType
 import mu.KLogger
-import net.openhft.chronicle.map.ChronicleMap
+import net.openhft.chronicle.map.ChronicleMapBuilder
 import java.io.File
 import java.net.InetAddress
 
@@ -40,8 +40,7 @@ class ChronicleMapStore(val dbFile: File, val logger: KLogger): GenericStore {
             }
         }
     }
-
-    private val map = ChronicleMap.of(ByteArray::class.java, ByteArray::class.java)
+    private val map = ChronicleMapBuilder.of(ByteArray::class.java, ByteArray::class.java)
         .name("machine-keys")
         .entries(1_000_000)
         .constantValueSizeBySample(ByteArray(32))

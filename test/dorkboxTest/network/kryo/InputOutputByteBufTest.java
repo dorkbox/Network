@@ -250,7 +250,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 
 	@Test
 	public void testCanReadInt () throws IOException {
-		AeronOutput write = new AeronOutput();
+		AeronOutput write = new AeronOutput(32);
 
 		AeronInput read = new AeronInput(write.toBytes());
 		assertFalse(read.canReadVarInt());
@@ -316,7 +316,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 	@Test
 	public void testInts () throws IOException {
 		runIntTest(new AeronOutput(4096));
-		runIntTest(new AeronOutput());
+		runIntTest(new AeronOutput(32));
 	}
 
 	private void runIntTest (Output write) throws IOException {
@@ -479,7 +479,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 	@Test
 	public void testLongs () throws IOException {
 		runLongTest(new AeronOutput(4096));
-		runLongTest(new AeronOutput());
+		runLongTest(new AeronOutput(32));
 	}
 
 	private void runLongTest (Output write) throws IOException {
@@ -626,7 +626,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 	@Test
 	public void testShorts () throws IOException {
 		runShortTest(new AeronOutput(4096));
-		runShortTest(new AeronOutput());
+		runShortTest(new AeronOutput(32));
 	}
 
 	private void runShortTest (Output write) throws IOException {
@@ -667,7 +667,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 	@Test
 	public void testFloats () throws IOException {
 		runFloatTest(new AeronOutput(4096));
-		runFloatTest(new AeronOutput());
+		runFloatTest(new AeronOutput(32));
 	}
 
 	private void runFloatTest (Output write) throws IOException {
@@ -760,7 +760,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 	@Test
 	public void testDoubles () throws IOException {
 		runDoubleTest(new AeronOutput(4096));
-		runDoubleTest(new AeronOutput());
+		runDoubleTest(new AeronOutput(32));
 	}
 
 	private void runDoubleTest (Output write) throws IOException {
@@ -855,7 +855,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 	@Test
 	public void testBooleans () throws IOException {
 		runBooleanTest(new AeronOutput(4096));
-		runBooleanTest(new AeronOutput());
+		runBooleanTest(new AeronOutput(32));
 	}
 
 	private void runBooleanTest (Output write) throws IOException {
@@ -874,7 +874,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 	@Test
 	public void testChars () throws IOException {
 		runCharTest(new AeronOutput(4096));
-		runCharTest(new AeronOutput());
+		runCharTest(new AeronOutput(32));
 	}
 
 	private void runCharTest (Output write) throws IOException {
@@ -909,7 +909,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 
 	@Test
 	public void testSmallBuffers () throws Exception {
-        AeronOutput testOutput = new AeronOutput();
+        AeronOutput testOutput = new AeronOutput(32);
 		testOutput.writeBytes(new byte[512]);
 		testOutput.writeBytes(new byte[512]);
 		testOutput.flush();
@@ -953,7 +953,7 @@ public class InputOutputByteBufTest extends KryoTestCase {
 
 		String s1 = "12345";
 
-		AeronOutput output = new AeronOutput();
+		AeronOutput output = new AeronOutput(32);
 
 		kryo.writeClass(output, s1.getClass());
 		kryo.writeObject(output, s1);

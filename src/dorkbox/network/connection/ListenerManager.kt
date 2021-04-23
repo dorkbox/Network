@@ -17,7 +17,7 @@ package dorkbox.network.connection
 
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.ipFilter.IpSubnetFilterRule
-import dorkbox.util.Property
+import dorkbox.os.OS
 import dorkbox.util.classes.ClassHelper
 import dorkbox.util.classes.ClassHierarchy
 import dorkbox.util.collections.IdentityMap
@@ -34,8 +34,7 @@ internal class ListenerManager<CONNECTION: Connection> {
         /**
          * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
          */
-        @Property
-        val LOAD_FACTOR = 0.8f
+        val LOAD_FACTOR = OS.getFloat(ListenerManager::class.qualifiedName + "LOAD_FACTOR", 0.8f)
 
         /**
          * Remove from the stacktrace EVERYTHING except the message. This is for propagating internal errors

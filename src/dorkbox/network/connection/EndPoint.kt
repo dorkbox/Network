@@ -230,9 +230,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * Returns the property store used by this endpoint. The property store can store via properties,
      * a database, etc, or can be a "null" property store, which does nothing
      */
-    fun <S : SettingsStore> getStorage(): S {
-        @Suppress("UNCHECKED_CAST")
-        return settingsStore as S
+    fun getStorage(): SettingsStore {
+        return settingsStore
     }
 
     /**
