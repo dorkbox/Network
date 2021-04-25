@@ -44,33 +44,30 @@ import java.io.OutputStream
 /**
  * An [OutputStream] which writes data to a [MutableDirectBuffer].
  *
- *
  * A write operation against this stream will occur at the `writerIndex`
  * of its underlying buffer and the `writerIndex` will increase during
  * the write operation.
  *
- *
- * This stream implements [DataOutput] for your convenience.
  * The endianness of the stream is not always big endian but depends on
  * the endianness of the underlying buffer.
- *
- *
  *
  * Utility methods are provided for efficiently reading primitive types and strings.
  *
  * Modified from KRYO to use ByteBuf.
  */
 class AeronOutput : Output {
+
     /** Returns the buffer. The bytes between zero and [.position] are the data that has been written.  */
     // NOTE: capacity IS NOT USED!
     var internalBuffer: MutableDirectBuffer
         private set
+
+
     /**
      * Creates a new Output for writing to a direct [MutableDirectBuffer].
      *
      * @param bufferSize The size of the buffer.
      */
-    /** Creates a new Output for writing to a direct [MutableDirectBuffer].  */
     @JvmOverloads
     constructor(bufferSize: Int = 32) {
         require(bufferSize >= 0) { "bufferSize must be >= 0!" }
@@ -80,9 +77,10 @@ class AeronOutput : Output {
 
     /**
      * Creates a new Output for writing to a byte[].
-     * @see .setBuffer
+     *
+     * @see [setBuffer]
      */
-    constructor(buffer: ByteArray?) {
+    constructor(buffer: ByteArray) {
         internalBuffer = UnsafeBuffer(buffer)
         position = 0
         capacity = internalBuffer.capacity()
@@ -103,9 +101,10 @@ class AeronOutput : Output {
 
     /**
      * Throws [UnsupportedOperationException] because this output uses a ByteBuffer, not a byte[].
-     * @see .getInternalBuffer
+     *
+     * @see [internalBuffer]
      */
-    @Deprecated(" ")
+    @Deprecated("This buffer does not used a byte[]")
     override fun getBuffer(): ByteArray {
         throw UnsupportedOperationException("This buffer does not used a byte[], see #getInternaleBuffer().")
     }
@@ -131,7 +130,7 @@ class AeronOutput : Output {
     /**
      * Sets a new buffer to write to. The max size is the buffer's length.
      */
-    @Deprecated("")
+    @Deprecated("maxBufferSize parameter is ignored", ReplaceWith("setBuffer(buffer)"))
     override fun setBuffer(buffer: ByteArray, maxBufferSize: Int) {
         setBuffer(buffer)
     }
@@ -215,76 +214,78 @@ class AeronOutput : Output {
 
     @Throws(KryoException::class)
     override fun writeVarInt(value: Int, optimizePositive: Boolean): Int {
-        var value = value
-        if (!optimizePositive) value = value shl 1 xor (value shr 31)
-        if (value ushr 7 == 0) {
-            internalBuffer.putByte(position++, value.toByte())
+        var newValue = value
+        if (!optimizePositive) newValue = newValue shl 1 xor (newValue shr 31)
+        if (newValue ushr 7 == 0) {
+            internalBuffer.putByte(position++, newValue.toByte())
             return 1
         }
-        if (value ushr 14 == 0) {
-            internalBuffer.putByte(position++, (value and 0x7F or 0x80).toByte())
-            internalBuffer.putByte(position++, (value ushr 7).toByte())
+        if (newValue ushr 14 == 0) {
+            internalBuffer.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            internalBuffer.putByte(position++, (newValue ushr 7).toByte())
             return 2
         }
-        if (value ushr 21 == 0) {
+        if (newValue ushr 21 == 0) {
             val byteBuf = internalBuffer
-            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 14).toByte())
+            byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 14).toByte())
             return 3
         }
-        if (value ushr 28 == 0) {
+        if (newValue ushr 28 == 0) {
             val byteBuf = internalBuffer
-            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 21).toByte())
+            byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 21).toByte())
             return 4
         }
         val byteBuf = internalBuffer
-        byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 28).toByte())
+        byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 14 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 21 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 28).toByte())
         return 5
     }
 
     @Throws(KryoException::class)
     override fun writeVarIntFlag(flag: Boolean, value: Int, optimizePositive: Boolean): Int {
-        var value = value
-        if (!optimizePositive) value = value shl 1 xor (value shr 31)
-        val first = value and 0x3F or if (flag) 0x80 else 0 // Mask first 6 bits, bit 8 is the flag.
-        if (value ushr 6 == 0) {
+        var newValue = value
+
+        if (!optimizePositive) newValue = newValue shl 1 xor (newValue shr 31)
+
+        val first = newValue and 0x3F or if (flag) 0x80 else 0 // Mask first 6 bits, bit 8 is the flag.
+        if (newValue ushr 6 == 0) {
             internalBuffer.putByte(position++, first.toByte())
             return 1
         }
-        if (value ushr 13 == 0) {
+        if (newValue ushr 13 == 0) {
             internalBuffer.putByte(position++, (first or 0x40).toByte()) // Set bit 7.
-            internalBuffer.putByte(position++, (value ushr 6).toByte())
+            internalBuffer.putByte(position++, (newValue ushr 6).toByte())
             return 2
         }
-        if (value ushr 20 == 0) {
+        if (newValue ushr 20 == 0) {
             val byteBuf = internalBuffer
             byteBuf.putByte(position++, (first or 0x40).toByte()) // Set bit 7.
-            byteBuf.putByte(position++, (value ushr 6 or 0x80).toByte()) // Set bit 8.
-            byteBuf.putByte(position++, (value ushr 13).toByte())
+            byteBuf.putByte(position++, (newValue ushr 6 or 0x80).toByte()) // Set bit 8.
+            byteBuf.putByte(position++, (newValue ushr 13).toByte())
             return 3
         }
-        if (value ushr 27 == 0) {
+        if (newValue ushr 27 == 0) {
             val byteBuf = internalBuffer
             byteBuf.putByte(position++, (first or 0x40).toByte()) // Set bit 7.
-            byteBuf.putByte(position++, (value ushr 6 or 0x80).toByte()) // Set bit 8.
-            byteBuf.putByte(position++, (value ushr 13 or 0x80).toByte()) // Set bit 8.
-            byteBuf.putByte(position++, (value ushr 20).toByte())
+            byteBuf.putByte(position++, (newValue ushr 6 or 0x80).toByte()) // Set bit 8.
+            byteBuf.putByte(position++, (newValue ushr 13 or 0x80).toByte()) // Set bit 8.
+            byteBuf.putByte(position++, (newValue ushr 20).toByte())
             return 4
         }
         val byteBuf = internalBuffer
         byteBuf.putByte(position++, (first or 0x40).toByte()) // Set bit 7.
-        byteBuf.putByte(position++, (value ushr 6 or 0x80).toByte()) // Set bit 8.
-        byteBuf.putByte(position++, (value ushr 13 or 0x80).toByte()) // Set bit 8.
-        byteBuf.putByte(position++, (value ushr 20 or 0x80).toByte()) // Set bit 8.
-        byteBuf.putByte(position++, (value ushr 27).toByte())
+        byteBuf.putByte(position++, (newValue ushr 6 or 0x80).toByte()) // Set bit 8.
+        byteBuf.putByte(position++, (newValue ushr 13 or 0x80).toByte()) // Set bit 8.
+        byteBuf.putByte(position++, (newValue ushr 20 or 0x80).toByte()) // Set bit 8.
+        byteBuf.putByte(position++, (newValue ushr 27).toByte())
         return 5
     }
 
@@ -297,84 +298,86 @@ class AeronOutput : Output {
 
     @Throws(KryoException::class)
     override fun writeVarLong(value: Long, optimizePositive: Boolean): Int {
-        var value = value
-        if (!optimizePositive) value = value shl 1 xor (value shr 63)
-        if (value ushr 7 == 0L) {
-            internalBuffer.putByte(position++, value.toByte())
+        var newValue = value
+
+        if (!optimizePositive) newValue = newValue shl 1 xor (newValue shr 63)
+
+        if (newValue ushr 7 == 0L) {
+            internalBuffer.putByte(position++, newValue.toByte())
             return 1
         }
-        if (value ushr 14 == 0L) {
-            internalBuffer.putByte(position++, (value and 0x7F or 0x80).toByte())
-            internalBuffer.putByte(position++, (value ushr 7).toByte())
+        if (newValue ushr 14 == 0L) {
+            internalBuffer.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            internalBuffer.putByte(position++, (newValue ushr 7).toByte())
             return 2
         }
-        if (value ushr 21 == 0L) {
+        if (newValue ushr 21 == 0L) {
             val byteBuf = internalBuffer
-            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 14).toByte())
+            byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 14).toByte())
             return 3
         }
-        if (value ushr 28 == 0L) {
+        if (newValue ushr 28 == 0L) {
             val byteBuf = internalBuffer
-            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 21).toByte())
+            byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 21).toByte())
             return 4
         }
-        if (value ushr 35 == 0L) {
+        if (newValue ushr 35 == 0L) {
             val byteBuf = internalBuffer
-            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 28).toByte())
+            byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 21 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 28).toByte())
             return 5
         }
-        if (value ushr 42 == 0L) {
+        if (newValue ushr 42 == 0L) {
             val byteBuf = internalBuffer
-            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 28 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 35).toByte())
+            byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 21 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 28 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 35).toByte())
             return 6
         }
-        if (value ushr 49 == 0L) {
+        if (newValue ushr 49 == 0L) {
             val byteBuf = internalBuffer
-            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 28 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 35 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 42).toByte())
+            byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 21 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 28 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 35 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 42).toByte())
             return 7
         }
-        if (value ushr 56 == 0L) {
+        if (newValue ushr 56 == 0L) {
             val byteBuf = internalBuffer
-            byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 28 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 35 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 42 or 0x80).toByte())
-            byteBuf.putByte(position++, (value ushr 49).toByte())
+            byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 14 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 21 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 28 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 35 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 42 or 0x80).toByte())
+            byteBuf.putByte(position++, (newValue ushr 49).toByte())
             return 8
         }
         val byteBuf = internalBuffer
-        byteBuf.putByte(position++, (value and 0x7F or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 7 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 14 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 21 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 28 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 35 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 42 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 49 or 0x80).toByte())
-        byteBuf.putByte(position++, (value ushr 56).toByte())
+        byteBuf.putByte(position++, (newValue and 0x7F or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 7 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 14 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 21 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 28 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 35 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 42 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 49 or 0x80).toByte())
+        byteBuf.putByte(position++, (newValue ushr 56).toByte())
         return 9
     }
 
@@ -419,6 +422,8 @@ class AeronOutput : Output {
             writeByte(0x80) // 0 means null, bit 8 means UTF8.
             return
         }
+
+
         val charCount = value.length
         if (charCount == 0) {
             writeByte(1 or 0x80) // 1 means empty string, bit 8 means UTF8.
@@ -427,7 +432,7 @@ class AeronOutput : Output {
 
         // Detect ASCII, we only do this for small strings, but ONLY more than 1 char.
         // since 1 char is used for bit-masking if we use for 1 char string, reading the string will not work!
-        var permitAscii = charCount > 1 && charCount <= 32
+        var permitAscii = charCount in 2..32
         if (permitAscii) {
             for (i in 0 until charCount) {
                 if (value[i].toInt() > 127) {
@@ -462,7 +467,7 @@ class AeronOutput : Output {
                 return
             }
         }
-        if (charIndex < charCount) writeUtf8_slow(value, charCount, charIndex)
+        if (charIndex < charCount) writeUtf8Slow(value, charCount, charIndex)
     }
 
     @Throws(KryoException::class)
@@ -484,13 +489,14 @@ class AeronOutput : Output {
             byteBuf.putByte(position++, value[i].toByte())
             ++i
         }
-        byteBuf.putByte(position - 1, (byteBuf.getByte(position - 1).toInt() or 0x80) as Byte) // Bit 8 means end of ASCII.
+        byteBuf.putByte(position - 1, (byteBuf.getByte(position - 1).toInt() or 0x80).toByte()) // Bit 8 means end of ASCII.
     }
 
-    private fun writeUtf8_slow(value: String, charCount: Int, charIndex: Int) {
-        var charIndex = charIndex
-        while (charIndex < charCount) {
-            val c = value[charIndex].toInt()
+    private fun writeUtf8Slow(value: String, charCount: Int, charIndex: Int) {
+        var index = charIndex
+        while (index < charCount) {
+            val c = value[index].toInt()
+
             if (c <= 0x007F) {
                 internalBuffer.putByte(position++, c.toByte())
             } else if (c > 0x07FF) {
@@ -501,84 +507,84 @@ class AeronOutput : Output {
                 internalBuffer.putByte(position++, (0xC0 or (c shr 6 and 0x1F)).toByte())
                 internalBuffer.putByte(position++, (0x80 or (c and 0x3F)).toByte())
             }
-            charIndex++
+            index++
         }
     }
 
     // Primitive arrays:
     @Throws(KryoException::class)
     override fun writeInts(array: IntArray, offset: Int, count: Int) {
-        var offset = offset
-        val n = offset + count
-        while (offset < n) {
-            val value = array[offset]
+        var newOffset = offset
+        val n = newOffset + count
+        while (newOffset < n) {
+            val value = array[newOffset]
             writeInt(value)
-            offset++
+            newOffset++
         }
     }
 
     @Throws(KryoException::class)
     override fun writeLongs(array: LongArray, offset: Int, count: Int) {
-        var offset = offset
-        val n = offset + count
-        while (offset < n) {
-            val value = array[offset]
+        var newOffset = offset
+        val n = newOffset + count
+        while (newOffset < n) {
+            val value = array[newOffset]
             writeLong(value)
-            offset++
+            newOffset++
         }
     }
 
     @Throws(KryoException::class)
     override fun writeFloats(array: FloatArray, offset: Int, count: Int) {
-        var offset = offset
-        val n = offset + count
-        while (offset < n) {
-            val value = java.lang.Float.floatToIntBits(array[offset])
+        var newOffset = offset
+        val n = newOffset + count
+        while (newOffset < n) {
+            val value = java.lang.Float.floatToIntBits(array[newOffset])
             writeFloat(value.toFloat())
-            offset++
+            newOffset++
         }
     }
 
     @Throws(KryoException::class)
     override fun writeDoubles(array: DoubleArray, offset: Int, count: Int) {
-        var offset = offset
-        val n = offset + count
-        while (offset < n) {
-            val value = java.lang.Double.doubleToLongBits(array[offset])
+        var newOffset = offset
+        val n = newOffset + count
+        while (newOffset < n) {
+            val value = java.lang.Double.doubleToLongBits(array[newOffset])
             writeDouble(value.toDouble())
-            offset++
+            newOffset++
         }
     }
 
     @Throws(KryoException::class)
     override fun writeShorts(array: ShortArray, offset: Int, count: Int) {
-        var offset = offset
-        val n = offset + count
-        while (offset < n) {
-            val value = array[offset].toInt()
+        var newOffset = offset
+        val n = newOffset + count
+        while (newOffset < n) {
+            val value = array[newOffset].toInt()
             writeShort(value)
-            offset++
+            newOffset++
         }
     }
 
     @Throws(KryoException::class)
     override fun writeChars(array: CharArray, offset: Int, count: Int) {
-        var offset = offset
-        val n = offset + count
-        while (offset < n) {
-            val value = array[offset].toInt()
+        var newOffset = offset
+        val n = newOffset + count
+        while (newOffset < n) {
+            val value = array[newOffset].toInt()
             writeChar(value.toChar())
-            offset++
+            newOffset++
         }
     }
 
     @Throws(KryoException::class)
     override fun writeBooleans(array: BooleanArray, offset: Int, count: Int) {
-        var offset = offset
-        val n = offset + count
-        while (offset < n) {
-            internalBuffer.putByte(position++, if (array[offset]) 1.toByte() else 0)
-            offset++
+        var newOffset = offset
+        val n = newOffset + count
+        while (newOffset < n) {
+            internalBuffer.putByte(position++, if (array[newOffset]) 1.toByte() else 0)
+            newOffset++
         }
     }
 }

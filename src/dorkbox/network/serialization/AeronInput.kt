@@ -45,52 +45,40 @@ import java.io.InputStream
 /**
  * An [InputStream] which reads data from a [DirectBuffer].
  *
- *
  * A read operation against this stream will occur at the `readerIndex`
  * of its underlying buffer and the `readerIndex` will increase during
  * the read operation.
  *
- *
- * This stream implements [DataInput] for your convenience.
  * The endianness of the stream is not always big endian but depends on
  * the endianness of the underlying buffer.
  *
- *
  * Utility methods are provided for efficiently reading primitive types and strings.
- *
- *
- *
- *
- *
- *
- *
  *
  * Modified from KRYO ByteBufferInput to use ByteBuf instead of ByteBuffer.
  */
 class AeronInput
-/** Creates an uninitialized Input, [.setBuffer] must be called before the Input is used.  */
+    /** Creates an uninitialized Input, [.setBuffer] must be called before the Input is used.  */
     () : Input() {
-    /** Returns the buffer. The bytes between zero and [.position] are the data that has been read.  */
+
+
+    /** the buffer. The bytes between zero and [position] are the data that has been read.  */
     var internalBuffer: DirectBuffer? = null
         private set
+
     /**
      * Creates a new Input for reading from a [DirectBuffer] which is filled with the specified bytes.
-     * @see .setBuffer
+     *
+     * @see [setBuffer]
      */
-    /** Creates a new Input for reading from a byteArray which is filled with the specified bytes.  */
-    @JvmOverloads
     constructor(bytes: ByteArray, offset: Int = 0, length: Int = bytes.size) : this() {
         setBuffer(bytes, offset, length)
     }
+
     /**
      * Creates a new Input for reading from a [DirectBuffer] which is filled with the specified bytes.
-     * @see .setBuffer
+     *
+     * @see [setBuffer]
      */
-    /**
-     * Creates a new Input for reading from a [DirectBuffer] which is filled with the specified bytes.
-     * @see .setBuffer
-     */
-    @JvmOverloads
     constructor(buffer: DirectBuffer, offset: Int = 0, length: Int = buffer.capacity()) : this() {
         setBuffer(buffer, offset, length)
     }
@@ -98,13 +86,14 @@ class AeronInput
     /**
      * Throws [UnsupportedOperationException] because this input uses a DirectBuffer, not a byte[].
      */
-    @Deprecated("")
+    @Deprecated("This input does not use a byte[]", ReplaceWith("internalBuffer"))
     override fun getBuffer(): ByteArray {
-        throw UnsupportedOperationException("This input does not use a byte[], see #getInternalBuffer().")
+        throw UnsupportedOperationException("This input does not use a byte[], see #internalBuffer.")
     }
 
     /** Sets a new buffer. The offset is 0 and the count is the buffer's length.
-     * @see .setBuffer
+     *
+     * @see [setBuffer]
      */
     override fun setBuffer(bytes: ByteArray) {
         setBuffer(bytes, 0, bytes.size)
@@ -120,8 +109,9 @@ class AeronInput
         capacity = count
     }
 
+    @Deprecated("This input does not use an inputStream", ReplaceWith("setByteBuf(buffer)"))
     override fun setInputStream(inputStream: InputStream) {
-        throw UnsupportedOperationException("This input does not use a inputStream, see #setByteBuf().")
+        throw UnsupportedOperationException("This input does not use an inputStream, see setByteBuf().")
     }
 
     /**
@@ -188,13 +178,13 @@ class AeronInput
 
     @Throws(KryoException::class)
     override fun read(bytes: ByteArray, offset: Int, count: Int): Int {
-        var count = count
-        if (position + count > limit) {
-            count = limit - position
+        var newCount = count
+        if (position + newCount > limit) {
+            newCount = limit - position
         }
-        internalBuffer!!.getBytes(position, bytes, offset, count)
-        position += count
-        return count
+        internalBuffer!!.getBytes(position, bytes, offset, newCount)
+        position += newCount
+        return newCount
     }
 
     override fun setPosition(position: Int) {
@@ -465,6 +455,7 @@ class AeronInput
             0 -> return null
             1 -> return ""
         }
+
         charCount-- // make count adjustment
         readUtf8Chars(charCount)
         return String(chars, 0, charCount)
@@ -472,12 +463,14 @@ class AeronInput
 
     override fun readStringBuilder(): StringBuilder? {
         if (!readVarIntFlag()) return StringBuilder(readAsciiString()) // ASCII.
+
         // Null, empty, or UTF8.
         var charCount = readVarIntFlag(true)
         when (charCount) {
             0 -> return null
             1 -> return StringBuilder("")
         }
+
         charCount--
         readUtf8Chars(charCount)
         val builder = StringBuilder(charCount)
@@ -506,7 +499,8 @@ class AeronInput
         val chars = chars
         val byteBuf = internalBuffer
         var charCount = 0
-        val n = Math.min(chars.size, limit - position)
+        val n = chars.size.coerceAtMost(limit - position)
+
         while (charCount < n) {
             val b = byteBuf!!.getByte(position++).toInt()
             if (b and 0x80 == 0x80) {
@@ -516,45 +510,48 @@ class AeronInput
             chars[charCount] = b.toChar()
             charCount++
         }
+
         return readAscii_slow(charCount)
     }
 
     private fun readAscii_slow(charCount: Int): String {
-        var charCount = charCount
+        var count = charCount
         var chars = chars
         val byteBuf = internalBuffer
+
         while (true) {
             val b = byteBuf!!.getByte(position++).toInt()
-            if (charCount == chars.size) {
-                val newChars = CharArray(charCount * 2)
-                System.arraycopy(chars, 0, newChars, 0, charCount)
+            if (count == chars.size) {
+                val newChars = CharArray(count * 2)
+                System.arraycopy(chars, 0, newChars, 0, count)
                 chars = newChars
                 this.chars = newChars
             }
             if (b and 0x80 == 0x80) {
-                chars[charCount] = (b and 0x7F).toChar()
-                return String(chars, 0, charCount + 1)
+                chars[count] = (b and 0x7F).toChar()
+                return String(chars, 0, count + 1)
             }
-            chars[charCount++] = b.toChar()
+            chars[count++] = b.toChar()
         }
     }
 
     private fun readUtf8Chars_slow(charCount: Int, charIndex: Int) {
-        var charIndex = charIndex
+        var index = charIndex
         val byteBuf = internalBuffer
         val chars = chars
-        while (charIndex < charCount) {
+
+        while (index < charCount) {
             val b: Int = byteBuf!!.getByte(position++).toInt() and 0xFF
             when (b shr 4) {
-                0, 1, 2, 3, 4, 5, 6, 7 -> chars[charIndex] = b.toChar()
-                12, 13 -> chars[charIndex] = (b and 0x1F shl 6 or (byteBuf.getByte(position++).toInt() and 0x3F)).toChar()
+                0, 1, 2, 3, 4, 5, 6, 7 -> chars[index] = b.toChar()
+                12, 13 -> chars[index] = (b and 0x1F shl 6 or (byteBuf.getByte(position++).toInt() and 0x3F)).toChar()
                 14 -> {
                     val b2 = byteBuf.getByte(position++).toInt()
                     val b3 = byteBuf.getByte(position++).toInt()
-                    chars[charIndex] = (b and 0x0F shl 12 or (b2 and 0x3F shl 6) or (b3 and 0x3F)).toChar()
+                    chars[index] = (b and 0x0F shl 12 or (b2 and 0x3F shl 6) or (b3 and 0x3F)).toChar()
                 }
             }
-            charIndex++
+            index++
         }
     }
 
