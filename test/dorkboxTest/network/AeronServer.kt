@@ -29,11 +29,8 @@ import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
 
-/**
- *
- */
 object AeronServer {
-    private val LOG = LoggerFactory.getLogger(AeronServer::class.java)
+//    private val LOG = LoggerFactory.getLogger(AeronServer::class.java)
 
     init {
         // assume SLF4J is bound to logback in the current environment
@@ -85,16 +82,16 @@ object AeronServer {
         val server: Server<*> = Server<Connection>(configuration)
 
         server.filter { connection ->
-            println("should this connection be allowed?")
+            println("should the connection $connection be allowed?")
             true
         }
 
         server.onConnect { connection ->
-            println("connected")
+            println("connected: $connection")
         }
 
         server.onDisconnect { connection ->
-            println("disconnect")
+            println("disconnect: $connection")
         }
 
         server.onError { throwable ->
@@ -103,7 +100,7 @@ object AeronServer {
         }
 
         server.onError { connection, throwable ->
-            println("from test: has connection error")
+            println("from test: has connection error: $connection")
             throwable.printStackTrace()
         }
 

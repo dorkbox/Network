@@ -16,986 +16,954 @@
  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
-
-package dorkboxTest.network.kryo;
-
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.util.Random;
-
-import org.junit.Test;
-
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Registration;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-
-import dorkbox.network.serialization.AeronInput;
-import dorkbox.network.serialization.AeronOutput;
-
-/** @author Nathan Sweet */
-@SuppressWarnings("all")
-public class InputOutputByteBufTest extends KryoTestCase {
-	@Test
-	public void testByteBufferInputEnd () {
-        AeronInput in = new AeronInput(new byte[] {123, 0, 0, 0});
-		assertFalse(in.end());
-		in.setPosition(4);
-		assertTrue(in.end());
-	}
-
-	@Test
-	public void testOutputBytes () throws IOException {
-        AeronOutput output = new AeronOutput(0);
-		output.writeBytes(new byte[] {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26});
-		output.writeBytes(new byte[] {31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46});
-		output.writeBytes(new byte[] {51, 52, 53, 54, 55, 56, 57, 58});
-		output.writeBytes(new byte[] {61, 62, 63, 64, 65});
-		output.flush();
-
-		assertArrayEquals(new byte[] { //
-			11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, //
-			31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, //
-			51, 52, 53, 54, 55, 56, 57, 58, //
-			61, 62, 63, 64, 65}, output.toBytes());
-	}
-
-	@Test
-	public void testOutputBytesArray () throws IOException {
-        byte[] buffer = { //
-                          11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, //
-                          31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, //
-                          51, 52, 53, 54, 55, 56, 57, 58, //
-                          61, 62, 63, 64, 65};
-        AeronOutput output = new AeronOutput(buffer);
-        output.setPosition(buffer.length);
-
-		assertArrayEquals(new byte[] { //
-			11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, //
-			31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, //
-			51, 52, 53, 54, 55, 56, 57, 58, //
-			61, 62, 63, 64, 65}, output.toBytes());
-	}
-
-	@Test
-	public void testInputBytes () throws IOException {
-		byte[] bytes = new byte[] { //
-			11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, //
-			31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, //
-			51, 52, 53, 54, 55, 56, 57, 58, //
-			61, 62, 63, 64, 65};
-
-		AeronInput input = new AeronInput(bytes);
-		byte[] temp = new byte[1024];
-		int count = input.read(temp, 512, bytes.length);
-		assertEquals(bytes.length, count);
-		byte[] temp2 = new byte[count];
-		System.arraycopy(temp, 512, temp2, 0, count);
-		assertArrayEquals(bytes, temp2);
-
-		input = new AeronInput(bytes);
-		count = input.read(temp, 512, 512);
-		assertEquals(bytes.length, count);
-		temp2 = new byte[count];
-		System.arraycopy(temp, 512, temp2, 0, count);
-		assertArrayEquals(bytes, temp2);
-	}
-
-	@Test
-	public void testWriteBytes () throws IOException {
-		AeronOutput buffer = new AeronOutput(512);
-		buffer.writeBytes(new byte[] {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26});
-		buffer.writeBytes(new byte[] {31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46});
-		buffer.writeByte(51);
-		buffer.writeBytes(new byte[] {52, 53, 54, 55, 56, 57, 58});
-		buffer.writeByte(61);
-		buffer.writeByte(62);
-		buffer.writeByte(63);
-		buffer.writeByte(64);
-		buffer.writeByte(65);
-		buffer.flush();
-
-		assertArrayEquals(new byte[] { //
-			11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, //
-			31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, //
-			51, 52, 53, 54, 55, 56, 57, 58, //
-			61, 62, 63, 64, 65}, buffer.toBytes());
-	}
-
-	@Test
-	public void testStrings () throws IOException {
-		runStringTest(new AeronOutput(4096));
-		runStringTest(new AeronOutput(897));
-
-		Output write = new AeronOutput(21);
-		String value = "abcdef\u00E1\u00E9\u00ED\u00F3\u00FA\u1234";
-		write.writeString(value);
-
-		Input read = new AeronInput(write.toBytes());
-		assertEquals(value, read.readString());
-
-		write.reset();
-		write.writeString(null);
-		read = new Input(write.toBytes());
-		assertNull(read.readString());
-
-		for (int i = 0; i <= 258; i++)
-			runStringTest(i);
-		runStringTest(1);
-		runStringTest(2);
-		runStringTest(127);
-		runStringTest(256);
-		runStringTest(1024 * 1023);
-		runStringTest(1024 * 1024);
-		runStringTest(1024 * 1025);
-		runStringTest(1024 * 1026);
-		runStringTest(1024 * 1024 * 2);
-	}
-
-	@Test
-	public void testGrowingBufferForAscii () {
-		// Initial size of 2.
-		final AeronOutput output = new AeronOutput(2);
-		// Check that it is possible to write an ASCII string into the output buffer.
-		output.writeString("node/read");
-        Input input = new AeronInput(output.toBytes(), 0, output.position());
-        assertEquals("node/read", input.readString());
-	}
-
-	private void runStringTest (int length) throws IOException {
-		Output write = new Output(1024, -1);
-		StringBuilder buffer = new StringBuilder();
-		for (int i = 0; i < length; i++)
-			buffer.append((char)i);
-
-		String value = buffer.toString();
-		write.writeString(value);
-		write.writeString(value);
-
-        AeronInput read = new AeronInput(write.toBytes());
-		assertEquals(value, read.readString());
-		assertEquals(value, read.readStringBuilder().toString());
-
-		write.reset();
-		write.writeString(buffer.toString());
-		write.writeString(buffer.toString());
-		read = new AeronInput(write.toBytes());
-		assertEquals(value, read.readStringBuilder().toString());
-		assertEquals(value, read.readString());
-
-		if (length <= 127) {
-			write.reset();
-			write.writeAscii(value);
-			write.writeAscii(value);
-			read = new AeronInput(write.toBytes());
-			assertEquals(value, read.readStringBuilder().toString());
-			assertEquals(value, read.readString());
-		}
-	}
-
-	private void runStringTest (AeronOutput write) throws IOException {
-		String value1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\rabcdefghijklmnopqrstuvwxyz\n1234567890\t\"!`?'.,;:()[]{}<>|/@\\^$-%+=#_&~*";
-		String value2 = "abcdef\u00E1\u00E9\u00ED\u00F3\u00FA\u1234";
-
-		write.writeString("");
-		write.writeString("1");
-		write.writeString("22");
-		write.writeString("uno");
-		write.writeString("dos");
-		write.writeString("tres");
-		write.writeString(null);
-		write.writeString(value1);
-		write.writeString(value2);
-		for (int i = 0; i < 127; i++)
-			write.writeString(String.valueOf((char)i));
-		for (int i = 0; i < 127; i++)
-			write.writeString(String.valueOf((char)i) + "abc");
-
-        AeronInput read = new AeronInput(write.toBytes());
-		assertEquals("", read.readString());
-		assertEquals("1", read.readString());
-		assertEquals("22", read.readString());
-		assertEquals("uno", read.readString());
-		assertEquals("dos", read.readString());
-		assertEquals("tres", read.readString());
-		assertNull(read.readString());
-		assertEquals(value1, read.readString());
-		assertEquals(value2, read.readString());
-		for (int i = 0; i < 127; i++)
-			assertEquals(String.valueOf((char)i), read.readString());
-		for (int i = 0; i < 127; i++)
-			assertEquals(String.valueOf((char)i) + "abc", read.readString());
-
-		read.reset();
-		assertEquals("", read.readStringBuilder().toString());
-		assertEquals("1", read.readStringBuilder().toString());
-		assertEquals("22", read.readStringBuilder().toString());
-		assertEquals("uno", read.readStringBuilder().toString());
-		assertEquals("dos", read.readStringBuilder().toString());
-		assertEquals("tres", read.readStringBuilder().toString());
-		assertNull(read.readStringBuilder());
-		assertEquals(value1, read.readStringBuilder().toString());
-		assertEquals(value2, read.readStringBuilder().toString());
-		for (int i = 0; i < 127; i++)
-			assertEquals(String.valueOf((char)i), read.readStringBuilder().toString());
-		for (int i = 0; i < 127; i++)
-			assertEquals(String.valueOf((char)i) + "abc", read.readStringBuilder().toString());
-	}
-
-	@Test
-	public void testCanReadInt () throws IOException {
-		AeronOutput write = new AeronOutput(32);
-
-		AeronInput read = new AeronInput(write.toBytes());
-		assertFalse(read.canReadVarInt());
-
-		write.writeVarInt(400, true);
-
-		read = new AeronInput(write.toBytes());
-		assertTrue(read.canReadVarInt());
-		read.setLimit(read.limit() - 1);
-		assertFalse(read.canReadVarInt());
-	}
-
-	@Test
-	public void testVarIntFlagOutput () throws IOException {
-		AeronOutput output = new AeronOutput(4096);
-        AeronInput input = new AeronInput(output.getInternalBuffer());
-		runVarIntFlagsTest(output, input);
-	}
-
-	@Test
-	public void testVarIntFlagByteBufferOutput () throws IOException {
-        AeronOutput output = new AeronOutput(4096);
-        AeronInput input = new AeronInput(output.getInternalBuffer());
-		runVarIntFlagsTest(output, input);
-	}
-
-	private void runVarIntFlagsTest (Output output, Input input) throws IOException {
-		assertEquals(1, output.writeVarIntFlag(true, 63, true));
-		assertEquals(2, output.writeVarIntFlag(true, 64, true));
-
-		assertEquals(1, output.writeVarIntFlag(false, 63, true));
-		assertEquals(2, output.writeVarIntFlag(false, 64, true));
-
-		assertEquals(1, output.writeVarIntFlag(true, 31, false));
-		assertEquals(2, output.writeVarIntFlag(true, 32, false));
-
-		assertEquals(1, output.writeVarIntFlag(false, 31, false));
-		assertEquals(2, output.writeVarIntFlag(false, 32, false));
-
-		input.setPosition(0);
-		input.setLimit(output.position());
-		assertTrue(input.readVarIntFlag());
-		assertEquals(63, input.readVarIntFlag(true));
-		assertTrue(input.readVarIntFlag());
-		assertEquals(64, input.readVarIntFlag(true));
-
-		assertFalse(input.readVarIntFlag());
-		assertEquals(63, input.readVarIntFlag(true));
-		assertFalse(input.readVarIntFlag());
-		assertEquals(64, input.readVarIntFlag(true));
-
-		assertTrue(input.readVarIntFlag());
-		assertEquals(31, input.readVarIntFlag(false));
-		assertTrue(input.readVarIntFlag());
-		assertEquals(32, input.readVarIntFlag(false));
-
-		assertFalse(input.readVarIntFlag());
-		assertEquals(31, input.readVarIntFlag(false));
-		assertFalse(input.readVarIntFlag());
-		assertEquals(32, input.readVarIntFlag(false));
-	}
-
-	@Test
-	public void testInts () throws IOException {
-		runIntTest(new AeronOutput(4096));
-		runIntTest(new AeronOutput(32));
-	}
-
-	private void runIntTest (Output write) throws IOException {
-		write.writeInt(0);
-		write.writeInt(63);
-		write.writeInt(64);
-		write.writeInt(127);
-		write.writeInt(128);
-		write.writeInt(8192);
-		write.writeInt(16384);
-		write.writeInt(2097151);
-		write.writeInt(1048575);
-		write.writeInt(134217727);
-		write.writeInt(268435455);
-		write.writeInt(134217728);
-		write.writeInt(268435456);
-		write.writeInt(-2097151);
-		write.writeInt(-1048575);
-		write.writeInt(-134217727);
-		write.writeInt(-268435455);
-		write.writeInt(-134217728);
-		write.writeInt(-268435456);
-		assertEquals(1, write.writeVarInt(0, true));
-		assertEquals(1, write.writeVarInt(0, false));
-		assertEquals(1, write.writeVarInt(63, true));
-		assertEquals(1, write.writeVarInt(63, false));
-		assertEquals(1, write.writeVarInt(64, true));
-		assertEquals(2, write.writeVarInt(64, false));
-		assertEquals(1, write.writeVarInt(127, true));
-		assertEquals(2, write.writeVarInt(127, false));
-		assertEquals(2, write.writeVarInt(128, true));
-		assertEquals(2, write.writeVarInt(128, false));
-		assertEquals(2, write.writeVarInt(8191, true));
-		assertEquals(2, write.writeVarInt(8191, false));
-		assertEquals(2, write.writeVarInt(8192, true));
-		assertEquals(3, write.writeVarInt(8192, false));
-		assertEquals(2, write.writeVarInt(16383, true));
-		assertEquals(3, write.writeVarInt(16383, false));
-		assertEquals(3, write.writeVarInt(16384, true));
-		assertEquals(3, write.writeVarInt(16384, false));
-		assertEquals(3, write.writeVarInt(2097151, true));
-		assertEquals(4, write.writeVarInt(2097151, false));
-		assertEquals(3, write.writeVarInt(1048575, true));
-		assertEquals(3, write.writeVarInt(1048575, false));
-		assertEquals(4, write.writeVarInt(134217727, true));
-		assertEquals(4, write.writeVarInt(134217727, false));
-		assertEquals(4, write.writeVarInt(268435455, true));
-		assertEquals(5, write.writeVarInt(268435455, false));
-		assertEquals(4, write.writeVarInt(134217728, true));
-		assertEquals(5, write.writeVarInt(134217728, false));
-		assertEquals(5, write.writeVarInt(268435456, true));
-		assertEquals(5, write.writeVarInt(268435456, false));
-		assertEquals(1, write.writeVarInt(-64, false));
-		assertEquals(5, write.writeVarInt(-64, true));
-		assertEquals(2, write.writeVarInt(-65, false));
-		assertEquals(5, write.writeVarInt(-65, true));
-		assertEquals(2, write.writeVarInt(-8192, false));
-		assertEquals(5, write.writeVarInt(-8192, true));
-		assertEquals(3, write.writeVarInt(-1048576, false));
-		assertEquals(5, write.writeVarInt(-1048576, true));
-		assertEquals(4, write.writeVarInt(-134217728, false));
-		assertEquals(5, write.writeVarInt(-134217728, true));
-		assertEquals(5, write.writeVarInt(-134217729, false));
-		assertEquals(5, write.writeVarInt(-134217729, true));
-		assertEquals(5, write.writeVarInt(1000000000, false));
-		assertEquals(5, write.writeVarInt(1000000000, true));
-		assertEquals(5, write.writeVarInt(Integer.MAX_VALUE - 1, false));
-		assertEquals(5, write.writeVarInt(Integer.MAX_VALUE - 1, true));
-		assertEquals(5, write.writeVarInt(Integer.MAX_VALUE, false));
-		assertEquals(5, write.writeVarInt(Integer.MAX_VALUE, true));
-
-        AeronInput read = new AeronInput(write.toBytes());
-		assertEquals(0, read.readInt());
-		assertEquals(63, read.readInt());
-		assertEquals(64, read.readInt());
-		assertEquals(127, read.readInt());
-		assertEquals(128, read.readInt());
-		assertEquals(8192, read.readInt());
-		assertEquals(16384, read.readInt());
-		assertEquals(2097151, read.readInt());
-		assertEquals(1048575, read.readInt());
-		assertEquals(134217727, read.readInt());
-		assertEquals(268435455, read.readInt());
-		assertEquals(134217728, read.readInt());
-		assertEquals(268435456, read.readInt());
-		assertEquals(-2097151, read.readInt());
-		assertEquals(-1048575, read.readInt());
-		assertEquals(-134217727, read.readInt());
-		assertEquals(-268435455, read.readInt());
-		assertEquals(-134217728, read.readInt());
-		assertEquals(-268435456, read.readInt());
-		assertTrue(read.canReadVarInt());
-		assertTrue(read.canReadVarInt());
-		assertTrue(read.canReadVarInt());
-		assertEquals(0, read.readVarInt(true));
-		assertEquals(0, read.readVarInt(false));
-		assertEquals(63, read.readVarInt(true));
-		assertEquals(63, read.readVarInt(false));
-		assertEquals(64, read.readVarInt(true));
-		assertEquals(64, read.readVarInt(false));
-		assertEquals(127, read.readVarInt(true));
-		assertEquals(127, read.readVarInt(false));
-		assertEquals(128, read.readVarInt(true));
-		assertEquals(128, read.readVarInt(false));
-		assertEquals(8191, read.readVarInt(true));
-		assertEquals(8191, read.readVarInt(false));
-		assertEquals(8192, read.readVarInt(true));
-		assertEquals(8192, read.readVarInt(false));
-		assertEquals(16383, read.readVarInt(true));
-		assertEquals(16383, read.readVarInt(false));
-		assertEquals(16384, read.readVarInt(true));
-		assertEquals(16384, read.readVarInt(false));
-		assertEquals(2097151, read.readVarInt(true));
-		assertEquals(2097151, read.readVarInt(false));
-		assertEquals(1048575, read.readVarInt(true));
-		assertEquals(1048575, read.readVarInt(false));
-		assertEquals(134217727, read.readVarInt(true));
-		assertEquals(134217727, read.readVarInt(false));
-		assertEquals(268435455, read.readVarInt(true));
-		assertEquals(268435455, read.readVarInt(false));
-		assertEquals(134217728, read.readVarInt(true));
-		assertEquals(134217728, read.readVarInt(false));
-		assertEquals(268435456, read.readVarInt(true));
-		assertEquals(268435456, read.readVarInt(false));
-		assertEquals(-64, read.readVarInt(false));
-		assertEquals(-64, read.readVarInt(true));
-		assertEquals(-65, read.readVarInt(false));
-		assertEquals(-65, read.readVarInt(true));
-		assertEquals(-8192, read.readVarInt(false));
-		assertEquals(-8192, read.readVarInt(true));
-		assertEquals(-1048576, read.readVarInt(false));
-		assertEquals(-1048576, read.readVarInt(true));
-		assertEquals(-134217728, read.readVarInt(false));
-		assertEquals(-134217728, read.readVarInt(true));
-		assertEquals(-134217729, read.readVarInt(false));
-		assertEquals(-134217729, read.readVarInt(true));
-		assertEquals(1000000000, read.readVarInt(false));
-		assertEquals(1000000000, read.readVarInt(true));
-		assertEquals(Integer.MAX_VALUE - 1, read.readVarInt(false));
-		assertEquals(Integer.MAX_VALUE - 1, read.readVarInt(true));
-		assertEquals(Integer.MAX_VALUE, read.readVarInt(false));
-		assertEquals(Integer.MAX_VALUE, read.readVarInt(true));
-		assertFalse(read.canReadVarInt());
-
-		Random random = new Random();
-		for (int i = 0; i < 10000; i++) {
-			int value = random.nextInt();
-			write.reset();
-			write.writeInt(value);
-			write.writeVarInt(value, true);
-			write.writeVarInt(value, false);
-
-			read.setBuffer(write.toBytes());
-			assertEquals(value, read.readInt());
-			assertEquals(value, read.readVarInt(true));
-			assertEquals(value, read.readVarInt(false));
-		}
-	}
-
-	@Test
-	public void testLongs () throws IOException {
-		runLongTest(new AeronOutput(4096));
-		runLongTest(new AeronOutput(32));
-	}
-
-	private void runLongTest (Output write) throws IOException {
-		write.writeLong(0);
-		write.writeLong(63);
-		write.writeLong(64);
-		write.writeLong(127);
-		write.writeLong(128);
-		write.writeLong(8192);
-		write.writeLong(16384);
-		write.writeLong(2097151);
-		write.writeLong(1048575);
-		write.writeLong(134217727);
-		write.writeLong(268435455);
-		write.writeLong(134217728);
-		write.writeLong(268435456);
-		write.writeLong(-2097151);
-		write.writeLong(-1048575);
-		write.writeLong(-134217727);
-		write.writeLong(-268435455);
-		write.writeLong(-134217728);
-		write.writeLong(-268435456);
-		assertEquals(1, write.writeVarLong(0, true));
-		assertEquals(1, write.writeVarLong(0, false));
-		assertEquals(1, write.writeVarLong(63, true));
-		assertEquals(1, write.writeVarLong(63, false));
-		assertEquals(1, write.writeVarLong(64, true));
-		assertEquals(2, write.writeVarLong(64, false));
-		assertEquals(1, write.writeVarLong(127, true));
-		assertEquals(2, write.writeVarLong(127, false));
-		assertEquals(2, write.writeVarLong(128, true));
-		assertEquals(2, write.writeVarLong(128, false));
-		assertEquals(2, write.writeVarLong(8191, true));
-		assertEquals(2, write.writeVarLong(8191, false));
-		assertEquals(2, write.writeVarLong(8192, true));
-		assertEquals(3, write.writeVarLong(8192, false));
-		assertEquals(2, write.writeVarLong(16383, true));
-		assertEquals(3, write.writeVarLong(16383, false));
-		assertEquals(3, write.writeVarLong(16384, true));
-		assertEquals(3, write.writeVarLong(16384, false));
-		assertEquals(3, write.writeVarLong(2097151, true));
-		assertEquals(4, write.writeVarLong(2097151, false));
-		assertEquals(3, write.writeVarLong(1048575, true));
-		assertEquals(3, write.writeVarLong(1048575, false));
-		assertEquals(4, write.writeVarLong(134217727, true));
-		assertEquals(4, write.writeVarLong(134217727, false));
-		assertEquals(4, write.writeVarLong(268435455L, true));
-		assertEquals(5, write.writeVarLong(268435455L, false));
-		assertEquals(4, write.writeVarLong(134217728L, true));
-		assertEquals(5, write.writeVarLong(134217728L, false));
-		assertEquals(5, write.writeVarLong(268435456L, true));
-		assertEquals(5, write.writeVarLong(268435456L, false));
-		assertEquals(1, write.writeVarLong(-64, false));
-		assertEquals(9, write.writeVarLong(-64, true));
-		assertEquals(2, write.writeVarLong(-65, false));
-		assertEquals(9, write.writeVarLong(-65, true));
-		assertEquals(2, write.writeVarLong(-8192, false));
-		assertEquals(9, write.writeVarLong(-8192, true));
-		assertEquals(3, write.writeVarLong(-1048576, false));
-		assertEquals(9, write.writeVarLong(-1048576, true));
-		assertEquals(4, write.writeVarLong(-134217728, false));
-		assertEquals(9, write.writeVarLong(-134217728, true));
-		assertEquals(5, write.writeVarLong(-134217729, false));
-		assertEquals(9, write.writeVarLong(-134217729, true));
-
-        AeronInput read = new AeronInput(write.toBytes());
-		assertEquals(0, read.readLong());
-		assertEquals(63, read.readLong());
-		assertEquals(64, read.readLong());
-		assertEquals(127, read.readLong());
-		assertEquals(128, read.readLong());
-		assertEquals(8192, read.readLong());
-		assertEquals(16384, read.readLong());
-		assertEquals(2097151, read.readLong());
-		assertEquals(1048575, read.readLong());
-		assertEquals(134217727, read.readLong());
-		assertEquals(268435455, read.readLong());
-		assertEquals(134217728, read.readLong());
-		assertEquals(268435456, read.readLong());
-		assertEquals(-2097151, read.readLong());
-		assertEquals(-1048575, read.readLong());
-		assertEquals(-134217727, read.readLong());
-		assertEquals(-268435455, read.readLong());
-		assertEquals(-134217728, read.readLong());
-		assertEquals(-268435456, read.readLong());
-		assertEquals(0, read.readVarLong(true));
-		assertEquals(0, read.readVarLong(false));
-		assertEquals(63, read.readVarLong(true));
-		assertEquals(63, read.readVarLong(false));
-		assertEquals(64, read.readVarLong(true));
-		assertEquals(64, read.readVarLong(false));
-		assertEquals(127, read.readVarLong(true));
-		assertEquals(127, read.readVarLong(false));
-		assertEquals(128, read.readVarLong(true));
-		assertEquals(128, read.readVarLong(false));
-		assertEquals(8191, read.readVarLong(true));
-		assertEquals(8191, read.readVarLong(false));
-		assertEquals(8192, read.readVarLong(true));
-		assertEquals(8192, read.readVarLong(false));
-		assertEquals(16383, read.readVarLong(true));
-		assertEquals(16383, read.readVarLong(false));
-		assertEquals(16384, read.readVarLong(true));
-		assertEquals(16384, read.readVarLong(false));
-		assertEquals(2097151, read.readVarLong(true));
-		assertEquals(2097151, read.readVarLong(false));
-		assertEquals(1048575, read.readVarLong(true));
-		assertEquals(1048575, read.readVarLong(false));
-		assertEquals(134217727, read.readVarLong(true));
-		assertEquals(134217727, read.readVarLong(false));
-		assertEquals(268435455, read.readVarLong(true));
-		assertEquals(268435455, read.readVarLong(false));
-		assertEquals(134217728, read.readVarLong(true));
-		assertEquals(134217728, read.readVarLong(false));
-		assertEquals(268435456, read.readVarLong(true));
-		assertEquals(268435456, read.readVarLong(false));
-		assertEquals(-64, read.readVarLong(false));
-		assertEquals(-64, read.readVarLong(true));
-		assertEquals(-65, read.readVarLong(false));
-		assertEquals(-65, read.readVarLong(true));
-		assertEquals(-8192, read.readVarLong(false));
-		assertEquals(-8192, read.readVarLong(true));
-		assertEquals(-1048576, read.readVarLong(false));
-		assertEquals(-1048576, read.readVarLong(true));
-		assertEquals(-134217728, read.readVarLong(false));
-		assertEquals(-134217728, read.readVarLong(true));
-		assertEquals(-134217729, read.readVarLong(false));
-		assertEquals(-134217729, read.readVarLong(true));
-
-		Random random = new Random();
-		for (int i = 0; i < 10000; i++) {
-			long value = random.nextLong();
-			write.reset();
-			write.writeLong(value);
-			write.writeVarLong(value, true);
-			write.writeVarLong(value, false);
-
-			read.setBuffer(write.toBytes());
-			assertEquals(value, read.readLong());
-			assertEquals(value, read.readVarLong(true));
-			assertEquals(value, read.readVarLong(false));
-		}
-	}
-
-	@Test
-	public void testShorts () throws IOException {
-		runShortTest(new AeronOutput(4096));
-		runShortTest(new AeronOutput(32));
-	}
-
-	private void runShortTest (Output write) throws IOException {
-		write.writeShort(0);
-		write.writeShort(63);
-		write.writeShort(64);
-		write.writeShort(127);
-		write.writeShort(128);
-		write.writeShort(8192);
-		write.writeShort(16384);
-		write.writeShort(32767);
-		write.writeShort(-63);
-		write.writeShort(-64);
-		write.writeShort(-127);
-		write.writeShort(-128);
-		write.writeShort(-8192);
-		write.writeShort(-16384);
-		write.writeShort(-32768);
-
-        AeronInput read = new AeronInput(write.toBytes());
-		assertEquals(0, read.readShort());
-		assertEquals(63, read.readShort());
-		assertEquals(64, read.readShort());
-		assertEquals(127, read.readShort());
-		assertEquals(128, read.readShort());
-		assertEquals(8192, read.readShort());
-		assertEquals(16384, read.readShort());
-		assertEquals(32767, read.readShort());
-		assertEquals(-63, read.readShort());
-		assertEquals(-64, read.readShort());
-		assertEquals(-127, read.readShort());
-		assertEquals(-128, read.readShort());
-		assertEquals(-8192, read.readShort());
-		assertEquals(-16384, read.readShort());
-		assertEquals(-32768, read.readShort());
-	}
-
-	@Test
-	public void testFloats () throws IOException {
-		runFloatTest(new AeronOutput(4096));
-		runFloatTest(new AeronOutput(32));
-	}
-
-	private void runFloatTest (Output write) throws IOException {
-		write.writeFloat(0);
-		write.writeFloat(63);
-		write.writeFloat(64);
-		write.writeFloat(127);
-		write.writeFloat(128);
-		write.writeFloat(8192);
-		write.writeFloat(16384);
-		write.writeFloat(32767);
-		write.writeFloat(-63);
-		write.writeFloat(-64);
-		write.writeFloat(-127);
-		write.writeFloat(-128);
-		write.writeFloat(-8192);
-		write.writeFloat(-16384);
-		write.writeFloat(-32768);
-		assertEquals(1, write.writeVarFloat(0, 1000, true));
-		assertEquals(1, write.writeVarFloat(0, 1000, false));
-		assertEquals(3, write.writeVarFloat(63, 1000, true));
-		assertEquals(3, write.writeVarFloat(63, 1000, false));
-		assertEquals(3, write.writeVarFloat(64, 1000, true));
-		assertEquals(3, write.writeVarFloat(64, 1000, false));
-		assertEquals(3, write.writeVarFloat(127, 1000, true));
-		assertEquals(3, write.writeVarFloat(127, 1000, false));
-		assertEquals(3, write.writeVarFloat(128, 1000, true));
-		assertEquals(3, write.writeVarFloat(128, 1000, false));
-		assertEquals(4, write.writeVarFloat(8191, 1000, true));
-		assertEquals(4, write.writeVarFloat(8191, 1000, false));
-		assertEquals(4, write.writeVarFloat(8192, 1000, true));
-		assertEquals(4, write.writeVarFloat(8192, 1000, false));
-		assertEquals(4, write.writeVarFloat(16383, 1000, true));
-		assertEquals(4, write.writeVarFloat(16383, 1000, false));
-		assertEquals(4, write.writeVarFloat(16384, 1000, true));
-		assertEquals(4, write.writeVarFloat(16384, 1000, false));
-		assertEquals(4, write.writeVarFloat(32767, 1000, true));
-		assertEquals(4, write.writeVarFloat(32767, 1000, false));
-		assertEquals(3, write.writeVarFloat(-64, 1000, false));
-		assertEquals(5, write.writeVarFloat(-64, 1000, true));
-		assertEquals(3, write.writeVarFloat(-65, 1000, false));
-		assertEquals(5, write.writeVarFloat(-65, 1000, true));
-		assertEquals(4, write.writeVarFloat(-8192, 1000, false));
-		assertEquals(5, write.writeVarFloat(-8192, 1000, true));
-
-        AeronInput read = new AeronInput(write.toBytes());
-		KryoAssert.assertFloatEquals(read.readFloat(), 0f);
-		KryoAssert.assertFloatEquals(read.readFloat(), 63f);
-		KryoAssert.assertFloatEquals(read.readFloat(), 64f);
-		KryoAssert.assertFloatEquals(read.readFloat(), 127f);
-		KryoAssert.assertFloatEquals(read.readFloat(), 128f);
-		KryoAssert.assertFloatEquals(read.readFloat(), 8192f);
-		KryoAssert.assertFloatEquals(read.readFloat(), 16384f);
-		KryoAssert.assertFloatEquals(read.readFloat(), 32767f);
-		KryoAssert.assertFloatEquals(read.readFloat(), -63f);
-		KryoAssert.assertFloatEquals(read.readFloat(), -64f);
-		KryoAssert.assertFloatEquals(read.readFloat(), -127f);
-		KryoAssert.assertFloatEquals(read.readFloat(), -128f);
-		KryoAssert.assertFloatEquals(read.readFloat(), -8192f);
-		KryoAssert.assertFloatEquals(read.readFloat(), -16384f);
-		KryoAssert.assertFloatEquals(read.readFloat(), -32768f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 0f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 0f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 63f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 63f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 64f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 64f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 127f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 127f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 128f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 128f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 8191f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 8191f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 8192f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 8192f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 16383f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 16383f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 16384f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 16384f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), 32767f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), 32767f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), -64f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), -64f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), -65f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), -65f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, false), -8192f);
-		KryoAssert.assertFloatEquals(read.readVarFloat(1000, true), -8192f);
-	}
-
-	@Test
-	public void testDoubles () throws IOException {
-		runDoubleTest(new AeronOutput(4096));
-		runDoubleTest(new AeronOutput(32));
-	}
-
-	private void runDoubleTest (Output write) throws IOException {
-		write.writeDouble(0);
-		write.writeDouble(63);
-		write.writeDouble(64);
-		write.writeDouble(127);
-		write.writeDouble(128);
-		write.writeDouble(8192);
-		write.writeDouble(16384);
-		write.writeDouble(32767);
-		write.writeDouble(-63);
-		write.writeDouble(-64);
-		write.writeDouble(-127);
-		write.writeDouble(-128);
-		write.writeDouble(-8192);
-		write.writeDouble(-16384);
-		write.writeDouble(-32768);
-		assertEquals(1, write.writeVarDouble(0, 1000, true));
-		assertEquals(1, write.writeVarDouble(0, 1000, false));
-		assertEquals(3, write.writeVarDouble(63, 1000, true));
-		assertEquals(3, write.writeVarDouble(63, 1000, false));
-		assertEquals(3, write.writeVarDouble(64, 1000, true));
-		assertEquals(3, write.writeVarDouble(64, 1000, false));
-		assertEquals(3, write.writeVarDouble(127, 1000, true));
-		assertEquals(3, write.writeVarDouble(127, 1000, false));
-		assertEquals(3, write.writeVarDouble(128, 1000, true));
-		assertEquals(3, write.writeVarDouble(128, 1000, false));
-		assertEquals(4, write.writeVarDouble(8191, 1000, true));
-		assertEquals(4, write.writeVarDouble(8191, 1000, false));
-		assertEquals(4, write.writeVarDouble(8192, 1000, true));
-		assertEquals(4, write.writeVarDouble(8192, 1000, false));
-		assertEquals(4, write.writeVarDouble(16383, 1000, true));
-		assertEquals(4, write.writeVarDouble(16383, 1000, false));
-		assertEquals(4, write.writeVarDouble(16384, 1000, true));
-		assertEquals(4, write.writeVarDouble(16384, 1000, false));
-		assertEquals(4, write.writeVarDouble(32767, 1000, true));
-		assertEquals(4, write.writeVarDouble(32767, 1000, false));
-		assertEquals(3, write.writeVarDouble(-64, 1000, false));
-		assertEquals(9, write.writeVarDouble(-64, 1000, true));
-		assertEquals(3, write.writeVarDouble(-65, 1000, false));
-		assertEquals(9, write.writeVarDouble(-65, 1000, true));
-		assertEquals(4, write.writeVarDouble(-8192, 1000, false));
-		assertEquals(9, write.writeVarDouble(-8192, 1000, true));
-		write.writeDouble(1.23456d);
-
-        AeronInput read = new AeronInput(write.toBytes());
-		KryoAssert.assertDoubleEquals(read.readDouble(), 0d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), 63d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), 64d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), 127d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), 128d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), 8192d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), 16384d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), 32767d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), -63d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), -64d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), -127d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), -128d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), -8192d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), -16384d);
-		KryoAssert.assertDoubleEquals(read.readDouble(), -32768d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 0d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 0d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 63d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 63d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 64d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 64d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 127d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 127d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 128d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 128d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 8191d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 8191d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 8192d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 8192d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 16383d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 16383d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 16384d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 16384d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), 32767d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), 32767d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), -64d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), -64d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), -65d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), -65d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, false), -8192d);
-		KryoAssert.assertDoubleEquals(read.readVarDouble(1000, true), -8192d);
-		KryoAssert.assertDoubleEquals(1.23456d, read.readDouble());
-	}
-
-	@Test
-	public void testBooleans () throws IOException {
-		runBooleanTest(new AeronOutput(4096));
-		runBooleanTest(new AeronOutput(32));
-	}
-
-	private void runBooleanTest (Output write) throws IOException {
-		for (int i = 0; i < 100; i++) {
-			write.writeBoolean(true);
-			write.writeBoolean(false);
-		}
-
-        AeronInput read = new AeronInput(write.toBytes());
-		for (int i = 0; i < 100; i++) {
-			assertTrue(read.readBoolean());
-			assertFalse(read.readBoolean());
-		}
-	}
-
-	@Test
-	public void testChars () throws IOException {
-		runCharTest(new AeronOutput(4096));
-		runCharTest(new AeronOutput(32));
-	}
-
-	private void runCharTest (Output write) throws IOException {
-		write.writeChar((char)0);
-		write.writeChar((char)63);
-		write.writeChar((char)64);
-		write.writeChar((char)127);
-		write.writeChar((char)128);
-		write.writeChar((char)8192);
-		write.writeChar((char)16384);
-		write.writeChar((char)32767);
-		write.writeChar((char)65535);
-
-        AeronInput read = new AeronInput(write.toBytes());
-		assertEquals(0, read.readChar());
-		assertEquals(63, read.readChar());
-		assertEquals(64, read.readChar());
-		assertEquals(127, read.readChar());
-		assertEquals(128, read.readChar());
-		assertEquals(8192, read.readChar());
-		assertEquals(16384, read.readChar());
-		assertEquals(32767, read.readChar());
-		assertEquals(65535, read.readChar());
-	}
-
-	@Test
-	public void testInputWithOffset () throws Exception {
-		final byte[] buf = new byte[30];
-		final AeronInput in = new AeronInput(buf, 10, 10);
-		assertEquals(10, in.available());
-	}
-
-	@Test
-	public void testSmallBuffers () throws Exception {
-        AeronOutput testOutput = new AeronOutput(32);
-		testOutput.writeBytes(new byte[512]);
-		testOutput.writeBytes(new byte[512]);
-		testOutput.flush();
-
-        AeronInput input = new AeronInput(testOutput.getInternalBuffer());
-		byte[] toRead = new byte[512];
-		input.readBytes(toRead);
-
-		input.readBytes(toRead);
-	}
-
-	@Test
-	public void testVerySmallBuffers () throws Exception {
-		Output out1 = new Output(4, -1);
-		Output out2 = new AeronOutput(4);
-
-		for (int i = 0; i < 16; i++) {
-			out1.writeVarInt(92, false);
-		}
-
-		for (int i = 0; i < 16; i++) {
-			out2.writeVarInt(92, false);
-		}
-
-		assertArrayEquals(out1.toBytes(), out2.toBytes());
-	}
-
-	@Test
-	public void testZeroLengthOutputs () throws Exception {
-		Output output = new Output(0, 10000);
-		kryo.writeClassAndObject(output, "Test string");
-
-		AeronOutput byteBufferOutput = new AeronOutput(0);
-		kryo.writeClassAndObject(byteBufferOutput, "Test string");
-	}
-
-    @SuppressWarnings("unchecked")
-	@Test
-	public void testFlushRoundTrip () throws Exception {
-		Kryo kryo = new Kryo();
-
-		String s1 = "12345";
-
-		AeronOutput output = new AeronOutput(32);
-
-		kryo.writeClass(output, s1.getClass());
-		kryo.writeObject(output, s1);
-
-        AeronInput input = new AeronInput(output.getInternalBuffer());
-
-		Registration r = kryo.readClass(input);
-		String s2 = (String)kryo.readObject(input, r.getType());
-
-		assertEquals(s1, s2);
-	}
-
-
-	@Test(expected = IllegalArgumentException.class)
-	public void testSetOutputBufferMinuxOne () {
-		int bufferSize = 2;
-		int maxBufferSize = 1;
-
-		AeronOutput output = new AeronOutput(-1);
-		assertNotNull(output);
-
-		output.setBuffer(new byte[bufferSize]);
-	}
-
-	@Test
-	public void testNewOutputMaxBufferSizeIsMinusOne () {
-		int bufferSize = 2;
-		int maxBufferSize = -1;
-
-		Output output = new Output(bufferSize, maxBufferSize);
-		assertNotNull(output);
-		// This test should pass as long as no exception thrown
-	}
-
-	@Test
-	public void testSetOutputMaxBufferSizeIsMinusOne () {
-		int bufferSize = 2;
-		int maxBufferSize = -1;
-
-		Output output = new AeronOutput(bufferSize);
-		assertNotNull(output);
-		output.setBuffer(new byte[bufferSize], maxBufferSize);
-		// This test should pass as long as no exception thrown
-	}
+package dorkboxTest.network.kryo
+
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.Input
+import com.esotericsoftware.kryo.io.Output
+import dorkbox.network.serialization.AeronInput
+import dorkbox.network.serialization.AeronOutput
+import org.junit.Assert
+import org.junit.Test
+import java.io.IOException
+import java.util.*
+
+/** @author Nathan Sweet
+ */
+class InputOutputByteBufTest : KryoTestCase() {
+    @Test
+    fun testByteBufferInputEnd() {
+        val `in` = AeronInput(byteArrayOf(123, 0, 0, 0))
+        Assert.assertFalse(`in`.end())
+        `in`.setPosition(4)
+        Assert.assertTrue(`in`.end())
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testOutputBytes() {
+        val output = AeronOutput(0)
+        output.writeBytes(byteArrayOf(11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26))
+        output.writeBytes(byteArrayOf(31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46))
+        output.writeBytes(byteArrayOf(51, 52, 53, 54, 55, 56, 57, 58))
+        output.writeBytes(byteArrayOf(61, 62, 63, 64, 65))
+        output.flush()
+        Assert.assertArrayEquals(
+            byteArrayOf( //
+                11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,  //
+                31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,  //
+                51, 52, 53, 54, 55, 56, 57, 58,  //
+                61, 62, 63, 64, 65
+            ), output.toBytes()
+        )
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testOutputBytesArray() {
+        val buffer = byteArrayOf( //
+            11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,  //
+            31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,  //
+            51, 52, 53, 54, 55, 56, 57, 58,  //
+            61, 62, 63, 64, 65
+        )
+        val output = AeronOutput(buffer)
+        output.setPosition(buffer.size)
+        Assert.assertArrayEquals(
+            byteArrayOf( //
+                11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,  //
+                31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,  //
+                51, 52, 53, 54, 55, 56, 57, 58,  //
+                61, 62, 63, 64, 65
+            ), output.toBytes()
+        )
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testInputBytes() {
+        val bytes = byteArrayOf( //
+            11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,  //
+            31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,  //
+            51, 52, 53, 54, 55, 56, 57, 58,  //
+            61, 62, 63, 64, 65
+        )
+        var input = AeronInput(bytes)
+        val temp = ByteArray(1024)
+        var count = input.read(temp, 512, bytes.size)
+        Assert.assertEquals(bytes.size.toLong(), count.toLong())
+        var temp2 = ByteArray(count)
+        System.arraycopy(temp, 512, temp2, 0, count)
+        Assert.assertArrayEquals(bytes, temp2)
+        input = AeronInput(bytes)
+        count = input.read(temp, 512, 512)
+        Assert.assertEquals(bytes.size.toLong(), count.toLong())
+        temp2 = ByteArray(count)
+        System.arraycopy(temp, 512, temp2, 0, count)
+        Assert.assertArrayEquals(bytes, temp2)
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testWriteBytes() {
+        val buffer = AeronOutput(512)
+        buffer.writeBytes(byteArrayOf(11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26))
+        buffer.writeBytes(byteArrayOf(31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46))
+        buffer.writeByte(51)
+        buffer.writeBytes(byteArrayOf(52, 53, 54, 55, 56, 57, 58))
+        buffer.writeByte(61)
+        buffer.writeByte(62)
+        buffer.writeByte(63)
+        buffer.writeByte(64)
+        buffer.writeByte(65)
+        buffer.flush()
+        Assert.assertArrayEquals(
+            byteArrayOf( //
+                11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,  //
+                31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,  //
+                51, 52, 53, 54, 55, 56, 57, 58,  //
+                61, 62, 63, 64, 65
+            ), buffer.toBytes()
+        )
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testStrings() {
+        runStringTest(AeronOutput(4096))
+        runStringTest(AeronOutput(897))
+        val write: Output = AeronOutput(21)
+        val value = "abcdef\u00E1\u00E9\u00ED\u00F3\u00FA\u1234"
+        write.writeString(value)
+        var read: Input = AeronInput(write.toBytes())
+        Assert.assertEquals(value, read.readString())
+        write.reset()
+        write.writeString(null)
+        read = Input(write.toBytes())
+        Assert.assertNull(read.readString())
+        for (i in 0..258) runStringTest(i)
+        runStringTest(1)
+        runStringTest(2)
+        runStringTest(127)
+        runStringTest(256)
+        runStringTest(1024 * 1023)
+        runStringTest(1024 * 1024)
+        runStringTest(1024 * 1025)
+        runStringTest(1024 * 1026)
+        runStringTest(1024 * 1024 * 2)
+    }
+
+    @Test
+    fun testGrowingBufferForAscii() {
+        // Initial size of 2.
+        val output = AeronOutput(2)
+        // Check that it is possible to write an ASCII string into the output buffer.
+        output.writeString("node/read")
+        val input: Input = AeronInput(output.toBytes(), 0, output.position())
+        Assert.assertEquals("node/read", input.readString())
+    }
+
+    @Throws(IOException::class)
+    private fun runStringTest(length: Int) {
+        val write = Output(1024, -1)
+        val buffer = StringBuilder()
+        for (i in 0 until length) buffer.append(i.toChar())
+        val value = buffer.toString()
+        write.writeString(value)
+        write.writeString(value)
+        var read = AeronInput(write.toBytes())
+        Assert.assertEquals(value, read.readString())
+        Assert.assertEquals(value, read.readStringBuilder().toString())
+        write.reset()
+        write.writeString(buffer.toString())
+        write.writeString(buffer.toString())
+        read = AeronInput(write.toBytes())
+        Assert.assertEquals(value, read.readStringBuilder().toString())
+        Assert.assertEquals(value, read.readString())
+        if (length <= 127) {
+            write.reset()
+            write.writeAscii(value)
+            write.writeAscii(value)
+            read = AeronInput(write.toBytes())
+            Assert.assertEquals(value, read.readStringBuilder().toString())
+            Assert.assertEquals(value, read.readString())
+        }
+    }
+
+    @Throws(IOException::class)
+    private fun runStringTest(write: AeronOutput) {
+        val value1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\rabcdefghijklmnopqrstuvwxyz\n1234567890\t\"!`?'.,;:()[]{}<>|/@\\^$-%+=#_&~*"
+        val value2 = "abcdef\u00E1\u00E9\u00ED\u00F3\u00FA\u1234"
+        write.writeString("")
+        write.writeString("1")
+        write.writeString("22")
+        write.writeString("uno")
+        write.writeString("dos")
+        write.writeString("tres")
+        write.writeString(null)
+        write.writeString(value1)
+        write.writeString(value2)
+        for (i in 0..126) write.writeString(i.toChar().toString())
+        for (i in 0..126) write.writeString(i.toChar().toString() + "abc")
+        val read = AeronInput(write.toBytes())
+        Assert.assertEquals("", read.readString())
+        Assert.assertEquals("1", read.readString())
+        Assert.assertEquals("22", read.readString())
+        Assert.assertEquals("uno", read.readString())
+        Assert.assertEquals("dos", read.readString())
+        Assert.assertEquals("tres", read.readString())
+        Assert.assertNull(read.readString())
+        Assert.assertEquals(value1, read.readString())
+        Assert.assertEquals(value2, read.readString())
+        for (i in 0..126) Assert.assertEquals(i.toChar().toString(), read.readString())
+        for (i in 0..126) Assert.assertEquals(i.toChar().toString() + "abc", read.readString())
+
+        // now test string builder
+        read.reset()
+        Assert.assertEquals("", read.readStringBuilder().toString())
+        Assert.assertEquals("1", read.readStringBuilder().toString())
+        Assert.assertEquals("22", read.readStringBuilder().toString())
+        Assert.assertEquals("uno", read.readStringBuilder().toString())
+        Assert.assertEquals("dos", read.readStringBuilder().toString())
+        Assert.assertEquals("tres", read.readStringBuilder().toString())
+        Assert.assertNull(read.readStringBuilder())
+        Assert.assertEquals(value1, read.readStringBuilder().toString())
+        Assert.assertEquals(value2, read.readStringBuilder().toString())
+        for (i in 0..126) Assert.assertEquals(i.toChar().toString(), read.readStringBuilder().toString())
+        for (i in 0..126) Assert.assertEquals(i.toChar().toString() + "abc", read.readStringBuilder().toString())
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testCanReadInt() {
+        val write = AeronOutput(32)
+        var read = AeronInput(write.toBytes())
+        Assert.assertFalse(read.canReadVarInt())
+        write.writeVarInt(400, true)
+        read = AeronInput(write.toBytes())
+        Assert.assertTrue(read.canReadVarInt())
+        read.setLimit(read.limit() - 1)
+        Assert.assertFalse(read.canReadVarInt())
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testVarIntFlagOutput() {
+        val output = AeronOutput(4096)
+        val input = AeronInput(output.internalBuffer)
+        runVarIntFlagsTest(output, input)
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testVarIntFlagByteBufferOutput() {
+        val output = AeronOutput(4096)
+        val input = AeronInput(output.internalBuffer)
+        runVarIntFlagsTest(output, input)
+    }
+
+    @Throws(IOException::class)
+    private fun runVarIntFlagsTest(output: Output, input: Input) {
+        Assert.assertEquals(1, output.writeVarIntFlag(true, 63, true).toLong())
+        Assert.assertEquals(2, output.writeVarIntFlag(true, 64, true).toLong())
+        Assert.assertEquals(1, output.writeVarIntFlag(false, 63, true).toLong())
+        Assert.assertEquals(2, output.writeVarIntFlag(false, 64, true).toLong())
+        Assert.assertEquals(1, output.writeVarIntFlag(true, 31, false).toLong())
+        Assert.assertEquals(2, output.writeVarIntFlag(true, 32, false).toLong())
+        Assert.assertEquals(1, output.writeVarIntFlag(false, 31, false).toLong())
+        Assert.assertEquals(2, output.writeVarIntFlag(false, 32, false).toLong())
+        input.setPosition(0)
+        input.setLimit(output.position())
+        Assert.assertTrue(input.readVarIntFlag())
+        Assert.assertEquals(63, input.readVarIntFlag(true).toLong())
+        Assert.assertTrue(input.readVarIntFlag())
+        Assert.assertEquals(64, input.readVarIntFlag(true).toLong())
+        Assert.assertFalse(input.readVarIntFlag())
+        Assert.assertEquals(63, input.readVarIntFlag(true).toLong())
+        Assert.assertFalse(input.readVarIntFlag())
+        Assert.assertEquals(64, input.readVarIntFlag(true).toLong())
+        Assert.assertTrue(input.readVarIntFlag())
+        Assert.assertEquals(31, input.readVarIntFlag(false).toLong())
+        Assert.assertTrue(input.readVarIntFlag())
+        Assert.assertEquals(32, input.readVarIntFlag(false).toLong())
+        Assert.assertFalse(input.readVarIntFlag())
+        Assert.assertEquals(31, input.readVarIntFlag(false).toLong())
+        Assert.assertFalse(input.readVarIntFlag())
+        Assert.assertEquals(32, input.readVarIntFlag(false).toLong())
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testInts() {
+        runIntTest(AeronOutput(4096))
+        runIntTest(AeronOutput(32))
+    }
+
+    @Throws(IOException::class)
+    private fun runIntTest(write: Output) {
+        write.writeInt(0)
+        write.writeInt(63)
+        write.writeInt(64)
+        write.writeInt(127)
+        write.writeInt(128)
+        write.writeInt(8192)
+        write.writeInt(16384)
+        write.writeInt(2097151)
+        write.writeInt(1048575)
+        write.writeInt(134217727)
+        write.writeInt(268435455)
+        write.writeInt(134217728)
+        write.writeInt(268435456)
+        write.writeInt(-2097151)
+        write.writeInt(-1048575)
+        write.writeInt(-134217727)
+        write.writeInt(-268435455)
+        write.writeInt(-134217728)
+        write.writeInt(-268435456)
+        Assert.assertEquals(1, write.writeVarInt(0, true).toLong())
+        Assert.assertEquals(1, write.writeVarInt(0, false).toLong())
+        Assert.assertEquals(1, write.writeVarInt(63, true).toLong())
+        Assert.assertEquals(1, write.writeVarInt(63, false).toLong())
+        Assert.assertEquals(1, write.writeVarInt(64, true).toLong())
+        Assert.assertEquals(2, write.writeVarInt(64, false).toLong())
+        Assert.assertEquals(1, write.writeVarInt(127, true).toLong())
+        Assert.assertEquals(2, write.writeVarInt(127, false).toLong())
+        Assert.assertEquals(2, write.writeVarInt(128, true).toLong())
+        Assert.assertEquals(2, write.writeVarInt(128, false).toLong())
+        Assert.assertEquals(2, write.writeVarInt(8191, true).toLong())
+        Assert.assertEquals(2, write.writeVarInt(8191, false).toLong())
+        Assert.assertEquals(2, write.writeVarInt(8192, true).toLong())
+        Assert.assertEquals(3, write.writeVarInt(8192, false).toLong())
+        Assert.assertEquals(2, write.writeVarInt(16383, true).toLong())
+        Assert.assertEquals(3, write.writeVarInt(16383, false).toLong())
+        Assert.assertEquals(3, write.writeVarInt(16384, true).toLong())
+        Assert.assertEquals(3, write.writeVarInt(16384, false).toLong())
+        Assert.assertEquals(3, write.writeVarInt(2097151, true).toLong())
+        Assert.assertEquals(4, write.writeVarInt(2097151, false).toLong())
+        Assert.assertEquals(3, write.writeVarInt(1048575, true).toLong())
+        Assert.assertEquals(3, write.writeVarInt(1048575, false).toLong())
+        Assert.assertEquals(4, write.writeVarInt(134217727, true).toLong())
+        Assert.assertEquals(4, write.writeVarInt(134217727, false).toLong())
+        Assert.assertEquals(4, write.writeVarInt(268435455, true).toLong())
+        Assert.assertEquals(5, write.writeVarInt(268435455, false).toLong())
+        Assert.assertEquals(4, write.writeVarInt(134217728, true).toLong())
+        Assert.assertEquals(5, write.writeVarInt(134217728, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(268435456, true).toLong())
+        Assert.assertEquals(5, write.writeVarInt(268435456, false).toLong())
+        Assert.assertEquals(1, write.writeVarInt(-64, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(-64, true).toLong())
+        Assert.assertEquals(2, write.writeVarInt(-65, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(-65, true).toLong())
+        Assert.assertEquals(2, write.writeVarInt(-8192, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(-8192, true).toLong())
+        Assert.assertEquals(3, write.writeVarInt(-1048576, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(-1048576, true).toLong())
+        Assert.assertEquals(4, write.writeVarInt(-134217728, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(-134217728, true).toLong())
+        Assert.assertEquals(5, write.writeVarInt(-134217729, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(-134217729, true).toLong())
+        Assert.assertEquals(5, write.writeVarInt(1000000000, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(1000000000, true).toLong())
+        Assert.assertEquals(5, write.writeVarInt(Int.MAX_VALUE - 1, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(Int.MAX_VALUE - 1, true).toLong())
+        Assert.assertEquals(5, write.writeVarInt(Int.MAX_VALUE, false).toLong())
+        Assert.assertEquals(5, write.writeVarInt(Int.MAX_VALUE, true).toLong())
+        val read = AeronInput(write.toBytes())
+        Assert.assertEquals(0, read.readInt().toLong())
+        Assert.assertEquals(63, read.readInt().toLong())
+        Assert.assertEquals(64, read.readInt().toLong())
+        Assert.assertEquals(127, read.readInt().toLong())
+        Assert.assertEquals(128, read.readInt().toLong())
+        Assert.assertEquals(8192, read.readInt().toLong())
+        Assert.assertEquals(16384, read.readInt().toLong())
+        Assert.assertEquals(2097151, read.readInt().toLong())
+        Assert.assertEquals(1048575, read.readInt().toLong())
+        Assert.assertEquals(134217727, read.readInt().toLong())
+        Assert.assertEquals(268435455, read.readInt().toLong())
+        Assert.assertEquals(134217728, read.readInt().toLong())
+        Assert.assertEquals(268435456, read.readInt().toLong())
+        Assert.assertEquals(-2097151, read.readInt().toLong())
+        Assert.assertEquals(-1048575, read.readInt().toLong())
+        Assert.assertEquals(-134217727, read.readInt().toLong())
+        Assert.assertEquals(-268435455, read.readInt().toLong())
+        Assert.assertEquals(-134217728, read.readInt().toLong())
+        Assert.assertEquals(-268435456, read.readInt().toLong())
+        Assert.assertTrue(read.canReadVarInt())
+        Assert.assertTrue(read.canReadVarInt())
+        Assert.assertTrue(read.canReadVarInt())
+        Assert.assertEquals(0, read.readVarInt(true).toLong())
+        Assert.assertEquals(0, read.readVarInt(false).toLong())
+        Assert.assertEquals(63, read.readVarInt(true).toLong())
+        Assert.assertEquals(63, read.readVarInt(false).toLong())
+        Assert.assertEquals(64, read.readVarInt(true).toLong())
+        Assert.assertEquals(64, read.readVarInt(false).toLong())
+        Assert.assertEquals(127, read.readVarInt(true).toLong())
+        Assert.assertEquals(127, read.readVarInt(false).toLong())
+        Assert.assertEquals(128, read.readVarInt(true).toLong())
+        Assert.assertEquals(128, read.readVarInt(false).toLong())
+        Assert.assertEquals(8191, read.readVarInt(true).toLong())
+        Assert.assertEquals(8191, read.readVarInt(false).toLong())
+        Assert.assertEquals(8192, read.readVarInt(true).toLong())
+        Assert.assertEquals(8192, read.readVarInt(false).toLong())
+        Assert.assertEquals(16383, read.readVarInt(true).toLong())
+        Assert.assertEquals(16383, read.readVarInt(false).toLong())
+        Assert.assertEquals(16384, read.readVarInt(true).toLong())
+        Assert.assertEquals(16384, read.readVarInt(false).toLong())
+        Assert.assertEquals(2097151, read.readVarInt(true).toLong())
+        Assert.assertEquals(2097151, read.readVarInt(false).toLong())
+        Assert.assertEquals(1048575, read.readVarInt(true).toLong())
+        Assert.assertEquals(1048575, read.readVarInt(false).toLong())
+        Assert.assertEquals(134217727, read.readVarInt(true).toLong())
+        Assert.assertEquals(134217727, read.readVarInt(false).toLong())
+        Assert.assertEquals(268435455, read.readVarInt(true).toLong())
+        Assert.assertEquals(268435455, read.readVarInt(false).toLong())
+        Assert.assertEquals(134217728, read.readVarInt(true).toLong())
+        Assert.assertEquals(134217728, read.readVarInt(false).toLong())
+        Assert.assertEquals(268435456, read.readVarInt(true).toLong())
+        Assert.assertEquals(268435456, read.readVarInt(false).toLong())
+        Assert.assertEquals(-64, read.readVarInt(false).toLong())
+        Assert.assertEquals(-64, read.readVarInt(true).toLong())
+        Assert.assertEquals(-65, read.readVarInt(false).toLong())
+        Assert.assertEquals(-65, read.readVarInt(true).toLong())
+        Assert.assertEquals(-8192, read.readVarInt(false).toLong())
+        Assert.assertEquals(-8192, read.readVarInt(true).toLong())
+        Assert.assertEquals(-1048576, read.readVarInt(false).toLong())
+        Assert.assertEquals(-1048576, read.readVarInt(true).toLong())
+        Assert.assertEquals(-134217728, read.readVarInt(false).toLong())
+        Assert.assertEquals(-134217728, read.readVarInt(true).toLong())
+        Assert.assertEquals(-134217729, read.readVarInt(false).toLong())
+        Assert.assertEquals(-134217729, read.readVarInt(true).toLong())
+        Assert.assertEquals(1000000000, read.readVarInt(false).toLong())
+        Assert.assertEquals(1000000000, read.readVarInt(true).toLong())
+        Assert.assertEquals((Int.MAX_VALUE - 1).toLong(), read.readVarInt(false).toLong())
+        Assert.assertEquals((Int.MAX_VALUE - 1).toLong(), read.readVarInt(true).toLong())
+        Assert.assertEquals(Int.MAX_VALUE.toLong(), read.readVarInt(false).toLong())
+        Assert.assertEquals(Int.MAX_VALUE.toLong(), read.readVarInt(true).toLong())
+        Assert.assertFalse(read.canReadVarInt())
+        val random = Random()
+        for (i in 0..9999) {
+            val value = random.nextInt()
+            write.reset()
+            write.writeInt(value)
+            write.writeVarInt(value, true)
+            write.writeVarInt(value, false)
+            read.buffer = write.toBytes()
+            Assert.assertEquals(value.toLong(), read.readInt().toLong())
+            Assert.assertEquals(value.toLong(), read.readVarInt(true).toLong())
+            Assert.assertEquals(value.toLong(), read.readVarInt(false).toLong())
+        }
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testLongs() {
+        runLongTest(AeronOutput(4096))
+        runLongTest(AeronOutput(32))
+    }
+
+    @Throws(IOException::class)
+    private fun runLongTest(write: Output) {
+        write.writeLong(0)
+        write.writeLong(63)
+        write.writeLong(64)
+        write.writeLong(127)
+        write.writeLong(128)
+        write.writeLong(8192)
+        write.writeLong(16384)
+        write.writeLong(2097151)
+        write.writeLong(1048575)
+        write.writeLong(134217727)
+        write.writeLong(268435455)
+        write.writeLong(134217728)
+        write.writeLong(268435456)
+        write.writeLong(-2097151)
+        write.writeLong(-1048575)
+        write.writeLong(-134217727)
+        write.writeLong(-268435455)
+        write.writeLong(-134217728)
+        write.writeLong(-268435456)
+        Assert.assertEquals(1, write.writeVarLong(0, true).toLong())
+        Assert.assertEquals(1, write.writeVarLong(0, false).toLong())
+        Assert.assertEquals(1, write.writeVarLong(63, true).toLong())
+        Assert.assertEquals(1, write.writeVarLong(63, false).toLong())
+        Assert.assertEquals(1, write.writeVarLong(64, true).toLong())
+        Assert.assertEquals(2, write.writeVarLong(64, false).toLong())
+        Assert.assertEquals(1, write.writeVarLong(127, true).toLong())
+        Assert.assertEquals(2, write.writeVarLong(127, false).toLong())
+        Assert.assertEquals(2, write.writeVarLong(128, true).toLong())
+        Assert.assertEquals(2, write.writeVarLong(128, false).toLong())
+        Assert.assertEquals(2, write.writeVarLong(8191, true).toLong())
+        Assert.assertEquals(2, write.writeVarLong(8191, false).toLong())
+        Assert.assertEquals(2, write.writeVarLong(8192, true).toLong())
+        Assert.assertEquals(3, write.writeVarLong(8192, false).toLong())
+        Assert.assertEquals(2, write.writeVarLong(16383, true).toLong())
+        Assert.assertEquals(3, write.writeVarLong(16383, false).toLong())
+        Assert.assertEquals(3, write.writeVarLong(16384, true).toLong())
+        Assert.assertEquals(3, write.writeVarLong(16384, false).toLong())
+        Assert.assertEquals(3, write.writeVarLong(2097151, true).toLong())
+        Assert.assertEquals(4, write.writeVarLong(2097151, false).toLong())
+        Assert.assertEquals(3, write.writeVarLong(1048575, true).toLong())
+        Assert.assertEquals(3, write.writeVarLong(1048575, false).toLong())
+        Assert.assertEquals(4, write.writeVarLong(134217727, true).toLong())
+        Assert.assertEquals(4, write.writeVarLong(134217727, false).toLong())
+        Assert.assertEquals(4, write.writeVarLong(268435455L, true).toLong())
+        Assert.assertEquals(5, write.writeVarLong(268435455L, false).toLong())
+        Assert.assertEquals(4, write.writeVarLong(134217728L, true).toLong())
+        Assert.assertEquals(5, write.writeVarLong(134217728L, false).toLong())
+        Assert.assertEquals(5, write.writeVarLong(268435456L, true).toLong())
+        Assert.assertEquals(5, write.writeVarLong(268435456L, false).toLong())
+        Assert.assertEquals(1, write.writeVarLong(-64, false).toLong())
+        Assert.assertEquals(9, write.writeVarLong(-64, true).toLong())
+        Assert.assertEquals(2, write.writeVarLong(-65, false).toLong())
+        Assert.assertEquals(9, write.writeVarLong(-65, true).toLong())
+        Assert.assertEquals(2, write.writeVarLong(-8192, false).toLong())
+        Assert.assertEquals(9, write.writeVarLong(-8192, true).toLong())
+        Assert.assertEquals(3, write.writeVarLong(-1048576, false).toLong())
+        Assert.assertEquals(9, write.writeVarLong(-1048576, true).toLong())
+        Assert.assertEquals(4, write.writeVarLong(-134217728, false).toLong())
+        Assert.assertEquals(9, write.writeVarLong(-134217728, true).toLong())
+        Assert.assertEquals(5, write.writeVarLong(-134217729, false).toLong())
+        Assert.assertEquals(9, write.writeVarLong(-134217729, true).toLong())
+        val read = AeronInput(write.toBytes())
+        Assert.assertEquals(0, read.readLong())
+        Assert.assertEquals(63, read.readLong())
+        Assert.assertEquals(64, read.readLong())
+        Assert.assertEquals(127, read.readLong())
+        Assert.assertEquals(128, read.readLong())
+        Assert.assertEquals(8192, read.readLong())
+        Assert.assertEquals(16384, read.readLong())
+        Assert.assertEquals(2097151, read.readLong())
+        Assert.assertEquals(1048575, read.readLong())
+        Assert.assertEquals(134217727, read.readLong())
+        Assert.assertEquals(268435455, read.readLong())
+        Assert.assertEquals(134217728, read.readLong())
+        Assert.assertEquals(268435456, read.readLong())
+        Assert.assertEquals(-2097151, read.readLong())
+        Assert.assertEquals(-1048575, read.readLong())
+        Assert.assertEquals(-134217727, read.readLong())
+        Assert.assertEquals(-268435455, read.readLong())
+        Assert.assertEquals(-134217728, read.readLong())
+        Assert.assertEquals(-268435456, read.readLong())
+        Assert.assertEquals(0, read.readVarLong(true))
+        Assert.assertEquals(0, read.readVarLong(false))
+        Assert.assertEquals(63, read.readVarLong(true))
+        Assert.assertEquals(63, read.readVarLong(false))
+        Assert.assertEquals(64, read.readVarLong(true))
+        Assert.assertEquals(64, read.readVarLong(false))
+        Assert.assertEquals(127, read.readVarLong(true))
+        Assert.assertEquals(127, read.readVarLong(false))
+        Assert.assertEquals(128, read.readVarLong(true))
+        Assert.assertEquals(128, read.readVarLong(false))
+        Assert.assertEquals(8191, read.readVarLong(true))
+        Assert.assertEquals(8191, read.readVarLong(false))
+        Assert.assertEquals(8192, read.readVarLong(true))
+        Assert.assertEquals(8192, read.readVarLong(false))
+        Assert.assertEquals(16383, read.readVarLong(true))
+        Assert.assertEquals(16383, read.readVarLong(false))
+        Assert.assertEquals(16384, read.readVarLong(true))
+        Assert.assertEquals(16384, read.readVarLong(false))
+        Assert.assertEquals(2097151, read.readVarLong(true))
+        Assert.assertEquals(2097151, read.readVarLong(false))
+        Assert.assertEquals(1048575, read.readVarLong(true))
+        Assert.assertEquals(1048575, read.readVarLong(false))
+        Assert.assertEquals(134217727, read.readVarLong(true))
+        Assert.assertEquals(134217727, read.readVarLong(false))
+        Assert.assertEquals(268435455, read.readVarLong(true))
+        Assert.assertEquals(268435455, read.readVarLong(false))
+        Assert.assertEquals(134217728, read.readVarLong(true))
+        Assert.assertEquals(134217728, read.readVarLong(false))
+        Assert.assertEquals(268435456, read.readVarLong(true))
+        Assert.assertEquals(268435456, read.readVarLong(false))
+        Assert.assertEquals(-64, read.readVarLong(false))
+        Assert.assertEquals(-64, read.readVarLong(true))
+        Assert.assertEquals(-65, read.readVarLong(false))
+        Assert.assertEquals(-65, read.readVarLong(true))
+        Assert.assertEquals(-8192, read.readVarLong(false))
+        Assert.assertEquals(-8192, read.readVarLong(true))
+        Assert.assertEquals(-1048576, read.readVarLong(false))
+        Assert.assertEquals(-1048576, read.readVarLong(true))
+        Assert.assertEquals(-134217728, read.readVarLong(false))
+        Assert.assertEquals(-134217728, read.readVarLong(true))
+        Assert.assertEquals(-134217729, read.readVarLong(false))
+        Assert.assertEquals(-134217729, read.readVarLong(true))
+        val random = Random()
+        for (i in 0..9999) {
+            val value = random.nextLong()
+            write.reset()
+            write.writeLong(value)
+            write.writeVarLong(value, true)
+            write.writeVarLong(value, false)
+            read.buffer = write.toBytes()
+            Assert.assertEquals(value, read.readLong())
+            Assert.assertEquals(value, read.readVarLong(true))
+            Assert.assertEquals(value, read.readVarLong(false))
+        }
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testShorts() {
+        runShortTest(AeronOutput(4096))
+        runShortTest(AeronOutput(32))
+    }
+
+    @Throws(IOException::class)
+    private fun runShortTest(write: Output) {
+        write.writeShort(0)
+        write.writeShort(63)
+        write.writeShort(64)
+        write.writeShort(127)
+        write.writeShort(128)
+        write.writeShort(8192)
+        write.writeShort(16384)
+        write.writeShort(32767)
+        write.writeShort(-63)
+        write.writeShort(-64)
+        write.writeShort(-127)
+        write.writeShort(-128)
+        write.writeShort(-8192)
+        write.writeShort(-16384)
+        write.writeShort(-32768)
+        val read = AeronInput(write.toBytes())
+        Assert.assertEquals(0, read.readShort().toLong())
+        Assert.assertEquals(63, read.readShort().toLong())
+        Assert.assertEquals(64, read.readShort().toLong())
+        Assert.assertEquals(127, read.readShort().toLong())
+        Assert.assertEquals(128, read.readShort().toLong())
+        Assert.assertEquals(8192, read.readShort().toLong())
+        Assert.assertEquals(16384, read.readShort().toLong())
+        Assert.assertEquals(32767, read.readShort().toLong())
+        Assert.assertEquals(-63, read.readShort().toLong())
+        Assert.assertEquals(-64, read.readShort().toLong())
+        Assert.assertEquals(-127, read.readShort().toLong())
+        Assert.assertEquals(-128, read.readShort().toLong())
+        Assert.assertEquals(-8192, read.readShort().toLong())
+        Assert.assertEquals(-16384, read.readShort().toLong())
+        Assert.assertEquals(-32768, read.readShort().toLong())
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testFloats() {
+        runFloatTest(AeronOutput(4096))
+        runFloatTest(AeronOutput(32))
+    }
+
+    @Throws(IOException::class)
+    private fun runFloatTest(write: Output) {
+        write.writeFloat(0f)
+        write.writeFloat(63f)
+        write.writeFloat(64f)
+        write.writeFloat(127f)
+        write.writeFloat(128f)
+        write.writeFloat(8192f)
+        write.writeFloat(16384f)
+        write.writeFloat(32767f)
+        write.writeFloat(-63f)
+        write.writeFloat(-64f)
+        write.writeFloat(-127f)
+        write.writeFloat(-128f)
+        write.writeFloat(-8192f)
+        write.writeFloat(-16384f)
+        write.writeFloat(-32768f)
+        Assert.assertEquals(1, write.writeVarFloat(0f, 1000f, true).toLong())
+        Assert.assertEquals(1, write.writeVarFloat(0f, 1000f, false).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(63f, 1000f, true).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(63f, 1000f, false).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(64f, 1000f, true).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(64f, 1000f, false).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(127f, 1000f, true).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(127f, 1000f, false).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(128f, 1000f, true).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(128f, 1000f, false).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(8191f, 1000f, true).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(8191f, 1000f, false).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(8192f, 1000f, true).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(8192f, 1000f, false).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(16383f, 1000f, true).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(16383f, 1000f, false).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(16384f, 1000f, true).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(16384f, 1000f, false).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(32767f, 1000f, true).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(32767f, 1000f, false).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(-64f, 1000f, false).toLong())
+        Assert.assertEquals(5, write.writeVarFloat(-64f, 1000f, true).toLong())
+        Assert.assertEquals(3, write.writeVarFloat(-65f, 1000f, false).toLong())
+        Assert.assertEquals(5, write.writeVarFloat(-65f, 1000f, true).toLong())
+        Assert.assertEquals(4, write.writeVarFloat(-8192f, 1000f, false).toLong())
+        Assert.assertEquals(5, write.writeVarFloat(-8192f, 1000f, true).toLong())
+        val read = AeronInput(write.toBytes())
+        KryoAssert.assertFloatEquals(read.readFloat(), 0.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), 63.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), 64.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), 127.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), 128.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), 8192.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), 16384.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), 32767.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), -63.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), -64.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), -127.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), -128.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), -8192.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), -16384.0)
+        KryoAssert.assertFloatEquals(read.readFloat(), -32768.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 0.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 0.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 63.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 63.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 64.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 64.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 127.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 127.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 128.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 128.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 8191.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 8191.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 8192.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 8192.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 16383.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 16383.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 16384.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 16384.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 32767.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 32767.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), -64.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), -64.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), -65.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), -65.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), -8192.0)
+        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), -8192.0)
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testDoubles() {
+        runDoubleTest(AeronOutput(4096))
+        runDoubleTest(AeronOutput(32))
+    }
+
+    @Throws(IOException::class)
+    private fun runDoubleTest(write: Output) {
+        write.writeDouble(0.0)
+        write.writeDouble(63.0)
+        write.writeDouble(64.0)
+        write.writeDouble(127.0)
+        write.writeDouble(128.0)
+        write.writeDouble(8192.0)
+        write.writeDouble(16384.0)
+        write.writeDouble(32767.0)
+        write.writeDouble(-63.0)
+        write.writeDouble(-64.0)
+        write.writeDouble(-127.0)
+        write.writeDouble(-128.0)
+        write.writeDouble(-8192.0)
+        write.writeDouble(-16384.0)
+        write.writeDouble(-32768.0)
+        Assert.assertEquals(1, write.writeVarDouble(0.0, 1000.0, true).toLong())
+        Assert.assertEquals(1, write.writeVarDouble(0.0, 1000.0, false).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(63.0, 1000.0, true).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(63.0, 1000.0, false).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(64.0, 1000.0, true).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(64.0, 1000.0, false).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(127.0, 1000.0, true).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(127.0, 1000.0, false).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(128.0, 1000.0, true).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(128.0, 1000.0, false).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(8191.0, 1000.0, true).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(8191.0, 1000.0, false).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(8192.0, 1000.0, true).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(8192.0, 1000.0, false).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(16383.0, 1000.0, true).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(16383.0, 1000.0, false).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(16384.0, 1000.0, true).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(16384.0, 1000.0, false).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(32767.0, 1000.0, true).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(32767.0, 1000.0, false).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(-64.0, 1000.0, false).toLong())
+        Assert.assertEquals(9, write.writeVarDouble(-64.0, 1000.0, true).toLong())
+        Assert.assertEquals(3, write.writeVarDouble(-65.0, 1000.0, false).toLong())
+        Assert.assertEquals(9, write.writeVarDouble(-65.0, 1000.0, true).toLong())
+        Assert.assertEquals(4, write.writeVarDouble(-8192.0, 1000.0, false).toLong())
+        Assert.assertEquals(9, write.writeVarDouble(-8192.0, 1000.0, true).toLong())
+        write.writeDouble(1.23456)
+        val read = AeronInput(write.toBytes())
+        KryoAssert.assertDoubleEquals(read.readDouble(), 0.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), 63.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), 64.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), 127.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), 128.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), 8192.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), 16384.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), 32767.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), -63.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), -64.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), -127.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), -128.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), -8192.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), -16384.0)
+        KryoAssert.assertDoubleEquals(read.readDouble(), -32768.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 0.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 0.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 63.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 63.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 64.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 64.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 127.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 127.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 128.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 128.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 8191.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 8191.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 8192.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 8192.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 16383.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 16383.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 16384.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 16384.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 32767.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 32767.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), -64.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), -64.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), -65.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), -65.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), -8192.0)
+        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), -8192.0)
+        KryoAssert.assertDoubleEquals(1.23456, read.readDouble())
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testBooleans() {
+        runBooleanTest(AeronOutput(4096))
+        runBooleanTest(AeronOutput(32))
+    }
+
+    @Throws(IOException::class)
+    private fun runBooleanTest(write: Output) {
+        for (i in 0..99) {
+            write.writeBoolean(true)
+            write.writeBoolean(false)
+        }
+        val read = AeronInput(write.toBytes())
+        for (i in 0..99) {
+            Assert.assertTrue(read.readBoolean())
+            Assert.assertFalse(read.readBoolean())
+        }
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun testChars() {
+        runCharTest(AeronOutput(4096))
+        runCharTest(AeronOutput(32))
+    }
+
+    @Throws(IOException::class)
+    private fun runCharTest(write: Output) {
+        write.writeChar(0.toChar())
+        write.writeChar(63.toChar())
+        write.writeChar(64.toChar())
+        write.writeChar(127.toChar())
+        write.writeChar(128.toChar())
+        write.writeChar(8192.toChar())
+        write.writeChar(16384.toChar())
+        write.writeChar(32767.toChar())
+        write.writeChar(65535.toChar())
+        val read = AeronInput(write.toBytes())
+        Assert.assertEquals(0, read.readChar().toLong())
+        Assert.assertEquals(63, read.readChar().toLong())
+        Assert.assertEquals(64, read.readChar().toLong())
+        Assert.assertEquals(127, read.readChar().toLong())
+        Assert.assertEquals(128, read.readChar().toLong())
+        Assert.assertEquals(8192, read.readChar().toLong())
+        Assert.assertEquals(16384, read.readChar().toLong())
+        Assert.assertEquals(32767, read.readChar().toLong())
+        Assert.assertEquals(65535, read.readChar().toLong())
+    }
+
+    @Test
+    @Throws(Exception::class)
+    fun testInputWithOffset() {
+        val buf = ByteArray(30)
+        val `in` = AeronInput(buf, 10, 10)
+        Assert.assertEquals(10, `in`.available().toLong())
+    }
+
+    @Test
+    @Throws(Exception::class)
+    fun testSmallBuffers() {
+        val testOutput = AeronOutput(32)
+        testOutput.writeBytes(ByteArray(512))
+        testOutput.writeBytes(ByteArray(512))
+        testOutput.flush()
+        val input = AeronInput(testOutput.internalBuffer)
+        val toRead = ByteArray(512)
+        input.readBytes(toRead)
+        input.readBytes(toRead)
+    }
+
+    @Test
+    @Throws(Exception::class)
+    fun testVerySmallBuffers() {
+        val out1 = Output(4, -1)
+        val out2: Output = AeronOutput(4)
+        for (i in 0..15) {
+            out1.writeVarInt(92, false)
+        }
+        for (i in 0..15) {
+            out2.writeVarInt(92, false)
+        }
+        Assert.assertArrayEquals(out1.toBytes(), out2.toBytes())
+    }
+
+    @Test
+    @Throws(Exception::class)
+    fun testZeroLengthOutputs() {
+        val output = Output(0, 10000)
+        kryo!!.writeClassAndObject(output, "Test string")
+        val byteBufferOutput = AeronOutput(0)
+        kryo!!.writeClassAndObject(byteBufferOutput, "Test string")
+    }
+
+    @Test
+    @Throws(Exception::class)
+    fun testFlushRoundTrip() {
+        val kryo = Kryo()
+        val s1 = "12345"
+        val output = AeronOutput(32)
+        kryo.writeClass(output, s1.javaClass)
+        kryo.writeObject(output, s1)
+        val input = AeronInput(output.internalBuffer)
+        val r = kryo.readClass(input)
+        val s2 = kryo.readObject(input, r.type) as String
+        Assert.assertEquals(s1, s2)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun testSetOutputBufferMinusOne() {
+        val bufferSize = 2
+        val output = AeronOutput(-1)
+        Assert.assertNotNull(output)
+        output.buffer = ByteArray(bufferSize)
+    }
+
+    @Test
+    fun testNewOutputMaxBufferSizeIsMinusOne() {
+        val bufferSize = 2
+        val maxBufferSize = -1
+        val output = Output(bufferSize, maxBufferSize)
+        Assert.assertNotNull(output)
+        // This test should pass as long as no exception thrown
+    }
+
+    @Test
+    fun testSetOutputMaxBufferSizeIsMinusOne() {
+        val bufferSize = 2
+        val maxBufferSize = -1
+        val output: Output = AeronOutput(bufferSize)
+        Assert.assertNotNull(output)
+        output.setBuffer(ByteArray(bufferSize), maxBufferSize)
+        // This test should pass as long as no exception thrown
+    }
 }

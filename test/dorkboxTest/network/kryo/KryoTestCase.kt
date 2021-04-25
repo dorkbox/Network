@@ -16,282 +16,249 @@
  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
+package dorkboxTest.network.kryo
 
-package dorkboxTest.network.kryo;
-
-import static com.esotericsoftware.minlog.Log.WARN;
-import static com.esotericsoftware.minlog.Log.warn;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.lang.reflect.Array;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-
-import org.junit.Before;
-
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
-import com.esotericsoftware.kryo.io.ByteBufferInput;
-import com.esotericsoftware.kryo.io.ByteBufferOutput;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-import com.esotericsoftware.kryo.unsafe.UnsafeByteBufferInput;
-import com.esotericsoftware.kryo.unsafe.UnsafeByteBufferOutput;
-import com.esotericsoftware.kryo.unsafe.UnsafeInput;
-import com.esotericsoftware.kryo.unsafe.UnsafeOutput;
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.Serializer
+import com.esotericsoftware.kryo.io.ByteBufferInput
+import com.esotericsoftware.kryo.io.ByteBufferOutput
+import com.esotericsoftware.kryo.io.Input
+import com.esotericsoftware.kryo.io.Output
+import com.esotericsoftware.kryo.unsafe.UnsafeByteBufferInput
+import com.esotericsoftware.kryo.unsafe.UnsafeByteBufferOutput
+import com.esotericsoftware.kryo.unsafe.UnsafeInput
+import com.esotericsoftware.kryo.unsafe.UnsafeOutput
+import com.esotericsoftware.minlog.Log
+import org.junit.Assert
+import org.junit.Before
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import java.lang.reflect.Array
+import java.nio.ByteBuffer
 
 /** Convenience methods for round tripping objects.
- * @author Nathan Sweet */
-@SuppressWarnings("unchecked")
-abstract public class KryoTestCase {
-	// When true, roundTrip will only do a single write/read to make debugging easier (breaks some tests).
-	static private final boolean debug = false;
+ * @author Nathan Sweet
+ */
+abstract class KryoTestCase {
+    protected var kryo: Kryo? = null
+    protected var output: Output? = null
+    protected var input: Input? = null
+    protected var object1: Any? = null
+    protected var object2: Any? = null
+    protected var supportsCopy = false
 
-	protected Kryo kryo;
-	protected Output output;
-	protected Input input;
-	protected Object object1, object2;
-	protected boolean supportsCopy;
+    interface BufferFactory {
+        fun createOutput(os: OutputStream?): Output
+        fun createOutput(os: OutputStream?, size: Int): Output
+        fun createOutput(size: Int, limit: Int): Output
+        fun createInput(os: InputStream?, size: Int): Input
+        fun createInput(buffer: ByteArray): Input
+    }
 
-	static interface BufferFactory {
-		public Output createOutput(OutputStream os);
+    @Before
+    @Throws(Exception::class)
+    fun setUp() {
+        if (debug && Log.WARN) Log.warn("*** DEBUG TEST ***")
+        kryo = Kryo()
+    }
 
-		public Output createOutput(OutputStream os, int size);
+    /** @param length Pass Integer.MIN_VALUE to disable checking the length.
+     */
+    fun <T> roundTrip(length: Int, object1: T): T {
+        val object2: T = roundTripWithBufferFactory(length, object1, object : BufferFactory {
+            override fun createOutput(os: OutputStream?): Output {
+                return Output(os)
+            }
 
-		public Output createOutput(int size, int limit);
+            override fun createOutput(os: OutputStream?, size: Int): Output {
+                return Output(os, size)
+            }
 
-		public Input createInput(InputStream os, int size);
+            override fun createOutput(size: Int, limit: Int): Output {
+                return Output(size, limit)
+            }
 
-		public Input createInput(byte[] buffer);
-	}
+            override fun createInput(os: InputStream?, size: Int): Input {
+                return Input(os, size)
+            }
 
-	@Before
-	public void setUp () throws Exception {
-		if (debug && WARN) warn("*** DEBUG TEST ***");
+            override fun createInput(buffer: ByteArray): Input {
+                return Input(buffer)
+            }
+        })
+        if (debug) return object2
+        roundTripWithBufferFactory(length, object1, object : BufferFactory {
+            override fun createOutput(os: OutputStream?): Output {
+                return ByteBufferOutput(os)
+            }
 
-		kryo = new Kryo();
-	}
+            override fun createOutput(os: OutputStream?, size: Int): Output {
+                return ByteBufferOutput(os, size)
+            }
 
-	/** @param length Pass Integer.MIN_VALUE to disable checking the length. */
-	public <T> T roundTrip (int length, T object1) {
-		T object2 = roundTripWithBufferFactory(length, object1, new BufferFactory() {
-			@Override
-            public Output createOutput (OutputStream os) {
-				return new Output(os);
-			}
+            override fun createOutput(size: Int, limit: Int): Output {
+                return ByteBufferOutput(size, limit)
+            }
 
-			@Override
-            public Output createOutput (OutputStream os, int size) {
-				return new Output(os, size);
-			}
+            override fun createInput(os: InputStream?, size: Int): Input {
+                return ByteBufferInput(os, size)
+            }
 
-			@Override
-            public Output createOutput (int size, int limit) {
-				return new Output(size, limit);
-			}
+            override fun createInput(buffer: ByteArray): Input {
+                val byteBuffer = ByteBuffer.allocateDirect(buffer.size)
+                byteBuffer.put(buffer).flip()
+                return ByteBufferInput(byteBuffer)
+            }
+        })
+        roundTripWithBufferFactory(length, object1, object : BufferFactory {
+            override fun createOutput(os: OutputStream?): Output {
+                return UnsafeOutput(os)
+            }
 
-			@Override
-            public Input createInput (InputStream os, int size) {
-				return new Input(os, size);
-			}
+            override fun createOutput(os: OutputStream?, size: Int): Output {
+                return UnsafeOutput(os, size)
+            }
 
-			@Override
-            public Input createInput (byte[] buffer) {
-				return new Input(buffer);
-			}
-		});
+            override fun createOutput(size: Int, limit: Int): Output {
+                return UnsafeOutput(size, limit)
+            }
 
-		if (debug) return object2;
+            override fun createInput(os: InputStream?, size: Int): Input {
+                return UnsafeInput(os, size)
+            }
 
-		roundTripWithBufferFactory(length, object1, new BufferFactory() {
-			@Override
-            public Output createOutput (OutputStream os) {
-				return new ByteBufferOutput(os);
-			}
+            override fun createInput(buffer: ByteArray): Input {
+                return UnsafeInput(buffer)
+            }
+        })
+        roundTripWithBufferFactory(length, object1, object : BufferFactory {
+            override fun createOutput(os: OutputStream?): Output {
+                return UnsafeByteBufferOutput(os)
+            }
 
-			@Override
-            public Output createOutput (OutputStream os, int size) {
-				return new ByteBufferOutput(os, size);
-			}
+            override fun createOutput(os: OutputStream?, size: Int): Output {
+                return UnsafeByteBufferOutput(os, size)
+            }
 
-			@Override
-            public Output createOutput (int size, int limit) {
-				return new ByteBufferOutput(size, limit);
-			}
+            override fun createOutput(size: Int, limit: Int): Output {
+                return UnsafeByteBufferOutput(size, limit)
+            }
 
-			@Override
-            public Input createInput (InputStream os, int size) {
-				return new ByteBufferInput(os, size);
-			}
+            override fun createInput(os: InputStream?, size: Int): Input {
+                return UnsafeByteBufferInput(os, size)
+            }
 
-			@Override
-            public Input createInput (byte[] buffer) {
-				ByteBuffer byteBuffer = ByteBuffer.allocateDirect(buffer.length);
-				byteBuffer.put(buffer).flip();
-				return new ByteBufferInput(byteBuffer);
-			}
-		});
+            override fun createInput(buffer: ByteArray): Input {
+                val byteBuffer = ByteBuffer.allocateDirect(buffer.size)
+                byteBuffer.put(buffer).flip()
+                return UnsafeByteBufferInput(byteBuffer)
+            }
+        })
+        return object2
+    }
 
-		roundTripWithBufferFactory(length, object1, new BufferFactory() {
-			@Override
-            public Output createOutput (OutputStream os) {
-				return new UnsafeOutput(os);
-			}
+    /** @param length Pass Integer.MIN_VALUE to disable checking the length.
+     */
+    fun <T> roundTripWithBufferFactory(length: Int, object1: T, sf: BufferFactory): T {
+        val checkLength = length != Int.MIN_VALUE
+        this.object1 = object1
 
-			@Override
-            public Output createOutput (OutputStream os, int size) {
-				return new UnsafeOutput(os, size);
-			}
+        // Test output to stream, large buffer.
+        var outStream = ByteArrayOutputStream()
+        output = sf.createOutput(outStream, 4096)
+        kryo!!.writeClassAndObject(output, object1)
+        output!!.flush()
+        if (debug) println()
 
-			@Override
-            public Output createOutput (int size, int limit) {
-				return new UnsafeOutput(size, limit);
-			}
+        // Test input from stream, large buffer.
+        val out = outStream.toByteArray()
+        input = sf.createInput(ByteArrayInputStream(outStream.toByteArray()), 4096)
+        object2 = kryo!!.readClassAndObject(input)
+        doAssertEquals(object1, object2)
+        if (checkLength) {
+            Assert.assertEquals("Incorrect number of bytes read.", length.toLong(), input!!.total())
+            Assert.assertEquals("Incorrect number of bytes written.", length.toLong(), output!!.total())
+        }
+        if (debug) return object2 as T
 
-			@Override
-            public Input createInput (InputStream os, int size) {
-				return new UnsafeInput(os, size);
-			}
+        // Test output to stream, small buffer.
+        outStream = ByteArrayOutputStream()
+        output = sf.createOutput(outStream, 10)
+        kryo!!.writeClassAndObject(output, object1)
+        output!!.flush()
 
-			@Override
-            public Input createInput (byte[] buffer) {
-				return new UnsafeInput(buffer);
-			}
-		});
+        // Test input from stream, small buffer.
+        input = sf.createInput(ByteArrayInputStream(outStream.toByteArray()), 10)
+        object2 = kryo!!.readClassAndObject(input)
+        doAssertEquals(object1, object2)
+        if (checkLength) Assert.assertEquals("Incorrect number of bytes read.", length.toLong(), input!!.total())
+        if (object1 != null) {
+            // Test null with serializer.
+            val serializer: Serializer<*> = kryo!!.getRegistration(object1.javaClass).serializer
+            output!!.reset()
+            outStream.reset()
+            kryo!!.writeObjectOrNull(output, null, serializer)
+            output!!.flush()
 
-		roundTripWithBufferFactory(length, object1, new BufferFactory() {
-			@Override
-            public Output createOutput (OutputStream os) {
-				return new UnsafeByteBufferOutput(os);
-			}
+            // Test null from byte array with and without serializer.
+            input = sf.createInput(ByteArrayInputStream(outStream.toByteArray()), 10)
+            Assert.assertNull(kryo!!.readObjectOrNull(input, object1.javaClass, serializer))
+            input = sf.createInput(ByteArrayInputStream(outStream.toByteArray()), 10)
+            Assert.assertNull(kryo!!.readObjectOrNull(input, object1.javaClass))
+        }
 
-			@Override
-            public Output createOutput (OutputStream os, int size) {
-				return new UnsafeByteBufferOutput(os, size);
-			}
+        // Test output to byte array.
+        output = sf.createOutput(length * 2, -1)
+        kryo!!.writeClassAndObject(output, object1)
+        output!!.flush()
 
-			@Override
-            public Output createOutput (int size, int limit) {
-				return new UnsafeByteBufferOutput(size, limit);
-			}
+        // Test input from byte array.
+        input = sf.createInput(output!!.toBytes())
+        object2 = kryo!!.readClassAndObject(input)
+        doAssertEquals(object1, object2)
+        if (checkLength) {
+            Assert.assertEquals("Incorrect length.", length.toLong(), output!!.total())
+            Assert.assertEquals("Incorrect number of bytes read.", length.toLong(), input!!.total())
+        }
+        input!!.reset()
+        if (supportsCopy) {
+            // Test copy.
+            var copy: T = kryo!!.copy(object1)
+            doAssertEquals(object1, copy)
+            copy = kryo!!.copyShallow(object1)
+            doAssertEquals(object1, copy)
+        }
+        return object2 as T
+    }
 
-			@Override
-            public Input createInput (InputStream os, int size) {
-				return new UnsafeByteBufferInput(os, size);
-			}
+    protected fun doAssertEquals(object1: Any?, object2: Any?) {
+        Assert.assertEquals(arrayToList(object1), arrayToList(object2))
+    }
 
-			@Override
-            public Input createInput (byte[] buffer) {
-				ByteBuffer byteBuffer = ByteBuffer.allocateDirect(buffer.length);
-				byteBuffer.put(buffer).flip();
-				return new UnsafeByteBufferInput(byteBuffer);
-			}
-		});
+    companion object {
+        // When true, roundTrip will only do a single write/read to make debugging easier (breaks some tests).
+        private const val debug = false
+        fun arrayToList(array: Any?): Any? {
+            if (array == null || !array.javaClass.isArray) return array
 
-		return object2;
-	}
+            val list: ArrayList<Any?> = ArrayList(Array.getLength(array))
+            var i = 0
+            val n = Array.getLength(array)
+            while (i < n) {
+                val array1 = Array.get(array, i)
+                val element = arrayToList(array1)
+                list.add(element)
+                i++
+            }
+            return list
+        }
 
-	/** @param length Pass Integer.MIN_VALUE to disable checking the length. */
-	public <T> T roundTripWithBufferFactory (int length, T object1, BufferFactory sf) {
-		boolean checkLength = length != Integer.MIN_VALUE;
-
-		this.object1 = object1;
-
-		// Test output to stream, large buffer.
-		ByteArrayOutputStream outStream = new ByteArrayOutputStream();
-		output = sf.createOutput(outStream, 4096);
-		kryo.writeClassAndObject(output, object1);
-		output.flush();
-
-		if (debug) System.out.println();
-
-		// Test input from stream, large buffer.
-		byte[] out = outStream.toByteArray();
-		input = sf.createInput(new ByteArrayInputStream(outStream.toByteArray()), 4096);
-		object2 = kryo.readClassAndObject(input);
-		doAssertEquals(object1, object2);
-		if (checkLength) {
-			assertEquals("Incorrect number of bytes read.", length, input.total());
-			assertEquals("Incorrect number of bytes written.", length, output.total());
-		}
-
-		if (debug) return (T)object2;
-
-		// Test output to stream, small buffer.
-		outStream = new ByteArrayOutputStream();
-		output = sf.createOutput(outStream, 10);
-		kryo.writeClassAndObject(output, object1);
-		output.flush();
-
-		// Test input from stream, small buffer.
-		input = sf.createInput(new ByteArrayInputStream(outStream.toByteArray()), 10);
-		object2 = kryo.readClassAndObject(input);
-		doAssertEquals(object1, object2);
-		if (checkLength) assertEquals("Incorrect number of bytes read.", length, input.total());
-
-		if (object1 != null) {
-			// Test null with serializer.
-			Serializer serializer = kryo.getRegistration(object1.getClass()).getSerializer();
-			output.reset();
-			outStream.reset();
-			kryo.writeObjectOrNull(output, null, serializer);
-			output.flush();
-
-			// Test null from byte array with and without serializer.
-			input = sf.createInput(new ByteArrayInputStream(outStream.toByteArray()), 10);
-			assertNull(kryo.readObjectOrNull(input, object1.getClass(), serializer));
-
-			input = sf.createInput(new ByteArrayInputStream(outStream.toByteArray()), 10);
-			assertNull(kryo.readObjectOrNull(input, object1.getClass()));
-		}
-
-		// Test output to byte array.
-		output = sf.createOutput(length * 2, -1);
-		kryo.writeClassAndObject(output, object1);
-		output.flush();
-
-		// Test input from byte array.
-		input = sf.createInput(output.toBytes());
-		object2 = kryo.readClassAndObject(input);
-		doAssertEquals(object1, object2);
-		if (checkLength) {
-			assertEquals("Incorrect length.", length, output.total());
-			assertEquals("Incorrect number of bytes read.", length, input.total());
-		}
-		input.reset();
-
-		if (supportsCopy) {
-			// Test copy.
-			T copy = kryo.copy(object1);
-			doAssertEquals(object1, copy);
-			copy = kryo.copyShallow(object1);
-			doAssertEquals(object1, copy);
-		}
-
-		return (T)object2;
-	}
-
-	protected void doAssertEquals (Object object1, Object object2) {
-		assertEquals(arrayToList(object1), arrayToList(object2));
-	}
-
-	static public Object arrayToList (Object array) {
-		if (array == null || !array.getClass().isArray()) return array;
-		ArrayList list = new ArrayList(Array.getLength(array));
-		for (int i = 0, n = Array.getLength(array); i < n; i++)
-			list.add(arrayToList(Array.get(array, i)));
-		return list;
-	}
-
-	static public ArrayList list (Object... items) {
-		ArrayList list = new ArrayList();
-		for (Object item : items)
-			list.add(item);
-		return list;
-	}
+        fun list(vararg items: Any): ArrayList<*> {
+            val list: ArrayList<Any> = ArrayList()
+            for (item in items) list.add(item)
+            return list
+        }
+    }
 }
