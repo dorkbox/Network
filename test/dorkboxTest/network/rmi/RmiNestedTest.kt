@@ -90,17 +90,17 @@ class RmiNestedTest : BaseTest() {
 
             client.onConnect { connection ->
                 connection.logger.error("Connected")
-                connection.createObject<TestObject> { rmiId, remoteObject ->
+                connection.createObject<TestObject> {
                     connection.logger.error("Starting test")
-                    remoteObject.setValue(43.21f)
+                    setValue(43.21f)
 
                     // Normal remote method call.
-                    Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
+                    Assert.assertEquals(43.21f, other(), .0001f)
 
                     // Make a remote method call that returns another remote proxy object.
                     // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
                     //  here we have a proxy to both of them.
-                    val otherObject: OtherObject = remoteObject.getOtherObject()
+                    val otherObject: OtherObject = getOtherObject()
 
                     // Normal remote method call on the second object.
                     otherObject.setValue(12.34f)
@@ -109,7 +109,7 @@ class RmiNestedTest : BaseTest() {
 
 
                     // make sure the "local" object and the "remote" object have the same values
-                    Assert.assertEquals(12.34f, remoteObject.getOtherValue(), .0001f)
+                    Assert.assertEquals(12.34f, getOtherValue(), .0001f)
 
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
@@ -157,17 +157,17 @@ class RmiNestedTest : BaseTest() {
 
             client.onConnect { connection ->
                 connection.logger.error("Connected")
-                connection.createObject<TestObject> { rmiId, remoteObject ->
+                connection.createObject<TestObject> {
                     connection.logger.error("Starting test")
-                    remoteObject.setValue(43.21f)
+                    setValue(43.21f)
 
                     // Normal remote method call.
-                    Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
+                    Assert.assertEquals(43.21f, other(), .0001f)
 
                     // Make a remote method call that returns another remote proxy object.
                     // the "test" object exists in the REMOTE side, as does the "OtherObject" that is created.
                     //  here we have a proxy to both of them.
-                    val otherObject: OtherObject = remoteObject.getOtherObject()
+                    val otherObject: OtherObject = getOtherObject()
 
                     // Normal remote method call on the second object.
                     otherObject.setValue(12.34f)
@@ -176,7 +176,7 @@ class RmiNestedTest : BaseTest() {
 
 
                     // make sure the "local" object and the "remote" object have the same values
-                    Assert.assertEquals(12.34f, remoteObject.getOtherValue(), .0001f)
+                    Assert.assertEquals(12.34f, getOtherValue(), .0001f)
 
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
@@ -224,15 +224,15 @@ class RmiNestedTest : BaseTest() {
 
             client.onConnect { connection ->
                 connection.logger.error("Connected")
-                connection.createObject<TestObject> { rmiId, remoteObject ->
+                connection.createObject<TestObject> {
                     connection.logger.error("Starting test")
-                    remoteObject.setOtherValue(43.21f)
+                    setOtherValue(43.21f)
 
                     // Normal remote method call.
-                    Assert.assertEquals(43.21f, remoteObject.getOtherValue(), .0001f)
+                    Assert.assertEquals(43.21f, getOtherValue(), .0001f)
 
                     // real object
-                    val otherObject: OtherObject = remoteObject.getOtherObject()
+                    val otherObject: OtherObject = getOtherObject()
 
                     // Normal remote method call on the second object.
                     val value = otherObject.value()
@@ -264,15 +264,15 @@ class RmiNestedTest : BaseTest() {
 
             server.onConnect { connection ->
                 connection.logger.error("Connected")
-                connection.createObject<TestObject> { rmiId, remoteObject ->
+                connection.createObject<TestObject> {
                     connection.logger.error("Starting test")
-                    remoteObject.setOtherValue(43.21f)
+                    setOtherValue(43.21f)
 
                     // Normal remote method call.
-                    Assert.assertEquals(43.21f, remoteObject.getOtherValue(), .0001f)
+                    Assert.assertEquals(43.21f, getOtherValue(), .0001f)
 
                     // real object
-                    val otherObject: OtherObject = remoteObject.getOtherObject()
+                    val otherObject: OtherObject = getOtherObject()
 
                     // Normal remote method call on the second object.
                     val value = otherObject.value()

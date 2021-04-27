@@ -18,12 +18,7 @@ package dorkbox.network.rmi
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
-import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
-import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
-import dorkbox.network.rmi.messages.GlobalObjectCreateRequest
-import dorkbox.network.rmi.messages.GlobalObjectCreateResponse
-import dorkbox.network.rmi.messages.MethodRequest
-import dorkbox.network.rmi.messages.MethodResponse
+import dorkbox.network.rmi.messages.*
 import dorkbox.network.serialization.Serialization
 import dorkbox.util.classes.ClassHelper
 import kotlinx.coroutines.launch
@@ -81,11 +76,11 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
     private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
 
 
-    internal fun <Iface> registerCallback(callback: suspend (Int, Iface) -> Unit): Int {
+    internal fun <Iface> registerCallback(callback: suspend Iface.() -> Unit): Int {
         return remoteObjectCreationCallbacks.register(callback)
     }
 
-    private fun removeCallback(callbackId: Int): suspend (Int, Any) -> Unit {
+    private fun removeCallback(callbackId: Int): suspend Any.() -> Unit {
         // callback's area always correct, because we track them ourselves.
         return remoteObjectCreationCallbacks.remove(callbackId)!!
     }
@@ -125,7 +120,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
                                         connection: CONNECTION,
                                         isGlobal: Boolean,
                                         rmiId: Int,
-                                        callback: suspend (Int, Any) -> Unit,
+                                        callback: suspend Any.() -> Unit,
                                         serialization: Serialization) {
 
         // we only create the proxy + execute the callback if the RMI id is valid!
@@ -134,7 +129,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
             return
         }
 
-        val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 1)
+        val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 0)
 
         // create the client-side proxy object, if possible.  This MUST be an object that is saved for the connection
         var proxyObject = connection.rmiConnectionSupport.getProxyObject(rmiId)
@@ -147,7 +142,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
         // this should be executed on a NEW coroutine!
         endPoint.actionDispatch.launch {
             try {
-                callback(rmiId, proxyObject)
+                callback(proxyObject)
             } catch (e: Exception) {
                 ListenerManager.cleanStackTrace(e)
                 endPoint.listenerManager.notifyError(e)

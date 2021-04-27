@@ -100,16 +100,16 @@ class SerializationValidationTest : BaseTest() {
 
             client.onConnect { connection ->
                 connection.logger.error("Connected")
-                connection.createObject<TestObject> { rmiId, remoteObject ->
+                connection.createObject<TestObject> {
                     connection.logger.error("Starting test")
-                    remoteObject.setValue(43.21f)
+                    setValue(43.21f)
 
                     // Normal remote method call.
-                    Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
+                    Assert.assertEquals(43.21f, other(), .0001f)
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
                     // that is where that object actually exists.
-                    connection.send(remoteObject)
+                    connection.send(this)
                 }
             }
 
@@ -147,16 +147,16 @@ class SerializationValidationTest : BaseTest() {
 
             client.onConnect { connection ->
                 connection.logger.error("Connected")
-                connection.createObject<TestObject> { rmiId, remoteObject ->
+                connection.createObject<TestObject> {
                     connection.logger.error("Starting test")
-                    remoteObject.setValue(43.21f)
+                    setValue(43.21f)
 
                     // Normal remote method call.
-                    Assert.assertEquals(43.21f, remoteObject.other(), .0001f)
+                    Assert.assertEquals(43.21f, other(), .0001f)
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
                     // that is where that object actually exists.
-                    connection.send(remoteObject)
+                    connection.send(this)
                 }
             }
 

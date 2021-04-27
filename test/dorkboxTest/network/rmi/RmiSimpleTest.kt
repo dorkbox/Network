@@ -143,9 +143,9 @@ class RmiSimpleTest : BaseTest() {
 
                 server.logger.error("Starting test for: Server -> Client")
                 // NOTE: THIS IS BI-DIRECTIONAL!
-                connection.createObject<TestCow>(123) { rmiId, remoteObject ->
+                connection.createObject<TestCow>(123) {
                     server.logger.error("Running test for: Server -> Client")
-                    RmiCommonTest.runTests(connection, remoteObject, 123)
+                    RmiCommonTest.runTests(connection, this, 123)
                     server.logger.error("Done with test for: Server -> Client")
                 }
             }
@@ -160,9 +160,9 @@ class RmiSimpleTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect { connection ->
-                connection.createObject<TestCow>(23) { rmiId, remoteObject ->
+                connection.createObject<TestCow>(23) {
                     client.logger.error("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(connection, remoteObject, 23)
+                    RmiCommonTest.runTests(connection, this, 23)
                     client.logger.error("Done with test for: Client -> Server")
                 }
             }
@@ -219,9 +219,9 @@ class RmiSimpleTest : BaseTest() {
                 server.logger.error("Finished test for: Client -> Server")
 
                 // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
-                connection.createObject<TestCow>(4) { rmiId, remoteObject ->
+                connection.createObject<TestCow>(4) {
                     server.logger.error("Running test for: Server -> Client")
-                    RmiCommonTest.runTests(connection, remoteObject, 4)
+                    RmiCommonTest.runTests(connection, this, 4)
                     server.logger.error("Done with test for: Server -> Client")
                 }
             }
@@ -256,9 +256,9 @@ class RmiSimpleTest : BaseTest() {
                 client.logger.error("Starting test for: Client -> Server")
 
                 // this creates a GLOBAL object on the server (instead of a connection specific object)
-                client.createObject<TestCow>(44) { rmiId, remoteObject ->
+                client.createObject<TestCow>(44) {
                     client.logger.error("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(client.connection, remoteObject, 44)
+                    RmiCommonTest.runTests(client.connection, this, 44)
                     client.logger.error("Done with test for: Client -> Server")
                 }
             }

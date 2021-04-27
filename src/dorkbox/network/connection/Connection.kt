@@ -648,8 +648,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @see RemoteObject
      */
-    suspend fun <Iface> createObject(vararg objectParameters: Any?, callback: suspend (Int, Iface) -> Unit) {
-        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 1)
+    suspend fun <Iface> createObject(vararg objectParameters: Any?, callback: suspend Iface.() -> Unit) {
+        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0)
         val kryoId = endPoint.serialization.getKryoIdForRmiClient(iFaceClass)
 
         @Suppress("UNCHECKED_CAST")
@@ -675,8 +675,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @see RemoteObject
      */
-    suspend fun <Iface> createObject(callback: suspend (Int, Iface) -> Unit) {
-        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function2::class.java, callback.javaClass, 1)
+    suspend fun <Iface> createObject(callback: suspend Iface.() -> Unit) {
+        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0)
         val kryoId = endPoint.serialization.getKryoIdForRmiClient(iFaceClass)
 
         rmiConnectionSupport.createRemoteObject(this, kryoId, null, callback)

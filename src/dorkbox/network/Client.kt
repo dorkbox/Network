@@ -746,7 +746,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
-    suspend inline fun <reified Iface> createObject(vararg objectParameters: Any?, noinline callback: suspend (Int, Iface) -> Unit) {
+    suspend inline fun <reified Iface> createObject(vararg objectParameters: Any?, noinline callback: suspend Iface.() -> Unit) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
         val kryoId = serialization.getKryoIdForRmiClient(Iface::class.java)
@@ -776,7 +776,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @see RemoteObject
      */
-    suspend inline fun <reified Iface> createObject(noinline callback: suspend (Int, Iface) -> Unit) {
+    suspend inline fun <reified Iface> createObject(noinline callback: suspend Iface.() -> Unit) {
         // NOTE: It's not possible to have reified inside a virtual function
         // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
         val kryoId = serialization.getKryoIdForRmiClient(Iface::class.java)

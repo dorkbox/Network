@@ -74,7 +74,7 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
     /**
      * on the "client" to create a connection-specific remote object (that exists on the server)
      */
-    suspend fun <Iface> createRemoteObject(connection: Connection, kryoId: Int, objectParameters: Array<Any?>?, callback: suspend (Int, Iface) -> Unit) {
+    suspend fun <Iface> createRemoteObject(connection: Connection, kryoId: Int, objectParameters: Array<Any?>?, callback: suspend Iface.() -> Unit) {
         val callbackId = rmiGlobalSupport.registerCallback(callback)
 
         // There is no rmiID yet, because we haven't created it!
