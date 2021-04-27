@@ -47,25 +47,36 @@ internal class ListenerManager<CONNECTION: Connection> {
         }
 
         /**
-         * Remove from the stacktrace kotlin coroutine info + dorkbox network call stack.
+         * Remove from the stacktrace kotlin coroutine info + dorkbox network call stack. This is NOT used by RMI
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
         fun cleanStackTrace(throwable: Throwable) {
             // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-            val stackTrace = throwable.stackTrace
-            var newEndIndex = stackTrace.size -1  // offset by 1 because we have to adjust for the access index
+
+            // we never care about coroutine stacks, so filter then to start with
+            val stackTrace = throwable.stackTrace.filterNot {
+                val stackName = it.className
+                stackName.startsWith("kotlinx.coroutines.") ||
+                        stackName.startsWith("kotlin.coroutines.")
+            }.toTypedArray()
+
+
+            var newEndIndex = stackTrace.size
 
             // maybe offset by 1 because we have to adjust coroutine calls
-            val firstStartIndex = if (stackTrace[0].methodName == "invokeSuspend") 1 else 0
-            var newStartIndex = firstStartIndex
+            var newStartIndex = 0
 
+            val savedFirstStack = if (stackTrace[0].methodName == "invokeSuspend") {
+                newStartIndex = 1
+                stackTrace.copyOfRange(0, 1)
+            } else {
+                null
+            }
 
             for (i in newEndIndex downTo 0) {
                 val stackName = stackTrace[i].className
-                if (stackName.startsWith("kotlinx.coroutines.") ||
-                    stackName.startsWith("kotlin.coroutines.") ||
-                    stackName.startsWith("dorkbox.network.")) {
+                if (stackName.startsWith("dorkbox.network.")) {
                     newEndIndex--
                 } else {
                     break
@@ -73,25 +84,8 @@ internal class ListenerManager<CONNECTION: Connection> {
             }
 
             if (newEndIndex > 0) {
-                for (i in newStartIndex..newEndIndex) {
-                    val stackName = stackTrace[i].className
-                    if (stackName.startsWith("kotlinx.coroutines.") ||
-                        stackName.startsWith("kotlin.coroutines.")
-                    ) {
-                        newStartIndex++
-                    } else {
-                        break
-                    }
-                }
-            }
-
-            newEndIndex++ // have to add 1 back, because a copy must be by size (and we access from 0)
-
-            if (newEndIndex > 0) {
-                // newEndIndex will also remove the VERY LAST CachedMethod or CachedAsmMethod access invocation (because it's offset by 1)
-
-                if (firstStartIndex == 1) {
-                    // we want to save the FIRST stack frame also
+                if (savedFirstStack != null) {
+                    // we want to save the FIRST stack frame also, maybe
                     throwable.stackTrace = stackTrace.copyOfRange(0, 1) + stackTrace.copyOfRange(newStartIndex, newEndIndex)
                 } else {
                     throwable.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
