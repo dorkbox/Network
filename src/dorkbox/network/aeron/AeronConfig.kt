@@ -124,8 +124,7 @@ object AeronConfig {
             .socketSndbufLength(config.sendBufferSize)
             .socketRcvbufLength(config.receiveBufferSize)
 
-        context
-            .aeronDirectoryName(config.aeronDirectory!!.absolutePath)
+        context.aeronDirectoryName(config.aeronDirectory!!.absolutePath)
 
         if (context.ipcTermBufferLength() != io.aeron.driver.Configuration.ipcTermBufferLength()) {
             // default 64 megs each is HUGE
@@ -239,19 +238,22 @@ object AeronConfig {
         if (!isRunning(context)) {
             logger.debug("Starting Aeron Media driver in '${context.aeronDirectory()}'")
 
-            val threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronDriver"), true)
-            context
-                .conductorThreadFactory(threadFactory)
-                .receiverThreadFactory(threadFactory)
-                .senderThreadFactory(threadFactory)
-                .sharedNetworkThreadFactory(threadFactory)
-                .sharedThreadFactory(threadFactory)
-
+            var threadFactory: NamedThreadFactory? = null
 
             // try to start. If we start/stop too quickly, it's a problem
             var count = 10
             while (count-- > 0) {
                 try {
+                    if (threadFactory == null) {
+                        threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronDriver"), true)
+                        context
+                            .conductorThreadFactory(threadFactory)
+                            .receiverThreadFactory(threadFactory)
+                            .senderThreadFactory(threadFactory)
+                            .sharedNetworkThreadFactory(threadFactory)
+                            .sharedThreadFactory(threadFactory)
+                    }
+
                     return MediaDriver.launch(context)
                 } catch (e: Exception) {
                     logger.warn(e) { "Unable to start the Aeron Media driver. Retrying $count more times..." }
