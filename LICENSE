@@ -1,4 +1,4 @@
- - Network - Encrypted, high-performance, and event-driven/reactive network stack for Java 11+
+ - Network - Encrypted, high-performance, and event-driven/reactive network stack for Java 8+
    [The Apache Software License, Version 2.0]
    https://git.dorkbox.com/dorkbox/Network
    Copyright 2021
@@ -134,7 +134,7 @@
        Copyright 2021
          QOS.ch
 
-     - MinLog-SLF4J - Drop-in replacement for MinLog to log through SLF4j.
+     - MinLog - Drop-in replacement for MinLog to log through SLF4j.
        [BSD 3-Clause License]
        https://git.dorkbox.com/dorkbox/MinLog-SLF4J
        https://github.com/EsotericSoftware/minlog
@@ -268,17 +268,13 @@
            Copyright 2020
              Square, Inc
 
-         - JNA - Simplified native library access for Java.
+         - Kotlin - 
            [The Apache Software License, Version 2.0]
-           https://github.com/twall/jna
-           Copyright 2021
-             Timothy Wall
-
-         - JNA-Platform - Mappings for a number of commonly used platform functions
-           [The Apache Software License, Version 2.0]
-           https://github.com/twall/jna
-           Copyright 2021
-             Timothy Wall
+           https://github.com/JetBrains/kotlin
+           Copyright 2020
+             JetBrains s.r.o. and Kotlin Programming Language contributors
+           Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+           See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
          - Java Uuid Generator - A set of Java classes for working with UUIDs
            [The Apache Software License, Version 2.0]
@@ -311,6 +307,12 @@
            https://github.com/jhalterman/typetools
            Copyright 2021
              Jonathan Halterman and friends
+
+         - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
+           [The Apache Software License, Version 2.0]
+           https://github.com/Kotlin/kotlinx.coroutines
+           Copyright 2021
+             JetBrains s.r.o.
 
          - SLF4J - Simple facade or abstraction for various logging frameworks
            [MIT License]
@@ -413,12 +415,6 @@
                Copyright 2021
                  JetBrains s.r.o.
 
-             - kotlin-logging - Lightweight logging framework for Kotlin
-               [The Apache Software License, Version 2.0]
-               https://github.com/MicroUtils/kotlin-logging
-               Copyright 2021
-                 Ohad Shai
-
              - SLF4J - Simple facade or abstraction for various logging frameworks
                [MIT License]
                http://www.slf4j.org
@@ -487,40 +483,18 @@
          Dorkbox LLC
 
        Extra license information
-         - Kryo - Fast and efficient binary object graph serialization framework for Java
-           [BSD 3-Clause License]
-           https://github.com/EsotericSoftware/kryo
-           Copyright 2021
-             Nathan Sweet
-
-           Extra license information
-             - ReflectASM - 
-               [BSD 3-Clause License]
-               https://github.com/EsotericSoftware/reflectasm
-                 Nathan Sweet
-
-             - Objenesis  - 
-               [The Apache Software License, Version 2.0]
-               http://objenesis.org
-                 Objenesis Team and all contributors
-
-             - MinLog-SLF4J - 
-               [BSD 3-Clause License]
-               https://github.com/EsotericSoftware/minlog
-                 Nathan Sweet
-
-         - Bouncy Castle Crypto - Lightweight cryptography API and JCE Extension
-           [The Apache Software License, Version 2.0]
-           http://www.bouncycastle.org
-           Copyright 2021
-             The Legion of the Bouncy Castle Inc
-
          - Kryo Serializers - Extra kryo serializers
            [The Apache Software License, Version 2.0]
            https://github.com/magro/kryo-serializers
            Copyright 2021
              Martin Grotzke
              Rafael Winterhalter
+
+         - Bouncy Castle Crypto - Lightweight cryptography API and JCE Extension
+           [The Apache Software License, Version 2.0]
+           http://www.bouncycastle.org
+           Copyright 2021
+             The Legion of the Bouncy Castle Inc
 
      - NetworkUtils - Utilities for managing network configurations, IP/MAC address conversion, and ping (via OS native commands)
        [The Apache Software License, Version 2.0]
@@ -550,12 +524,6 @@
              JetBrains s.r.o. and Kotlin Programming Language contributors
            Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
            See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
-
-         - kotlin-logging - Lightweight logging framework for Kotlin
-           [The Apache Software License, Version 2.0]
-           https://github.com/MicroUtils/kotlin-logging
-           Copyright 2021
-             Ohad Shai
 
          - SLF4J - Simple facade or abstraction for various logging frameworks
            [MIT License]
@@ -608,24 +576,6 @@
                Copyright 2021
                  QOS.ch
 
-             - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
-               [The Apache Software License, Version 2.0]
-               https://github.com/Kotlin/kotlinx.coroutines
-               Copyright 2021
-                 JetBrains s.r.o.
-
-             - kotlin-logging - Lightweight logging framework for Kotlin
-               [The Apache Software License, Version 2.0]
-               https://github.com/MicroUtils/kotlin-logging
-               Copyright 2021
-                 Ohad Shai
-
-             - SLF4J - Simple facade or abstraction for various logging frameworks
-               [MIT License]
-               http://www.slf4j.org
-               Copyright 2021
-                 QOS.ch
-
              - SSHJ - SSHv2 library for Java
                [The Apache Software License, Version 2.0]
                https://github.com/hierynomus/sshj
@@ -660,6 +610,18 @@
                    https://github.com/str4d/ed25519-java
                      https://github.com/str4d
 
+             - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
+               [The Apache Software License, Version 2.0]
+               https://github.com/Kotlin/kotlinx.coroutines
+               Copyright 2021
+                 JetBrains s.r.o.
+
+             - SLF4J - Simple facade or abstraction for various logging frameworks
+               [MIT License]
+               http://www.slf4j.org
+               Copyright 2021
+                 QOS.ch
+
              - Updates - Software Update Management
                [The Apache Software License, Version 2.0]
                https://git.dorkbox.com/dorkbox/Updates
@@ -675,12 +637,6 @@
                    Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
                    See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
-                 - PropertyLoader - Property annotation and loader for fields
-                   [The Apache Software License, Version 2.0]
-                   https://git.dorkbox.com/dorkbox/PropertyLoader
-                   Copyright 2021
-                     Dorkbox LLC
-
          - Updates - Software Update Management
            [The Apache Software License, Version 2.0]
            https://git.dorkbox.com/dorkbox/Updates
@@ -695,12 +651,6 @@
                  JetBrains s.r.o. and Kotlin Programming Language contributors
                Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
                See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
-
-             - PropertyLoader - Property annotation and loader for fields
-               [The Apache Software License, Version 2.0]
-               https://git.dorkbox.com/dorkbox/PropertyLoader
-               Copyright 2021
-                 Dorkbox LLC
 
      - ObjectPool - Fast, lightweight, and compatible blocking/non-blocking/soft-reference object pool for Java 8+
        [The Apache Software License, Version 2.0]

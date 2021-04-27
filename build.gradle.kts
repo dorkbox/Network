@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import dorkbox.gradle.kotlin
 import java.time.Instant
 
 ///////////////////////////////
@@ -27,20 +26,17 @@ gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show th
 gradle.startParameter.warningMode = WarningMode.All
 
 plugins {
-    java
+    id("com.dorkbox.GradleUtils") version "2.6"
+    id("com.dorkbox.Licensing") version "2.6"
+    id("com.dorkbox.VersionUpdate") version "2.3"
+    id("com.dorkbox.GradlePublish") version "1.11"
 
-    id("com.dorkbox.GradleUtils") version "1.15"
-    id("com.dorkbox.Licensing") version "2.5.5"
-    id("com.dorkbox.VersionUpdate") version "2.2"
-    id("com.dorkbox.GradlePublish") version "1.10"
-    id("com.dorkbox.GradleModuleInfo") version "1.1"
-
-    kotlin("jvm") version "1.4.10"
+    kotlin("jvm") version "1.5.0"
 }
 
 object Extras {
     // set for the project
-    const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 11+"
+    const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 8+"
     const val group = "com.dorkbox"
     const val version = "5.0"
 
@@ -58,14 +54,12 @@ object Extras {
 /////  assign 'Extras'
 ///////////////////////////////
 GradleUtils.load("$projectDir/../../gradle.properties", Extras)
-GradleUtils.fixIntellijPaths()
-GradleUtils.defaultResolutionStrategy()
-GradleUtils.compileConfiguration(JavaVersion.VERSION_11) { kotlinOptions ->
+GradleUtils.defaults()
+// because of the api changes for stacktrace stuff, it's best for us to ONLY support 11+
+GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
     // see: https://kotlinlang.org/docs/reference/using-gradle.html
-    kotlinOptions.apply {
-        // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
-        freeCompilerArgs += "-Xinline-classes"
-    }
+    // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
+//    freeCompilerArgs = listOf("-Xinline-classes")
 }
 
 // ratelimiter, "other" package
@@ -77,23 +71,6 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) { kotlinOptions ->
 // java 14 is faster with aeron!
 // NOTE: now using aeron instead of netty
 // todo: remove BC! use conscrypt instead, or native java? (if possible. we are java 11 now, instead of 1.6)
-// using netty IP filters for connections
-// /*
-// * Copyright 2014 The Netty Project
-// *
-// * The Netty Project licenses this file to you under the Apache License,
-// * version 2.0 (the "License"); you may not use this file except in compliance
-// * with the License. You may obtain a copy of the License at:
-// *
-// *   http://www.apache.org/licenses/LICENSE-2.0
-// *
-// * Unless required by applicable law or agreed to in writing, software
-// * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// * License for the specific language governing permissions and limitations
-// * under the License.
-// */
-//package dorkbox.network.ipFilter;
 
 
 // also, NOT using bouncastle, but instead the google one
@@ -146,31 +123,6 @@ licensing {
     }
 }
 
-sourceSets {
-    main {
-        kotlin {
-            setSrcDirs(listOf("src"))
-
-            // want to add files for the source. 'setSrcDirs' resets includes...
-            include("**/*.kt")
-        }
-    }
-
-    test {
-        kotlin {
-            setSrcDirs(listOf("test"))
-
-            // want to add files for the source. 'setSrcDirs' resets includes...
-            include("**/*.kt")
-        }
-    }
-}
-
-repositories {
-    mavenLocal() // this must be first!
-    jcenter()
-}
-
 tasks.jar.get().apply {
     manifest {
         // https://docs.oracle.com/javase/tutorial/deployment/jar/packageman.html
@@ -183,27 +135,37 @@ tasks.jar.get().apply {
         attributes["Implementation-Title"] = "${Extras.group}.${Extras.id}"
         attributes["Implementation-Version"] = Extras.buildDate
         attributes["Implementation-Vendor"] = Extras.vendor
-
-        attributes["Automatic-Module-Name"] = Extras.id
     }
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:atomicfu:0.14.4")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.9")
+    implementation("org.jetbrains.kotlinx:atomicfu:0.15.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.3")
+
+    // https://github.com/dorkbox
+    implementation("com.dorkbox:MinLog:2.1")
+    implementation("com.dorkbox:Utilities:1.10")
+    implementation("com.dorkbox:Updates:1.1")
+    implementation("com.dorkbox:Serializers:1.0")
+    implementation("com.dorkbox:NetworkUtils:2.6")
+    implementation("com.dorkbox:ObjectPool:3.3")
 
 
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.31.0"
+    val aeronVer = "1.32.0"
     // REMOVE UdpChannel when ISSUE https://github.com/real-logic/aeron/issues/1057 is resolved! (hopefully in 1.30.0)
     implementation("io.aeron:aeron-client:$aeronVer")
     implementation("io.aeron:aeron-driver:$aeronVer")
 
     // https://github.com/EsotericSoftware/kryo
-    implementation("com.esotericsoftware:kryo:5.1.0")
+    implementation("com.esotericsoftware:kryo:5.1.0") {
+        exclude("com.esotericsoftware", "minlog") // we use our own minlog, that logs to SLF4j instead
+    }
 
     // https://github.com/magro/kryo-serializers
-    implementation("de.javakaffee:kryo-serializers:0.45")
+    implementation("de.javakaffee:kryo-serializers:0.45"){
+        exclude("com.esotericsoftware", "kryo") // we use our own min-log, that logs to SLF4j
+    }
 
     // https://github.com/jpountz/lz4-java
 //    implementation("net.jpountz.lz4:lz4:1.3.0")
@@ -215,21 +177,13 @@ dependencies {
     implementation("com.conversantmedia:disruptor:1.2.19")
 
     // https://github.com/jhalterman/typetools
-    implementation("net.jodah:typetools:0.6.2")
-
-    // https://github.com/dorkbox
-    implementation("com.dorkbox:Annotations:3.1")
-    implementation("com.dorkbox:MinLog-SLF4J:2.0")
-    implementation("com.dorkbox:Utilities:1.8.3")
-    implementation("com.dorkbox:Updates:1.0")
-    implementation("com.dorkbox:NetworkUtils:2.0")
-    implementation("com.dorkbox:ObjectPool:3.1")
+    implementation("net.jodah:typetools:0.6.3")
 
     // really fast storage
     // https://github.com/lmdbjava/lmdbjava
     compileOnly("org.lmdbjava:lmdbjava:0.8.1")
     // https://github.com/OpenHFT/Chronicle-Map
-    compileOnly("net.openhft:chronicle-map:3.20.40")
+    compileOnly("net.openhft:chronicle-map:3.20.84")
 
 
     // Caffeine High-throughput Timeout Cache
@@ -240,15 +194,17 @@ dependencies {
     }
 
     // https://github.com/MicroUtils/kotlin-logging
-    implementation("io.github.microutils:kotlin-logging:2.0.3")
-    implementation("org.slf4j:slf4j-api:1.7.30")
+    implementation("io.github.microutils:kotlin-logging:2.0.6")
+    implementation("org.slf4j:slf4j-api:1.8.0-beta4")
+
+
 
 
     testImplementation("org.lmdbjava:lmdbjava:0.8.1")
     testImplementation("net.openhft:chronicle-map:3.20.3")
 
     testImplementation("junit:junit:4.13.1")
-    testImplementation("ch.qos.logback:logback-classic:1.2.3")
+    testImplementation("ch.qos.logback:logback-classic:1.3.0-alpha4")
 }
 
 publishToSonatype {
