@@ -52,17 +52,15 @@ internal class ListenerManager<CONNECTION: Connection> {
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
         fun cleanStackTrace(throwable: Throwable) {
-            // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-
             // we never care about coroutine stacks, so filter then to start with
             val stackTrace = throwable.stackTrace.filterNot {
                 val stackName = it.className
                 stackName.startsWith("kotlinx.coroutines.") ||
-                        stackName.startsWith("kotlin.coroutines.")
+                stackName.startsWith("kotlin.coroutines.")
             }.toTypedArray()
 
 
-            var newEndIndex = stackTrace.size
+            var newEndIndex = stackTrace.size - 1
 
             // maybe offset by 1 because we have to adjust coroutine calls
             var newStartIndex = 0
