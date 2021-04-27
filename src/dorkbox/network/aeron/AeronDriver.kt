@@ -227,7 +227,7 @@ class AeronDriver(val config: Configuration,
          */
         fun isRunning(context: MediaDriver.Context, timeout: Long = context.driverTimeoutMs()): Boolean {
             // if the media driver is running, it will be a quick connection. Usually 100ms or so
-            return context.isDriverActive(context.driverTimeoutMs()) { }
+            return context.isDriverActive(timeout) { }
         }
 
         /**
