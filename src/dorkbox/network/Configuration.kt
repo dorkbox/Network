@@ -105,9 +105,9 @@ class ServerConfiguration : dorkbox.network.Configuration() {
     @Suppress("DuplicatedCode")
     override fun validate() {
         // have to do some basic validation of our configuration
-        if (listenIpAddress != listenIpAddress.toLowerCase()) {
+        if (listenIpAddress != listenIpAddress.lowercase()) {
             // only do this once!
-            listenIpAddress = listenIpAddress.toLowerCase()
+            listenIpAddress = listenIpAddress.lowercase()
         }
 
         require(listenIpAddress.isNotBlank()) { "Blank listen IP address, cannot continue"}

@@ -435,7 +435,7 @@ class AeronOutput : Output {
         var permitAscii = charCount in 2..32
         if (permitAscii) {
             for (i in 0 until charCount) {
-                if (value[i].toInt() > 127) {
+                if (value[i].code > 127) {
                     permitAscii = false
                     break  // not ascii
                 }
@@ -459,7 +459,7 @@ class AeronOutput : Output {
         // Try to write 7 bit chars.
         val byteBuf = internalBuffer
         while (true) {
-            val c = value[charIndex].toInt()
+            val c = value[charIndex].code
             if (c > 127) break
             byteBuf.putByte(position++, c.toByte())
             charIndex++
@@ -486,7 +486,7 @@ class AeronOutput : Output {
         var i = 0
         val n = value.length
         while (i < n) {
-            byteBuf.putByte(position++, value[i].toByte())
+            byteBuf.putByte(position++, value[i].code.toByte())
             ++i
         }
         byteBuf.putByte(position - 1, (byteBuf.getByte(position - 1).toInt() or 0x80).toByte()) // Bit 8 means end of ASCII.
@@ -495,7 +495,7 @@ class AeronOutput : Output {
     private fun writeUtf8Slow(value: String, charCount: Int, charIndex: Int) {
         var index = charIndex
         while (index < charCount) {
-            val c = value[index].toInt()
+            val c = value[index].code
 
             if (c <= 0x007F) {
                 internalBuffer.putByte(position++, c.toByte())
@@ -572,7 +572,7 @@ class AeronOutput : Output {
         var newOffset = offset
         val n = newOffset + count
         while (newOffset < n) {
-            val value = array[newOffset].toInt()
+            val value = array[newOffset].code
             writeChar(value.toChar())
             newOffset++
         }
