@@ -19,12 +19,11 @@ import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.cache.RemovalCause
 import com.github.benmanes.caffeine.cache.RemovalListener
-import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.IpcMediaDriverConnection
-import dorkbox.network.aeron.UdpMediaDriverConnection
+import dorkbox.network.aeron.UdpMediaDriverPairedConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.ListenerManager
@@ -289,23 +288,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             val connection = server.newConnection(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
-            val permitConnection = listenerManager.notifyFilter(connection)
-            if (!permitConnection) {
-                // have to unwind actions!
-                sessionIdAllocator.free(connectionSessionId)
-                streamIdAllocator.free(connectionStreamPubId)
-
-                val exception = ClientRejectedException("Connection was not permitted!")
-                ListenerManager.cleanStackTrace(exception)
-                listenerManager.notifyError(connection, exception)
-
-                runBlocking {
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection was not permitted!"))
-                }
-                return
-            }
-
-
+            // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
 
 
             ///////////////
@@ -353,7 +336,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             ListenerManager.noStackTrace(exception)
             listenerManager.notifyError(exception)
         }
-
     }
 
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
