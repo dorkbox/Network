@@ -138,9 +138,6 @@ internal class ListenerManager<CONNECTION: Connection> {
     }
 
     // initialize a emtpy arrays
-    private val onConnectIpFilterList = atomic(Array<IpFilterRule>(0) { IpSubnetFilterRule.fake })
-    private val onConnectIpFilterMutex = Mutex()
-
     private val onConnectFilterList = atomic(Array<(suspend (CONNECTION) -> Boolean)>(0) { { true } })
     private val onConnectFilterMutex = Mutex()
 
@@ -174,16 +171,15 @@ internal class ListenerManager<CONNECTION: Connection> {
     }
 
     /**
-     * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
+     * Adds an IP+subnet rule that defines if that IP+subnet is allowed or denied connectivity to this server.
      *
-     * If there are any IP+subnet added to this list - then ONLY those are permitted (all else are denied)
-     *
-     * If there is nothing added to this list - then ALL are permitted
+     * If there are no rules added, then all connections are allowed
+     * If there are rules added, then a rule MUST be matched to be allowed
      */
     suspend fun filter(ipFilterRule: IpFilterRule) {
-        onConnectIpFilterMutex.withLock {
-            // we have to follow the single-writer principle!
-            onConnectIpFilterList.lazySet(add(ipFilterRule, onConnectIpFilterList.value))
+        filter {
+            // IPC will not filter, so this is OK to coerce to not-null
+            ipFilterRule.matches(it.remoteAddress!!)
         }
     }
 
@@ -317,61 +313,29 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * @return true if the connection will be allowed to connect. False if we should terminate this connection
      */
-     fun notifyFilter(connection: CONNECTION): Boolean {
-        // NOTE: pass a reference to a string, so if there is an error, we can get it! (and log it, and send it to the client)
-
-        // first run through the IP connection filters, THEN run through the "custom" filters
-
-//        val address = connection.remoteAddressInt
-
-        // it's possible for a remote address to match MORE than 1 rule.
-//        var isAllowed = false
-
-        // these are the IP filters (optimized checking based on simple IP rules)
-        onConnectIpFilterList.value.forEach {
-//            if (it.matches(connection))
-//
-//
-//                if (!it(connection)) {
-//                    return false
-//            }
+     suspend fun notifyFilter(connection: CONNECTION): Boolean {
+        // remote address will NOT be null at this stage, but best to verify.
+        val remoteAddress = connection.remoteAddress
+        if (remoteAddress == null) {
+            notifyError(connection, IOException("Unable to attempt connection stages when no remote address is present"))
+            return false
         }
 
+        // by default, there is a SINGLE rule that will always exist, and will always ACCEPT ALL connections.
+        // This is so the array types can be setup (the compiler needs SOMETHING there)
+        val arrayOfIpFilterRules = onConnectFilterList.value
 
-//        onConnectFilterList.value.forEach {
-//            if (!it(connection)) {
-//                return false
-//            }
-//        }
-//
-//        val size = ipFilterRules.size
-//        if (size == 0) {
-//            return true
-//        }
+        // if there is a rule, a connection must match for it to connect
+        arrayOfIpFilterRules.forEach {
+            if (it.invoke(connection)) {
+                return true
+            }
+        }
 
-//
-//        for (i in 0 until size) {
-//            val rule = ipFilterRules[i] ?: continue
-//            if (isAllowed) {
-//                break
-//            }
-//            if (rule.matches(remoteAddress)) {
-//                isAllowed = rule.ruleType() == IpFilterRuleType.ACCEPT
-//            }
-//        }
-//        logger.debug("Validating {}  Connection allowed: {}", address, isAllowed)
-//        return isAllowed
-//        return true
-
-
-        // these are the custom filters
-//        onConnectFilterList.value.forEach {
-//            if (!it(connection)) {
-//                return false
-//            }
-//        }
-
-        return true
+        // default if nothing matches
+        // NO RULES ADDED -> ACCEPT
+        //    RULES ADDED -> DENY
+        return arrayOfIpFilterRules.isEmpty()
     }
 
     /**

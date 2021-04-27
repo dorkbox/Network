@@ -432,13 +432,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 server.listenIPv6Address!!
             }
 
-            val clientConnection = UdpMediaDriverConnection(listenAddress,
-                                                            publicationPort,
-                                                            subscriptionPort,
-                                                            connectionStreamId,
-                                                            connectionSessionId,
-                                                            0,
-                                                            message.isReliable)
+            val clientConnection = UdpMediaDriverPairedConnection(listenAddress,
+                                                                  clientAddress,
+                                                                  clientAddressString,
+                                                                  publicationPort,
+                                                                  subscriptionPort,
+                                                                  connectionStreamId,
+                                                                  connectionSessionId,
+                                                                  0,
+                                                                  message.isReliable)
 
             // we have to construct how the connection will communicate!
             runBlocking {
@@ -447,27 +449,27 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
             logger.info {
                 //   (reliable:$isReliable)"
-                "Creating new connection from ${IP.toString(clientAddress)} [$subscriptionPort|$publicationPort] [$connectionStreamId|$connectionSessionId] (reliable:${message.isReliable})"
+                "Creating new connection from $clientAddressString [$subscriptionPort|$publicationPort] [$connectionStreamId|$connectionSessionId] (reliable:${message.isReliable})"
             }
 
             val connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
-            val permitConnection = listenerManager.notifyFilter(connection)
-            if (!permitConnection) {
-                // have to unwind actions!
-                connectionsPerIpCounts.decrementSlow(clientAddress)
-                sessionIdAllocator.free(connectionSessionId)
-                streamIdAllocator.free(connectionStreamId)
+            runBlocking {
+                val permitConnection = listenerManager.notifyFilter(connection)
+                if (!permitConnection) {
+                    // have to unwind actions!
+                    connectionsPerIpCounts.decrementSlow(clientAddress)
+                    sessionIdAllocator.free(connectionSessionId)
+                    streamIdAllocator.free(connectionStreamId)
 
-                val exception = ClientRejectedException("Connection was not permitted!")
-                ListenerManager.cleanStackTrace(exception)
-                listenerManager.notifyError(connection, exception)
+                    val exception = ClientRejectedException("Connection $clientAddressString was not permitted!")
+                    ListenerManager.cleanStackTrace(exception)
+                    listenerManager.notifyError(connection, exception)
 
-                runBlocking {
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection was not permitted!"))
+                    return@runBlocking
                 }
-                return
             }
 
 

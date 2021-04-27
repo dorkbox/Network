@@ -15,7 +15,7 @@
  */
 package dorkbox.network.ipFilter
 
-import java.net.InetSocketAddress
+import java.net.InetAddress
 
 /**
  * Implement this interface to create new rules.
@@ -24,13 +24,5 @@ interface IpFilterRule {
     /**
      * @return This method should return true if remoteAddress is valid according to your criteria. False otherwise.
      */
-    fun matches(remoteAddress: InetSocketAddress): Boolean
-
-    /**
-     * @return This method should return [IpFilterRuleType.ACCEPT] if all
-     * [IpFilterRule.matches] for which [.matches]
-     * returns true should the accepted. If you want to exclude all of those IP addresses then
-     * [IpFilterRuleType.REJECT] should be returned.
-     */
-    fun ruleType(): IpFilterRuleType
+    fun matches(remoteAddress: InetAddress): Boolean
 }
