@@ -48,7 +48,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         /**
          * Gets the version number.
          */
-        const val version = "5.0"
+        const val version = "5.1"
 
         init {
             // Add this project to the updates system, which verifies this class + UUID + version information
