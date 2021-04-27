@@ -21,7 +21,7 @@ import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.IpcMediaDriverConnection
-import dorkbox.network.aeron.UdpMediaDriverConnection
+import dorkbox.network.aeron.UdpMediaDriverServerConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
@@ -215,12 +215,13 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     @Suppress("DuplicatedCode")
     private suspend fun getIpv4Poller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
         val poller = if (canUseIPv4) {
-            val driver = UdpMediaDriverConnection(address = listenIPv4Address!!,
-                                                  publicationPort = config.publicationPort,
-                                                  subscriptionPort = config.subscriptionPort,
-                                                  streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
-                                                  connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
+            val driver = UdpMediaDriverServerConnection(
+                    listenAddress = listenIPv4Address!!,
+                    publicationPort = config.publicationPort,
+                    subscriptionPort = config.subscriptionPort,
+                    streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                    sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                    connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
 
             driver.buildServer(aeron, logger)
             val publication = driver.publication
@@ -252,7 +253,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     // val port = remoteIpAndPort.substring(splitPoint+1)
 
                     // this should never be null, because we are feeding it a valid IP address from aeron
-                    val clientAddress = IPv4.fromStringUnsafe(clientAddressString)
+                    val clientAddress = IPv4.toAddressUnsafe(clientAddressString)
 
 
                     val message = readHandshakeMessage(buffer, offset, length, header)
@@ -296,12 +297,13 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     @Suppress("DuplicatedCode")
     private suspend fun getIpv6Poller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
         val poller = if (canUseIPv6) {
-            val driver = UdpMediaDriverConnection(address = listenIPv6Address!!,
-                                                  publicationPort = config.publicationPort,
-                                                  subscriptionPort = config.subscriptionPort,
-                                                  streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
-                                                  connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
+            val driver = UdpMediaDriverServerConnection(
+                    listenAddress = listenIPv6Address!!,
+                    publicationPort = config.publicationPort,
+                    subscriptionPort = config.subscriptionPort,
+                    streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                    sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                    connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
 
             driver.buildServer(aeron, logger)
             val publication = driver.publication
@@ -333,7 +335,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     // val port = remoteIpAndPort.substring(splitPoint+1)
 
                     // this should never be null, because we are feeding it a valid IP address from aeron
-                    val clientAddress = IPv6.fromString(clientAddressString)!!
+                    val clientAddress = IPv6.toAddress(clientAddressString)!!
 
 
                     val message = readHandshakeMessage(buffer, offset, length, header)
@@ -376,12 +378,13 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
     @Suppress("DuplicatedCode")
     private suspend fun getIpv6WildcardPoller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
-        val driver = UdpMediaDriverConnection(address = listenIPv6Address!!,
-                                              publicationPort = config.publicationPort,
-                                              subscriptionPort = config.subscriptionPort,
-                                              streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                                              sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
-                                              connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
+        val driver = UdpMediaDriverServerConnection(
+                listenAddress = listenIPv6Address!!,
+                publicationPort = config.publicationPort,
+                subscriptionPort = config.subscriptionPort,
+                streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
 
         driver.buildServer(aeron, logger)
         val publication = driver.publication
@@ -414,7 +417,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
                 // this should never be null, because we are feeding it a valid IP address from aeron
                 // maybe IPv4, maybe IPv6! This is slower than if we ALREADY know what it is.
-                val clientAddress = IP.fromString(clientAddressString)!!
+                val clientAddress = IP.toAddress(clientAddressString)!!
 
 
                 val message = readHandshakeMessage(buffer, offset, length, header)

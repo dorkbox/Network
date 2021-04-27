@@ -20,7 +20,7 @@ import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronConfig
 import dorkbox.network.aeron.IpcMediaDriverConnection
-import dorkbox.network.aeron.UdpMediaDriverConnection
+import dorkbox.network.aeron.UdpMediaDriverClientConnection
 import dorkbox.network.connection.*
 import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ClientException
@@ -249,7 +249,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         this.remoteAddress0 = remoteAddress
         connection0 = null
 
-
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         val aeron = initEndpointState()
 
@@ -302,26 +301,30 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 logger.info { "IPC for loopback enabled, but unable to connect. Retrying with address ${IP.toString(remoteAddress!!)}" }
 
                 // try a UDP connection instead
-                val udpConnection = UdpMediaDriverConnection(address = this.remoteAddress0!!,
-                                                             publicationPort = config.subscriptionPort,
-                                                             subscriptionPort = config.publicationPort,
-                                                             streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                                                             sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
-                                                             connectionTimeoutMS = connectionTimeoutMS,
-                                                             isReliable = reliable)
+                val udpConnection = UdpMediaDriverClientConnection(
+                        address = this.remoteAddress0!!,
+                        publicationPort = config.subscriptionPort,
+                        subscriptionPort = config.publicationPort,
+                        streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                        sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                        connectionTimeoutMS = connectionTimeoutMS,
+                        isReliable = reliable)
+
                 // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
                 udpConnection.buildClient(aeron, logger)
                 udpConnection
             }
         }
         else {
-            val test = UdpMediaDriverConnection(address = this.remoteAddress0!!,
-                                                publicationPort = config.subscriptionPort,
-                                                subscriptionPort = config.publicationPort,
-                                                streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                                                sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
-                                                connectionTimeoutMS = connectionTimeoutMS,
-                                                isReliable = reliable)
+            val test = UdpMediaDriverClientConnection(
+                    address = this.remoteAddress0!!,
+                    publicationPort = config.subscriptionPort,
+                    subscriptionPort = config.publicationPort,
+                    streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
+                    sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                    connectionTimeoutMS = connectionTimeoutMS,
+                    isReliable = reliable)
+
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
             test.buildClient(aeron, logger)
             test
@@ -358,31 +361,33 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
 
         // we are now connected, so we can connect to the NEW client-specific ports
-        val reliableClientConnection = if (isUsingIPC) {
-            IpcMediaDriverConnection(sessionId = connectionInfo.sessionId,
-                                     // NOTE: pub/sub must be switched!
-                                     streamIdSubscription = connectionInfo.publicationPort,
-                                     streamId = connectionInfo.subscriptionPort)
+        val clientConnection = if (isUsingIPC) {
+            IpcMediaDriverConnection(
+                sessionId = connectionInfo.sessionId,
+                // NOTE: pub/sub must be switched!
+                streamIdSubscription = connectionInfo.publicationPort,
+                streamId = connectionInfo.subscriptionPort)
         }
         else {
-            UdpMediaDriverConnection(address = handshakeConnection.address!!,
-                                     // NOTE: pub/sub must be switched!
-                                     publicationPort = connectionInfo.subscriptionPort,
-                                     subscriptionPort = connectionInfo.publicationPort,
-                                     streamId = connectionInfo.streamId,
-                                     sessionId = connectionInfo.sessionId,
-                                     connectionTimeoutMS = connectionTimeoutMS,
-                                     isReliable = handshakeConnection.isReliable)
+            UdpMediaDriverClientConnection(
+                address = (handshakeConnection as UdpMediaDriverClientConnection).address,
+                // NOTE: pub/sub must be switched!
+                publicationPort = connectionInfo.subscriptionPort,
+                subscriptionPort = connectionInfo.publicationPort,
+                streamId = connectionInfo.streamId,
+                sessionId = connectionInfo.sessionId,
+                connectionTimeoutMS = connectionTimeoutMS,
+                isReliable = handshakeConnection.isReliable)
         }
 
         // we have to construct how the connection will communicate!
-        reliableClientConnection.buildClient(aeron, logger)
+        clientConnection.buildClient(aeron, logger)
 
         // only the client connects to the server, so here we have to connect. The server (when creating the new "connection" object)
         // does not need to do anything
         //
         // throws a ConnectTimedOutException if the client cannot connect for any reason to the server-assigned client ports
-        logger.info(reliableClientConnection.clientInfo())
+        logger.info(clientConnection.clientInfo())
 
 
         ///////////////
@@ -408,9 +413,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         val newConnection: CONNECTION
         if (isUsingIPC) {
-            newConnection = newConnection(ConnectionParams(this, reliableClientConnection, PublicKeyValidationState.VALID))
+            newConnection = newConnection(ConnectionParams(this, clientConnection, PublicKeyValidationState.VALID))
         } else {
-            newConnection = newConnection(ConnectionParams(this, reliableClientConnection, validateRemoteAddress))
+            newConnection = newConnection(ConnectionParams(this, clientConnection, validateRemoteAddress))
 
             remoteAddress!!
 
