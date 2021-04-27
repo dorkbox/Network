@@ -19,7 +19,6 @@ package dorkbox.network.aeron
 import dorkbox.netUtil.IP
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientTimedOutException
-import io.aeron.Aeron
 import io.aeron.ChannelUriStringBuilder
 import kotlinx.coroutines.delay
 import mu.KLogger
@@ -62,7 +61,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
 
     private fun uri(): ChannelUriStringBuilder {
         val builder = ChannelUriStringBuilder().reliable(isReliable).media("udp")
-        if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
+        if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             builder.sessionId(sessionId)
         }
 
@@ -70,7 +69,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
     }
 
     @Suppress("DuplicatedCode")
-    override suspend fun buildClient(aeron: Aeron, logger: KLogger) {
+    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         val aeronAddressString = aeronConnectionString(address)
 
         // Create a publication at the given address and port, using the given stream ID.
@@ -99,8 +98,8 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         //  publication of any state to other threads and not be long running or re-entrant with the client.
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-        val publication = addPublicationWithRetry(aeron, publicationUri.build(), streamId, logger)
-        val subscription = addSubscriptionWithRetry(aeron, subscriptionUri.build(), streamId, logger)
+        val publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        val subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
 
         var success = false
 
@@ -150,14 +149,14 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
     override fun clientInfo(): String {
         address
 
-        return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
+        return if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             "Connecting to ${IP.toString(address)} [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
             "Connecting handshake to ${IP.toString(address)} [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
         }
     }
 
-    override suspend fun buildServer(aeron: Aeron, logger: KLogger) {
+    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         throw ClientException("Server info not implemented in Client MDC")
     }
     override fun serverInfo(): String {

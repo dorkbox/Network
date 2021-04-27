@@ -18,57 +18,22 @@
 package dorkbox.network.aeron
 
 import dorkbox.network.exceptions.ClientTimedOutException
-import io.aeron.Aeron
 import io.aeron.Publication
 import io.aeron.Subscription
-import kotlinx.coroutines.delay
 import mu.KLogger
 
-abstract class MediaDriverConnection(val publicationPort: Int, val subscriptionPort: Int,
-                                     val streamId: Int, val sessionId: Int,
-                                     val connectionTimeoutMS: Long, val isReliable: Boolean) : AutoCloseable {
+abstract class MediaDriverConnection(
+                                val publicationPort: Int, val subscriptionPort: Int,
+                                val streamId: Int, val sessionId: Int,
+                                val connectionTimeoutMS: Long, val isReliable: Boolean) : AutoCloseable {
 
     lateinit var subscription: Subscription
     lateinit var publication: Publication
 
 
-    suspend fun addSubscriptionWithRetry(aeron: Aeron, uri: String, streamId: Int, logger: KLogger): Subscription {
-        // If we start/stop too quickly, we might have the address already in use! Retry a few times.
-        var count = 10
-        var exception: Exception? = null
-        while (count-- > 0) {
-            try {
-                return aeron.addSubscription(uri, streamId)
-            } catch (e: Exception) {
-                exception = e
-                logger.warn { "Unable to add a publication to Aeron. Retrying $count more times..." }
-                delay(5000)
-            }
-        }
-
-        throw exception!!
-    }
-
-    suspend fun addPublicationWithRetry(aeron: Aeron, uri: String, streamId: Int, logger: KLogger): Publication {
-        // If we start/stop too quickly, we might have the address already in use! Retry a few times.
-        var count = 10
-        var exception: Exception? = null
-        while (count-- > 0) {
-            try {
-                return aeron.addPublication(uri, streamId)
-            } catch (e: Exception) {
-                exception = e
-                logger.warn { "Unable to add a publication to Aeron. Retrying $count more times..." }
-                delay(5_000)
-            }
-        }
-
-        throw exception!!
-    }
-
     @Throws(ClientTimedOutException::class)
-    abstract suspend fun buildClient(aeron: Aeron, logger: KLogger)
-    abstract suspend fun buildServer(aeron: Aeron, logger: KLogger)
+    abstract suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
+    abstract suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
 
     abstract fun clientInfo() : String
     abstract fun serverInfo() : String

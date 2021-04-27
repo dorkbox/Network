@@ -20,7 +20,6 @@ import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.exceptions.ServerException
-import io.aeron.Aeron
 import io.aeron.ChannelUriStringBuilder
 import mu.KLogger
 import java.net.Inet4Address
@@ -41,7 +40,7 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
 
     var success: Boolean = false
 
-    private fun aeronConnectionString(ipAddress: InetAddress): String {
+    protected fun aeronConnectionString(ipAddress: InetAddress): String {
         return if (ipAddress is Inet4Address) {
             ipAddress.hostAddress
         } else {
@@ -55,9 +54,9 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
         }
     }
 
-    private fun uri(): ChannelUriStringBuilder {
+    protected fun uri(): ChannelUriStringBuilder {
         val builder = ChannelUriStringBuilder().reliable(isReliable).media("udp")
-        if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
+        if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             builder.sessionId(sessionId)
         }
 
@@ -65,11 +64,11 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
     }
 
     @Suppress("DuplicatedCode")
-    override suspend fun buildClient(aeron: Aeron, logger: KLogger) {
+    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         throw ServerException("Client info not implemented in Server MDC")
     }
 
-    override suspend fun buildServer(aeron: Aeron, logger: KLogger) {
+    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         val connectionString = aeronConnectionString(listenAddress)
 
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
@@ -100,8 +99,8 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
         // If we start/stop too quickly, we might have the address already in use! Retry a few times.
-        publication = addPublicationWithRetry(aeron, publicationUri.build(), streamId, logger)
-        subscription = addSubscriptionWithRetry(aeron, subscriptionUri.build(), streamId, logger)
+        publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
     }
 
     override fun clientInfo(): String {
@@ -119,7 +118,7 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
             IP.toString(listenAddress)
         }
 
-        return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
+        return if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             "Listening on $address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
             "Listening handshake on $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"

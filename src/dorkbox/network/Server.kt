@@ -18,7 +18,7 @@ package dorkbox.network
 import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
-import dorkbox.network.aeron.AeronConfig
+import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverServerConnection
@@ -35,7 +35,6 @@ import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
-import io.aeron.Aeron
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
@@ -71,12 +70,12 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
          */
         fun isRunning(configuration: ServerConfiguration): Boolean {
             if (configuration.context == null) {
-                AeronConfig.createContext(configuration)
+                AeronDriver.createContext(configuration)
             }
 
             require(configuration.context != null) { "Configuration context cannot be properly created. Unable to continue!" }
 
-            return AeronConfig.isRunning(configuration.context!!)
+            return AeronDriver.isRunning(configuration.context!!)
         }
 
         init {
@@ -160,12 +159,13 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         return super.getRmiConnectionSupport()
     }
 
-    private suspend fun getIpcPoller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
+    private suspend fun getIpcPoller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
         val poller = if (config.enableIpc) {
             val driver = IpcMediaDriverConnection(streamIdSubscription = config.ipcSubscriptionId,
                                                   streamId = config.ipcPublicationId,
-                                                  sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
-            driver.buildServer(aeron, logger)
+                                                  sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID)
+            driver.buildServer(aeronDriver, logger)
+
             val publication = driver.publication
             val subscription = driver.subscription
 
@@ -193,7 +193,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                publication,
                                                                sessionId,
                                                                message,
-                                                               aeron)
+                        aeronDriver)
                 }
 
                 override fun poll(): Int { return subscription.poll(handler, 1) }
@@ -213,17 +213,18 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
     @Suppress("DuplicatedCode")
-    private suspend fun getIpv4Poller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
+    private suspend fun getIpv4Poller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
         val poller = if (canUseIPv4) {
             val driver = UdpMediaDriverServerConnection(
                     listenAddress = listenIPv4Address!!,
                     publicationPort = config.publicationPort,
                     subscriptionPort = config.subscriptionPort,
-                    streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                    sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                    streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                    sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
                     connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
 
-            driver.buildServer(aeron, logger)
+            driver.buildServer(aeronDriver, logger)
+
             val publication = driver.publication
             val subscription = driver.subscription
 
@@ -274,7 +275,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                clientAddressString,
                                                                clientAddress,
                                                                message,
-                                                               aeron,
+                                                               aeronDriver,
                                                                false)
                 }
 
@@ -295,17 +296,18 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
     @Suppress("DuplicatedCode")
-    private suspend fun getIpv6Poller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
+    private suspend fun getIpv6Poller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
         val poller = if (canUseIPv6) {
             val driver = UdpMediaDriverServerConnection(
                     listenAddress = listenIPv6Address!!,
                     publicationPort = config.publicationPort,
                     subscriptionPort = config.subscriptionPort,
-                    streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                    sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                    streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                    sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
                     connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
 
-            driver.buildServer(aeron, logger)
+            driver.buildServer(aeronDriver, logger)
+
             val publication = driver.publication
             val subscription = driver.subscription
 
@@ -356,7 +358,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                clientAddressString,
                                                                clientAddress,
                                                                message,
-                                                               aeron,
+                                                               aeronDriver,
                                                                false)
                 }
 
@@ -377,16 +379,17 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
     @Suppress("DuplicatedCode")
-    private suspend fun getIpv6WildcardPoller(aeron: Aeron, config: ServerConfiguration): AeronPoller {
+    private suspend fun getIpv6WildcardPoller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
         val driver = UdpMediaDriverServerConnection(
                 listenAddress = listenIPv6Address!!,
                 publicationPort = config.publicationPort,
                 subscriptionPort = config.subscriptionPort,
-                streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
                 connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
 
-        driver.buildServer(aeron, logger)
+        driver.buildServer(aeronDriver, logger)
+
         val publication = driver.publication
         val subscription = driver.subscription
 
@@ -438,7 +441,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                            clientAddressString,
                                                            clientAddress,
                                                            message,
-                                                           aeron,
+                                                           aeronDriver,
                                                            true)
            }
 
@@ -461,17 +464,16 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             return
         }
 
-        val aeron = initEndpointState()
+        initEndpointState()
 
         config as ServerConfiguration
-
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         bindAlreadyCalled = true
 
         val waiter = SuspendWaiter()
         actionDispatch.launch {
-            val ipcPoller: AeronPoller = getIpcPoller(aeron, config)
+            val ipcPoller: AeronPoller = getIpcPoller(aeronDriver, config)
 
             // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
             val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address != IPv6.WILDCARD
@@ -486,15 +488,15 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                         override fun close() {}
                         override fun serverInfo(): String { return "IPv4 Disabled" }
                     }
-                    ipv6Poller = getIpv6WildcardPoller(aeron, config)
+                    ipv6Poller = getIpv6WildcardPoller(aeronDriver, config)
                 } else {
                     // only 1 will be a real poller
-                    ipv4Poller = getIpv4Poller(aeron, config)
-                    ipv6Poller = getIpv6Poller(aeron, config)
+                    ipv4Poller = getIpv4Poller(aeronDriver, config)
+                    ipv6Poller = getIpv6Poller(aeronDriver, config)
                 }
             } else {
-                ipv4Poller = getIpv4Poller(aeron, config)
-                ipv6Poller = getIpv6Poller(aeron, config)
+                ipv4Poller = getIpv4Poller(aeronDriver, config)
+                ipv6Poller = getIpv6Poller(aeronDriver, config)
             }
 
             waiter.doNotify()

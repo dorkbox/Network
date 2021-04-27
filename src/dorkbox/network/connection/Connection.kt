@@ -416,7 +416,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             }
 
             // on close, we want to make sure this file is DELETED!
-            val logFile = endPoint.getMediaDriverPublicationFile(publication.registrationId())
+            val logFile = endPoint.aeronDriver.getMediaDriverPublicationFile(publication.registrationId())
             publication.close()
 
             closeTimeoutTime = System.currentTimeMillis() + timeOut

@@ -19,7 +19,7 @@ import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
-import dorkbox.network.aeron.AeronConfig
+import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.MessageNotRegisteredException
@@ -33,9 +33,7 @@ import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.SettingsStore
-import dorkbox.util.NamedThreadFactory
 import dorkbox.util.exceptions.SecurityException
-import io.aeron.Aeron
 import io.aeron.Publication
 import io.aeron.driver.MediaDriver
 import io.aeron.logbuffer.Header
@@ -47,8 +45,6 @@ import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
-import org.agrona.concurrent.BackoffIdleStrategy
-import java.io.File
 
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
@@ -77,9 +73,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val listenerManager = ListenerManager<CONNECTION>()
     internal val connections = ConnectionManager<CONNECTION>()
 
-    internal val aeron: Aeron
-    private var mediaDriver: MediaDriver? = null
-    internal val mediaDriverContext: MediaDriver.Context
+    internal val aeronDriver: AeronDriver
 
     /**
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basic types.
@@ -134,39 +128,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         // Only starts the media driver if we are NOT already running!
         try {
-            mediaDriver = AeronConfig.startDriver(config, type, logger)
+            AeronDriver.validateConfig(config, logger)
+            aeronDriver = AeronDriver(config, type, logger)
+            aeronDriver.start()
         } catch (e: Exception) {
-            listenerManager.notifyError(e)
-            throw e
-        }
-
-        require(config.context != null) { "Configuration context cannot be properly created. Unable to continue!" }
-        mediaDriverContext = config.context!!
-
-        val aeronContext = Aeron.Context()
-        aeronContext
-            .aeronDirectoryName(mediaDriverContext.aeronDirectory().path)
-            .concludeAeronDirectory()
-
-        val threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronClient"),true)
-        aeronContext
-            .threadFactory(threadFactory)
-            .idleStrategy(BackoffIdleStrategy())
-
-        // we DO NOT want to abort the JVM if there are errors.
-        aeronContext.errorHandler { error ->
-            logger.error("Error in Aeron", error)
-        }
-
-        try {
-            aeron = Aeron.connect(aeronContext)
-        } catch (e: Exception) {
-            try {
-                mediaDriver?.close()
-            } catch (secondaryException: Exception) {
-                e.addSuppressed(secondaryException)
-            }
-
             listenerManager.notifyError(e)
             throw e
         }
@@ -180,17 +145,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     }
 
 
-    internal fun initEndpointState(): Aeron {
+    internal fun initEndpointState() {
         shutdown.getAndSet(false)
         shutdownWaiter = SuspendWaiter()
-        return aeron
-    }
-
-    /**
-     * @return the aeron media driver log file for a specific publication. This should be removed when a publication is closed (but is not always!)
-     */
-    internal fun getMediaDriverPublicationFile(publicationRegId: Long): File {
-        return mediaDriverContext.aeronDirectory().resolve("publications").resolve("${publicationRegId}.logbuffer")
     }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
@@ -637,8 +594,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * @return true if the media driver is active and running
      */
     fun isRunning(): Boolean {
-        // if the media driver is running, it will be a quick connection. Usually 100ms or so
-        return mediaDriverContext.isDriverActive(1_000) { }
+        return aeronDriver.isRunning()
     }
 
     /**
@@ -655,14 +611,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         if (shutdown.compareAndSet(expect = false, update = true)) {
             logger.info { "Shutting down..." }
 
-            try {
-                aeron.close()
-            } catch (e: Exception) {
-                logger.error("Error stopping aeron.", e)
-            }
-
             runBlocking {
-                AeronConfig.stopDriver(mediaDriver, logger)
+                aeronDriver.close()
+
                 connections.forEach {
                     it.close()
                 }
@@ -676,8 +627,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
 
             close0()
-
-            (aeron.context().threadFactory() as NamedThreadFactory).group.destroy()
 
             // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
             shutdownWaiter.cancel()

@@ -21,7 +21,7 @@ import com.github.benmanes.caffeine.cache.RemovalCause
 import com.github.benmanes.caffeine.cache.RemovalListener
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
-import dorkbox.network.aeron.AeronConfig
+import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverPairedConnection
 import dorkbox.network.connection.Connection
@@ -29,7 +29,6 @@ import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.*
-import io.aeron.Aeron
 import io.aeron.Publication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -72,7 +71,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     private val connectionsPerIpCounts = ConnectionCounts()
 
     // guarantee that session/stream ID's will ALWAYS be unique! (there can NEVER be a collision!)
-    private val sessionIdAllocator = RandomIdAllocator(AeronConfig.RESERVED_SESSION_ID_LOW, AeronConfig.RESERVED_SESSION_ID_HIGH)
+    private val sessionIdAllocator = RandomIdAllocator(AeronDriver.RESERVED_SESSION_ID_LOW, AeronDriver.RESERVED_SESSION_ID_HIGH)
     private val streamIdAllocator = RandomIdAllocator(1, Integer.MAX_VALUE)
 
 
@@ -201,7 +200,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                          handshakePublication: Publication,
                                          sessionId: Int,
                                          message: HandshakeMessage,
-                                         aeron: Aeron) {
+                                         aeronDriver: AeronDriver) {
 
         val connectionString = "IPC"
 
@@ -278,7 +277,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
             // we have to construct how the connection will communicate!
             runBlocking {
-                clientConnection.buildServer(aeron, logger)
+                clientConnection.buildServer(aeronDriver, logger, true)
             }
 
             logger.info {
@@ -345,7 +344,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                          clientAddressString: String,
                                          clientAddress: InetAddress,
                                          message: HandshakeMessage,
-                                         aeron: Aeron,
+                                         aeronDriver: AeronDriver,
                                          isIpv6Wildcard: Boolean) {
 
         if (!validateMessageTypeAndDoPending(server, server.actionDispatch, handshakePublication, message, sessionId, clientAddressString)) {
@@ -444,7 +443,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
             // we have to construct how the connection will communicate!
             runBlocking {
-                clientConnection.buildServer(aeron, logger)
+                clientConnection.buildServer(aeronDriver, logger, true)
             }
 
             logger.info {

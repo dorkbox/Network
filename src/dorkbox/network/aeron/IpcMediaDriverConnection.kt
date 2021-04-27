@@ -17,7 +17,6 @@
 package dorkbox.network.aeron
 
 import dorkbox.network.exceptions.ClientTimedOutException
-import io.aeron.Aeron
 import io.aeron.ChannelUriStringBuilder
 import kotlinx.coroutines.delay
 import mu.KLogger
@@ -26,7 +25,7 @@ import mu.KLogger
  * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
  * NOTE: IPC connection will ALWAYS have a timeout of 1 second to connect. This is IPC, it should connect fast
  */
-internal class IpcMediaDriverConnection(streamId: Int,
+internal open class IpcMediaDriverConnection(streamId: Int,
                                         val streamIdSubscription: Int,
                                         sessionId: Int,
                                         ) :
@@ -36,7 +35,7 @@ internal class IpcMediaDriverConnection(streamId: Int,
 
     private fun uri(): ChannelUriStringBuilder {
         val builder = ChannelUriStringBuilder().media("ipc")
-        if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
+        if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             builder.sessionId(sessionId)
         }
 
@@ -48,7 +47,7 @@ internal class IpcMediaDriverConnection(streamId: Int,
      *
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
-    override suspend fun buildClient(aeron: Aeron, logger: KLogger) {
+    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
@@ -66,8 +65,8 @@ internal class IpcMediaDriverConnection(streamId: Int,
         //  publication of any state to other threads and not be long running or re-entrant with the client.
 
         // If we start/stop too quickly, we might have the aeron connectivity issues! Retry a few times.
-        val publication = addPublicationWithRetry(aeron, publicationUri.build(), streamId, logger)
-        val subscription = addSubscriptionWithRetry(aeron, subscriptionUri.build(), streamIdSubscription, logger)
+        val publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        val subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamIdSubscription)
 
         var success = false
 
@@ -117,7 +116,7 @@ internal class IpcMediaDriverConnection(streamId: Int,
      *
      * serverAddress is ignored for IPC
      */
-    override suspend fun buildServer(aeron: Aeron, logger: KLogger) {
+    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
@@ -138,12 +137,12 @@ internal class IpcMediaDriverConnection(streamId: Int,
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
         // If we start/stop too quickly, we might have the aeron connectivity issues! Retry a few times.
-        publication = addPublicationWithRetry(aeron, publicationUri.build(), streamId, logger)
-        subscription = addSubscriptionWithRetry(aeron, subscriptionUri.build(), streamIdSubscription, logger)
+        publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamIdSubscription)
     }
 
     override fun clientInfo() : String {
-        return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
+        return if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             "[$sessionId] IPC connection established to [$streamIdSubscription|$streamId]"
         } else {
             "Connecting handshake to IPC [$streamIdSubscription|$streamId]"
@@ -151,7 +150,7 @@ internal class IpcMediaDriverConnection(streamId: Int,
     }
 
     override fun serverInfo() : String {
-        return if (sessionId != AeronConfig.RESERVED_SESSION_ID_INVALID) {
+        return if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             "[$sessionId] IPC listening on [$streamIdSubscription|$streamId] "
         } else {
             "Listening handshake on IPC [$streamIdSubscription|$streamId]"

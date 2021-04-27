@@ -46,7 +46,12 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
@@ -92,7 +97,12 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
@@ -137,7 +147,12 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
@@ -182,7 +197,12 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
@@ -220,7 +240,12 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
@@ -253,19 +278,17 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
         waitForThreads()
     }
-
-
-
-
-
-
-
 
     @Test
     fun acceptAllCustomServer() {
@@ -303,7 +326,12 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
@@ -350,7 +378,12 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
@@ -390,11 +423,16 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK, Long.MAX_VALUE)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
-        waitForThreads(Long.MAX_VALUE)
+        waitForThreads()
     }
 
     @Test(expected = ClientException::class)
@@ -425,19 +463,15 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             runBlocking {
-                client.connect(LOOPBACK)
+                try {
+                    client.connect(LOOPBACK)
+                } catch (e: Exception) {
+                    stopEndPoints()
+                    throw e
+                }
             }
         }
 
         waitForThreads()
     }
-
-
-
-
-
-
-
-
-
 }

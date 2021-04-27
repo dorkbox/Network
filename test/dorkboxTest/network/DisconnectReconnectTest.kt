@@ -2,7 +2,7 @@ package dorkboxTest.network
 
 import dorkbox.network.Client
 import dorkbox.network.Server
-import dorkbox.network.aeron.AeronConfig
+import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
@@ -72,8 +72,9 @@ class DisconnectReconnectTest : BaseTest() {
     @Test
     fun manualMediaDriverAndReconnectClient() {
         val serverConfiguration = serverConfig()
-        val mediaDriver = runBlocking {
-            AeronConfig.startDriver(serverConfiguration)
+        val aeronDriver = runBlocking {
+            AeronDriver.validateConfig(serverConfiguration)
+            AeronDriver(serverConfiguration)
         }
 
         run {
@@ -124,7 +125,7 @@ class DisconnectReconnectTest : BaseTest() {
         waitForThreads()
 
         runBlocking {
-            AeronConfig.stopDriver(mediaDriver)
+            aeronDriver.close()
         }
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)

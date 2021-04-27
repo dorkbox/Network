@@ -18,7 +18,7 @@ package dorkbox.network
 import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
-import dorkbox.network.aeron.AeronConfig
+import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverClientConnection
 import dorkbox.network.connection.*
@@ -170,8 +170,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                         connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
         // Default IPC ports are flipped because they are in the perspective of the SERVER
         connect(remoteAddress = remoteAddress,
-                ipcPublicationId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB,
-                ipcSubscriptionId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB,
+                ipcPublicationId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
+                ipcSubscriptionId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
                 connectionTimeoutMS = connectionTimeoutMS,
                 reliable = reliable)
     }
@@ -188,8 +188,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @throws ClientRejectedException if the client connection is rejected
      */
     @Suppress("DuplicatedCode")
-    suspend fun connect(ipcPublicationId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB,
-                        ipcSubscriptionId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB,
+    suspend fun connect(ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
+                        ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
                         connectionTimeoutMS: Long = 30_000L) {
         // Default IPC ports are flipped because they are in the perspective of the SERVER
 
@@ -229,8 +229,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     @Suppress("DuplicatedCode")
     private suspend fun connect(remoteAddress: InetAddress? = null,
                                 // Default IPC ports are flipped because they are in the perspective of the SERVER
-                                ipcPublicationId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB,
-                                ipcSubscriptionId: Int = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB,
+                                ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
+                                ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
                                 connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
 
         require(connectionTimeoutMS >= 0) { "connectionTimeoutMS '$connectionTimeoutMS' is invalid. It must be >0" }
@@ -250,7 +250,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         connection0 = null
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
-        val aeron = initEndpointState()
+        initEndpointState()
 
         // only try to connect via IPv4 if we have a network interface that supports it!
         if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
@@ -271,7 +271,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         var isUsingIPC = false
         val canUseIPC = config.enableIpc && remoteAddress == null
         val autoChangeToIpc = canUseIPC && config.enableIpcForLoopback &&
-                              remoteAddress != null && remoteAddress.isLoopbackAddress && isRunning(mediaDriverContext)
+                              remoteAddress != null && remoteAddress.isLoopbackAddress && aeronDriver.isRunning()
         if (autoChangeToIpc) {
             logger.info {"IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC" }
         }
@@ -282,11 +282,11 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             // MAYBE the server doesn't have IPC enabled? If no, we need to connect via UDP instead
             val ipcConnection = IpcMediaDriverConnection(streamIdSubscription = ipcSubscriptionId,
                                                          streamId = ipcPublicationId,
-                                                         sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID)
+                                                         sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID)
 
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
             try {
-                ipcConnection.buildClient(aeron, logger)
+                ipcConnection.buildClient(aeronDriver, logger)
                 isUsingIPC = true
             } catch (e: Exception) {
                 // if we specified that we want to use IPC, then we have to throw the timeout exception, because there is no IPC
@@ -305,13 +305,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                         address = this.remoteAddress0!!,
                         publicationPort = config.subscriptionPort,
                         subscriptionPort = config.publicationPort,
-                        streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                        sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                        streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                        sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
                         connectionTimeoutMS = connectionTimeoutMS,
                         isReliable = reliable)
 
                 // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
-                udpConnection.buildClient(aeron, logger)
+                udpConnection.buildClient(aeronDriver, logger)
                 udpConnection
             }
         }
@@ -320,13 +320,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                     address = this.remoteAddress0!!,
                     publicationPort = config.subscriptionPort,
                     subscriptionPort = config.publicationPort,
-                    streamId = AeronConfig.UDP_HANDSHAKE_STREAM_ID,
-                    sessionId = AeronConfig.RESERVED_SESSION_ID_INVALID,
+                    streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                    sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
                     connectionTimeoutMS = connectionTimeoutMS,
                     isReliable = reliable)
 
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
-            test.buildClient(aeron, logger)
+            test.buildClient(aeronDriver, logger)
             test
         }
 
@@ -381,7 +381,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
 
         // we have to construct how the connection will communicate!
-        clientConnection.buildClient(aeron, logger)
+        clientConnection.buildClient(aeronDriver, logger)
 
         // only the client connects to the server, so here we have to connect. The server (when creating the new "connection" object)
         // does not need to do anything
@@ -424,6 +424,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             if (!permitConnection) {
                 handshakeConnection.close()
                 val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress)} was not permitted!")
+                ListenerManager.cleanStackTrace(exception)
                 listenerManager.notifyError(exception)
                 throw exception
             }

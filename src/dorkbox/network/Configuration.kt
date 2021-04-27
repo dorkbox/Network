@@ -17,7 +17,7 @@ package dorkbox.network
 
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
-import dorkbox.network.aeron.AeronConfig
+import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
@@ -66,7 +66,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
     /**
      * The IPC Publication ID is used to define what ID the server will send data on. The client IPC subscription ID must match this value.
      */
-    var ipcPublicationId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_PUB
+    var ipcPublicationId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB
         set(value) {
             require(context == null) { errorMessage }
             field = value
@@ -75,7 +75,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
     /**
      * The IPC Subscription ID is used to define what ID the server will receive data on. The client IPC publication ID must match this value.
      */
-    var ipcSubscriptionId = AeronConfig.IPC_HANDSHAKE_STREAM_ID_SUB
+    var ipcSubscriptionId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB
         set(value) {
             require(context == null) { errorMessage }
             field = value
