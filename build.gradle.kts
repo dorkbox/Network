@@ -139,7 +139,7 @@ tasks.jar.get().apply {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:atomicfu:0.15.2")
+    implementation("org.jetbrains.kotlinx:atomicfu:0.16.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.3")
 
     // https://github.com/dorkbox
@@ -188,7 +188,7 @@ dependencies {
 
     // Caffeine High-throughput Timeout Cache
     // https://github.com/ben-manes/caffeine
-    implementation("com.github.ben-manes.caffeine:caffeine:2.8.6") {
+    implementation("com.github.ben-manes.caffeine:caffeine:3.0.1") {
         exclude("org.checkerframework", "checker-qual")
         exclude("com.google.errorprone", "error_prone_annotations")
     }
