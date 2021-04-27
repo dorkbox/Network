@@ -31,7 +31,6 @@ import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
-import dorkbox.updates.Updates.add
 import dorkbox.util.Sys
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineStart
@@ -55,7 +54,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             // Add this project to the updates system, which verifies this class + UUID + version information
 
             // Add this project to the updates system, which verifies this class + UUID + version information
-            add(Client::class.java, "5be42ae40cac49fb90dea86bc513141b", version)
+            dorkbox.updates.Updates.add(Client::class.java, "5be42ae40cac49fb90dea86bc513141b", version)
         }
     }
 
