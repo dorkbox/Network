@@ -16,7 +16,9 @@
 package dorkbox.network.connection
 
 import dorkbox.network.aeron.IpcMediaDriverConnection
-import dorkbox.network.aeron.UdpMediaDriverConnection
+import dorkbox.network.aeron.UdpMediaDriverClientConnection
+import dorkbox.network.aeron.UdpMediaDriverPairedConnection
+import dorkbox.network.aeron.UdpMediaDriverServerConnection
 import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.handshake.RandomIdAllocator
 import dorkbox.network.ping.Ping
@@ -83,7 +85,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * @return true if this connection is a network connection
      */
-    val isNetwork = connectionParameters.mediaDriverConnection is UdpMediaDriverConnection
+    val isNetwork = connectionParameters.mediaDriverConnection is UdpMediaDriverServerConnection
 
     /**
      * the endpoint associated with this connection
@@ -144,24 +146,35 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         subscription = mediaDriverConnection.subscription
         publication = mediaDriverConnection.publication
 
-        remoteAddress = mediaDriverConnection.address // this can be the IP address or "ipc" word
         id = mediaDriverConnection.sessionId // NOTE: this is UNIQUE per server!
 
         if (mediaDriverConnection is IpcMediaDriverConnection) {
             streamId = 0 // this is because with IPC, we have stream sub/pub (which are replaced as port sub/pub)
             subscriptionPort = mediaDriverConnection.streamIdSubscription
             publicationPort = mediaDriverConnection.streamId
+
+            remoteAddress = null
             remoteAddressString = "ipc"
 
             toString0 = "[$id] IPC [$subscriptionPort|$publicationPort]"
         } else {
-            mediaDriverConnection as UdpMediaDriverConnection
-
             streamId = mediaDriverConnection.streamId // NOTE: this is UNIQUE per server!
             subscriptionPort = mediaDriverConnection.subscriptionPort
             publicationPort = mediaDriverConnection.publicationPort
 
-            remoteAddressString = mediaDriverConnection.addressString
+            when (mediaDriverConnection) {
+                is UdpMediaDriverClientConnection -> {
+                    remoteAddress = mediaDriverConnection.address
+                    remoteAddressString = mediaDriverConnection.addressString
+                }
+                is UdpMediaDriverPairedConnection -> {
+                    remoteAddress = mediaDriverConnection.remoteAddress
+                    remoteAddressString = mediaDriverConnection.remoteAddressString
+                }
+                else -> {
+                    throw Exception("Invalid media driver connection type! : ${mediaDriverConnection::class.qualifiedName}")
+                }
+            }
 
             toString0 = "[$id] $remoteAddressString [$publicationPort|$subscriptionPort]"
         }
