@@ -55,11 +55,11 @@ class PingPongTest : BaseTest() {
         populateData(data)
 
         run {
-            val configuration = serverConfig()
-            register(configuration.serialization)
+            val config = serverConfig()
+            register(config.serialization)
 
 
-            val server: Server<Connection> = Server(configuration)
+            val server: Server<Connection> = Server(config)
             addEndPoint(server)
             server.bind()
 
