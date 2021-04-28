@@ -144,10 +144,17 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         return config.settingsStore.create(logger)
     }
 
-
     internal fun initEndpointState() {
         shutdown.getAndSet(false)
         shutdownWaiter = SuspendWaiter()
+
+        // Only starts the media driver if we are NOT already running!
+        try {
+            aeronDriver.start()
+        } catch (e: Exception) {
+            listenerManager.notifyError(e)
+            throw e
+        }
     }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
@@ -157,7 +164,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         @Suppress("UNCHECKED_CAST")
         removeConnection(connection as CONNECTION)
     }
-
 
     /**
      * Adds a custom connection to the server.
@@ -347,7 +353,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
         } catch (e: Exception) {
             val exception = newException("[${publication.sessionId()}] Error serializing handshake message $message", e)
-            ListenerManager.cleanStackTrace(exception)
+            ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
             listenerManager.notifyError(exception)
         } finally {
             sendIdleStrategy.reset()
@@ -377,7 +383,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             val sessionId = header.sessionId()
 
             val exception = newException("[${sessionId}] Error de-serializing message", e)
-            ListenerManager.cleanStackTrace(exception)
+            ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
             listenerManager.notifyError(exception)
 
             logger.error("Error de-serializing message on connection ${header.sessionId()}!", e)
@@ -410,7 +416,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             val sessionId = header.sessionId()
 
             val exception = newException("[${sessionId}] Error de-serializing message", e)
-            ListenerManager.cleanStackTrace(exception)
+            ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
             listenerManager.notifyError(connection, exception)
 
             return // don't do anything!
@@ -507,9 +513,13 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 // more critical error sending the message. we shouldn't retry or anything.
                 val errorMessage = "[${publication.sessionId()}] Error sending message. $message (${errorCodeName(result)})"
 
-                // either client or server=. No other choices. We create an exception, because it's more useful!
+                // either client or server. No other choices. We create an exception, because it's more useful!
                 val exception = newException(errorMessage)
-                ListenerManager.cleanStackTrace(exception, 1)
+
+                // 2 because we do not want to see the stack for the abstract `newException`
+                // 2 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+                // where we see who is calling "send()"
+                ListenerManager.cleanStackTrace(exception, 4)
 
                 @Suppress("UNCHECKED_CAST")
                 listenerManager.notifyError(connection as CONNECTION, exception)

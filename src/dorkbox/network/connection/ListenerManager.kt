@@ -51,7 +51,7 @@ internal class ListenerManager<CONNECTION: Connection> {
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
-        fun cleanStackTrace(throwable: Throwable) {
+        fun cleanStackTrace(throwable: Throwable, adjustedStartOfStack: Int = 0) {
             // we never care about coroutine stacks, so filter then to start with
             val stackTrace = throwable.stackTrace.filterNot {
                 val stackName = it.className
@@ -63,11 +63,12 @@ internal class ListenerManager<CONNECTION: Connection> {
             var newEndIndex = stackTrace.size - 1
 
             // maybe offset by 1 because we have to adjust coroutine calls
-            var newStartIndex = 0
+            var newStartIndex = adjustedStartOfStack
 
-            val savedFirstStack = if (stackTrace[0].methodName == "invokeSuspend") {
-                newStartIndex = 1
-                stackTrace.copyOfRange(0, 1)
+            // sometimes we want to see the VERY first invocation, but not always
+            val savedFirstStack = if (stackTrace[newStartIndex].methodName == "invokeSuspend") {
+                newStartIndex++
+                stackTrace.copyOfRange(adjustedStartOfStack, newStartIndex)
             } else {
                 null
             }
@@ -84,7 +85,7 @@ internal class ListenerManager<CONNECTION: Connection> {
             if (newEndIndex > 0) {
                 if (savedFirstStack != null) {
                     // we want to save the FIRST stack frame also, maybe
-                    throwable.stackTrace = stackTrace.copyOfRange(0, 1) + stackTrace.copyOfRange(newStartIndex, newEndIndex)
+                    throwable.stackTrace = savedFirstStack + stackTrace.copyOfRange(newStartIndex, newEndIndex)
                 } else {
                     throwable.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
                 }
