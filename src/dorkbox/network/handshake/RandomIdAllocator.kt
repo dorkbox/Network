@@ -20,10 +20,10 @@ import org.agrona.collections.IntHashSet
 import java.security.SecureRandom
 
 /**
- * An allocator for session IDs.
+ * An allocator for random IDs.
  *
  * The allocator randomly selects values from the given range `[min, max]` and will not return a previously-returned value `x`
- * until `x` has been freed with `{ SessionAllocator#free(int)}.
+ * until `x` has been freed with [free].
  *
  * This implementation uses storage proportional to the number of currently-allocated
  * values. Allocation time is bounded by { max - min}, will be { O(1)}
@@ -32,10 +32,10 @@ import java.security.SecureRandom
  *
  * NOTE: THIS IS NOT THREAD SAFE!
  *
- * @param min The minimum session ID (inclusive)
- * @param max The maximum session ID (exclusive)
+ * @param min The minimum ID (inclusive)
+ * @param max The maximum ID (exclusive)
  */
-class RandomIdAllocator(private val min: Int, max: Int) {
+class RandomIdAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = Integer.MAX_VALUE) {
     private val used = IntHashSet()
     private val random = SecureRandom()
     private val maxAssignments: Int
@@ -50,15 +50,15 @@ class RandomIdAllocator(private val min: Int, max: Int) {
     }
 
     /**
-     * Allocate a new session. Will never allocate session ID '0'
+     * Allocate an unused ID. Will never allocate ID '0'
      *
-     * @return A new session ID
+     * @return A new, unused ID
      *
-     * @throws AllocationException If there are no non-allocated sessions left
+     * @throws AllocationException If there are no non-allocated IDs left
      */
     fun allocate(): Int {
         if (used.size == maxAssignments) {
-            throw AllocationException("No session IDs left to allocate")
+            throw AllocationException("No IDs left to allocate")
         }
 
         for (index in 0 until maxAssignments) {
@@ -69,22 +69,21 @@ class RandomIdAllocator(private val min: Int, max: Int) {
             }
         }
 
-        throw AllocationException("Unable to allocate a session ID after $maxAssignments attempts (${used.size} values in use")
+        throw AllocationException("Unable to allocate a ID after $maxAssignments attempts (${used.size} values in use")
     }
 
     /**
-     * Free a session. After this method returns, `session` becomes eligible
-     * for allocation by future calls to [.allocate].
+     * Free an ID for use later. After this method returns, the ID becomes eligible for allocation by future calls to [allocate].
      *
-     * @param session The session to free
+     * @param id The ID to free
      */
-    fun free(session: Int) {
-        used.remove(session)
+    fun free(id: Int) {
+        used.remove(id)
     }
 
 
     /**
-     * Removes all used sessions from the internal data structures
+     * Removes all used IDs from the internal data structures
      */
     fun clear() {
         used.clear()
