@@ -35,6 +35,13 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 class ServerConfiguration : dorkbox.network.Configuration() {
+    companion object {
+        /**
+         * Gets the version number.
+         */
+        const val version = "5.1"
+    }
+
     /**
      * The address for the server to listen on. "*" will accept connections from all interfaces, otherwise specify
      * the hostname (or IP) to bind to.
