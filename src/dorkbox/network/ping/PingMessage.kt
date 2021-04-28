@@ -19,6 +19,6 @@ package dorkbox.network.ping
  * Internal message to determine round trip time.
  */
 class PingMessage {
-    var id = 0
-    var isReply = false
+    var id: Int = 0
+    var isReply: Boolean = false
 }

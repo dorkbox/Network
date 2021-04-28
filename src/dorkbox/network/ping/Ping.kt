@@ -15,28 +15,26 @@
  */
 package dorkbox.network.ping
 
-import dorkbox.network.connection.Connection
-
-interface Ping {
-    /**
-     * Wait for the ping to return, and returns the ping response time in MS or -1 if it failed.
-     */
-    val response: Int
-
-    /**
-     * Adds a ping listener to this future. The listener is notified when this future is done. If this future is already completed,
-     * then the listener is notified immediately.
-     */
-    fun <C : Connection> add(listener: PingListener<C>)
-
-    /**
-     * Removes a ping listener from this future. The listener is no longer notified when this future is done. If the listener
-     * was not previously associated with this future, this method does nothing and returns silently.
-     */
-    fun <C : Connection> remove(listener: PingListener<C>)
-
-    /**
-     * Cancel this Ping.
-     */
-    fun cancel()
+class Ping {
+//    /**
+//     * Wait for the ping to return, and returns the ping response time in MS or -1 if it failed.
+//     */
+//    val response: Int
+//
+//    /**
+//     * Adds a ping listener to this future. The listener is notified when this future is done. If this future is already completed,
+//     * then the listener is notified immediately.
+//     */
+//    fun <C : Connection> add(listener: PingListener<C>)
+//
+//    /**
+//     * Removes a ping listener from this future. The listener is no longer notified when this future is done. If the listener
+//     * was not previously associated with this future, this method does nothing and returns silently.
+//     */
+//    fun <C : Connection> remove(listener: PingListener<C>)
+//
+//    /**
+//     * Cancel this Ping.
+//     */
+//    fun cancel()
 }

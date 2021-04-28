@@ -22,7 +22,6 @@ import dorkbox.network.aeron.UdpMediaDriverServerConnection
 import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.handshake.RandomIdAllocator
 import dorkbox.network.ping.Ping
-import dorkbox.network.ping.PingFuture
 import dorkbox.network.ping.PingMessage
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
@@ -118,9 +117,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 //            val pingFuture2 = pingFuture
 //            return pingFuture2?.response ?: -1
 //        }
-
-    @Volatile
-    private var pingFuture: PingFuture? = null
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private val remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
@@ -249,57 +245,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
-     * Updates the ping times for this connection (called when this connection gets a REPLY ping message).
-     */
-    fun updatePingResponse(ping: PingMessage?) {
-        if (pingFuture != null) {
-            pingFuture!!.setSuccess(this, ping)
-        }
-    }
-
-    /**
-     * Sends a "ping" packet, trying UDP then TCP (in that order) to measure **ROUND TRIP** time to the remote connection.
+     * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
+     *
+     * Only 1 in-flight ping can be performed at a time. Calling ping() again, before the previous ping returns will do nothing.
      *
      * @return Ping can have a listener attached, which will get called when the ping returns.
      */
-    suspend fun ping(): Ping {
-        // TODO: USE AERON FOR THIS
-//        val pingFuture2 = pingFuture
-//        if (pingFuture2 != null && !pingFuture2.isSuccess) {
-//            pingFuture2.cancel()
-//        }
-//        val newPromise: Promise<PingTuple<out Connection?>>
-//        newPromise = if (channelWrapper.udp() != null) {
-//            channelWrapper.udp()
-//                    .newPromise()
-//        } else {
-//            channelWrapper.tcp()
-//                    .newPromise()
-//        }
-//        pingFuture = PingFuture(newPromise)
-//        val ping = PingMessage()
-//        ping.id = pingFuture!!.id
-//        ping0(ping)
-//        return pingFuture!!
-        TODO()
+    suspend fun ping(function: suspend Ping.() -> Unit) {
+        endPoint.pingManager.ping(this, function)
     }
-
-    /**
-     * INTERNAL USE ONLY. Used to initiate a ping, and to return a ping.
-     *
-     * Sends a ping message attempted in the following order: UDP, TCP,LOCAL
-     */
-    fun ping0(ping: PingMessage) {
-//        if (channelWrapper.udp() != null) {
-//            UDP(ping)
-//        } else if (channelWrapper.tcp() != null) {
-//            TCP(ping)
-//        } else {
-//            self(ping)
-//        }
-        TODO()
-    }
-
 
     /**
      * A message in progress means that we have requested to to send an object over the network, but it hasn't finished sending over the network

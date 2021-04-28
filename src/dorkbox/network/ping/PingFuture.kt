@@ -18,7 +18,7 @@ package dorkbox.network.ping
 import dorkbox.network.connection.Connection
 import java.util.concurrent.atomic.AtomicInteger
 
-class PingFuture internal constructor() : Ping {
+class PingFuture internal constructor() {
     /**
      * @return the ID of this ping future
      */
@@ -46,7 +46,7 @@ class PingFuture internal constructor() : Ping {
     /**
      * Wait for the ping to return, and returns the ping response time in MS or -1 if it failed.
      */
-    override val response: Int
+    val response: Int
         get() =// try {
         //     PingTuple<? extends Connection> entry = this.promise.syncUninterruptibly()
         //                                                         .get();
@@ -62,7 +62,7 @@ class PingFuture internal constructor() : Ping {
      * Adds the specified listener to this future. The specified listener is notified when this future is done. If this future is already
      * completed, the specified listener is notified immediately.
      */
-    override fun <C : Connection> add(listener: PingListener<C>) {
+    fun <C : Connection> add(listener: PingListener<C>) {
         // this.promise.addListener((GenericFutureListener) listener);
     }
 
@@ -70,14 +70,14 @@ class PingFuture internal constructor() : Ping {
      * Removes the specified listener from this future. The specified listener is no longer notified when this future is done. If the
      * specified listener is not associated with this future, this method does nothing and returns silently.
      */
-    override fun <C : Connection> remove(listener: PingListener<C>) {
+    fun <C : Connection> remove(listener: PingListener<C>) {
         // this.promise.removeListener((GenericFutureListener) listener);
     }
 
     /**
      * Cancel this Ping.
      */
-    override fun cancel() {
+    fun cancel() {
         // this.promise.tryFailure(new PingCanceledException());
     }
 

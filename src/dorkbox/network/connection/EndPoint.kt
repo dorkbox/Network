@@ -25,8 +25,8 @@ import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.MessageNotRegisteredException
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ipFilter.IpFilterRule
+import dorkbox.network.ping.PingManager
 import dorkbox.network.ping.PingMessage
-import dorkbox.network.rmi.ResponseManager
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
 import dorkbox.network.rmi.messages.RmiMessage
@@ -73,6 +73,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val listenerManager = ListenerManager<CONNECTION>()
     internal val connections = ConnectionManager<CONNECTION>()
 
+    internal val pingManager = PingManager<CONNECTION>(logger, actionDispatch)
+
     internal val aeronDriver: AeronDriver
 
     /**
@@ -81,7 +83,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     val serialization: Serialization
 
     private val handshakeKryo: KryoExtra
-
 
     private val sendIdleStrategy: CoroutineIdleStrategy
 
@@ -98,8 +99,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     // we only want one instance of these created. These will be called appropriately
     val settingsStore: SettingsStore
 
-    private val responseManager = ResponseManager(logger, actionDispatch)
-    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, responseManager, config.serialization)
+    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
 
     init {
         require(!config.previouslyUsed) { "${type.simpleName} configuration cannot be reused!" }
@@ -420,15 +420,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         when (message) {
             is PingMessage -> {
                 // the ping listener (internal use only!)
-
-//                val ping = message as PingMessage
-//                if (ping.isReply) {
-//                    updatePingResponse(ping)
-//                } else {
-//                    // return the ping from whence it came
-//                    ping.isReply = true
-//                    ping0(ping)
-//                }
+                actionDispatch.launch {
+                    pingManager.manage(this@EndPoint, connection, message, logger)
+                }
             }
 
             // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
@@ -511,7 +505,14 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
-                logger.error("[${publication.sessionId()}] Error sending message. $message (${errorCodeName(result)})")
+                val errorMessage = "[${publication.sessionId()}] Error sending message. $message (${errorCodeName(result)})"
+
+                // either client or server=. No other choices. We create an exception, because it's more useful!
+                val exception = newException(errorMessage)
+                ListenerManager.cleanStackTrace(exception, 1)
+
+                @Suppress("UNCHECKED_CAST")
+                listenerManager.notifyError(connection as CONNECTION, exception)
 
                 return
             }
