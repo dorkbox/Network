@@ -15,9 +15,7 @@
  */
 package dorkbox.network
 
-import dorkbox.netUtil.IP
-import dorkbox.netUtil.IPv4
-import dorkbox.netUtil.IPv6
+import dorkbox.netUtil.*
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverClientConnection
@@ -51,8 +49,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         const val version = "5.1"
 
         init {
-            // Add this project to the updates system, which verifies this class + UUID + version information
-
             // Add this project to the updates system, which verifies this class + UUID + version information
             dorkbox.updates.Updates.add(Client::class.java, "5be42ae40cac49fb90dea86bc513141b", version)
         }
@@ -125,16 +121,16 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             // this is default IPC settings
             remoteAddress.isEmpty() -> connect(connectionTimeoutMS = connectionTimeoutMS)
 
-            IPv4.isPreferred -> connect(remoteAddress = Inet4Address.getAllByName(remoteAddress)[0],
+            IPv4.isPreferred -> connect(remoteAddress = Inet4.toAddress(remoteAddress),
                                         connectionTimeoutMS = connectionTimeoutMS,
                                         reliable = reliable)
 
-            IPv6.isPreferred -> connect(remoteAddress = Inet6Address.getAllByName(remoteAddress)[0],
+            IPv6.isPreferred -> connect(remoteAddress = Inet6.toAddress(remoteAddress),
                                         connectionTimeoutMS = connectionTimeoutMS,
                                         reliable = reliable)
 
             // if there is no preference, then try to connect via IPv4
-            else -> connect(remoteAddress = Inet4Address.getAllByName(remoteAddress)[0],
+            else -> connect(remoteAddress = IPv4.toAddress(remoteAddress),
                             connectionTimeoutMS = connectionTimeoutMS,
                             reliable = reliable)
         }
@@ -232,7 +228,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                                 ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
                                 connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
 
-        require(connectionTimeoutMS >= 0) { "connectionTimeoutMS '$connectionTimeoutMS' is invalid. It must be >0" }
+        require(connectionTimeoutMS >= 0) { "connectionTimeoutMS '$connectionTimeoutMS' is invalid. It must be >=0" }
 
         // this will exist ONLY if we are reconnecting via a "disconnect" callback
         lockStepForReconnect.value?.doWait()

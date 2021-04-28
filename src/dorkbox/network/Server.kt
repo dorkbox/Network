@@ -15,9 +15,7 @@
  */
 package dorkbox.network
 
-import dorkbox.netUtil.IP
-import dorkbox.netUtil.IPv4
-import dorkbox.netUtil.IPv6
+import dorkbox.netUtil.*
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.IpcMediaDriverConnection
@@ -43,8 +41,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
-import java.net.Inet4Address
-import java.net.Inet6Address
 import java.net.InetAddress
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
@@ -113,42 +109,43 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     private val canUseIPv4 = config.enableIPv4 && IPv4.isAvailable
     private val canUseIPv6 = config.enableIPv6 && IPv6.isAvailable
 
-    internal val listenIPv4Address: InetAddress?
-    internal val listenIPv6Address: InetAddress?
 
-    init {
-        // localhost/loopback IP might not always be 127.0.0.1 or ::1
-        // We want to listen on BOTH IPv4 and IPv6 (config option lets us configure this)
-        listenIPv4Address = if (canUseIPv4) {
+    // localhost/loopback IP might not always be 127.0.0.1 or ::1
+    // We want to listen on BOTH IPv4 and IPv6 (config option lets us configure this)
+    internal val listenIPv4Address: InetAddress? =
+        if (canUseIPv4) {
             when (config.listenIpAddress) {
                 "loopback", "localhost", "lo" -> IPv4.LOCALHOST
                 "0", "::", "0.0.0.0", "*" -> {
                     // this is the "wildcard" address. Windows has problems with this.
-                    InetAddress.getByAddress(null, byteArrayOf(0, 0, 0, 0))
+                    IPv4.WILDCARD
                 }
-                else -> Inet4Address.getAllByName(config.listenIpAddress)[0]
+                else -> Inet4.toAddress(config.listenIpAddress) // Inet4Address.getAllByName(config.listenIpAddress)[0]
             }
         }
         else {
             null
         }
 
-        listenIPv6Address = if (canUseIPv6) {
+
+    internal val listenIPv6Address: InetAddress? =
+        if (canUseIPv6) {
             when (config.listenIpAddress) {
                 "loopback", "localhost", "lo" -> IPv6.LOCALHOST
                 "0", "::", "0.0.0.0", "*" -> {
                     // this is the "wildcard" address. Windows has problems with this.
-                    InetAddress.getByAddress(null, byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+                    IPv6.WILDCARD
                 }
-                else -> Inet6Address.getAllByName(config.listenIpAddress)[0]
+                else -> Inet6.toAddress(config.listenIpAddress)
             }
         }
         else {
             null
         }
 
+    init {
         // we are done with initial configuration, now finish serialization
-        serialization.finishInit(type, ByteArray(0))
+        serialization.finishInit(type)
     }
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
