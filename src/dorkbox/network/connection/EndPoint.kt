@@ -130,7 +130,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         try {
             AeronDriver.validateConfig(config, logger)
             aeronDriver = AeronDriver(config, type, logger)
-            aeronDriver.start()
         } catch (e: Exception) {
             listenerManager.notifyError(e)
             throw e
