@@ -21,13 +21,14 @@ import dorkbox.network.connection.ListenerManager
 import dorkbox.network.rmi.messages.*
 import dorkbox.network.serialization.Serialization
 import dorkbox.util.classes.ClassHelper
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
 
 internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
-                                                         internal val responseManager: ResponseManager,
+                                                         actionDispatch: CoroutineScope,
                                                          private val serialization: Serialization) : RmiObjectCache(logger) {
 
     companion object {
@@ -71,6 +72,8 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
             return Proxy.newProxyInstance(RmiManagerGlobal::class.java.classLoader, interfaces, proxyObject) as RemoteObject
         }
     }
+
+    internal val responseManager = ResponseManager(logger, actionDispatch)
 
     // this is used for all connection specific ones as well.
     private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
