@@ -429,7 +429,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             }
 
             logger.info("Adding new signature for ${IP.toString(remoteAddress)} : ${Sys.bytesToHex(connectionInfo.publicKey)}")
-            settingsStore.addRegisteredServerKey(remoteAddress, connectionInfo.publicKey)
+            storage.addRegisteredServerKey(remoteAddress, connectionInfo.publicKey)
         }
 
 

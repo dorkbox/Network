@@ -71,7 +71,7 @@ abstract class BaseTest {
 
     companion object {
         const val LOOPBACK = "loopback"
-        fun clientConfig(): Configuration {
+        fun clientConfig(block: Configuration.() -> Unit = {}): Configuration {
             val configuration = Configuration()
             configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
             configuration.subscriptionPort = 2000
@@ -80,7 +80,7 @@ abstract class BaseTest {
             return configuration
         }
 
-        fun serverConfig(): ServerConfiguration {
+        fun serverConfig(block: ServerConfiguration.() -> Unit = {}): ServerConfiguration {
             val configuration = ServerConfiguration()
             configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
 
