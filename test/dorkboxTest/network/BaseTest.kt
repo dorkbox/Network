@@ -50,12 +50,12 @@ import dorkbox.os.OS
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
 import org.slf4j.LoggerFactory
+import java.lang.Thread.sleep
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.concurrent.CopyOnWriteArrayList
@@ -171,7 +171,7 @@ abstract class BaseTest {
     /**
      * Immediately stop the endpoints
      */
-    suspend fun stopEndPoints(stopAfterMillis: Long = 0) {
+    fun stopEndPoints(stopAfterMillis: Long = 0) {
         if (isStopping) {
             return
         }
@@ -179,7 +179,7 @@ abstract class BaseTest {
 
         // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
         // ARE NOT in the same thread group as netty!
-        delay(stopAfterMillis)
+        sleep(stopAfterMillis)
 
         synchronized(lock) {}
 
@@ -212,7 +212,12 @@ abstract class BaseTest {
     fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT) {
         synchronized(lock) {}
         try {
-            latch.await(stopAfterSeconds, TimeUnit.SECONDS)
+            if (stopAfterSeconds == 0L) {
+                latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
+            } else {
+                latch.await(stopAfterSeconds, TimeUnit.SECONDS)
+            }
+
         } catch (e: InterruptedException) {
             e.printStackTrace()
         }
