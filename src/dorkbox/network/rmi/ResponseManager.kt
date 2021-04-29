@@ -20,6 +20,7 @@ import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import mu.KLogger
@@ -71,8 +72,12 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
 
         // populate the array of randomly assigned ID's + waiters. This can happen in a new thread
         actionDispatch.launch {
-            for (it in ids) {
-                waiterCache.offer(ResponseWaiter(it))
+            try {
+                for (it in ids) {
+                    waiterCache.offer(ResponseWaiter(it))
+                }
+            } catch (e: ClosedSendChannelException) {
+                // this can happen if we are starting/stopping an endpoint (and thus a response-manager) VERY quickly, and can be ignored
             }
         }
     }
