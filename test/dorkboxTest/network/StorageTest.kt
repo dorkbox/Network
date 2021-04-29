@@ -19,12 +19,11 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.storage.SettingsStore
-import dorkbox.network.storage.types.ChronicleMapStore
-import dorkbox.network.storage.types.LmdbStore
-import dorkbox.network.storage.types.MemoryStore
-import dorkbox.network.storage.types.PropertyStore
+import dorkbox.network.storage.StorageType
+import dorkbox.network.storage.types.*
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
+import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
 import java.io.File
@@ -33,24 +32,31 @@ class StorageTest : BaseTest() {
     @Test
     fun sharedStoreTest() {
         // we want the server + client to have the SAME info
-        val store = MemoryStore.type().create()
+        val store = MemoryAccess(KotlinLogging.logger("StorageType"))
 
-        val server = object : Server<Connection>(serverConfig()) {
-            override fun createSettingsStore(logger: KLogger): SettingsStore {
-                return store
+        val sharedStore = object : StorageType {
+            override fun create(logger: KLogger): SettingsStore {
+                return SettingsStore(logger, store)
             }
         }
 
-        val client = object: Client<Connection>(clientConfig()) {
-            override fun createSettingsStore(logger: KLogger): SettingsStore {
-                return store
-            }
-        }
 
+        val serverConfig = serverConfig {
+            settingsStore = sharedStore
+        }
+        val server = Server<Connection>(serverConfig)
+
+        val config = clientConfig {
+            settingsStore = sharedStore
+        }
+        val client = Client<Connection>(config)
         server.bind()
 
         runBlocking {
             client.connect("localhost")
+
+            Assert.assertFalse(server.storage.getSalt().contentEquals(client.storage.getSalt()))
+
             server.close()
         }
     }
@@ -60,8 +66,8 @@ class StorageTest : BaseTest() {
     fun memoryTest() {
         val salt1 = MemoryStore.type().create().use { it.getSalt() }
 
-        val salt2 = Server<Connection>(serverConfig().apply { settingsStore = MemoryStore.type() }).use { it.settingsStore.getSalt() }
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = MemoryStore.type() }).use { it.settingsStore.getSalt() }
+        val salt2 = Server<Connection>(serverConfig().apply { settingsStore = MemoryStore.type() }).use { it.storage.getSalt() }
+        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = MemoryStore.type() }).use { it.storage.getSalt() }
 
         Assert.assertFalse(salt1.contentEquals(salt2))
         Assert.assertFalse(salt1.contentEquals(salt3))
@@ -80,8 +86,8 @@ class StorageTest : BaseTest() {
         file.delete()
         fileLock.delete()
 
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = LmdbStore.type(file) }).use { it.settingsStore.getSalt() }
-        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = LmdbStore.type(file) }).use { it.settingsStore.getSalt() }
+        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = LmdbStore.type(file) }).use { it.storage.getSalt() }
+        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = LmdbStore.type(file) }).use { it.storage.getSalt() }
 
         Assert.assertArrayEquals(salt3, salt4)
         Assert.assertFalse(salt1.contentEquals(salt4))
@@ -99,8 +105,8 @@ class StorageTest : BaseTest() {
         Assert.assertArrayEquals(salt1, salt2)
         file.delete()
 
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = PropertyStore.type(file) }).use { it.settingsStore.getSalt() }
-        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = PropertyStore.type(file) }).use { it.settingsStore.getSalt() }
+        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = PropertyStore.type(file) }).use { it.storage.getSalt() }
+        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = PropertyStore.type(file) }).use { it.storage.getSalt() }
 
         Assert.assertArrayEquals(salt3, salt4)
         Assert.assertFalse(salt1.contentEquals(salt4))
@@ -117,8 +123,8 @@ class StorageTest : BaseTest() {
         Assert.assertArrayEquals(salt1, salt2)
         file.delete()
 
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = ChronicleMapStore.type(file) }).use { it.settingsStore.getSalt() }
-        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = ChronicleMapStore.type(file) }).use { it.settingsStore.getSalt() }
+        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = ChronicleMapStore.type(file) }).use { it.storage.getSalt() }
+        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = ChronicleMapStore.type(file) }).use { it.storage.getSalt() }
 
         Assert.assertArrayEquals(salt3, salt4)
         Assert.assertFalse(salt1.contentEquals(salt4))

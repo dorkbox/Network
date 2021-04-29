@@ -96,8 +96,12 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     @Volatile
     private var shutdownWaiter: SuspendWaiter = SuspendWaiter()
 
-    // we only want one instance of these created. These will be called appropriately
-    val settingsStore: SettingsStore
+    /**
+     * Returns the storage used by this endpoint. This is the backing data structure for key/value pairs, and can be a database, file, etc
+     *
+     * Only one instance of these is created for an endpoint.
+     */
+    val storage: SettingsStore
 
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
 
@@ -122,9 +126,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         handshakeKryo = serialization.initHandshakeKryo()
 
         // we have to be able to specify the property store
-        settingsStore = createSettingsStore(logger)
+        storage = config.settingsStore.create(logger)
 
-        crypto = CryptoManagement(logger, settingsStore, type, config.enableRemoteSignatureValidation)
+        crypto = CryptoManagement(logger, storage, type, config.enableRemoteSignatureValidation)
 
         // Only starts the media driver if we are NOT already running!
         try {
@@ -134,13 +138,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             listenerManager.notifyError(e)
             throw e
         }
-    }
-
-    /**
-     * Open so users can override which/how a settings store is created
-     */
-    open fun createSettingsStore(logger: KLogger): SettingsStore {
-        return config.settingsStore.create(logger)
     }
 
     internal fun initEndpointState() {
@@ -186,14 +183,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     fun removeConnection(connection: CONNECTION) {
         connections.remove(connection)
-    }
-
-    /**
-     * Returns the property store used by this endpoint. The property store can store via properties,
-     * a database, etc, or can be a "null" property store, which does nothing
-     */
-    fun getStorage(): SettingsStore {
-        return settingsStore
     }
 
     /**
@@ -629,7 +618,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // the storage is closed via this as well.
-                settingsStore.close()
+                storage.close()
 
                 // Connections are closed first, because we want to make sure that no RMI messages can be received
                 // when we close the RMI support objects (in which case, weird - but harmless - errors show up)

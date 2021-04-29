@@ -146,7 +146,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
     suspend fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {
         failed = null
         oneTimeKey = endPoint.crypto.secureRandom.nextInt()
-        val publicKey = endPoint.settingsStore.getPublicKey()!!
+        val publicKey = endPoint.storage.getPublicKey()!!
 
         // Send the one-time pad to the server.
         val publication = handshakeConnection.publication
