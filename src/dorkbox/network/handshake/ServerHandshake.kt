@@ -31,6 +31,7 @@ import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.*
 import io.aeron.Publication
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
@@ -126,8 +127,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 // this enables the connection to start polling for messages
                 server.addConnection(pendingConnection)
 
+
                 // now tell the client we are done
-                actionDispatch.launch {
+
+                // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                @Suppress("EXPERIMENTAL_API_USAGE")
+                actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
+                    // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
+                    //   we want this behavior INSTEAD OF automatically starting this on a new thread.
+
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(message.oneTimeKey, sessionId))
 
                     listenerManager.notifyConnect(pendingConnection)

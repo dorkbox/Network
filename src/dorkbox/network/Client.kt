@@ -76,7 +76,11 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     private val rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, serialization)
 
+    // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
+    // lock-stop ordering for how disconnect and connect work with each-other
     private val lockStepForReconnect = atomic<SuspendWaiter?>(null)
+    // GUARANTEE that the callbacks for 'onDisconnect' happens-before the 'onConnect'.
+    private val lockStepForDispatch = atomic<SuspendWaiter?>(null)
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ClientException(message, cause)
@@ -437,6 +441,11 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             if (!lockStepForReconnect.compareAndSet(null, SuspendWaiter())) {
                 listenerManager.notifyError(connection, IllegalStateException("lockStep for reconnect was in the wrong state!"))
             }
+
+            // on the client, we want to GUARANTEE that the disconnect happens-before the connect.
+            if (!lockStepForDispatch.compareAndSet(null, SuspendWaiter())) {
+                listenerManager.notifyError(connection, IllegalStateException("lockStep for dispatch was in the wrong state!"))
+            }
         }
         newConnection.postCloseAction = {
             // this is called whenever connection.close() is called by the framework or via client.close()
@@ -450,6 +459,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
                 //   we want this behavior INSTEAD OF automatically starting this on a new thread.
                 listenerManager.notifyDisconnect(connection)
+
+                lockStepForDispatch.value?.cancel()
             }
 
             // in case notifyDisconnect called client.connect().... cancel them waiting
@@ -468,8 +479,17 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             // have to make a new thread to listen for incoming data!
             // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
-            actionDispatch.launch {
+
+            // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+            @Suppress("EXPERIMENTAL_API_USAGE")
+            actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
+                lockStepForDispatch.value?.doWait()
+
+                // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
+                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
                 listenerManager.notifyConnect(newConnection)
+
+                lockStepForDispatch.lazySet(null)
             }
 
             // these have to be in two SEPARATE actionDispatch.launch commands.... otherwise...
