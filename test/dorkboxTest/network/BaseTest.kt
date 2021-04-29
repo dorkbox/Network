@@ -77,6 +77,7 @@ abstract class BaseTest {
             configuration.subscriptionPort = 2000
             configuration.publicationPort = 2001
 
+            block(configuration)
             return configuration
         }
 
@@ -89,6 +90,8 @@ abstract class BaseTest {
 
             configuration.maxClientCount = 5
             configuration.maxConnectionsPerIpAddress = 5
+
+            block(configuration)
 
             return configuration
         }
