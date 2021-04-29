@@ -134,7 +134,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                                         reliable = reliable)
 
             // if there is no preference, then try to connect via IPv4
-            else -> connect(remoteAddress = IPv4.toAddress(remoteAddress),
+            else -> connect(remoteAddress = Inet4.toAddress(remoteAddress),
                             connectionTimeoutMS = connectionTimeoutMS,
                             reliable = reliable)
         }
