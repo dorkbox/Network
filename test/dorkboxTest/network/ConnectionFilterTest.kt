@@ -231,14 +231,14 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK, 0)
+                client.connect(LOOPBACK)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e
             }
         }
 
-        waitForThreads(0)
+        waitForThreads()
     }
 
     @Test(expected = ClientException::class)
