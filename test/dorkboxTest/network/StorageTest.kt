@@ -21,7 +21,6 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.storage.SettingsStore
 import dorkbox.network.storage.StorageType
 import dorkbox.network.storage.types.*
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import org.junit.Assert
@@ -45,20 +44,19 @@ class StorageTest : BaseTest() {
             settingsStore = sharedStore
         }
         val server = Server<Connection>(serverConfig)
+        server.bind()
 
         val config = clientConfig {
             settingsStore = sharedStore
         }
         val client = Client<Connection>(config)
-        server.bind()
 
-        runBlocking {
-            client.connect("localhost")
 
-            Assert.assertFalse(server.storage.getSalt().contentEquals(client.storage.getSalt()))
+        client.connect("localhost")
 
-            server.close()
-        }
+        Assert.assertTrue(server.storage.getSalt().contentEquals(client.storage.getSalt()))
+
+        server.close()
     }
 
 
