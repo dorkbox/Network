@@ -16,6 +16,7 @@
 package dorkbox.network.connection
 
 import dorkbox.network.ipFilter.IpFilterRule
+import dorkbox.network.ping.Ping
 import dorkbox.os.OS
 import dorkbox.util.classes.ClassHelper
 import dorkbox.util.classes.ClassHierarchy
@@ -131,7 +132,7 @@ internal class ListenerManager<CONNECTION: Connection> {
     }
 
     // initialize a emtpy arrays
-    private val onConnectFilterList = atomic(Array<(suspend (CONNECTION) -> Boolean)>(0) { { true } })
+    private val onConnectFilterList = atomic(Array<((CONNECTION) -> Boolean)>(0) { { true } })
     private val onConnectFilterMutex = Mutex()
 
     private val onConnectList = atomic(Array<suspend ((CONNECTION) -> Unit)>(0) { { } })
@@ -148,6 +149,9 @@ internal class ListenerManager<CONNECTION: Connection> {
 
     private val onMessageMap = atomic(IdentityMap<Class<*>, Array<suspend (CONNECTION, Any) -> Unit>>(32, LOAD_FACTOR))
     private val onMessageMutex = Mutex()
+
+    private val onPingList = atomic(Array<suspend (CONNECTION.(Ping) -> Unit)>(0) { { } })
+    private val onPingMutex = Mutex()
 
     // used to keep a cache of class hierarchy for distributing messages
     private val classHierarchyCache = ClassHierarchy(LOAD_FACTOR)
@@ -189,7 +193,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * For a server, this function will be called for ALL clients.
      */
-    suspend fun filter(function: suspend (CONNECTION) -> Boolean) {
+    suspend fun filter(function: (CONNECTION) -> Boolean) {
         onConnectFilterMutex.withLock {
             // we have to follow the single-writer principle!
             onConnectFilterList.lazySet(add(function, onConnectFilterList.value))
@@ -298,6 +302,17 @@ internal class ListenerManager<CONNECTION: Connection> {
         }
     }
 
+    /**
+     * Adds a function that will be called when a client/server "connects" with each other
+     *
+     * For a server, this function will be called for ALL clients.
+     */
+    suspend fun onPing(function: suspend CONNECTION.(Ping) -> Unit) {
+        onPingMutex.withLock {
+            // we have to follow the single-writer principle!
+            onPingList.lazySet(add(function, onPingList.value))
+        }
+    }
 
     /**
      * Invoked just after a connection is created, but before it is connected.
@@ -306,7 +321,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * @return true if the connection will be allowed to connect. False if we should terminate this connection
      */
-     suspend fun notifyFilter(connection: CONNECTION): Boolean {
+     fun notifyFilter(connection: CONNECTION): Boolean {
         // remote address will NOT be null at this stage, but best to verify.
         val remoteAddress = connection.remoteAddress
         if (remoteAddress == null) {
@@ -427,5 +442,20 @@ internal class ListenerManager<CONNECTION: Connection> {
         }
 
         return hasListeners
+    }
+
+    /**
+     * Invoked when a connection is 'pinged' by the remote endpoint
+     */
+    suspend fun notifyPing(ping: Ping, connection: CONNECTION) {
+        onPingList.value.forEach {
+            try {
+                it(connection, ping)
+            } catch (t: Throwable) {
+                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                cleanStackTrace(t)
+                notifyError(connection, t)
+            }
+        }
     }
 }

@@ -19,7 +19,7 @@ class Ping {
 //    /**
 //     * Wait for the ping to return, and returns the ping response time in MS or -1 if it failed.
 //     */
-//    val response: Int
+    val time: Int = 0
 //
 //    /**
 //     * Adds a ping listener to this future. The listener is notified when this future is done. If this future is already completed,

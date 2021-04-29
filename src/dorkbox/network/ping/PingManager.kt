@@ -56,7 +56,7 @@ class PingManager<CONNECTION : Connection>(logger: KLogger, actionDispatch: Coro
 //        }
     }
 
-    fun ping(function1: Connection, function: suspend Ping.() -> Unit) {
+    suspend fun ping(function1: Connection, function: suspend Ping.() -> Unit) {
 //        val ping = PingMessage()
 //        ping.id = pingIdAllocator.allocate()
 //

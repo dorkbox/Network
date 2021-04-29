@@ -570,8 +570,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     /**
      * Sends a message to the server, if the connection is closed for any reason, this returns false.
      *
-     * If you want to be notified via an exception (instead of returning true/false), use [sendWithException]
-     *
      * @return true if the message was sent successfully, false if the connection has been closed
      */
     suspend fun send(message: Any): Boolean {
@@ -588,34 +586,42 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     }
 
     /**
-     * Sends a message to the server, if the connection is closed for any reason, this throws an exception.
+     * Sends a message to the server, if the connection is closed for any reason, this returns false.
      *
-     * If you want to be notified if there is a problem without an exception getting thrown, use [send]
-     *
-     * @throws ClientException when a message cannot be sent
+     * @return true if the message was sent successfully, false if the connection has been closed
      */
-    suspend fun sendWithException(message: Any) {
-        val c = connection0
-        if (c != null) {
-            c.send(message)
-        } else {
-            val exception = ClientException("Cannot send a message when there is no connection!")
-            listenerManager.notifyError(exception)
-            throw exception
+    fun sendBlocking(message: Any): Boolean {
+        return runBlocking {
+            send(message)
         }
     }
 
     /**
-     * @throws ClientException when a ping cannot be sent
+     * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
+     *
+     * @param function called when the ping returns (ie: update time/latency counters/metrics/etc)
      */
-//    suspend fun ping(): Ping {
-//        val c = connection
-//        if (c != null) {
-//            return c.ping()
-//        } else {
-//            throw ClientException("Cannot ping a connection when there is no connection!")
-//        }
-//    }
+    suspend fun ping(function: suspend Ping.() -> Unit) {
+        val c = connection0
+
+        if (c != null) {
+            pingManager.ping(c, function)
+        } else {
+            val exception = ClientException("Cannot send a ping when there is no connection!")
+            listenerManager.notifyError(exception)
+        }
+    }
+
+    /**
+     * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
+     *
+     * @param function called when the ping returns (ie: update time/latency counters/metrics/etc)
+     */
+    fun pingBlocking(function: suspend Ping.() -> Unit) {
+        runBlocking {
+            ping(function)
+        }
+    }
 
     /**
      * Removes the specified host address from the list of registered server keys.

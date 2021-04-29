@@ -25,6 +25,7 @@ import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.MessageNotRegisteredException
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ipFilter.IpFilterRule
+import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import dorkbox.network.ping.PingMessage
 import dorkbox.network.rmi.RmiManagerConnections
@@ -215,9 +216,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     /**
      * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
      *
-     * If there are any IP+subnet added to this list - then ONLY those are permitted (all else are denied)
+     * By default, if there are no filter rules, then all connections are allowed to connect
+     * If there are filter rules - then ONLY connections for the a filter that returns true are allowed to connect (all else are denied)
      *
-     * If there is nothing added to this list - then ALL are permitted
+     * This function will be called for **only** network clients (IPC client are excluded)
      */
     fun filter(ipFilterRule: IpFilterRule) {
         actionDispatch.launch {
@@ -229,15 +231,18 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if a connection
      * should be allowed
      *
+     * By default, if there are no filter rules, then all connections are allowed to connect
+     * If there are filter rules - then ONLY connections for the a filter that returns true are allowed to connect (all else are denied)
+     *
      * It is the responsibility of the custom filter to write the error, if there is one
      *
      * If the function returns TRUE, then the connection will continue to connect.
      * If the function returns FALSE, then the other end of the connection will
      *   receive a connection error
      *
-     * For a server, this function will be called for ALL clients.
+     * This function will be called for **only** network clients (IPC client are excluded)
      */
-    fun filter(function: suspend (CONNECTION) -> Boolean) {
+    fun filter(function: (CONNECTION) -> Boolean) {
         actionDispatch.launch {
             listenerManager.filter(function)
         }
@@ -245,8 +250,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     /**
      * Adds a function that will be called when a client/server "connects" with each other
-     *
-     * For a server, this function will be called for ALL clients.
      */
     fun onConnect(function: suspend (CONNECTION) -> Unit) {
         actionDispatch.launch {
@@ -295,6 +298,17 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     fun <Message : Any> onMessage(function: suspend (CONNECTION, Message) -> Unit) {
         actionDispatch.launch {
             listenerManager.onMessage(function)
+        }
+    }
+
+    /**
+     * Adds a function that will be called when a ping message is received
+     *
+     * @param function called when the ping returns (ie: update time/latency counters/metrics/etc)
+     */
+    fun onPing(function: suspend CONNECTION.(Ping) -> Unit) {
+        actionDispatch.launch {
+            listenerManager.onPing(function)
         }
     }
 
