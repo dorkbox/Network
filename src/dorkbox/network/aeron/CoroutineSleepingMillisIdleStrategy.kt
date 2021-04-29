@@ -16,6 +16,7 @@
 package dorkbox.network.aeron
 
 import kotlinx.coroutines.delay
+import org.agrona.concurrent.SleepingMillisIdleStrategy
 
 /**
  * When idle this strategy is to sleep for a specified period time in milliseconds.
@@ -88,6 +89,13 @@ class CoroutineSleepingMillisIdleStrategy : CoroutineIdleStrategy {
      */
     override fun clone(): CoroutineSleepingMillisIdleStrategy {
         return CoroutineSleepingMillisIdleStrategy(sleepPeriodMs = sleepPeriodMs)
+    }
+
+    /**
+     * Creates a clone of this IdleStrategy
+     */
+    override fun cloneToNormal(): SleepingMillisIdleStrategy {
+        return SleepingMillisIdleStrategy(sleepPeriodMs)
     }
 
 

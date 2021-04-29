@@ -15,6 +15,8 @@
  */
 package dorkbox.network.aeron
 
+import org.agrona.concurrent.IdleStrategy
+
 /**
  * Idle strategy for use by threads when they do not have work to do.
  *
@@ -107,4 +109,9 @@ interface CoroutineIdleStrategy {
      * Creates a clone of this IdleStrategy
      */
     fun clone(): CoroutineIdleStrategy
+
+    /**
+     * Creates a clone of this IdleStrategy
+     */
+    fun cloneToNormal(): IdleStrategy
 }

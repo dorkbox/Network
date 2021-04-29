@@ -17,6 +17,7 @@ package dorkbox.network.aeron
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
+import org.agrona.concurrent.BackoffIdleStrategy
 import org.agrona.hints.ThreadHints
 
 abstract class BackoffIdleStrategyPrePad {
@@ -214,8 +215,7 @@ class CoroutineBackoffIdleStrategy : BackoffIdleStrategyData, CoroutineIdleStrat
      * @param minParkPeriodMs to use when initiating parking
      * @param maxParkPeriodMs to use for end duration when parking
      */
-    constructor(
-            maxSpins: Long, maxYields: Long, minParkPeriodMs: Long, maxParkPeriodMs: Long)
+    constructor(maxSpins: Long, maxYields: Long, minParkPeriodMs: Long, maxParkPeriodMs: Long)
             : super(maxSpins, maxYields, minParkPeriodMs, maxParkPeriodMs) {
     }
 
@@ -331,6 +331,13 @@ class CoroutineBackoffIdleStrategy : BackoffIdleStrategyData, CoroutineIdleStrat
      */
     override fun clone(): CoroutineBackoffIdleStrategy {
         return CoroutineBackoffIdleStrategy(maxSpins = maxSpins, maxYields = maxYields, minParkPeriodMs = minParkPeriodMs, maxParkPeriodMs = maxParkPeriodMs)
+    }
+
+    /**
+     * Creates a clone of this IdleStrategy
+     */
+    override fun cloneToNormal(): BackoffIdleStrategy {
+        return BackoffIdleStrategy(maxSpins, maxYields, minParkPeriodMs, maxParkPeriodMs)
     }
 
     override fun toString(): String {

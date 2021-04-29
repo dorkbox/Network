@@ -621,10 +621,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * Removes the specified host address from the list of registered server keys.
      */
     fun removeRegisteredServerKey(address: InetAddress) {
-        val savedPublicKey = settingsStore.getRegisteredServerKey(address)
+        val savedPublicKey = storage.getRegisteredServerKey(address)
         if (savedPublicKey != null) {
             logger.debug { "Deleting remote IP address key $address" }
-            settingsStore.removeRegisteredServerKey(address)
+            storage.removeRegisteredServerKey(address)
         }
     }
 
