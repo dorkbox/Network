@@ -22,7 +22,7 @@ import dorkbox.network.connection.Connection
 import org.agrona.DirectBuffer
 
 /**
- * Nothing in this class is thread safe
+ * READ and WRITE are exclusive to each other and can be performed in different threads.
  */
 class KryoExtra() : Kryo() {
     // for kryo serialization
