@@ -31,10 +31,6 @@ class RmiSpamAsyncTest : BaseTest() {
 
     private val RMI_ID = 12251
 
-    init {
-        // the logger cannot keep-up if it's on trace
-        setLogLevel(Level.DEBUG)
-    }
 
     @Test
     fun rmiNetworkAsync() {
@@ -62,6 +58,9 @@ class RmiSpamAsyncTest : BaseTest() {
             val configuration = serverConfig()
             config(configuration)
 
+            // the logger cannot keep-up if it's on trace
+            setLogLevel(Level.DEBUG)
+
             configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
 
             server = Server(configuration)
@@ -76,6 +75,9 @@ class RmiSpamAsyncTest : BaseTest() {
         run {
             val configuration = clientConfig()
             config(configuration)
+
+            // the logger cannot keep-up if it's on trace
+            setLogLevel(Level.DEBUG)
 
             client = Client<Connection>(configuration)
             addEndPoint(client)
