@@ -59,7 +59,7 @@ GradleUtils.defaults()
 GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
     // see: https://kotlinlang.org/docs/reference/using-gradle.html
     // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
-//    freeCompilerArgs = listOf("-Xinline-classes")
+    freeCompilerArgs = listOf("-Xinline-classes")
 }
 
 // ratelimiter, "other" package
@@ -147,7 +147,7 @@ dependencies {
     implementation("com.dorkbox:Utilities:1.10")
     implementation("com.dorkbox:Updates:1.1")
     implementation("com.dorkbox:Serializers:1.0")
-    implementation("com.dorkbox:NetworkUtils:2.6")
+    implementation("com.dorkbox:NetworkUtils:2.7")
     implementation("com.dorkbox:ObjectPool:3.3")
 
 
