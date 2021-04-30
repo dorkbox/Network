@@ -79,8 +79,8 @@ abstract class BaseTest {
 
             val configuration = Configuration()
             configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
-            configuration.subscriptionPort = 2000
-            configuration.publicationPort = 2001
+            configuration.subscriptionPort = 2200
+            configuration.publicationPort = 2201
 
             configuration.enableIpc = false
 
@@ -94,8 +94,8 @@ abstract class BaseTest {
             val configuration = ServerConfiguration()
             configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
 
-            configuration.subscriptionPort = 2000
-            configuration.publicationPort = 2001
+            configuration.subscriptionPort = 2200
+            configuration.publicationPort = 2201
 
             configuration.enableIpc = false
             configuration.maxClientCount = 5
