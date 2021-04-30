@@ -738,7 +738,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
     /**
-     * Tells us to save an an already created object, GLOBALLY using the specified ID, so a remote connection can get it via [Connection.getObject]
+     * Tells us to save an already created object, GLOBALLY using the specified ID, so a remote connection can get it via [Connection.getObject]
      *
      * FOR REMOTE CONNECTIONS:
      * Methods that return a value will throw [TimeoutException] if the response is not received with the
@@ -759,6 +759,53 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         val success = rmiGlobalSupport.saveImplObject(`object`, objectId)
         if (!success) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.notifyError(exception)
+        }
+        return success
+    }
+
+    /**
+     * Tells us to delete a previously saved object, GLOBALLY using the specified object.
+     *
+     * After this call, this object wil no longer be available to remote connections and the ID will be recycled (don't use it again)
+     *
+     * @return true if the object was successfully deleted. If false, an error log will be emitted
+     *
+     * @see RemoteObject
+     */
+    @Suppress("DuplicatedCode")
+    fun deleteGlobalObject(`object`: Any): Boolean {
+        val successRmiId = rmiGlobalSupport.getId(`object`)
+        val success = successRmiId != RemoteObjectStorage.INVALID_RMI
+
+        if (success) {
+            rmiGlobalSupport.removeImplObject<Any?>(successRmiId)
+        } else {
+            val exception = Exception("RMI implementation '${`object`::class.java}' could not be deleted! It does not exist")
+            ListenerManager.cleanStackTrace(exception)
+            listenerManager.notifyError(exception)
+        }
+
+        return success
+    }
+
+    /**
+     * Tells us to delete a previously saved object, GLOBALLY using the specified ID.
+     *
+     * After this call, this object wil no longer be available to remote connections and the ID will be recycled (don't use it again)
+     *
+     * @return true if the object was successfully deleted. If false, an error log will be emitted
+     *
+     * @see RemoteObject
+     */
+    @Suppress("DuplicatedCode")
+    fun deleteGlobalObject(objectId: Int): Boolean {
+        val previousObject = rmiGlobalSupport.removeImplObject<Any?>(objectId)
+
+        val success = previousObject != null
+        if (!success) {
+            val exception = Exception("RMI implementation UD '$objectId' could not be deleted! It does not exist")
             ListenerManager.cleanStackTrace(exception)
             listenerManager.notifyError(exception)
         }
