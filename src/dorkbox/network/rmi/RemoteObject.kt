@@ -81,9 +81,4 @@ interface RemoteObject {
      *      instead of invoking the remote `equals()` method on the object.
      */
     fun enableEquals(enabled: Boolean)
-
-    /**
-     * Causes this RemoteObject to stop listening to the connection for method invocation response messages.
-     */
-    fun close()
 }

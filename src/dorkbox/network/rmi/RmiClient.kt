@@ -22,11 +22,7 @@ import kotlinx.coroutines.runBlocking
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.util.*
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.EmptyCoroutineContext
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.*
 
 object MyUnconfined : CoroutineDispatcher() {
     override fun isDispatchNeeded(context: CoroutineContext): Boolean = false
@@ -56,7 +52,6 @@ internal class RmiClient(val isGlobal: Boolean,
     companion object {
         private val methods = RmiUtils.getMethods(RemoteObject::class.java)
 
-        private val closeMethod = methods.find { it.name == "close" }
         private val toStringMethod = methods.find { it.name == "toString" }
         private val hashCodeMethod = methods.find { it.name == "hashCode" }
         private val equalsMethod = methods.find { it.name == "equals" }
@@ -75,7 +70,7 @@ internal class RmiClient(val isGlobal: Boolean,
         private val EMPTY_ARRAY: Array<Any> = Collections.EMPTY_LIST.toTypedArray() as Array<Any>
     }
 
-    private var timeoutMillis: Long = 3000
+    private var timeoutMillis: Long = 3_000L
     private var isAsync = false
 
     private var enableToString = false
@@ -152,11 +147,6 @@ internal class RmiClient(val isGlobal: Boolean,
         if (method.declaringClass == RemoteObject::class.java) {
             // manage all of the RemoteObject proxy methods
             when (method) {
-                closeMethod -> {
-                    connection.rmiConnectionSupport.removeProxyObject(rmiObjectId)
-                    return null
-                }
-
                 setResponseTimeoutMethod -> {
                     timeoutMillis = (args!![0] as Int).toLong()
                     require(timeoutMillis >= 0) { "ResponseTimeout must be >= 0"}
@@ -209,7 +199,6 @@ internal class RmiClient(val isGlobal: Boolean,
         }
 
         // setup the RMI request
-
         val invokeMethod = MethodRequest()
 
         // if this is a kotlin suspend function, the continuation arg will NOT be here (it's replaced at runtime)!

@@ -70,6 +70,12 @@ internal class RmiManagerConnections<CONNECTION: Connection>(logger: KLogger,
         return proxyObject as Iface
     }
 
+    /**
+     * on the "client" to remove a connection-specific remote object (that exists on the server)
+     */
+    fun <Iface> deleteRemoteObject(connection: Connection, rmiId: Int) {
+        removeProxyObject(rmiId)
+    }
 
     /**
      * on the "client" to create a connection-specific remote object (that exists on the server)
