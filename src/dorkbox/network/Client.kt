@@ -47,7 +47,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         /**
          * Gets the version number.
          */
-        const val version = "5.1"
+        const val version = "5.2"
 
         /**
          * Checks to see if a client (using the specified configuration) is running.

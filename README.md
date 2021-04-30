@@ -30,7 +30,7 @@ These are the main features:
 
 - Note: There is a maximum packet size for UDP, 508 bytes *to guarantee it's unfragmented*
 
-- This is for cross-platform use, specifically - linux 32/64, mac 64, and windows 32/64. Java 11+
+- This is for cross-platform use, specifically - linux 32/64, mac 64, and windows 32/64. Java 1.8+
     
 ``` java
 public static
@@ -87,25 +87,25 @@ client.send()
 
 Maven Info
 ---------
-````
+```
 <dependencies>
     ...
     <dependency>
       <groupId>com.dorkbox</groupId>
       <artifactId>Network</artifactId>
-      <version>5.0</version>
+      <version>5.2</version>
     </dependency>
 </dependencies>
-````
+```
 
 Gradle Info
 ---------
-````
+```
 dependencies {
     ...
-    implementation("com.dorkbox:Network:5.0")
+    implementation("com.dorkbox:Network:5.2")
 }
-````
+```
 
 License
 ---------
