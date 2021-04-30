@@ -464,10 +464,10 @@ open class Serialization(private val references: Boolean = true, private val fac
         // now create the registration details, used to validate that the client/server have the EXACT same class registration setup
         val registrationDetails = arrayListOf<Array<Any>>()
 
-        if (logger.isDebugEnabled) {
+        if (logger.isTraceEnabled) {
             // log the in-order output first
             classesToRegister.forEach { classRegistration ->
-                logger.debug(classRegistration.info)
+                logger.trace(classRegistration.info)
             }
         }
 
