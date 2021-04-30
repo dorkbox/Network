@@ -630,4 +630,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         rmiConnectionSupport.createRemoteObject(this, kryoId, null, callback)
     }
+
+    /**
+     * Removes
+     */
+    fun removeObject(rmiObjectId: Int) {
+        TODO("Not yet implemented")
+    }
 }
