@@ -18,7 +18,6 @@ package dorkbox.network.rmi
 import dorkbox.network.rmi.messages.MethodResponse
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.delay
@@ -150,10 +149,7 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
         // 'timeout > 0' -> WAIT w/ TIMEOUT
         // 'timeout == 0' -> WAIT FOREVER
         if (timeoutMillis > 0) {
-            @Suppress("EXPERIMENTAL_API_USAGE")
-            val responseTimeoutJob = actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
-                // NOTE: UNDISPATCHED means that this coroutine will start when `rmiWaiter.doWait()` is called (the first suspension point)
-                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
+            val responseTimeoutJob = actionDispatch.launch {
                 delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
                 // check if we have a result or not
