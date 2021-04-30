@@ -87,7 +87,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     private val handshakeKryo: KryoExtra
 
     private val sendIdleStrategy: CoroutineIdleStrategy
-    private val sendIdleStrategyHandshake: IdleStrategy
+    private val sendIdleStrategyHandShake: IdleStrategy
+
+    val pollIdleStrategy: CoroutineIdleStrategy
+    val pollIdleStrategyHandShake: IdleStrategy
 
     /**
      * Crypto and signature management
@@ -126,7 +129,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         // serialization stuff
         serialization = config.serialization
         sendIdleStrategy = config.sendIdleStrategy
-        sendIdleStrategyHandshake = sendIdleStrategy.cloneToNormal()
+        pollIdleStrategy = config.pollIdleStrategy
+
+        sendIdleStrategyHandShake = sendIdleStrategy.cloneToNormal()
+        pollIdleStrategyHandShake = pollIdleStrategy.cloneToNormal()
 
         handshakeKryo = serialization.initHandshakeKryo()
 
@@ -347,7 +353,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                  */
                 if (result >= Publication.ADMIN_ACTION) {
                     // we should retry.
-                    sendIdleStrategyHandshake.idle()
+                    sendIdleStrategyHandShake.idle()
                     continue
                 }
 
@@ -362,7 +368,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
             listenerManager.notifyError(exception)
         } finally {
-            sendIdleStrategyHandshake.reset()
+            sendIdleStrategyHandShake.reset()
         }
     }
 
@@ -431,7 +437,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         when (message) {
             is PingMessage -> {
-                // the ping listener (internal use only!)
+                // the ping listener
                 actionDispatch.launch {
                     pingManager.manage(this@EndPoint, connection, message, logger)
                 }
@@ -636,21 +642,21 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     final override fun close() {
         if (shutdown.compareAndSet(expect = false, update = true)) {
             logger.info { "Shutting down..." }
+            aeronDriver.close()
 
             runBlocking {
-                aeronDriver.close()
-
                 connections.forEach {
                     it.close()
                 }
 
-                // the storage is closed via this as well.
-                storage.close()
-
                 // Connections are closed first, because we want to make sure that no RMI messages can be received
                 // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
+                // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via and RMI method)
                 rmiGlobalSupport.close()
             }
+
+            // the storage is closed via this as well.
+            storage.close()
 
             close0()
 

@@ -17,8 +17,8 @@ package dorkbox.network.connection
 
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverClientConnection
+import dorkbox.network.aeron.UdpMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverPairedConnection
-import dorkbox.network.aeron.UdpMediaDriverServerConnection
 import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.handshake.RandomIdAllocator
 import dorkbox.network.ping.Ping
@@ -33,9 +33,7 @@ import io.aeron.Subscription
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
 import java.io.IOException
@@ -84,7 +82,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * @return true if this connection is a network connection
      */
-    val isNetwork = connectionParameters.mediaDriverConnection is UdpMediaDriverServerConnection
+    val isNetwork = connectionParameters.mediaDriverConnection is UdpMediaDriverConnection
 
     /**
      * the endpoint associated with this connection

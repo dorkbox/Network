@@ -25,14 +25,15 @@ import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.handshake.ClientHandshake
+import dorkbox.network.ping.Ping
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.rmi.RemoteObjectStorage
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.TimeoutException
 import dorkbox.util.Sys
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -78,9 +79,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
     // lock-stop ordering for how disconnect and connect work with each-other
-    private val lockStepForReconnect = atomic<SuspendWaiter?>(null)
     // GUARANTEE that the callbacks for 'onDisconnect' happens-before the 'onConnect'.
-    private val lockStepForDispatch = atomic<SuspendWaiter?>(null)
+    private val lockStepForConnect = atomic<SuspendWaiter?>(null)
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ClientException(message, cause)
@@ -104,39 +104,54 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *  - an InetAddress address
      *
      * ### For the IPC (Inter-Process-Communication) it must be:
-     * - EMPTY.
      *  - `connect()`
      *  - `connect("")`
+     *  - `connectIpc()`
      *
-     * ### Case does not matter, and "localhost" is the default. IPC address must be in HEX notation (starting with '0x')
+     * ### Case does not matter, and "localhost" is the default.
      *
-     * @param remoteAddress The network or if localhost, IPC address for the client to connect to
+     * @param remoteAddress The network host or ip address
      * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely
-     * @param reliable true if we want to create a reliable connection. IPC connections are always reliable
+     * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
      *
      * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
      */
     @Suppress("BlockingMethodInNonBlockingContext")
-    suspend fun connect(remoteAddress: String,
-                        connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
+    fun connect(remoteAddress: String = "",
+                connectionTimeoutMS: Long = 30_000L,
+                reliable: Boolean = true) {
         when {
             // this is default IPC settings
-            remoteAddress.isEmpty() -> connect(connectionTimeoutMS = connectionTimeoutMS)
+            remoteAddress.isEmpty() -> {
+                connectIpc(connectionTimeoutMS = connectionTimeoutMS)
+            }
 
-            IPv4.isPreferred -> connect(remoteAddress = Inet4.toAddress(remoteAddress),
-                                        connectionTimeoutMS = connectionTimeoutMS,
-                                        reliable = reliable)
+            IPv4.isPreferred -> {
+                connect(
+                    remoteAddress = Inet4.toAddress(remoteAddress),
+                    connectionTimeoutMS = connectionTimeoutMS,
+                    reliable = reliable
+                )
+            }
 
-            IPv6.isPreferred -> connect(remoteAddress = Inet6.toAddress(remoteAddress),
-                                        connectionTimeoutMS = connectionTimeoutMS,
-                                        reliable = reliable)
+            IPv6.isPreferred -> {
+                connect(
+                    remoteAddress = Inet6.toAddress(remoteAddress),
+                    connectionTimeoutMS = connectionTimeoutMS,
+                    reliable = reliable
+                )
+            }
 
             // if there is no preference, then try to connect via IPv4
-            else -> connect(remoteAddress = Inet4.toAddress(remoteAddress),
-                            connectionTimeoutMS = connectionTimeoutMS,
-                            reliable = reliable)
+            else -> {
+                connect(
+                    remoteAddress = Inet4.toAddress(remoteAddress),
+                    connectionTimeoutMS = connectionTimeoutMS,
+                    reliable = reliable
+                )
+            }
         }
     }
 
@@ -151,22 +166,24 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *  - an InetAddress address
      *
      * ### For the IPC (Inter-Process-Communication) it must be:
-     * - EMPTY.
      *  - `connect()`
      *  - `connect("")`
+     *  - `connectIpc()`
      *
-     * ### Case does not matter, and "localhost" is the default. IPC address must be in HEX notation (starting with '0x')
+     * ### Case does not matter, and "localhost" is the default.
      *
      * @param remoteAddress The network or if localhost, IPC address for the client to connect to
      * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely
-     * @param reliable true if we want to create a reliable connection. IPC connections are always reliable
+     * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
      *
      * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
      */
-    suspend fun connect(remoteAddress: InetAddress,
-                        connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
+    fun connect(remoteAddress: InetAddress,
+                connectionTimeoutMS: Long = 30_000L,
+                reliable: Boolean = true) {
+
         // Default IPC ports are flipped because they are in the perspective of the SERVER
         connect(remoteAddress = remoteAddress,
                 ipcPublicationId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
@@ -187,9 +204,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @throws ClientRejectedException if the client connection is rejected
      */
     @Suppress("DuplicatedCode")
-    suspend fun connect(ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
-                        ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
-                        connectionTimeoutMS: Long = 30_000L) {
+    fun connectIpc(ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
+                   ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
+                   connectionTimeoutMS: Long = 30_000L) {
         // Default IPC ports are flipped because they are in the perspective of the SERVER
 
         require(ipcPublicationId != ipcSubscriptionId) { "IPC publication and subscription ports cannot be the same! The must match the server's configuration." }
@@ -208,41 +225,40 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * ### For a network address, it can be:
      *  - a network name ("localhost", "loopback", "lo", "bob.example.org")
      *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
+     *  - an InetAddress address
      *
      * ### For the IPC (Inter-Process-Communication) it must be:
-     * - EMPTY. ie: just call `connect()`
-     * - Specified EMPTY. ie: just call `connect()`
+     *  - `connect()`
+     *  - `connect("")`
+     *  - `connectIpc()`
      *
-     * ### Case does not matter, and "localhost" is the default. IPC address must be in HEX notation (starting with '0x')
+     * ### Case does not matter, and "localhost" is the default.
+     *
+     * ### Case does not matter, and "localhost" is the default.
      *
      * @param remoteAddress The network or if localhost, IPC address for the client to connect to
      * @param ipcPublicationId The IPC publication address for the client to connect to
      * @param ipcSubscriptionId The IPC subscription address for the client to connect to
      * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely.
-     * @param reliable true if we want to create a reliable connection. IPC connections are always reliable
+     * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
      *
      * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
      */
     @Suppress("DuplicatedCode")
-    private suspend fun connect(remoteAddress: InetAddress? = null,
-                                // Default IPC ports are flipped because they are in the perspective of the SERVER
-                                ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
-                                ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
-                                connectionTimeoutMS: Long = 30_000L, reliable: Boolean = true) {
-
+    private fun connect(remoteAddress: InetAddress? = null,
+                        // Default IPC ports are flipped because they are in the perspective of the SERVER
+                        ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
+                        ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
+                        connectionTimeoutMS: Long = 30_000L,
+                        reliable: Boolean = true) {
         require(connectionTimeoutMS >= 0) { "connectionTimeoutMS '$connectionTimeoutMS' is invalid. It must be >=0" }
-
-        // this will exist ONLY if we are reconnecting via a "disconnect" callback
-        lockStepForReconnect.value?.doWait()
 
         if (isConnected) {
             logger.error("Unable to connect when already connected!")
             return
         }
-
-        lockStepForReconnect.lazySet(null)
 
         // localhost/loopback IP might not always be 127.0.0.1 or ::1
         this.remoteAddress0 = remoteAddress
@@ -268,17 +284,17 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         // only change LOCALHOST -> IPC if the media driver is ALREADY running LOCALLY!
         var isUsingIPC = false
-        val canUseIPC = config.enableIpc && remoteAddress == null
-        val autoChangeToIpc = canUseIPC && config.enableIpcForLoopback &&
-                              remoteAddress != null && remoteAddress.isLoopbackAddress && aeronDriver.isRunning()
-        if (autoChangeToIpc) {
-            logger.info {"IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC" }
-        }
+        val canUseIPC = config.enableIpc
+        val autoChangeToIpc = config.enableIpcForLoopback &&
+                              (remoteAddress == null || remoteAddress.isLoopbackAddress) && aeronDriver.isRunning()
+
 
 
         val handshake = ClientHandshake(crypto, this)
-        val handshakeConnection = if (autoChangeToIpc || canUseIPC) {
-            // MAYBE the server doesn't have IPC enabled? If no, we need to connect via UDP instead
+        val handshakeConnection = if (autoChangeToIpc) {
+            logger.info {"IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC" }
+
+            // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
             val ipcConnection = IpcMediaDriverConnection(streamIdSubscription = ipcSubscriptionId,
                                                          streamId = ipcPublicationId,
                                                          sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID)
@@ -288,8 +304,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 ipcConnection.buildClient(aeronDriver, logger)
                 isUsingIPC = true
             } catch (e: Exception) {
-                // if we specified that we want to use IPC, then we have to throw the timeout exception, because there is no IPC
-                if (canUseIPC) {
+                // if we specified that we MUST use IPC, then we have to throw the exception, because there is no IPC
+                if (remoteAddress == null) {
                     throw e
                 }
             }
@@ -301,7 +317,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
                 // try a UDP connection instead
                 val udpConnection = UdpMediaDriverClientConnection(
-                        address = this.remoteAddress0!!,
+                        address = remoteAddress!!,
                         publicationPort = config.subscriptionPort,
                         subscriptionPort = config.publicationPort,
                         streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
@@ -316,7 +332,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
         else {
             val test = UdpMediaDriverClientConnection(
-                    address = this.remoteAddress0!!,
+                    address = remoteAddress!!,
                     publicationPort = config.subscriptionPort,
                     subscriptionPort = config.publicationPort,
                     streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
@@ -343,7 +359,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         val validateRemoteAddress = if (isUsingIPC) {
             PublicKeyValidationState.VALID
         } else {
-            crypto.validateRemoteAddress(this.remoteAddress0!!, connectionInfo.publicKey)
+            crypto.validateRemoteAddress(remoteAddress!!, connectionInfo.publicKey)
         }
 
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
@@ -438,16 +454,14 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         //////////////
         newConnection.preCloseAction = {
             // this is called whenever connection.close() is called by the framework or via client.close()
-            if (!lockStepForReconnect.compareAndSet(null, SuspendWaiter())) {
-                listenerManager.notifyError(connection, IllegalStateException("lockStep for reconnect was in the wrong state!"))
-            }
 
             // on the client, we want to GUARANTEE that the disconnect happens-before the connect.
-            if (!lockStepForDispatch.compareAndSet(null, SuspendWaiter())) {
-                listenerManager.notifyError(connection, IllegalStateException("lockStep for dispatch was in the wrong state!"))
+            if (!lockStepForConnect.compareAndSet(null, SuspendWaiter())) {
+                listenerManager.notifyError(connection, IllegalStateException("lockStep for onConnect was in the wrong state!"))
             }
         }
         newConnection.postCloseAction = {
+            isConnected = false
             // this is called whenever connection.close() is called by the framework or via client.close()
 
             // make sure to call our client.notifyDisconnect() callbacks
@@ -462,10 +476,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
                 lockStepForDispatch.value?.cancel()
             }
-
-            // in case notifyDisconnect called client.connect().... cancel them waiting
-            isConnected = false
-            lockStepForReconnect.value?.cancel()
         }
 
         connection0 = newConnection
@@ -477,24 +487,17 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         if (canFinishConnecting) {
             isConnected = true
 
+            // this forces the current thread to WAIT until poll system has started
+            val waiter = SuspendWaiter()
+
             // have to make a new thread to listen for incoming data!
             // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
-
-            // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            @Suppress("EXPERIMENTAL_API_USAGE")
-            actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
-                lockStepForDispatch.value?.doWait()
-
-                // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
-                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
-                listenerManager.notifyConnect(newConnection)
-
-                lockStepForDispatch.lazySet(null)
-            }
 
             // these have to be in two SEPARATE actionDispatch.launch commands.... otherwise...
             // if something inside of notifyConnect is blocking or suspends, then polling will never happen!
             actionDispatch.launch {
+                waiter.doNotify()
+
                 val pollIdleStrategy = config.pollIdleStrategy
 
                 while (!isShutdown()) {
@@ -502,8 +505,12 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                         logger.debug {"[${newConnection.id}] connection expired"}
 
-                        // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
-                        newConnection.close()
+                        // eventloop is required, because we want to run this code AFTER the current coroutine has finished. This prevents
+                        // odd race conditions when a client is restarted
+                        actionDispatch.eventLoop {
+                            // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
+                            newConnection.close()
+                        }
                         return@launch
                     }
                     else {
@@ -514,6 +521,16 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                         pollIdleStrategy.idle(pollCount)
                     }
                 }
+            }
+
+            actionDispatch.eventLoop {
+                waiter.doWait()
+
+                lockStepForConnect.value?.doWait()
+
+                listenerManager.notifyConnect(newConnection)
+
+                lockStepForConnect.lazySet(null)
             }
         } else {
             close()

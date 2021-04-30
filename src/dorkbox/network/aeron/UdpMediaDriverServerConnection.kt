@@ -36,11 +36,11 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
                                                    sessionId: Int,
                                                    connectionTimeoutMS: Long = 0,
                                                    isReliable: Boolean = true) :
-        MediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutMS, isReliable) {
+    UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutMS, isReliable) {
 
     var success: Boolean = false
 
-    protected fun aeronConnectionString(ipAddress: InetAddress): String {
+    private fun aeronConnectionString(ipAddress: InetAddress): String {
         return if (ipAddress is Inet4Address) {
             ipAddress.hostAddress
         } else {
@@ -64,11 +64,11 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
     }
 
     @Suppress("DuplicatedCode")
-    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
+    override fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         throw ServerException("Client info not implemented in Server MDC")
     }
 
-    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
+    override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         val connectionString = aeronConnectionString(listenAddress)
 
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.

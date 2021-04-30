@@ -10,10 +10,9 @@ import io.aeron.Subscription
 import io.aeron.driver.MediaDriver
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
+import org.agrona.concurrent.AgentTerminationException
 import org.agrona.concurrent.BackoffIdleStrategy
 import java.io.File
 import java.lang.Thread.sleep
@@ -153,19 +152,8 @@ class AeronDriver(val config: Configuration,
 
             // we DO NOT want to abort the JVM if there are errors.
             context.errorHandler { error ->
-                if (error is DriverTimeoutException) {
-                    // we suppress this because it is already handled
-                    return@errorHandler
-                }
-
-                if (error.cause is BindException) {
-                    // we suppress this because it is already handled
-                    return@errorHandler
-                }
-
-                logger.error("Error in Aeron Media Driver", error)
+                AeronDriver.manageError(logger, error)
             }
-
 
             val aeronDir = File(context.aeronDirectoryName()).absoluteFile
             context.aeronDirectoryName(aeronDir.path)
@@ -238,9 +226,9 @@ class AeronDriver(val config: Configuration,
          *
          * @return true if the media driver is active and running
          */
-        fun isRunning(context: MediaDriver.Context, timeout: Long = context.driverTimeoutMs()): Boolean {
+        fun isRunning(context: MediaDriver.Context): Boolean {
             // if the media driver is running, it will be a quick connection. Usually 100ms or so
-            return context.isDriverActive(timeout) { }
+            return context.isDriverActive(context.driverTimeoutMs()) { }
         }
 
         /**
@@ -254,6 +242,26 @@ class AeronDriver(val config: Configuration,
             }
 
             require(config.context != null) { "Configuration context cannot be properly created. Unable to continue!" }
+        }
+
+        fun manageError(logger: KLogger, error: Throwable) {
+            if (error is DriverTimeoutException) {
+                // we suppress this because it is already handled
+                return
+            }
+
+            if (error is AgentTerminationException) {
+                // we suppress this because it is already handled
+                return
+            }
+
+            if (error.cause is BindException) {
+                // we suppress this because it is already handled
+                return
+            }
+
+            ListenerManager.cleanStackTrace(error)
+            logger.error("Error in Aeron", error)
         }
     }
 
@@ -271,6 +279,14 @@ class AeronDriver(val config: Configuration,
 
     // did WE start the media driver, or did SOMEONE ELSE start it?
     private val mediaDriverWasAlreadyRunning: Boolean
+
+    /**
+     * @return the configured driver timeout
+     */
+    val driverTimeout: Long by lazy {
+        mediaDriverContext.driverTimeoutMs()
+    }
+
 
     init {
         mediaDriverContext
@@ -296,13 +312,11 @@ class AeronDriver(val config: Configuration,
         // we DO NOT want to abort the JVM if there are errors.
         // this replaces the default handler with one that doesn't abort the JVM
         aeronDriverContext.errorHandler { error ->
-            ListenerManager.cleanStackTrace(error)
-            logger.error("Error in Aeron", error)
+            AeronDriver.manageError(logger, error)
         }
 
         return aeronDriverContext
     }
-
 
     /**
      * @return true if the media driver was started, false if it was not started
@@ -315,9 +329,18 @@ class AeronDriver(val config: Configuration,
         if (mediaDriver == null) {
             // only start if we didn't already start... There will be several checks.
 
-            if (!isRunning(mediaDriverContext)) {
-                logger.debug("Starting Aeron Media driver in '${mediaDriverContext.aeronDirectory()}'")
+            var running = isRunning(mediaDriverContext)
+            if (running) {
+                // wait for a bit, because we are running, but we ALSO issued a START, and expect it to start.
+                // SOMETIMES aeron is in the middle of shutting down, and this prevents us from trying to connect to
+                // that instance
+                logger.debug("Aeron Media driver already running. Double checking status...")
+                sleep(mediaDriverContext.driverTimeoutMs()/2)
+                running = isRunning(mediaDriverContext)
+            }
 
+            if (!running) {
+                logger.debug("Starting Aeron Media driver.")
 
                 // try to start. If we start/stop too quickly, it's a problem
                 var count = 10
@@ -327,13 +350,11 @@ class AeronDriver(val config: Configuration,
                         return true
                     } catch (e: Exception) {
                         logger.warn(e) { "Unable to start the Aeron Media driver. Retrying $count more times..." }
-                        runBlocking {
-                            delay(mediaDriverContext.driverTimeoutMs())
-                        }
+                        sleep(mediaDriverContext.driverTimeoutMs())
                     }
                 }
             } else {
-                logger.debug("Not starting Aeron Media driver. It was already running in '${mediaDriverContext.aeronDirectory()}'")
+                logger.debug("Not starting Aeron Media driver. It was already running.")
             }
         }
 
@@ -389,7 +410,7 @@ class AeronDriver(val config: Configuration,
     }
 
 
-    suspend fun addPublicationWithRetry(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
+    fun addPublicationWithRetry(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
         val uri = publicationUri.build()
 
         // If we start/stop too quickly, we might have the address already in use! Retry a few times.
@@ -404,13 +425,14 @@ class AeronDriver(val config: Configuration,
                 exception = e
                 logger.warn { "Unable to add a publication to Aeron. Retrying $count more times..." }
 
+                // if exceptions are added here, make sure to ALSO suppress them in the context error handler
                 if (e is DriverTimeoutException) {
-                    delay(mediaDriverContext.driverTimeoutMs())
+                    sleep(mediaDriverContext.driverTimeoutMs())
                 }
 
                 if (e.cause is BindException) {
                     // was starting too fast!
-                    delay(mediaDriverContext.driverTimeoutMs())
+                    sleep(mediaDriverContext.driverTimeoutMs())
                 }
 
                 // reasons we cannot add a pub/sub to aeron
@@ -434,7 +456,7 @@ class AeronDriver(val config: Configuration,
         throw exception!!
     }
 
-    suspend fun addSubscriptionWithRetry(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
+    fun addSubscriptionWithRetry(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
         val uri = subscriptionUri.build()
 
         // If we start/stop too quickly, we might have the address already in use! Retry a few times.
@@ -451,15 +473,16 @@ class AeronDriver(val config: Configuration,
             } catch (e: Exception) {
                 // NOTE: this error will be logged in the `aeronDriverContext` logger
                 exception = e
-                logger.warn { "Unable to add a sublication to Aeron. Retrying $count more times..." }
+                logger.warn { "Unable to add a subscription to Aeron. Retrying $count more times..." }
 
+                // if exceptions are added here, make sure to ALSO suppress them in the context error handler
                 if (e is DriverTimeoutException) {
-                    delay(mediaDriverContext.driverTimeoutMs())
+                    sleep(mediaDriverContext.driverTimeoutMs())
                 }
 
                 if (e.cause is BindException) {
                     // was starting too fast!
-                    delay(mediaDriverContext.driverTimeoutMs())
+                    sleep(mediaDriverContext.driverTimeoutMs())
                 }
 
                 // reasons we cannot add a pub/sub to aeron
@@ -545,6 +568,8 @@ class AeronDriver(val config: Configuration,
                 logger.warn { "Aeron Media driver at '${mediaDriverContext.aeronDirectory()}' is still running. Waiting for it to stop. Trying $count more times." }
                 sleep(mediaDriverContext.driverTimeoutMs())
             }
+            logger.debug { "Closed the media driver at '${mediaDriverContext.aeronDirectory()}'" }
+
         } catch (e: Exception) {
             logger.error("Error closing the media driver at '${mediaDriverContext.aeronDirectory()}'", e)
         }
@@ -552,7 +577,5 @@ class AeronDriver(val config: Configuration,
         // Destroys this thread group and all of its subgroups.
         // This thread group must be empty, indicating that all threads that had been in this thread group have since stopped.
         threadFactory.group.destroy()
-
-        logger.debug { "Closed the media driver at '${mediaDriverContext.aeronDirectory()}'" }
     }
 }

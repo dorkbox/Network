@@ -36,7 +36,6 @@ import dorkbox.network.rmi.TimeoutException
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -156,7 +155,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         return super.getRmiConnectionSupport()
     }
 
-    private suspend fun getIpcPoller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
+    private fun getIpcPoller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
         val poller = if (config.enableIpc) {
             val driver = IpcMediaDriverConnection(streamIdSubscription = config.ipcSubscriptionId,
                                                   streamId = config.ipcPublicationId,
@@ -180,9 +179,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     if (message !is HandshakeMessage) {
                         listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from IPC not allowed! Invalid connection request"))
 
-                        actionDispatch.launch {
-                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                        }
+                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
                         return@FragmentAssembler
                     }
 
@@ -190,7 +187,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                publication,
                                                                sessionId,
                                                                message,
-                        aeronDriver)
+                                                               aeronDriver)
                 }
 
                 override fun poll(): Int { return subscription.poll(handler, 1) }
@@ -210,7 +207,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
     @Suppress("DuplicatedCode")
-    private suspend fun getIpv4Poller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
+    private fun getIpv4Poller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
         val poller = if (canUseIPv4) {
             val driver = UdpMediaDriverServerConnection(
                     listenAddress = listenIPv4Address!!,
@@ -260,9 +257,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     if (message !is HandshakeMessage) {
                         listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"))
 
-                        actionDispatch.launch {
-                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                        }
+                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
                         return@FragmentAssembler
                     }
 
@@ -293,7 +288,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
     @Suppress("DuplicatedCode")
-    private suspend fun getIpv6Poller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
+    private fun getIpv6Poller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
         val poller = if (canUseIPv6) {
             val driver = UdpMediaDriverServerConnection(
                     listenAddress = listenIPv6Address!!,
@@ -343,9 +338,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     if (message !is HandshakeMessage) {
                         listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"))
 
-                        actionDispatch.launch {
-                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                        }
+                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
                         return@FragmentAssembler
                     }
 
@@ -376,7 +369,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
     }
 
     @Suppress("DuplicatedCode")
-    private suspend fun getIpv6WildcardPoller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
+    private fun getIpv6WildcardPoller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
         val driver = UdpMediaDriverServerConnection(
                 listenAddress = listenIPv6Address!!,
                 publicationPort = config.publicationPort,
@@ -426,9 +419,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 if (message !is HandshakeMessage) {
                     listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"))
 
-                    actionDispatch.launch {
-                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                    }
+                    writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
                     return@FragmentAssembler
                 }
 
@@ -468,39 +459,39 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         bindAlreadyCalled = true
 
+        // this forces the current thread to WAIT until poll system has started
         val waiter = SuspendWaiter()
-        actionDispatch.launch {
-            val ipcPoller: AeronPoller = getIpcPoller(aeronDriver, config)
 
-            // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
-            val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address != IPv6.WILDCARD
-            val ipv4Poller: AeronPoller
-            val ipv6Poller: AeronPoller
+        val ipcPoller: AeronPoller = getIpcPoller(aeronDriver, config)
 
-            if (isWildcard) {
-                // IPv6 will bind to IPv4 wildcard as well!!
-                if (canUseIPv4 && canUseIPv6) {
-                    ipv4Poller = object : AeronPoller {
-                        override fun poll(): Int { return 0 }
-                        override fun close() {}
-                        override fun serverInfo(): String { return "IPv4 Disabled" }
-                    }
-                    ipv6Poller = getIpv6WildcardPoller(aeronDriver, config)
-                } else {
-                    // only 1 will be a real poller
-                    ipv4Poller = getIpv4Poller(aeronDriver, config)
-                    ipv6Poller = getIpv6Poller(aeronDriver, config)
+        // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
+        val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address != IPv6.WILDCARD
+        val ipv4Poller: AeronPoller
+        val ipv6Poller: AeronPoller
+
+        if (isWildcard) {
+            // IPv6 will bind to IPv4 wildcard as well!!
+            if (canUseIPv4 && canUseIPv6) {
+                ipv4Poller = object : AeronPoller {
+                    override fun poll(): Int { return 0 }
+                    override fun close() {}
+                    override fun serverInfo(): String { return "IPv4 Disabled" }
                 }
+                ipv6Poller = getIpv6WildcardPoller(aeronDriver, config)
             } else {
+                // only 1 will be a real poller
                 ipv4Poller = getIpv4Poller(aeronDriver, config)
                 ipv6Poller = getIpv6Poller(aeronDriver, config)
             }
+        } else {
+            ipv4Poller = getIpv4Poller(aeronDriver, config)
+            ipv6Poller = getIpv6Poller(aeronDriver, config)
+        }
 
+        actionDispatch.launch {
             waiter.doNotify()
 
-
             val pollIdleStrategy = config.pollIdleStrategy
-
             try {
                 var pollCount: Int
 
@@ -590,9 +581,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     jobs.add(job)
                 }
 
-                // reset all of the handshake info
-                handshake.clear()
-
                 // when we close a client or a server, we want to make sure that ALL notifications are finished.
                 // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
                 jobs.forEach { it.join() }
@@ -603,6 +591,9 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 ipv4Poller.close()
                 ipv6Poller.close()
                 ipcPoller.close()
+
+                // clear all of the handshake info
+                handshake.clear()
 
                 // finish closing -- this lets us make sure that we don't run into race conditions on the thread that calls close()
                 shutdownEventWaiter.doNotify()

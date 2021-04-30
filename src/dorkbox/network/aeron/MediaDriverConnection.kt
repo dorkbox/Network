@@ -32,8 +32,8 @@ abstract class MediaDriverConnection(
 
 
     @Throws(ClientTimedOutException::class)
-    abstract suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
-    abstract suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
+    abstract fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
+    abstract fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
 
     abstract fun clientInfo() : String
     abstract fun serverInfo() : String

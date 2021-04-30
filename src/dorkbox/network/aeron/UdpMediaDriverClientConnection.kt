@@ -21,8 +21,8 @@ import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
-import kotlinx.coroutines.delay
 import mu.KLogger
+import java.lang.Thread.sleep
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
@@ -38,7 +38,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                                               sessionId: Int,
                                               connectionTimeoutMS: Long = 0,
                                               isReliable: Boolean = true) :
-        MediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutMS, isReliable) {
+    UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutMS, isReliable) {
 
     var success: Boolean = false
 
@@ -80,7 +80,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
 
     @Suppress("DuplicatedCode")
     @Throws(ClientException::class)
-    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
+    override fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         val aeronAddressString = aeronConnectionString(address)
 
         // Create a publication at the given address and port, using the given stream ID.
@@ -100,6 +100,8 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
             logger.trace("client sub URI: $ip ${subscriptionUri.build()}")
         }
 
+        var success = false
+
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
@@ -107,7 +109,6 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         val publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
         val subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
 
-        var success = false
 
         // this will wait for the server to acknowledge the connection (all via aeron)
         val timoutInNanos = TimeUnit.MILLISECONDS.toNanos(connectionTimeoutMS)
@@ -118,12 +119,12 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                 break
             }
 
-            delay(timeMillis = 100L)
+            sleep(100L)
         }
 
         if (!success) {
             subscription.close()
-            val ex = ClientTimedOutException("Cannot create subscription: $ip ${subscriptionUri.build()}")
+            val ex = ClientTimedOutException("Cannot create subscription: $ip ${subscriptionUri.build()} in ${timoutInNanos}ms")
             ListenerManager.cleanStackTrace(ex)
             throw ex
         }
@@ -139,19 +140,18 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                 break
             }
 
-            delay(timeMillis = 100L)
+            sleep(100L)
         }
 
         if (!success) {
             subscription.close()
             publication.close()
-            val ex = ClientTimedOutException("Cannot create publication: $ip ${publicationUri.build()}")
-//            ListenerManager.cleanStackTrace(ex)
+            val ex = ClientTimedOutException("Cannot create publication: $ip ${publicationUri.build()} in ${timoutInNanos}ms")
+            ListenerManager.cleanStackTrace(ex)
             throw ex
         }
 
         this.success = true
-
         this.publication = publication
         this.subscription = subscription
     }
@@ -164,7 +164,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         }
     }
 
-    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
+    override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         throw ClientException("Server info not implemented in Client MDC")
     }
     override fun serverInfo(): String {

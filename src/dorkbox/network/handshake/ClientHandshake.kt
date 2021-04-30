@@ -143,7 +143,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
     }
 
     // called from the connect thread
-    suspend fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {
+    fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {
         failed = null
         oneTimeKey = endPoint.crypto.secureRandom.nextInt()
         val publicKey = endPoint.storage.getPublicKey()!!
@@ -151,8 +151,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
         // Send the one-time pad to the server.
         val publication = handshakeConnection.publication
         val subscription = handshakeConnection.subscription
-        val pollIdleStrategy = endPoint.config.pollIdleStrategy
-
+        val pollIdleStrategy = endPoint.pollIdleStrategyHandShake
 
 
         endPoint.writeHandshakeMessage(publication, HandshakeMessage.helloFromClient(oneTimeKey, publicKey))
@@ -191,7 +190,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
     }
 
     // called from the connect thread
-    suspend fun handshakeDone(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long): Boolean {
+    fun handshakeDone(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long): Boolean {
         val registrationMessage = HandshakeMessage.doneFromClient(oneTimeKey)
 
         // Send the done message to the server.
@@ -203,7 +202,7 @@ internal class ClientHandshake<CONNECTION: Connection>(private val crypto: Crypt
         failed = null
         var pollCount: Int
         val subscription = handshakeConnection.subscription
-        val pollIdleStrategy = endPoint.config.pollIdleStrategy
+        val pollIdleStrategy = endPoint.pollIdleStrategyHandShake
 
         var startTime = System.currentTimeMillis()
         while (connectionTimeoutMS == 0L || System.currentTimeMillis() - startTime < connectionTimeoutMS) {
