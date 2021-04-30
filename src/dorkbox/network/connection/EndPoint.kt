@@ -516,6 +516,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                     continue
                 }
 
+
+                if (result == Publication.CLOSED && connection.isClosedViaAeron()) {
+                    // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
+                    // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
+                    // send the message.
+                    // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
+                    return
+                }
+
                 // more critical error sending the message. we shouldn't retry or anything.
                 val errorMessage = "[${publication.sessionId()}] Error sending message. $message (${errorCodeName(result)})"
 
