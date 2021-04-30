@@ -146,7 +146,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
         // Only starts the media driver if we are NOT already running!
         try {
-            AeronDriver.validateConfig(config, logger)
             aeronDriver = AeronDriver(config, type, logger)
         } catch (e: Exception) {
             listenerManager.notifyError(e)

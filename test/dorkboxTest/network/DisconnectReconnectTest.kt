@@ -6,7 +6,6 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.io.IOException
@@ -38,6 +37,62 @@ class DisconnectReconnectTest : BaseTest() {
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
 
+
+            client.onDisconnect { connection ->
+                connection.logger.error("Disconnected!")
+
+                val count = reconnectCount.getAndIncrement()
+                if (count == 3) {
+                    connection.logger.error("Shutting down")
+                    stopEndPoints()
+                }
+                else {
+                    connection.logger.error("Reconnecting: $count")
+                    try {
+                        client.connect(LOOPBACK)
+                    } catch (e: IOException) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+
+            client.connect(LOOPBACK)
+        }
+
+
+        waitForThreads(0)
+
+        System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
+        Assert.assertEquals(4, reconnectCount.value)
+    }
+
+    @Test
+    fun reconnectClientViaClientClose() {
+        run {
+            val configuration = serverConfig() {
+                aeronDirectoryForceUnique = true
+            }
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+            server.bind()
+        }
+
+        run {
+            val config = clientConfig() {
+                aeronDirectoryForceUnique = true
+            }
+
+            val client: Client<Connection> = Client(config)
+            addEndPoint(client)
+
+            client.onConnect { connection ->
+                connection.logger.error("Disconnecting after 2 seconds.")
+                delay(2000)
+
+                connection.logger.error("Disconnecting....")
+                client.close()
+            }
 
             client.onDisconnect { connection ->
                 connection.logger.error("Disconnected!")
@@ -143,13 +198,12 @@ class DisconnectReconnectTest : BaseTest() {
 
     @Test
     fun manualMediaDriverAndReconnectClient() {
-        val serverConfiguration = serverConfig()
-        val aeronDriver = runBlocking {
-            AeronDriver.validateConfig(serverConfiguration)
-            AeronDriver(serverConfiguration)
-        }
+        // NOTE: once a config is assigned to a driver, the config cannot be changed
+        val aeronDriver = AeronDriver(serverConfig())
+        aeronDriver.start()
 
         run {
+            val serverConfiguration = serverConfig()
             val server: Server<Connection> = Server(serverConfiguration)
             addEndPoint(server)
             server.bind()

@@ -49,6 +49,15 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
          */
         const val version = "5.1"
 
+        /**
+         * Checks to see if a client (using the specified configuration) is running.
+         *
+         * This method should only be used to check if a client is running for a DIFFERENT configuration than the currently running client
+         */
+        fun isRunning(configuration: Configuration): Boolean {
+            return AeronDriver(configuration).isRunning()
+        }
+
         init {
             // Add this project to the updates system, which verifies this class + UUID + version information
             dorkbox.updates.Updates.add(Client::class.java, "5be42ae40cac49fb90dea86bc513141b", version)

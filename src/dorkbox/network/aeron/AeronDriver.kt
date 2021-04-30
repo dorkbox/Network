@@ -50,43 +50,63 @@ class AeronDriver(val config: Configuration,
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
         private const val AERON_PUBLICATION_LINGER_TIMEOUT = 5_000L  // in MS
 
+        fun manageError(logger: KLogger, error: Throwable) {
+            if (error is DriverTimeoutException) {
+                // we suppress this because it is already handled
+                return
+            }
 
-        private fun create(config: Configuration, logger: KLogger): MediaDriver.Context {
+            if (error is AgentTerminationException) {
+                // we suppress this because it is already handled
+                return
+            }
+
+            if (error.cause is BindException) {
+                // we suppress this because it is already handled
+                return
+            }
+
+            ListenerManager.cleanStackTrace(error)
+            logger.error("Error in Aeron", error)
+        }
+
+        private fun setConfigDefaults(config: Configuration, logger: KLogger) {
+
             /*
-            * Linux
-            * Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and
-            * net.core.wmem_max to allow larger SO_SNDBUF values to be set.
-            *
-            * Windows
-            * Windows tends to use SO_SNDBUF values that are too small. It is recommended to use values more like 1MB or so.
-            *
-            * Mac/Darwin
-            *
-            * Mac tends to use SO_SNDBUF values that are too small. It is recommended to use larger values, like 16KB.
-            */
+             * Linux
+             * Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and
+             * net.core.wmem_max to allow larger SO_SNDBUF values to be set.
+             *
+             * Windows
+             * Windows tends to use SO_SNDBUF values that are too small. It is recommended to use values more like 1MB or so.
+             *
+             * Mac/Darwin
+             *
+             * Mac tends to use SO_SNDBUF values that are too small. It is recommended to use larger values, like 16KB.
+             */
             if (config.receiveBufferSize == 0) {
                 config.receiveBufferSize = io.aeron.driver.Configuration.SOCKET_RCVBUF_LENGTH_DEFAULT
-    //            when {
-    //                OS.isLinux() ->
-    //                OS.isWindows() ->
-    //                OS.isMacOsX() ->
-    //            }
+                //            when {
+                //                OS.isLinux() ->
+                //                OS.isWindows() ->
+                //                OS.isMacOsX() ->
+                //            }
 
-    //            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
-    //            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
+                //            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
+                //            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
             }
 
 
             if (config.sendBufferSize == 0) {
                 config.receiveBufferSize = io.aeron.driver.Configuration.SOCKET_SNDBUF_LENGTH_DEFAULT
-    //            when {
-    //                OS.isLinux() ->
-    //                OS.isWindows() ->
-    //                OS.isMacOsX() ->
-    //            }
+                //            when {
+                //                OS.isLinux() ->
+                //                OS.isWindows() ->
+                //                OS.isMacOsX() ->
+                //            }
 
-    //            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
-    //            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
+                //            val rmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.rmem_max")
+                //            val wmem_max = dorkbox.network.other.NetUtil.sysctlGetInt("net.core.wmem_max")
             }
 
 
@@ -111,11 +131,16 @@ class AeronDriver(val config: Configuration,
             if (config.aeronDirectory == null) {
                 val baseFileLocation = config.suggestAeronLogLocation(logger)
 
-    //            val aeronLogDirectory = File(baseFileLocation, "aeron-" + type.simpleName)
+                //            val aeronLogDirectory = File(baseFileLocation, "aeron-" + type.simpleName)
                 val aeronLogDirectory = File(baseFileLocation, "aeron")
                 config.aeronDirectory = aeronLogDirectory
             }
 
+            // cannot make any more changes to the configuration!
+            config.contextDefined = true
+        }
+
+        private fun create(config: Configuration, threadFactory: NamedThreadFactory, logger: KLogger): MediaDriver.Context {
             // LOW-LATENCY SETTINGS
             // .termBufferSparseFile(false)
             //             .useWindowsHighResTimer(true)
@@ -138,6 +163,13 @@ class AeronDriver(val config: Configuration,
                 .socketSndbufLength(config.sendBufferSize)
                 .socketRcvbufLength(config.receiveBufferSize)
 
+            context
+                .conductorThreadFactory(threadFactory)
+                .receiverThreadFactory(threadFactory)
+                .senderThreadFactory(threadFactory)
+                .sharedNetworkThreadFactory(threadFactory)
+                .sharedThreadFactory(threadFactory)
+
             context.aeronDirectoryName(config.aeronDirectory!!.absolutePath)
 
             if (context.ipcTermBufferLength() != io.aeron.driver.Configuration.ipcTermBufferLength()) {
@@ -152,130 +184,23 @@ class AeronDriver(val config: Configuration,
 
             // we DO NOT want to abort the JVM if there are errors.
             context.errorHandler { error ->
-                AeronDriver.manageError(logger, error)
+                manageError(logger, error)
             }
-
-            val aeronDir = File(context.aeronDirectoryName()).absoluteFile
-            context.aeronDirectoryName(aeronDir.path)
 
             return context
-        }
-
-
-        /**
-         * Creates the Aeron Media Driver context
-         *
-         * @throws IllegalStateException if the configuration has already been used to create a context
-         * @throws IllegalArgumentException if the aeron media driver directory cannot be setup
-         */
-        fun createContext(config: Configuration, logger: KLogger = KotlinLogging.logger("AeronConfig")) {
-            if (config.context != null) {
-                logger.warn { "Unable to recreate a context for a configuration that has already been created" }
-                return
-            }
-
-            var context = create(config, logger)
-
-            // this happens EXACTLY once. Must be BEFORE the "isRunning" check!
-            context.concludeAeronDirectory()
-
-            // will setup the aeron directory or throw IllegalArgumentException if it cannot be configured
-            val aeronDir = context.aeronDirectory()
-
-            var isRunning = isRunning(context)
-
-            // this is incompatible with IPC, and will not be set if IPC is enabled
-            if (config.aeronDirectoryForceUnique && isRunning) {
-                val savedParent = aeronDir.parentFile
-                var retry = 0
-                val retryMax = 100
-
-                while (config.aeronDirectoryForceUnique && isRunning) {
-                    if (retry++ > retryMax) {
-                        throw IllegalArgumentException("Unable to force unique aeron Directory. Tried $retryMax times and all tries were in use.")
-                    }
-
-                    val randomNum = (1..retryMax).shuffled().first()
-                    val newDir = savedParent.resolve("${aeronDir.name}_$randomNum")
-
-                    context = create(config, logger)
-                    context.aeronDirectoryName(newDir.path)
-
-                    // this happens EXACTLY once. Must be BEFORE the "isRunning" check!
-                    context.concludeAeronDirectory()
-
-                    isRunning = isRunning(context)
-                }
-
-                if (!isRunning) {
-                    // NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
-                    //   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
-                    // since we are forcing a unique directory, we should ALSO delete it when we are done!
-                    context.dirDeleteOnShutdown()
-                }
-            }
-
-            logger.info { "Aeron directory: '${context.aeronDirectory()}'" }
-
-            // once we do this, we cannot change any of the config values!
-            config.context = context
-        }
-
-        /**
-         * Checks to see if an endpoint (using the specified configuration) is running.
-         *
-         * @return true if the media driver is active and running
-         */
-        fun isRunning(context: MediaDriver.Context): Boolean {
-            // if the media driver is running, it will be a quick connection. Usually 100ms or so
-            return context.isDriverActive(context.driverTimeoutMs()) { }
-        }
-
-        /**
-         * validates and creates the configuration. This can only happen once!
-         */
-        fun validateConfig(config: Configuration, logger: KLogger = KotlinLogging.logger("AeronConfig")) {
-            config.validate()
-
-            if (config.context == null) {
-                createContext(config, logger)
-            }
-
-            require(config.context != null) { "Configuration context cannot be properly created. Unable to continue!" }
-        }
-
-        fun manageError(logger: KLogger, error: Throwable) {
-            if (error is DriverTimeoutException) {
-                // we suppress this because it is already handled
-                return
-            }
-
-            if (error is AgentTerminationException) {
-                // we suppress this because it is already handled
-                return
-            }
-
-            if (error.cause is BindException) {
-                // we suppress this because it is already handled
-                return
-            }
-
-            ListenerManager.cleanStackTrace(error)
-            logger.error("Error in Aeron", error)
         }
     }
 
     private val closeRequested = atomic(false)
 
-    @Volatile
     private var aeron: Aeron? = null
 
-    @Volatile
     private var mediaDriver: MediaDriver? = null
 
+    private var context: MediaDriver.Context? = null
+
     // the context is validated before the AeronDriver object is created
-    private val threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronDriver"), true)
-    private val mediaDriverContext = config.context!!
+    private var threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronDriver"), true)
 
     // did WE start the media driver, or did SOMEONE ELSE start it?
     private val mediaDriverWasAlreadyRunning: Boolean
@@ -283,39 +208,119 @@ class AeronDriver(val config: Configuration,
     /**
      * @return the configured driver timeout
      */
-    val driverTimeout: Long by lazy {
-        mediaDriverContext.driverTimeoutMs()
-    }
+    val driverTimeout: Long
+        get() {
+            return context!!.driverTimeoutMs()
+        }
+
+    /**
+     * This is only valid **AFTER** [context.concludeAeronDirectory()] has been called.
+     */
+    val driverDirectory: File
+        get() {
+            return context!!.aeronDirectory()
+        }
 
 
     init {
-        mediaDriverContext
-            .conductorThreadFactory(threadFactory)
-            .receiverThreadFactory(threadFactory)
-            .senderThreadFactory(threadFactory)
-            .sharedNetworkThreadFactory(threadFactory)
-            .sharedThreadFactory(threadFactory)
+        // once we do this, we cannot change any of the config values!
+        config.validate()
+        setConfigDefaults(config, logger)
 
-        mediaDriverWasAlreadyRunning = isRunning(mediaDriverContext)
+        context = createContext(config, logger)
+        mediaDriverWasAlreadyRunning = isRunning()
     }
 
-    private fun setupAeron(): Aeron.Context {
-        val aeronDriverContext = Aeron.Context()
-        aeronDriverContext
-            .aeronDirectoryName(mediaDriverContext.aeronDirectory().path)
-            .concludeAeronDirectory()
-
-        aeronDriverContext
-            .threadFactory(threadFactory)
-            .idleStrategy(BackoffIdleStrategy())
-
-        // we DO NOT want to abort the JVM if there are errors.
-        // this replaces the default handler with one that doesn't abort the JVM
-        aeronDriverContext.errorHandler { error ->
-            AeronDriver.manageError(logger, error)
+    /**
+     * Creates the Aeron Media Driver context
+     *
+     * @throws IllegalStateException if the configuration has already been used to create a context
+     * @throws IllegalArgumentException if the aeron media driver directory cannot be setup
+     */
+    private fun createContext(config: Configuration, logger: KLogger = KotlinLogging.logger("AeronConfig")): MediaDriver.Context {
+        if (threadFactory.group.isDestroyed) {
+            // on close, we destroy the threadfactory -- and on driver restart, we might want it back
+            threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronDriver"), true)
         }
 
-        return aeronDriverContext
+        var context = create(config, threadFactory, logger)
+
+        // this happens EXACTLY once. Must be BEFORE the "isRunning" check!
+        context.concludeAeronDirectory()
+
+        // will setup the aeron directory or throw IllegalArgumentException if it cannot be configured
+        val aeronDir = context.aeronDirectory()
+
+        val driverTimeout = context.driverTimeoutMs()
+        var isRunning = context.isDriverActive(driverTimeout) { }
+
+        // this is incompatible with IPC, and will not be set if IPC is enabled
+        if (config.aeronDirectoryForceUnique && isRunning) {
+            val savedParent = aeronDir.parentFile
+            var retry = 0
+            val retryMax = 100
+
+            while (config.aeronDirectoryForceUnique && isRunning) {
+                if (retry++ > retryMax) {
+                    throw IllegalArgumentException("Unable to force unique aeron Directory. Tried $retryMax times and all tries were in use.")
+                }
+
+                val randomNum = (1..retryMax).shuffled().first()
+                val newDir = savedParent.resolve("${aeronDir.name}_$randomNum")
+
+                context = create(config, threadFactory, logger)
+                context.aeronDirectoryName(newDir.path)
+
+                // this happens EXACTLY once. Must be BEFORE the "isRunning" check!
+                context.concludeAeronDirectory()
+
+                isRunning = context.isDriverActive(driverTimeout) { }
+            }
+
+            if (!isRunning) {
+                // NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
+                //   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
+                // since we are forcing a unique directory, we should ALSO delete it when we are done!
+                context.dirDeleteOnShutdown()
+            }
+        }
+
+        logger.info { "Aeron directory: '${context.aeronDirectory()}'" }
+
+        return context
+    }
+
+
+    /**
+     * If the driver is not already running, this will start the driver
+     *
+     * @throws Exception if there is a problem starting the media driver
+     */
+    @Synchronized
+    fun start() {
+        if (closeRequested.value) {
+            logger.debug("Resetting media driver context")
+
+            // close was requested previously. we have to reset a few things
+            context = createContext(config, logger)
+
+            // we want to be able to "restart" aeron, as necessary, after a [close] method call
+            closeRequested.value = false
+        }
+
+        restart()
+    }
+
+    /**
+     * if we did NOT close, then will restart the media driver + aeron. If we manually closed aeron, then we won't try to restart
+     */
+    private fun restart() {
+        if (closeRequested.value) {
+            return
+        }
+
+        val didStartDriver = startDriver()
+        startAeron(didStartDriver)
     }
 
     /**
@@ -329,14 +334,14 @@ class AeronDriver(val config: Configuration,
         if (mediaDriver == null) {
             // only start if we didn't already start... There will be several checks.
 
-            var running = isRunning(mediaDriverContext)
+            var running = isRunning()
             if (running) {
                 // wait for a bit, because we are running, but we ALSO issued a START, and expect it to start.
                 // SOMETIMES aeron is in the middle of shutting down, and this prevents us from trying to connect to
                 // that instance
                 logger.debug("Aeron Media driver already running. Double checking status...")
-                sleep(mediaDriverContext.driverTimeoutMs()/2)
-                running = isRunning(mediaDriverContext)
+                sleep(driverTimeout/2)
+                running = isRunning()
             }
 
             if (!running) {
@@ -346,11 +351,11 @@ class AeronDriver(val config: Configuration,
                 var count = 10
                 while (count-- > 0) {
                     try {
-                        mediaDriver = MediaDriver.launch(mediaDriverContext)
+                        mediaDriver = MediaDriver.launch(context)
                         return true
                     } catch (e: Exception) {
-                        logger.warn(e) { "Unable to start the Aeron Media driver. Retrying $count more times..." }
-                        sleep(mediaDriverContext.driverTimeoutMs())
+                        logger.warn(e) { "Unable to start the Aeron Media driver at ${driverDirectory}. Retrying $count more times..." }
+                        sleep(driverTimeout)
                     }
                 }
             } else {
@@ -378,38 +383,34 @@ class AeronDriver(val config: Configuration,
         }
     }
 
-    /**
-     * If the driver is not already running, this will start the driver
-     *
-     * @throws Exception if there is a problem starting the media driver
-     */
-    fun start() {
-        // we want to be able to "restart" aeron, as necessary, after a [close] method call
-        closeRequested.lazySet(false)
-        restart()
-    }
+    private fun setupAeron(): Aeron.Context {
+        val aeronDriverContext = Aeron.Context()
+        aeronDriverContext
+            .aeronDirectoryName(driverDirectory.path)
+            .concludeAeronDirectory()
 
-    /**
-     * if we did NOT close, then will restart the media driver + aeron. If we manually closed aeron, then we won't try to restart
-     */
-    private fun restart() {
-        if (closeRequested.value) {
-            return
+        aeronDriverContext
+            .threadFactory(threadFactory)
+            .idleStrategy(BackoffIdleStrategy())
+
+        // we DO NOT want to abort the JVM if there are errors.
+        // this replaces the default handler with one that doesn't abort the JVM
+        aeronDriverContext.errorHandler { error ->
+            manageError(logger, error)
         }
 
-        val didStartDriver = startDriver()
-        startAeron(didStartDriver)
+        return aeronDriverContext
     }
-
 
     /**
      * @return the aeron media driver log file for a specific publication. This should be removed when a publication is closed (but is not always!)
      */
+    @Synchronized
     fun getMediaDriverPublicationFile(publicationRegId: Long): File {
-        return mediaDriverContext.aeronDirectory().resolve("publications").resolve("${publicationRegId}.logbuffer")
+        return driverDirectory.resolve("publications").resolve("${publicationRegId}.logbuffer")
     }
 
-
+    @Synchronized
     fun addPublicationWithRetry(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
         val uri = publicationUri.build()
 
@@ -427,12 +428,12 @@ class AeronDriver(val config: Configuration,
 
                 // if exceptions are added here, make sure to ALSO suppress them in the context error handler
                 if (e is DriverTimeoutException) {
-                    sleep(mediaDriverContext.driverTimeoutMs())
+                    sleep(driverTimeout)
                 }
 
                 if (e.cause is BindException) {
                     // was starting too fast!
-                    sleep(mediaDriverContext.driverTimeoutMs())
+                    sleep(driverTimeout)
                 }
 
                 // reasons we cannot add a pub/sub to aeron
@@ -456,6 +457,7 @@ class AeronDriver(val config: Configuration,
         throw exception!!
     }
 
+    @Synchronized
     fun addSubscriptionWithRetry(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
         val uri = subscriptionUri.build()
 
@@ -466,9 +468,7 @@ class AeronDriver(val config: Configuration,
             try {
                 val aeron = aeron
                 if (aeron != null) {
-                    val subscription = aeron.addSubscription(uri, streamId)
-
-                    return subscription
+                    return aeron.addSubscription(uri, streamId)
                 }
             } catch (e: Exception) {
                 // NOTE: this error will be logged in the `aeronDriverContext` logger
@@ -477,12 +477,12 @@ class AeronDriver(val config: Configuration,
 
                 // if exceptions are added here, make sure to ALSO suppress them in the context error handler
                 if (e is DriverTimeoutException) {
-                    sleep(mediaDriverContext.driverTimeoutMs())
+                    sleep(driverTimeout)
                 }
 
                 if (e.cause is BindException) {
                     // was starting too fast!
-                    sleep(mediaDriverContext.driverTimeoutMs())
+                    sleep(driverTimeout)
                 }
 
                 // reasons we cannot add a pub/sub to aeron
@@ -511,9 +511,10 @@ class AeronDriver(val config: Configuration,
      *
      * @return true if the media driver is active and running
      */
-    fun isRunning(timeout: Long = mediaDriverContext.driverTimeoutMs()): Boolean {
+    @Synchronized
+    fun isRunning(timeout: Long = context!!.driverTimeoutMs()): Boolean {
         // if the media driver is running, it will be a quick connection. Usually 100ms or so
-        return mediaDriverContext.isDriverActive(timeout) { }
+        return context!!.isDriverActive(timeout) { }
     }
 
     /**
@@ -522,8 +523,9 @@ class AeronDriver(val config: Configuration,
      * NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
      *   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
      */
+    @Synchronized
     fun close() {
-        closeRequested.lazySet(true)
+        closeRequested.value = true
 
         try {
             aeron?.close()
@@ -534,6 +536,8 @@ class AeronDriver(val config: Configuration,
         aeron = null
 
         val mediaDriver = mediaDriver
+        this@AeronDriver.mediaDriver = null
+
         if (mediaDriver == null) {
             logger.debug("No driver started for this instance. Not Stopping.")
             return
@@ -544,34 +548,37 @@ class AeronDriver(val config: Configuration,
             return
         }
 
+        logger.debug("Stopping driver at '${driverDirectory}'...")
 
-        logger.debug("Stopping driver at '${mediaDriverContext.aeronDirectory()}'...")
-
-        if (!isRunning(mediaDriverContext)) {
+        if (!isRunning()) {
             // not running
-            logger.debug { "Driver is not running at '${mediaDriverContext.aeronDirectory()}' for this context. Not Stopping." }
+            logger.debug { "Driver is not running at '${driverDirectory}' for this context. Not Stopping." }
             return
         }
 
         try {
             mediaDriver.close()
 
+            // on close, we want to wait for the driver to timeout before considering it "closed". Connections can still LINGER (see below)
             // on close, the publication CAN linger (in case a client goes away, and then comes back)
-            // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-            sleep(AERON_PUBLICATION_LINGER_TIMEOUT)
+                // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+            sleep(driverTimeout + AERON_PUBLICATION_LINGER_TIMEOUT)
 
-            this@AeronDriver.mediaDriver = null
 
             // wait for the media driver to actually stop
             var count = 10
-            while (count-- >= 0 && isRunning(mediaDriverContext)) {
-                logger.warn { "Aeron Media driver at '${mediaDriverContext.aeronDirectory()}' is still running. Waiting for it to stop. Trying $count more times." }
-                sleep(mediaDriverContext.driverTimeoutMs())
+            while (count-- >= 0 && isRunning()) {
+                logger.warn { "Aeron Media driver at '${driverDirectory}' is still running. Waiting for it to stop. Trying $count more times." }
+                sleep(driverTimeout)
             }
-            logger.debug { "Closed the media driver at '${mediaDriverContext.aeronDirectory()}'" }
+            logger.debug { "Closed the media driver at '${driverDirectory}'" }
 
+            val deletedAeron = driverDirectory.deleteRecursively()
+            if (!deletedAeron) {
+                logger.error { "Error deleting aeron directory $driverDirectory on shutdown "}
+            }
         } catch (e: Exception) {
-            logger.error("Error closing the media driver at '${mediaDriverContext.aeronDirectory()}'", e)
+            logger.error("Error closing the media driver at '${driverDirectory}'", e)
         }
 
         // Destroys this thread group and all of its subgroups.

@@ -62,16 +62,10 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         /**
          * Checks to see if a server (using the specified configuration) is running.
          *
-         * @return true if the configuration matches and can connect (but not verify) to the TCP control socket.
+         * This method should only be used to check if a server is running for a DIFFERENT configuration than the currently running server
          */
         fun isRunning(configuration: ServerConfiguration): Boolean {
-            if (configuration.context == null) {
-                AeronDriver.createContext(configuration)
-            }
-
-            require(configuration.context != null) { "Configuration context cannot be properly created. Unable to continue!" }
-
-            return AeronDriver.isRunning(configuration.context!!)
+            return AeronDriver(configuration).isRunning()
         }
 
         init {

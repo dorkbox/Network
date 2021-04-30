@@ -21,14 +21,11 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
-import dorkbox.network.exceptions.ClientException
-import dorkbox.network.exceptions.ServerException
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.StorageType
 import dorkbox.network.storage.types.PropertyStore
 import dorkbox.os.OS
 import io.aeron.driver.Configuration
-import io.aeron.driver.MediaDriver
 import io.aeron.driver.ThreadingMode
 import mu.KLogger
 import java.io.File
@@ -48,7 +45,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      */
     var listenIpAddress = "*"
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -57,7 +54,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      */
     var maxClientCount = 0
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -66,7 +63,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      */
     var maxConnectionsPerIpAddress = 0
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -75,7 +72,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      */
     var ipcPublicationId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -84,7 +81,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      */
     var ipcSubscriptionId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -101,7 +98,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      */
     override var settingsStore: StorageType = PropertyStore.type("settings-server.db")
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -116,38 +113,36 @@ class ServerConfiguration : dorkbox.network.Configuration() {
             // only do this once!
             listenIpAddress = listenIpAddress.lowercase()
         }
+        if (maxConnectionsPerIpAddress == 0) { maxConnectionsPerIpAddress = maxClientCount }
 
-        require(listenIpAddress.isNotBlank()) { "Blank listen IP address, cannot continue"}
+
+        require(listenIpAddress.isNotBlank()) { "Blank listen IP address, cannot continue." }
 
         // can't disable everything!
-        if (!enableIpc && !enableIPv4 && !enableIPv6) {
-            require(false) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
+        require(enableIpc || enableIPv4 || enableIPv6) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
+
+        if (enableIpc) {
+            require(!aeronDirectoryForceUnique) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
+        } else {
+            if (enableIPv4 && !enableIPv6) {
+                require(IPv4.isAvailable) { "IPC/IPv6 are disabled and IPv4 is enabled, but there is no IPv4 interface available!" }
+            }
+
+            if (!enableIPv4 && enableIPv6) {
+                require(IPv6.isAvailable) { "IPC/IPv4 are disabled and IPv6 is enabled, but there is no IPv6 interface available!" }
+            }
         }
 
-        // have to verify if it's the only thing specified, is IPv4 available...
-        if (!enableIpc && !enableIPv6 && enableIPv4 && !IPv4.isAvailable) {
-            require(false) { "IPC/IPv6 are disabled and IPv4 is enabled, but there is no IPv4 interface available!" }
-        }
 
-        // have to verify if it's the only thing specified, is IPv4 available...
-        if (!enableIpc && !enableIPv4 && enableIPv6 && !IPv6.isAvailable) {
-            require(false) { "IPC/IPv4 are disabled and IPv6 is enabled, but there is no IPv6 interface available!" }
-        }
+        require(publicationPort > 0) { "configuration port must be > 0" }
+        require(publicationPort < 65535) { "configuration port must be < 65535" }
 
-        if (enableIpc && aeronDirectoryForceUnique) {
-            require(false) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
-        }
+        require(subscriptionPort > 0) { "configuration controlPort must be > 0" }
+        require(subscriptionPort < 65535) { "configuration controlPort must be < 65535" }
 
-        if (publicationPort <= 0) { throw ServerException("configuration port must be > 0") }
-        if (publicationPort >= 65535) { throw ServerException("configuration port must be < 65535") }
+        require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
+        require(networkMtuSize < 9 * 1024) { "configuration networkMtuSize must be < ${9 * 1024}" }
 
-        if (subscriptionPort <= 0) { throw ServerException("configuration controlPort must be > 0") }
-        if (subscriptionPort >= 65535) { throw ServerException("configuration controlPort must be < 65535") }
-
-        if (networkMtuSize <= 0) { throw ServerException("configuration networkMtuSize must be > 0") }
-        if (networkMtuSize >= 9 * 1024) { throw ServerException("configuration networkMtuSize must be < ${9 * 1024}") }
-
-        if (maxConnectionsPerIpAddress == 0) { maxConnectionsPerIpAddress = maxClientCount}
     }
 }
 
@@ -161,7 +156,7 @@ open class Configuration {
      */
     var enableIPv4 = true
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -170,7 +165,7 @@ open class Configuration {
      */
     var enableIPv6 = true
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -182,7 +177,7 @@ open class Configuration {
      */
     var enableIpc = true
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -193,7 +188,7 @@ open class Configuration {
      */
     var enableRemoteSignatureValidation: Boolean = true
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -207,7 +202,7 @@ open class Configuration {
      */
     var publicationPort: Int = 0
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -221,7 +216,7 @@ open class Configuration {
      */
     var subscriptionPort: Int = 0
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -230,7 +225,7 @@ open class Configuration {
      */
     var connectionCloseTimeoutInSeconds: Int = 10
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -243,7 +238,7 @@ open class Configuration {
      */
     var connectionCheckIntervalInMS = TimeUnit.MILLISECONDS.toNanos(200)
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -257,7 +252,7 @@ open class Configuration {
      */
     var connectionExpirationTimoutInMS = TimeUnit.SECONDS.toNanos(2)
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -277,7 +272,7 @@ open class Configuration {
      */
     open var settingsStore: StorageType = PropertyStore.type("settings-client.db")
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -286,7 +281,7 @@ open class Configuration {
      */
     var serialization: Serialization = Serialization()
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -303,7 +298,7 @@ open class Configuration {
      */
     var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(maxSpins = 100, maxYields = 10, minParkPeriodMs = 1, maxParkPeriodMs = 100)
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -320,7 +315,7 @@ open class Configuration {
      */
     var sendIdleStrategy: CoroutineIdleStrategy = CoroutineSleepingMillisIdleStrategy(sleepPeriodMs = 100)
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -350,7 +345,7 @@ open class Configuration {
      */
     var threadingMode = ThreadingMode.SHARED
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -359,7 +354,7 @@ open class Configuration {
      */
     var aeronDirectory: File? = null
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -368,7 +363,7 @@ open class Configuration {
      */
     var aeronDirectoryForceUnique = false
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -402,7 +397,7 @@ open class Configuration {
      */
     var networkMtuSize = Configuration.MTU_LENGTH_DEFAULT
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -421,7 +416,7 @@ open class Configuration {
      */
     var sendBufferSize = 0
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -438,7 +433,7 @@ open class Configuration {
      */
     var receiveBufferSize = 0
         set(value) {
-            require(context == null) { errorMessage }
+            require(!contextDefined) { errorMessage }
             field = value
         }
 
@@ -446,7 +441,7 @@ open class Configuration {
      * Internal property that tells us if this configuration has already been configured and used to create and start the Media Driver
      */
     @Volatile
-    internal var context: MediaDriver.Context? = null
+    internal var contextDefined: Boolean = false
 
     /**
      * Internal property that tells us if this configuration has already been used in an endpoint
@@ -486,18 +481,17 @@ open class Configuration {
      */
     @Suppress("DuplicatedCode")
     open fun validate() {
-        if (enableIpc && aeronDirectoryForceUnique) {
-            require(false) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
-        }
-
         // have to do some basic validation of our configuration
-        if (publicationPort <= 0) { throw ClientException("configuration port must be > 0") }
-        if (publicationPort >= 65535) { throw ClientException("configuration port must be < 65535") }
 
-        if (subscriptionPort <= 0) { throw ClientException("configuration controlPort must be > 0") }
-        if (subscriptionPort >= 65535) { throw ClientException("configuration controlPort must be < 65535") }
+        require(!(enableIpc && aeronDirectoryForceUnique)) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
 
-        if (networkMtuSize <= 0) { throw ClientException("configuration networkMtuSize must be > 0") }
-        if (networkMtuSize >= 9 * 1024) { throw ClientException("configuration networkMtuSize must be < ${9 * 1024}") }
+        require(publicationPort > 0) { "configuration port must be > 0" }
+        require(publicationPort < 65535)  { "configuration port must be < 65535" }
+
+        require(subscriptionPort > 0) { "configuration controlPort must be > 0" }
+        require(subscriptionPort < 65535) { "configuration controlPort must be < 65535" }
+
+        require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
+        require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }
     }
 }
