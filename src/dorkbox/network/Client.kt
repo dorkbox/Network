@@ -466,15 +466,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             // make sure to call our client.notifyDisconnect() callbacks
 
-            // manually call it.
-            // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            @Suppress("EXPERIMENTAL_API_USAGE")
-            actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
-                // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
-                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
+            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+            actionDispatch.eventLoop {
                 listenerManager.notifyDisconnect(connection)
-
-                lockStepForDispatch.value?.cancel()
+                lockStepForConnect.value?.cancel()
             }
         }
 

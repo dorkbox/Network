@@ -23,6 +23,7 @@ import dorkbox.network.aeron.UdpMediaDriverServerConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.eventLoop
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ClientRejectedException
@@ -528,11 +529,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                             // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
                             // instantly notified and on cleanup, the server-listenermanager is called
 
-                            // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                            @Suppress("EXPERIMENTAL_API_USAGE")
-                            actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
-                                // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
-                                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
+                            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                            actionDispatch.eventLoop {
                                 listenerManager.notifyDisconnect(connection)
                             }
                         }
@@ -571,11 +569,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                     // instantly notified and on cleanup, the server-listenermanager is called
                     // NOTE: this must be the LAST thing happening!
 
-                    // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    @Suppress("EXPERIMENTAL_API_USAGE")
-                    val job = actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
-                        // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
-                        //   we want this behavior INSTEAD OF automatically starting this on a new thread.
+                    // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                    val job = actionDispatch.eventLoop {
                         listenerManager.notifyDisconnect(connection)
                     }
                     jobs.add(job)

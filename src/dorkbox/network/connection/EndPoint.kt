@@ -39,14 +39,17 @@ import io.aeron.Publication
 import io.aeron.driver.MediaDriver
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.IdleStrategy
+
+fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
+    // UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently in a different thread
+    //   we want this behavior to prevent "stack overflow" in case there are nested calls
+    return launch(start = CoroutineStart.UNDISPATCHED, block = block)
+}
 
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!

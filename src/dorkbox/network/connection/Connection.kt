@@ -392,12 +392,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             // lock-stop ordering for how disconnect and connect work with each-other
             preCloseAction()
 
-            // this always has to be on a new dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            @Suppress("EXPERIMENTAL_API_USAGE")
-            endPoint.actionDispatch.launch(start = CoroutineStart.UNDISPATCHED) {
-                // NOTE: UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently
-                //   we want this behavior INSTEAD OF automatically starting this on a new thread.
-                // a connection might have also registered for disconnect events
+            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+            endPoint.actionDispatch.eventLoop {
+                // a connection might have also registered for disconnect events (THIS IS NOT THE "CLIENT" listenerManager!)
                 listenerManager.value?.notifyDisconnect(this@Connection)
             }
 
