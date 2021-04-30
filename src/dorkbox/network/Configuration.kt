@@ -175,22 +175,12 @@ open class Configuration {
         }
 
     /**
-     * Enables the ability use IPC (Inter Process Communication).
+     * Enables the ability use IPC (Inter Process Communication). If a "loopback" is specified, and this is 'true', then
+     * IPC will be used instead - if possible.  IPC is about 4x faster than UDP in loopback situations.
      *
      * Aeron must be running in the same location for the client/server in order for this to work
      */
     var enableIpc = true
-        set(value) {
-            require(context == null) { errorMessage }
-            field = value
-        }
-
-    /**
-     * Permit loopback connections to use IPC instead of UDP for communicating, if possible. IPC is about 4x faster than UDP in loopback situations.
-     *
-     * This configuration only affects the client
-     */
-    var enableIpcForLoopback: Boolean = true
         set(value) {
             require(context == null) { errorMessage }
             field = value

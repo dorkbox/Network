@@ -284,8 +284,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         // only change LOCALHOST -> IPC if the media driver is ALREADY running LOCALLY!
         var isUsingIPC = false
-        val canUseIPC = config.enableIpc
-        val autoChangeToIpc = config.enableIpcForLoopback &&
+        val autoChangeToIpc = config.enableIpc &&
                               (remoteAddress == null || remoteAddress.isLoopbackAddress) && aeronDriver.isRunning()
 
 
