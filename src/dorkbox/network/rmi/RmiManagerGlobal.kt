@@ -347,7 +347,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
     }
 
     private suspend fun returnRmiMessage(connection: Connection, message: MethodRequest, result: Any?, logger: KLogger) {
-        logger.trace { "RMI returned: ${RmiUtils.unpackUnsignedRight(message.packedId)}" }
+        logger.trace { "RMI return. Send: ${RmiUtils.unpackUnsignedRight(message.packedId)}" }
 
         val rmiMessage = MethodResponse()
         rmiMessage.packedId = message.packedId

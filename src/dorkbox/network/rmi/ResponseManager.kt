@@ -78,6 +78,7 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
                 }
             } catch (e: ClosedSendChannelException) {
                 // this can happen if we are starting/stopping an endpoint (and thus a response-manager) VERY quickly, and can be ignored
+                logger.trace("Error during RMI preparation. Usually this is caused by fast a start/stop")
             }
         }
     }
@@ -91,7 +92,7 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
         val rmiId = RmiUtils.unpackUnsignedRight(message.packedId)
         val result = message.result
 
-        logger.trace { "RMI return: $rmiId" }
+        logger.trace { "RMI return message: $rmiId" }
 
         val previous = pendingLock.write {
             val previous = pending[rmiId]
@@ -101,7 +102,7 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
 
         // if NULL, since either we don't exist (because we were async), or it was cancelled
         if (previous is ResponseWaiter) {
-            logger.trace { "RMI valid-cancel: $rmiId" }
+            logger.trace { "RMI valid-cancel onMessage: $rmiId" }
 
             // this means we were NOT timed out! (we cannot be timed out here)
             previous.doNotify()
@@ -212,10 +213,6 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
     ///////
     ///////
 
-
-
-
-
     /**
      * on response, runs the waiting callback
      * NOTE: This uses the RMI-ID mechanism to know what the response ID is (the name is left alone)
@@ -224,7 +221,7 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
         val rmiId = RmiUtils.unpackUnsignedRight(message.packedId)
         val result = message.result
 
-        logger.trace { "RMI return: $rmiId" }
+        logger.trace { "RMI return callback: $rmiId" }
 
         val previous = pendingLock.write {
             val previous = pending[rmiId]
@@ -234,15 +231,12 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
 
         // if NULL, since either we don't exist (because we were async), or it was cancelled
         if (previous is ResponseWaiter) {
-            logger.trace { "RMI valid-cancel: $rmiId" }
+            logger.trace { "RMI valid-cancel onCallback: $rmiId" }
 
             // this means we were NOT timed out! (we cannot be timed out here)
             previous.doNotify()
         }
     }
-
-
-
 
     /**
      * gets the ResponseWaiter (id + waiter) and prepares the pending response map
