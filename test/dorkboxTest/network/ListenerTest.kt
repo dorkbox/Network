@@ -81,33 +81,33 @@ class ListenerTest : BaseTest() {
         addEndPoint(server)
 
         // standard listener
-        server.onMessage<String> { connection, message ->
+        server.onMessage<String> { message ->
             // should be called
-            connection.check()
-            connection.send(message)
+            check()
+            send(message)
         }
 
         // generic listener
-        server.onMessage<Any> { _, _ ->
+        server.onMessage<Any> {
             // should be called!
             serverOnMessage.value = true
         }
 
         // standard connect check
-        server.onConnect { connection ->
+        server.onConnect {
             serverConnect.value = true
 
-            connection.onMessage<Any> {_, _ ->
+            onMessage<Any> {
                 serverConnectionOnMessage.value = true
             }
 
-            connection.onDisconnect { _ ->
+            onDisconnect {
                 serverDisconnectMessage.value = true
             }
         }
 
         // standard listener disconnect check
-        server.onDisconnect { connection ->
+        server.onDisconnect {
             serverDisconnect.value = true
         }
 
@@ -126,11 +126,11 @@ class ListenerTest : BaseTest() {
         addEndPoint(client)
 
 
-        client.onConnect { connection ->
-            connection.send(origString) // 20 a's
+        client.onConnect {
+            send(origString) // 20 a's
         }
 
-        client.onMessage<String> { connection, message ->
+        client.onMessage<String> { message ->
             if (origString != message) {
                 checkFail2.value = true
                 System.err.println("original string not equal to the string received")
@@ -139,7 +139,7 @@ class ListenerTest : BaseTest() {
             }
 
             if (count.getAndIncrement() < limit) {
-                connection.send(message)
+                send(message)
             } else {
                 stopEndPoints()
             }

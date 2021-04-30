@@ -124,8 +124,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 logger.error("Error processing events", throwable)
             }
 
-            listenerManager.onError { connection, throwable ->
-                logger.error("Error processing events for connection $connection", throwable)
+            listenerManager.onError { throwable ->
+                logger.error("Error processing events for connection $this", throwable)
             }
         }
 
@@ -250,7 +250,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * This function will be called for **only** network clients (IPC client are excluded)
      */
-    fun filter(function: (CONNECTION) -> Boolean) {
+    fun filter(function: CONNECTION.() -> Boolean) {
         actionDispatch.launch {
             listenerManager.filter(function)
         }
@@ -259,7 +259,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     /**
      * Adds a function that will be called when a client/server "connects" with each other
      */
-    fun onConnect(function: suspend (CONNECTION) -> Unit) {
+    fun onConnect(function: suspend CONNECTION.() -> Unit) {
         actionDispatch.launch {
             listenerManager.onConnect(function)
         }
@@ -270,7 +270,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * Do not try to send messages! The connection will already be closed, resulting in an error if you attempt to do so.
      */
-    fun onDisconnect(function: suspend (CONNECTION) -> Unit) {
+    fun onDisconnect(function: suspend CONNECTION.() -> Unit) {
         actionDispatch.launch {
             listenerManager.onDisconnect(function)
         }
@@ -281,7 +281,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onError(function: (CONNECTION, Throwable) -> Unit) {
+    fun onError(function: CONNECTION.(Throwable) -> Unit) {
         actionDispatch.launch {
             listenerManager.onError(function)
         }
@@ -292,7 +292,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onError(function: (Throwable) -> Unit) {
+    fun onError(function: Throwable.() -> Unit) {
         actionDispatch.launch {
             listenerManager.onError(function)
         }
@@ -303,7 +303,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    fun <Message : Any> onMessage(function: suspend (CONNECTION, Message) -> Unit) {
+    fun <Message : Any> onMessage(function: suspend CONNECTION.(Message) -> Unit) {
         actionDispatch.launch {
             listenerManager.onMessage(function)
         }

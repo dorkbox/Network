@@ -72,14 +72,14 @@ class MultipleServerTest : BaseTest() {
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
 
-            server.onMessage<String>{ connection, message ->
+            server.onMessage<String>{ message ->
                 if (message != "client_$count") {
                     Assert.fail()
                 }
 
                 didReceive[count].set(true)
                 if (received.incrementAndGet() == total) {
-                    connection.logger.error("Done, stopping endpoints")
+                    logger.error("Done, stopping endpoints")
                     stopEndPoints()
                 }
             }
@@ -108,9 +108,9 @@ class MultipleServerTest : BaseTest() {
 
             clientAeronDir = File(configuration.aeronDirectory.toString() + count)
 
-            client.onConnect { connection ->
+            client.onConnect {
                 didSend[count].set(true)
-                connection.send("client_$count")
+                send("client_$count")
             }
 
             client.connect(LOOPBACK)
@@ -148,14 +148,14 @@ class MultipleServerTest : BaseTest() {
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
 
-            server.onMessage<String>{ connection, message ->
+            server.onMessage<String>{ message ->
                 if (message != "client_$count") {
                     Assert.fail()
                 }
 
                 didReceive[count].set(true)
                 if (received.incrementAndGet() == total) {
-                    connection.logger.error("Done, stopping endpoints")
+                    logger.error("Done, stopping endpoints")
                     stopEndPoints()
                 }
             }
@@ -183,9 +183,9 @@ class MultipleServerTest : BaseTest() {
 
             clientAeronDir = File(configuration.aeronDirectory.toString() + count)
 
-            client.onConnect { connection ->
+            client.onConnect {
                 didSend[count].set(true)
-                connection.send("client_$count")
+                send("client_$count")
             }
 
             client.connect(LOOPBACK)

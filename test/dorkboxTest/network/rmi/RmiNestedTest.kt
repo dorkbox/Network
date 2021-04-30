@@ -65,7 +65,7 @@ class RmiNestedTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.onMessage<OtherObject> { connection, message ->
+            server.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
                 // this 'object' is the REAL object, not a proxy, because this object is created within this connection.
                 if (message.value() == 12.34f) {
@@ -85,10 +85,10 @@ class RmiNestedTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                connection.logger.error("Connected")
-                connection.createObject<TestObject> {
-                    connection.logger.error("Starting test")
+            client.onConnect {
+                logger.error("Connected")
+                createObject<TestObject> {
+                    logger.error("Starting test")
                     setValue(43.21f)
 
                     // Normal remote method call.
@@ -111,7 +111,7 @@ class RmiNestedTest : BaseTest() {
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
                     // that is where that object actually exists.
-                    connection.send(otherObject)
+                    send(otherObject)
                 }
             }
 
@@ -130,7 +130,7 @@ class RmiNestedTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.onMessage<OtherObject> { connection, message ->
+            server.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
                 // this 'object' is the REAL object, not a proxy, because this object is created within this connection.
                 if (message.value() == 12.34f) {
@@ -150,10 +150,10 @@ class RmiNestedTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                connection.logger.error("Connected")
-                connection.createObject<TestObject> {
-                    connection.logger.error("Starting test")
+            client.onConnect {
+                logger.error("Connected")
+                createObject<TestObject> {
+                    logger.error("Starting test")
                     setValue(43.21f)
 
                     // Normal remote method call.
@@ -176,7 +176,7 @@ class RmiNestedTest : BaseTest() {
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
                     // that is where that object actually exists.
-                    connection.send(otherObject)
+                    send(otherObject)
                 }
             }
 
@@ -195,7 +195,7 @@ class RmiNestedTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.onMessage<OtherObject> { connection, message ->
+            server.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
                 // this 'object' is the REAL object
                 if (message.value() == 43.21f) {
@@ -215,10 +215,10 @@ class RmiNestedTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                connection.logger.error("Connected")
-                connection.createObject<TestObject> {
-                    connection.logger.error("Starting test")
+            client.onConnect {
+                logger.error("Connected")
+                createObject<TestObject> {
+                    logger.error("Starting test")
                     setOtherValue(43.21f)
 
                     // Normal remote method call.
@@ -234,7 +234,7 @@ class RmiNestedTest : BaseTest() {
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
                     // that is where that object actually exists.
-                    connection.send(otherObject)
+                    send(otherObject)
                 }
             }
 
@@ -253,10 +253,10 @@ class RmiNestedTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.onConnect { connection ->
-                connection.logger.error("Connected")
-                connection.createObject<TestObject> {
-                    connection.logger.error("Starting test")
+            server.onConnect {
+                logger.error("Connected")
+                createObject<TestObject> {
+                    logger.error("Starting test")
                     setOtherValue(43.21f)
 
                     // Normal remote method call.
@@ -272,7 +272,7 @@ class RmiNestedTest : BaseTest() {
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
                     // that is where that object actually exists.
-                    connection.send(otherObject)
+                    send(otherObject)
                 }
             }
 
@@ -287,7 +287,7 @@ class RmiNestedTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onMessage<OtherObject> { connection, message ->
+            client.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
                 // this 'object' is the REAL object
                 if (message.value() == 43.21f) {

@@ -75,22 +75,22 @@ object TestClient {
 
         val client = Client<Connection>(config)
 
-        client.onConnect { connection ->
-            connection.logger.error("Starting test for: Client -> Server")
+        client.onConnect {
+            logger.error("Starting test for: Client -> Server")
 
-            connection.createObject<TestCow>(124123) {
-                RmiCommonTest.runTests(connection, this, 124123)
-                connection.logger.error("DONE")
+            createObject<TestCow>(124123) {
+                RmiCommonTest.runTests(this@onConnect, this, 124123)
+                logger.error("DONE")
 
                 // now send this remote object ACROSS the wire to the server (on the server, this is where the IMPLEMENTATION lives)
-                connection.send(this)
+                send(this)
 
                 client.close()
             }
         }
 
-        client.onMessage<TestCow> { connection, test ->
-            connection.logger.error("Received test cow from server")
+        client.onMessage<TestCow> { test ->
+            logger.error("Received test cow from server")
             // this object LIVES on the server.
 
             try {
@@ -99,7 +99,7 @@ object TestClient {
                 Assert.fail("No exception should be caught.")
             }
 
-            connection.close()
+            close()
         }
 
         client.connect(BaseTest.LOOPBACK)

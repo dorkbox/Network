@@ -72,6 +72,8 @@ abstract class BaseTest {
     companion object {
         fun setLog() {
             setLogLevel(Level.TRACE)
+//            setLogLevel(Level.ERROR)
+//            setLogLevel(Level.DEBUG)
         }
 
         const val LOOPBACK = "loopback"

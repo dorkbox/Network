@@ -53,8 +53,8 @@ class MemoryTest : BaseTest() {
 
             run {
                 val client = Client<Connection>(clientConfig())
-                client.onConnect { connection ->
-                    val remoteObject = connection.getGlobalObject<TestObject>(RMI_ID)
+                client.onConnect {
+                    val remoteObject = getGlobalObject<TestObject>(RMI_ID)
                     val obj = remoteObject as RemoteObject
                     obj.async = true
 
@@ -64,7 +64,7 @@ class MemoryTest : BaseTest() {
                         try {
                             remoteObject.setOther(i)
                         } catch (e: Exception) {
-                            connection.logger.error("Timeout when calling RMI method")
+                            logger.error("Timeout when calling RMI method")
                             e.printStackTrace()
                         }
                     }
@@ -92,8 +92,8 @@ class MemoryTest : BaseTest() {
 
             run {
                 val client = Client<Connection>(clientConfig())
-                client.onConnect { connection ->
-                    val remoteObject = connection.getGlobalObject<TestObject>(RMI_ID)
+                client.onConnect {
+                    val remoteObject = getGlobalObject<TestObject>(RMI_ID)
                     val obj = remoteObject as RemoteObject
                     obj.async = true
 
@@ -103,7 +103,7 @@ class MemoryTest : BaseTest() {
                         try {
                             remoteObject.setOtherSus(i)
                         } catch (e: Exception) {
-                            connection.logger.error("Timeout when calling RMI method")
+                            logger.error("Timeout when calling RMI method")
                             e.printStackTrace()
                         }
                     }
@@ -124,8 +124,8 @@ class MemoryTest : BaseTest() {
 
                 val server = Server<Connection>(configuration)
 
-                server.onMessage<Long> { connection, testObject ->
-                    connection.send(testObject+1)
+                server.onMessage<Long> { testObject ->
+                    send(testObject+1)
                 }
 
                 server.bind()
@@ -135,12 +135,12 @@ class MemoryTest : BaseTest() {
             run {
                 val client = Client<Connection>(clientConfig())
 
-                client.onMessage<Long> { connection, testObject ->
-                    connection.send(testObject+1)
+                client.onMessage<Long> { testObject ->
+                    send(testObject+1)
                 }
 
-                client.onConnect { connection ->
-                    connection.send(0L)
+                client.onConnect {
+                    send(0L)
                 }
 
                 client.connect()

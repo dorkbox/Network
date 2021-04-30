@@ -132,22 +132,22 @@ internal class ListenerManager<CONNECTION: Connection> {
     }
 
     // initialize a emtpy arrays
-    private val onConnectFilterList = atomic(Array<((CONNECTION) -> Boolean)>(0) { { true } })
+    private val onConnectFilterList = atomic(Array<(CONNECTION.() -> Boolean)>(0) { { true } })
     private val onConnectFilterMutex = Mutex()
 
-    private val onConnectList = atomic(Array<suspend ((CONNECTION) -> Unit)>(0) { { } })
+    private val onConnectList = atomic(Array<suspend (CONNECTION.() -> Unit)>(0) { { } })
     private val onConnectMutex = Mutex()
 
-    private val onDisconnectList = atomic(Array<suspend (CONNECTION) -> Unit>(0) { { } })
+    private val onDisconnectList = atomic(Array<suspend CONNECTION.() -> Unit>(0) { { } })
     private val onDisconnectMutex = Mutex()
 
-    private val onErrorList = atomic(Array<(CONNECTION, Throwable) -> Unit>(0) { { _, _ -> } })
+    private val onErrorList = atomic(Array<CONNECTION.(Throwable) -> Unit>(0) { {  } })
     private val onErrorMutex = Mutex()
 
-    private val onErrorGlobalList = atomic(Array<(Throwable) -> Unit>(0) { { _ -> } })
+    private val onErrorGlobalList = atomic(Array<Throwable.() -> Unit>(0) { { } })
     private val onErrorGlobalMutex = Mutex()
 
-    private val onMessageMap = atomic(IdentityMap<Class<*>, Array<suspend (CONNECTION, Any) -> Unit>>(32, LOAD_FACTOR))
+    private val onMessageMap = atomic(IdentityMap<Class<*>, Array<suspend CONNECTION.(Any) -> Unit>>(32, LOAD_FACTOR))
     private val onMessageMutex = Mutex()
 
     private val onPingList = atomic(Array<suspend (CONNECTION.(Ping) -> Unit)>(0) { { } })
@@ -176,7 +176,7 @@ internal class ListenerManager<CONNECTION: Connection> {
     suspend fun filter(ipFilterRule: IpFilterRule) {
         filter {
             // IPC will not filter, so this is OK to coerce to not-null
-            ipFilterRule.matches(it.remoteAddress!!)
+            ipFilterRule.matches(remoteAddress!!)
         }
     }
 
@@ -193,7 +193,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * For a server, this function will be called for ALL clients.
      */
-    suspend fun filter(function: (CONNECTION) -> Boolean) {
+    suspend fun filter(function: CONNECTION.() -> Boolean) {
         onConnectFilterMutex.withLock {
             // we have to follow the single-writer principle!
             onConnectFilterList.lazySet(add(function, onConnectFilterList.value))
@@ -205,7 +205,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * For a server, this function will be called for ALL clients.
      */
-    suspend fun onConnect(function: suspend (CONNECTION) -> Unit) {
+    suspend fun onConnect(function: suspend CONNECTION.() -> Unit) {
         onConnectMutex.withLock {
             // we have to follow the single-writer principle!
             onConnectList.lazySet(add(function, onConnectList.value))
@@ -217,7 +217,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * Do not try to send messages! The connection will already be closed, resulting in an error if you attempt to do so.
      */
-    suspend fun onDisconnect(function: suspend (CONNECTION) -> Unit) {
+    suspend fun onDisconnect(function: suspend CONNECTION.() -> Unit) {
         onDisconnectMutex.withLock {
             // we have to follow the single-writer principle!
             onDisconnectList.lazySet(add(function, onDisconnectList.value))
@@ -229,7 +229,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * The error is also sent to an error log before this method is called.
      */
-    suspend fun onError(function: (CONNECTION, throwable: Throwable) -> Unit) {
+    suspend fun onError(function: CONNECTION.(Throwable) -> Unit) {
         onErrorMutex.withLock {
             // we have to follow the single-writer principle!
             onErrorList.lazySet(add(function, onErrorList.value))
@@ -241,7 +241,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * The error is also sent to an error log before this method is called.
      */
-    suspend fun onError(function: (throwable: Throwable) -> Unit) {
+    suspend fun onError(function: Throwable.() -> Unit) {
         onErrorGlobalMutex.withLock {
             // we have to follow the single-writer principle!
             onErrorGlobalList.lazySet(add(function, onErrorGlobalList.value))
@@ -253,7 +253,7 @@ internal class ListenerManager<CONNECTION: Connection> {
      *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    suspend fun <MESSAGE> onMessage(function: suspend (CONNECTION, MESSAGE) -> Unit) {
+    suspend fun <MESSAGE> onMessage(function: suspend CONNECTION.(MESSAGE) -> Unit) {
         onMessageMutex.withLock {
             // we have to follow the single-writer principle!
 

@@ -33,7 +33,7 @@ class SerializationValidationTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.onMessage<FinishedCommand> { connection, message ->
+            server.onMessage<FinishedCommand> { message ->
                 stopEndPoints()
             }
             server.bind()
@@ -46,8 +46,8 @@ class SerializationValidationTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                connection.send(FinishedCommand())
+            client.onConnect {
+                send(FinishedCommand())
             }
 
             client.connect(LOOPBACK)
@@ -81,7 +81,7 @@ class SerializationValidationTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.onMessage<TestObject> { connection, message ->
+            server.onMessage<TestObject> { message ->
                 stopEndPoints()
             }
             server.bind()
@@ -94,10 +94,10 @@ class SerializationValidationTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                connection.logger.error("Connected")
-                connection.createObject<TestObject> {
-                    connection.logger.error("Starting test")
+            client.onConnect {
+                logger.error("Connected")
+                createObject<TestObject> {
+                    logger.error("Starting test")
                     setValue(43.21f)
 
                     // Normal remote method call.
@@ -105,7 +105,7 @@ class SerializationValidationTest : BaseTest() {
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
                     // that is where that object actually exists.
-                    connection.send(this)
+                    send(this)
                 }
             }
 
@@ -125,7 +125,7 @@ class SerializationValidationTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.onMessage<TestObject> { connection, message ->
+            server.onMessage<TestObject> { message ->
                 stopEndPoints()
             }
             server.bind()
@@ -138,10 +138,10 @@ class SerializationValidationTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                connection.logger.error("Connected")
-                connection.createObject<TestObject> {
-                    connection.logger.error("Starting test")
+            client.onConnect {
+                logger.error("Connected")
+                createObject<TestObject> {
+                    logger.error("Starting test")
                     setValue(43.21f)
 
                     // Normal remote method call.
@@ -149,7 +149,7 @@ class SerializationValidationTest : BaseTest() {
 
                     // When a proxy object is sent, the other side receives its ACTUAL object (not a proxy of it), because
                     // that is where that object actually exists.
-                    connection.send(this)
+                    send(this)
                 }
             }
 

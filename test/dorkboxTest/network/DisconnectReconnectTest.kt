@@ -22,12 +22,12 @@ class DisconnectReconnectTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onConnect { connection ->
-                connection.logger.error("Disconnecting after 2 seconds.")
+            server.onConnect {
+                logger.error("Disconnecting after 2 seconds.")
                 delay(2000)
 
-                connection.logger.error("Disconnecting....")
-                connection.close()
+                logger.error("Disconnecting....")
+                close()
             }
         }
 
@@ -38,16 +38,16 @@ class DisconnectReconnectTest : BaseTest() {
             addEndPoint(client)
 
 
-            client.onDisconnect { connection ->
-                connection.logger.error("Disconnected!")
+            client.onDisconnect {
+                logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
                 if (count == 3) {
-                    connection.logger.error("Shutting down")
+                    logger.error("Shutting down")
                     stopEndPoints()
                 }
                 else {
-                    connection.logger.error("Reconnecting: $count")
+                    logger.error("Reconnecting: $count")
                     try {
                         client.connect(LOOPBACK)
                     } catch (e: IOException) {
@@ -86,24 +86,24 @@ class DisconnectReconnectTest : BaseTest() {
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                connection.logger.error("Disconnecting after 2 seconds.")
+            client.onConnect {
+                logger.error("Disconnecting after 2 seconds.")
                 delay(2000)
 
-                connection.logger.error("Disconnecting....")
+                logger.error("Disconnecting....")
                 client.close()
             }
 
-            client.onDisconnect { connection ->
-                connection.logger.error("Disconnected!")
+            client.onDisconnect {
+                logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
                 if (count == 3) {
-                    connection.logger.error("Shutting down")
+                    logger.error("Shutting down")
                     stopEndPoints()
                 }
                 else {
-                    connection.logger.error("Reconnecting: $count")
+                    logger.error("Reconnecting: $count")
                     try {
                         client.connect(LOOPBACK)
                     } catch (e: IOException) {
@@ -150,12 +150,12 @@ class DisconnectReconnectTest : BaseTest() {
             server.bind()
 
 
-            server.onConnect { connection ->
-                connection.logger.error("Disconnecting after 2 seconds.")
+            server.onConnect {
+                logger.error("Disconnecting after 2 seconds.")
                 delay(2000)
 
-                connection.logger.error("Disconnecting via RMI ....")
-                val closerObject = connection.getGlobalObject<CloseIface>(CLOSE_ID)
+                logger.error("Disconnecting via RMI ....")
+                val closerObject = getGlobalObject<CloseIface>(CLOSE_ID)
                 closerObject.close()
             }
         }
@@ -168,16 +168,16 @@ class DisconnectReconnectTest : BaseTest() {
             addEndPoint(client)
             client.saveGlobalObject(CloseImpl(), CLOSE_ID)
 
-            client.onDisconnect { connection ->
-                connection.logger.error("Disconnected!")
+            client.onDisconnect {
+                logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
                 if (count == 3) {
-                    connection.logger.error("Shutting down")
+                    logger.error("Shutting down")
                     stopEndPoints()
                 }
                 else {
-                    connection.logger.error("Reconnecting: $count")
+                    logger.error("Reconnecting: $count")
                     try {
                         client.connect(LOOPBACK)
                     } catch (e: IOException) {
@@ -208,12 +208,12 @@ class DisconnectReconnectTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onConnect { connection ->
-                connection.logger.error("Disconnecting after 2 seconds.")
+            server.onConnect {
+                logger.error("Disconnecting after 2 seconds.")
                 delay(2000)
 
-                connection.logger.error("Disconnecting....")
-                connection.close()
+                logger.error("Disconnecting....")
+                close()
             }
         }
 
@@ -224,16 +224,16 @@ class DisconnectReconnectTest : BaseTest() {
             addEndPoint(client)
 
 
-            client.onDisconnect { connection ->
-                connection.logger.error("Disconnected!")
+            client.onDisconnect {
+                logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
                 if (count == 3) {
-                    connection.logger.error("Shutting down")
+                    logger.error("Shutting down")
                     stopEndPoints()
                 }
                 else {
-                    connection.logger.error("Reconnecting: $count")
+                    logger.error("Reconnecting: $count")
                     try {
                         client.connect(LOOPBACK)
                     } catch (e: IOException) {
@@ -264,12 +264,12 @@ class DisconnectReconnectTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onConnect { connection ->
-                connection.logger.error("Disconnecting after 2 seconds.")
+            server.onConnect {
+                logger.error("Disconnecting after 2 seconds.")
                 delay(2000)
 
-                connection.logger.error("Disconnecting....")
-                connection.close()
+                logger.error("Disconnecting....")
+                close()
             }
         }
 
@@ -281,16 +281,16 @@ class DisconnectReconnectTest : BaseTest() {
             addEndPoint(client)
 
 
-            client.onDisconnect { connection ->
-                connection.logger.error("Disconnected!")
+            client.onDisconnect {
+                logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
                 if (count == 3) {
-                    connection.logger.error("Shutting down")
+                    logger.error("Shutting down")
                     stopEndPoints()
                 }
                 else {
-                    connection.logger.error("Reconnecting: $count")
+                    logger.error("Reconnecting: $count")
                     try {
                         client.connect(LOOPBACK)
                     } catch (e: IOException) {
@@ -321,8 +321,8 @@ class DisconnectReconnectTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onConnect { connection ->
-                connection.logger.error("Connected!")
+            server.onConnect {
+                logger.error("Connected!")
             }
         }
 
@@ -335,8 +335,8 @@ class DisconnectReconnectTest : BaseTest() {
             client = Client(config)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                connection.logger.error("Connected!")
+            client.onConnect {
+                logger.error("Connected!")
             }
 
             client.onDisconnect {

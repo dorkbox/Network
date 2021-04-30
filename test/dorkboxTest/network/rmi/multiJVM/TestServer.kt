@@ -48,12 +48,12 @@ object TestServer {
 
         val server = Server<Connection>(configuration)
 
-        server.onMessage<MessageWithTestCow> { connection, m ->
-            connection.logger.error("Received finish signal for test for: Client -> Server")
+        server.onMessage<MessageWithTestCow> { m ->
+            logger.error("Received finish signal for test for: Client -> Server")
             val `object` = m.testCow
             val id = `object`.id()
             Assert.assertEquals(124123, id.toLong())
-            connection.logger.error("Finished test for: Client -> Server")
+            logger.error("Finished test for: Client -> Server")
 
 //
 //            System.err.println("Starting test for: Server -> Client")
@@ -64,8 +64,8 @@ object TestServer {
 //            }
         }
 
-        server.onMessage<TestCow> { connection, test ->
-            connection.logger.error("Received test cow from client")
+        server.onMessage<TestCow> { test ->
+            logger.error("Received test cow from client")
             // this object LIVES on the server.
 
             try {
@@ -75,7 +75,7 @@ object TestServer {
             }
 
             // now test sending this object BACK to the client. The client SHOULD have the same RMI proxy object as before!
-            connection.send(test)
+            send(test)
 
 //            System.err.println("Starting test for: Server -> Client")
 //            connection.createObject<TestCow>(123) { rmiId, remoteObject ->

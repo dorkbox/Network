@@ -272,7 +272,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * (via connection.addListener), meaning that ONLY that listener attached to
      * the connection is notified on that event (ie, admin type listeners)
      */
-    suspend fun onDisconnect(function: suspend (Connection) -> Unit) {
+    suspend fun onDisconnect(function: suspend Connection.() -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
             origManager ?: ListenerManager()
@@ -284,7 +284,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Adds a function that will be called only for this connection, when a client/server receives a message
      */
-    suspend fun <MESSAGE> onMessage(function: suspend (Connection, MESSAGE) -> Unit) {
+    suspend fun <MESSAGE> onMessage(function: suspend Connection.(MESSAGE) -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
             origManager ?: ListenerManager()

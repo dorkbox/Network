@@ -25,7 +25,6 @@ import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.connection.Connection
 import dorkbox.network.storage.types.MemoryStore
-import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
@@ -105,25 +104,25 @@ object AeronClient {
 
 //        client.filter(IpSubnetFilterRule(IPv4.LOCALHOST, 32, IpFilterRuleType.ACCEPT))
 
-        client.filter { connection ->
+        client.filter {
             println("should this connection be allowed?")
             true
         }
 
-        client.onConnect { connection ->
+        client.onConnect {
             println("connected")
         }
 
-        client.onDisconnect { connection ->
+        client.onDisconnect {
             println("disconnect")
         }
 
-        client.onError { connection, throwable ->
+        client.onError { throwable ->
             println("has error")
             throwable.printStackTrace()
         }
 
-        client.onMessage<String> { connection, message ->
+        client.onMessage<String> { message ->
             println("HAS MESSAGE!")
             println(message)
         }

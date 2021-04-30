@@ -82,8 +82,8 @@ class RmiSpamAsyncTest : BaseTest() {
             client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                val remoteObject = connection.getGlobalObject<TestObject>(RMI_ID)
+            client.onConnect {
+                val remoteObject = getGlobalObject<TestObject>(RMI_ID)
                 val obj = remoteObject as RemoteObject
                 obj.async = true
 
@@ -91,18 +91,18 @@ class RmiSpamAsyncTest : BaseTest() {
                 for (i in 0 until totalRuns) {
                     if (!started) {
                         started = true
-                        connection.logger.error("Running for $totalRuns iterations....")
+                        logger.error("Running for $totalRuns iterations....")
                     }
 
                     if (i % mod == 0L) {
                         // this doesn't always output to the console. weird.
-                        client.logger.error("$i")
+                        logger.error("$i")
                     }
 
                     try {
                         remoteObject.setOther(i)
                     } catch (e: Exception) {
-                        connection.logger.error("Timeout when calling RMI method")
+                        logger.error("Timeout when calling RMI method")
                         e.printStackTrace()
                     }
                 }
@@ -112,7 +112,7 @@ class RmiSpamAsyncTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect()
+            client.connect(LOOPBACK)
         }
 
         waitForThreads()
@@ -125,7 +125,7 @@ class RmiSpamAsyncTest : BaseTest() {
 
     private class TestObjectImpl(private val counter: AtomicLong) : TestObject {
         @Override
-        override fun setOther(aFloat: Long): Boolean {
+        override fun setOther(value: Long): Boolean {
             counter.getAndIncrement()
             return true
         }

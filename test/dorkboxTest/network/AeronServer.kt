@@ -81,17 +81,17 @@ object AeronServer {
 
         val server: Server<*> = Server<Connection>(configuration)
 
-        server.filter { connection ->
-            println("should the connection $connection be allowed?")
+        server.filter {
+            println("should the connection $this be allowed?")
             true
         }
 
-        server.onConnect { connection ->
-            println("connected: $connection")
+        server.onConnect {
+            println("connected: $this")
         }
 
-        server.onDisconnect { connection ->
-            println("disconnect: $connection")
+        server.onDisconnect {
+            println("disconnect: $this")
         }
 
         server.onError { throwable ->
@@ -99,13 +99,13 @@ object AeronServer {
             throwable.printStackTrace()
         }
 
-        server.onError { connection, throwable ->
-            println("from test: has connection error: $connection")
+        server.onError { throwable ->
+            println("from test: has connection error: $this")
             throwable.printStackTrace()
         }
 
-        server.onMessage<String> { connection, message ->
-            connection.send("ECHO $message")
+        server.onMessage<String> { message ->
+            send("ECHO $message")
         }
 
         server.bind()

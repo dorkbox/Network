@@ -121,7 +121,7 @@ class RmiSimpleTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onMessage<MessageWithTestCow> { connection, m ->
+            server.onMessage<MessageWithTestCow> { m ->
                 server.logger.error("Received finish signal for test for: Client -> Server")
                 val `object` = m.testCow
                 val id = `object`.id()
@@ -131,9 +131,9 @@ class RmiSimpleTest : BaseTest() {
 
                 server.logger.error("Starting test for: Server -> Client")
                 // NOTE: THIS IS BI-DIRECTIONAL!
-                connection.createObject<TestCow>(123) {
+                createObject<TestCow>(123) {
                     server.logger.error("Running test for: Server -> Client")
-                    RmiCommonTest.runTests(connection, this, 123)
+                    RmiCommonTest.runTests(this@onMessage, this, 123)
                     server.logger.error("Done with test for: Server -> Client")
                 }
             }
@@ -147,15 +147,15 @@ class RmiSimpleTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                connection.createObject<TestCow>(23) {
+            client.onConnect {
+                createObject<TestCow>(23) {
                     client.logger.error("Running test for: Client -> Server")
-                    RmiCommonTest.runTests(connection, this, 23)
+                    RmiCommonTest.runTests(this@onConnect, this, 23)
                     client.logger.error("Done with test for: Client -> Server")
                 }
             }
 
-            client.onMessage<MessageWithTestCow> { _, m ->
+            client.onMessage<MessageWithTestCow> { m ->
                 client.logger.error("Received finish signal for test for: Client -> Server")
                 val `object` = m.testCow
                 val id = `object`.id()
@@ -194,7 +194,7 @@ class RmiSimpleTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onMessage<MessageWithTestCow> { connection, m ->
+            server.onMessage<MessageWithTestCow> { m ->
                 server.logger.error("Received finish signal for test for: Client -> Server")
 
                 val `object` = m.testCow
@@ -205,9 +205,9 @@ class RmiSimpleTest : BaseTest() {
                 server.logger.error("Finished test for: Client -> Server")
 
                 // normally this is in the 'connected', but we do it here, so that it's more linear and easier to debug
-                connection.createObject<TestCow>(4) {
+                createObject<TestCow>(4) {
                     server.logger.error("Running test for: Server -> Client")
-                    RmiCommonTest.runTests(connection, this, 4)
+                    RmiCommonTest.runTests(this@onMessage, this, 4)
                     server.logger.error("Done with test for: Server -> Client")
                 }
             }
@@ -221,7 +221,7 @@ class RmiSimpleTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onMessage<MessageWithTestCow> { _, m ->
+            client.onMessage<MessageWithTestCow> { m ->
                 client.logger.error("Received finish signal for test for: Client -> Server")
                 val `object` = m.testCow
                 val id = `object`.id()

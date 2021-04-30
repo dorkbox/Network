@@ -80,8 +80,8 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
             client = Client(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                val remoteObject = connection.getGlobalObject<TestObject>(RMI_ID)
+            client.onConnect {
+                val remoteObject = getGlobalObject<TestObject>(RMI_ID)
                 val obj = remoteObject as RemoteObject
                 obj.async = false
 
@@ -89,7 +89,7 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
                 for (i in 0 until totalRuns) {
                     if (!started) {
                         started = true
-                        connection.logger.error("Running for $totalRuns iterations....")
+                        logger.error("Running for $totalRuns iterations....")
                     }
 
                     if (i % mod == 0L) {
@@ -100,7 +100,7 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
                     try {
                         remoteObject.setOther(i)
                     } catch (e: Exception) {
-                        connection.logger.error("Timeout when calling RMI method")
+                        logger.error("Timeout when calling RMI method")
                         e.printStackTrace()
                     }
                 }

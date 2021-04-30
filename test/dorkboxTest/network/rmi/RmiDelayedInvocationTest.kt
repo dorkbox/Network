@@ -68,12 +68,12 @@ class RmiDelayedInvocationTest : BaseTest() {
             val client = Client<Connection>(configuration)
             addEndPoint(client)
 
-            client.onConnect { connection ->
-                val remoteObject = connection.getGlobalObject<TestObject>(OBJ_ID)
+            client.onConnect {
+                val remoteObject = getGlobalObject<TestObject>(OBJ_ID)
 
                 val totalRuns = 100
                 var abort = false
-                connection.logger.error("Running for $totalRuns iterations....")
+                logger.error("Running for $totalRuns iterations....")
 
                 for (i in 0 until totalRuns) {
                     if (abort) {
@@ -89,13 +89,13 @@ class RmiDelayedInvocationTest : BaseTest() {
                         try {
                             (iterateLock as Object).wait(1)
                         } catch (e: InterruptedException) {
-                            connection.logger.error("Failed after: $i")
+                            logger.error("Failed after: $i")
                             e.printStackTrace()
                             abort = true
                         }
                     }
                 }
-                connection.logger.error("Done with delay invocation test")
+                logger.error("Done with delay invocation test")
 
                 stopEndPoints()
             }

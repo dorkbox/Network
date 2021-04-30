@@ -291,12 +291,12 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         }
 
 
-        // only change LOCALHOST -> IPC if the media driver is ALREADY running LOCALLY!
+        // IPC can be enabled TWO ways!
+        // - config.enableIpc
+        // - NULL remoteAddress
+        // It is entirely possible that the server does not have IPC enabled!
         var isUsingIPC = false
-        val autoChangeToIpc = config.enableIpc &&
-                              (remoteAddress == null || remoteAddress.isLoopbackAddress) && aeronDriver.isRunning()
-
-
+        val autoChangeToIpc = (config.enableIpc && (remoteAddress == null || remoteAddress.isLoopbackAddress)) || (!config.enableIpc && remoteAddress == null)
 
         val handshake = ClientHandshake(crypto, this)
         val handshakeConnection = if (autoChangeToIpc) {
@@ -312,9 +312,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 ipcConnection.buildClient(aeronDriver, logger)
                 isUsingIPC = true
             } catch (e: Exception) {
-                // if we specified that we MUST use IPC, then we have to throw the exception, because there is no IPC
                 if (remoteAddress == null) {
-                    throw e
+                    // if we specified that we MUST use IPC, then we have to throw the exception, because there is no IPC
+                    throw ClientException("Unable to connect via IPC to server. No address was specified", e)
                 }
             }
 

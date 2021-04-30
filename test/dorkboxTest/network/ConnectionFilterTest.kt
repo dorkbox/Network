@@ -24,9 +24,9 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onConnect { connection ->
+            server.onConnect {
                 serverConnectSuccess.value = true
-                connection.close()
+                close()
             }
         }
 
@@ -73,9 +73,9 @@ class ConnectionFilterTest : BaseTest() {
             server.filter(IpSubnetFilterRule(IPv4.WILDCARD, 0))
             server.filter(IpSubnetFilterRule(IPv6.WILDCARD, 0))
 
-            server.onConnect { connection ->
+            server.onConnect {
                 serverConnectSuccess.value = true
-                connection.close()
+                close()
             }
         }
 
@@ -121,9 +121,9 @@ class ConnectionFilterTest : BaseTest() {
             server.filter(IpSubnetFilterRule("1.1.1.1", 0))
             server.filter(IpSubnetFilterRule("::1.1.1.1", 0)) // compressed ipv6
 
-            server.onConnect { connection ->
+            server.onConnect {
                 serverConnectSuccess.value = true
-                connection.close()
+                close()
             }
         }
 
@@ -167,9 +167,9 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onConnect { connection ->
+            server.onConnect {
                 serverConnectSuccess.value = true
-                connection.close()
+                close()
             }
         }
 
@@ -216,8 +216,8 @@ class ConnectionFilterTest : BaseTest() {
             server.bind()
             server.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
 
-            server.onConnect { connection ->
-                connection.close()
+            server.onConnect {
+                close()
             }
         }
 
@@ -258,9 +258,9 @@ class ConnectionFilterTest : BaseTest() {
             server.bind()
             server.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
 
-            server.onConnect { connection ->
+            server.onConnect {
                 serverConnectSuccess.lazySet(true)
-                connection.close()
+                close()
             }
         }
 
@@ -304,8 +304,8 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onConnect { connection ->
-                connection.close()
+            server.onConnect {
+                close()
             }
         }
 
@@ -346,9 +346,9 @@ class ConnectionFilterTest : BaseTest() {
                 true
             }
 
-            server.onConnect { connection ->
+            server.onConnect {
                 serverConnectSuccess.value = true
-                connection.close()
+                close()
             }
         }
 
@@ -393,9 +393,9 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onConnect { connection ->
+            server.onConnect {
                 serverConnectSuccess.value = true
-                connection.close()
+                close()
             }
         }
 
@@ -444,8 +444,8 @@ class ConnectionFilterTest : BaseTest() {
                 false
             }
 
-            server.onConnect { connection ->
-                connection.close()
+            server.onConnect {
+                close()
             }
         }
 
@@ -455,7 +455,7 @@ class ConnectionFilterTest : BaseTest() {
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
 
-            client.onDisconnect { _ ->
+            client.onDisconnect {
                 stopEndPoints()
             }
 
@@ -479,8 +479,8 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onConnect { connection ->
-                connection.close()
+            server.onConnect {
+                close()
             }
         }
 
@@ -493,7 +493,7 @@ class ConnectionFilterTest : BaseTest() {
                 false
             }
 
-            client.onDisconnect { _ ->
+            client.onDisconnect {
                 stopEndPoints()
             }
 

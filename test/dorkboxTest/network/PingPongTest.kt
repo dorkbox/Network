@@ -38,7 +38,6 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
@@ -63,18 +62,18 @@ class PingPongTest : BaseTest() {
             addEndPoint(server)
             server.bind()
 
-            server.onError { _, throwable ->
+            server.onError { throwable ->
                 fail = "Error during processing. $throwable"
             }
 
-            server.onConnect { _ ->
+            server.onConnect {
                 server.forEachConnection { connection ->
                     connection.logger.error("server connection: $connection")
                 }
             }
 
-            server.onMessage<Data> { connection, message ->
-                connection.send(message)
+            server.onMessage<Data> { message ->
+                send(message)
             }
         }
 
@@ -86,25 +85,25 @@ class PingPongTest : BaseTest() {
             addEndPoint(client)
 
 
-            client.onConnect { connection ->
-                connection.logger.error("client connection: $connection")
+            client.onConnect {
+                logger.error("client connection: $this")
 
                 fail = null
-                connection.send(data)
+                send(data)
             }
 
-            client.onError { connection, throwable ->
+            client.onError { throwable ->
                 fail = "Error during processing. $throwable"
                 throwable.printStackTrace()
             }
 
             val counter = AtomicInteger(0)
-            client.onMessage<Data> { connection, message ->
+            client.onMessage<Data> { message ->
                 if (counter.getAndIncrement() <= tries) {
-                    connection.send(data)
+                    send(data)
                 } else {
-                    connection.logger.error("done.")
-                    connection.logger.error("Ran $tries times")
+                    logger.error("done.")
+                    logger.error("Ran $tries times")
                     stopEndPoints()
                 }
             }
