@@ -186,6 +186,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
+                println("**************************** CLOSE")
                 stopEndPoints()
             }
 
@@ -233,12 +234,65 @@ class ConnectionFilterTest : BaseTest() {
             try {
                 client.connect(LOOPBACK)
             } catch (e: Exception) {
+                e.printStackTrace()
                 stopEndPoints()
                 throw e
             }
         }
 
         waitForThreads()
+    }
+
+    @Test
+    fun rejectServerIpc() {
+        val serverConnectSuccess = atomic(false)
+        val clientConnectSuccess = atomic(false)
+
+        run {
+            val configuration = serverConfig() {
+                enableIpc = true
+            }
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+            server.bind()
+            server.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
+
+            server.onConnect { connection ->
+                serverConnectSuccess.lazySet(true)
+                connection.close()
+            }
+        }
+
+        run {
+            val config = clientConfig() {
+                enableIpc = true
+            }
+
+            val client: Client<Connection> = Client(config)
+            addEndPoint(client)
+
+            client.onConnect {
+                clientConnectSuccess.value = true
+            }
+
+            client.onDisconnect {
+                stopEndPoints()
+            }
+
+            try {
+                client.connect(LOOPBACK)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                stopEndPoints()
+                throw e
+            }
+        }
+
+        waitForThreads()
+
+        Assert.assertTrue(serverConnectSuccess.value)
+        Assert.assertTrue(clientConnectSuccess.value)
     }
 
     @Test(expected = ClientException::class)

@@ -41,7 +41,6 @@ import dorkbox.network.connection.ConnectionParams
 import dorkbox.util.exceptions.InitializationException
 import dorkbox.util.exceptions.SecurityException
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.io.IOException
@@ -158,9 +157,7 @@ class ListenerTest : BaseTest() {
         }
 
 
-        runBlocking {
-            client.connect(LOOPBACK)
-        }
+        client.connect(LOOPBACK)
 
         waitForThreads()
 

@@ -70,7 +70,7 @@ class MemoryTest : BaseTest() {
                     }
                 }
 
-                client.connect()
+                client.connectIpc()
             }
 
             Thread.sleep(Long.MAX_VALUE)

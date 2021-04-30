@@ -38,7 +38,6 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.util.exceptions.SecurityException
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -114,9 +113,7 @@ class MultipleServerTest : BaseTest() {
                 connection.send("client_$count")
             }
 
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
         waitForThreads()
@@ -146,6 +143,7 @@ class MultipleServerTest : BaseTest() {
             configuration.subscriptionPort += offset
             configuration.publicationPort += offset
             configuration.aeronDirectory = serverAeronDir
+            configuration.enableIpc = true
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
@@ -178,6 +176,7 @@ class MultipleServerTest : BaseTest() {
             configuration.subscriptionPort += offset
             configuration.publicationPort += offset
             configuration.aeronDirectory = clientAeronDir
+            configuration.enableIpc = true
 
             val client: Client<Connection> = Client(configuration)
             addEndPoint(client)
@@ -189,9 +188,7 @@ class MultipleServerTest : BaseTest() {
                 connection.send("client_$count")
             }
 
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
         waitForThreads()

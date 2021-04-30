@@ -70,14 +70,23 @@ abstract class BaseTest {
     private var autoFailThread: Thread? = null
 
     companion object {
+        fun setLog() {
+            setLogLevel(Level.TRACE)
+        }
+
         const val LOOPBACK = "loopback"
         fun clientConfig(block: Configuration.() -> Unit = {}): Configuration {
+
             val configuration = Configuration()
             configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
             configuration.subscriptionPort = 2000
             configuration.publicationPort = 2001
 
+            configuration.enableIpc = false
+
             block(configuration)
+
+            setLog()
             return configuration
         }
 
@@ -88,16 +97,51 @@ abstract class BaseTest {
             configuration.subscriptionPort = 2000
             configuration.publicationPort = 2001
 
+            configuration.enableIpc = false
             configuration.maxClientCount = 5
             configuration.maxConnectionsPerIpAddress = 5
 
             block(configuration)
 
+            setLog()
             return configuration
         }
 
+        fun setLogLevel(level: Level) {
+            // assume SLF4J is bound to logback in the current environment
+            val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
+            rootLogger.level = level
+
+            val context = rootLogger.loggerContext
+            val jc = JoranConfigurator()
+            context.reset() // override default configuration
+
+            jc.context = context
+
+
+            context.getLogger(Server::class.simpleName).level = level
+            context.getLogger(Client::class.simpleName).level = level
+
+            // we only want error messages
+            val kryoLogger = LoggerFactory.getLogger("com.esotericsoftware") as Logger
+            kryoLogger.level = Level.ERROR
+
+            val encoder = PatternLayoutEncoder()
+            encoder.context = context
+            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
+            encoder.start()
+            val consoleAppender = ConsoleAppender<ILoggingEvent>()
+            consoleAppender.context = context
+            consoleAppender.encoder = encoder
+            consoleAppender.start()
+            rootLogger.addAppender(consoleAppender)
+//
+//            context.getLogger(Server::class.simpleName).trace("TESTING")
+//            context.getLogger(Client::class.simpleName).trace("TESTING")
+        }
+
         // wait minimum of 2 minutes before we automatically fail the unit test.
-        const val AUTO_FAIL_TIMEOUT: Long = 120
+        var AUTO_FAIL_TIMEOUT: Long = 120
 
         init {
             if (OS.javaVersion >= 9) {
@@ -133,38 +177,7 @@ abstract class BaseTest {
 
     init {
         println("---- " + this.javaClass.simpleName)
-
-//        setLogLevel(Level.INFO)
-        setLogLevel(Level.TRACE)
-//        setLogLevel(Level.DEBUG)
     }
-
-    fun setLogLevel(level: Level) {
-        // assume SLF4J is bound to logback in the current environment
-        val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
-        val context = rootLogger.loggerContext
-        val jc = JoranConfigurator()
-        jc.context = context
-        context.reset() // override default configuration
-
-        rootLogger.level = level
-
-        // we only want error messages
-        val kryoLogger = LoggerFactory.getLogger("com.esotericsoftware") as Logger
-        kryoLogger.level = Level.ERROR
-
-
-        val encoder = PatternLayoutEncoder()
-        encoder.context = context
-        encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
-        encoder.start()
-        val consoleAppender = ConsoleAppender<ILoggingEvent>()
-        consoleAppender.context = context
-        consoleAppender.encoder = encoder
-        consoleAppender.start()
-        rootLogger.addAppender(consoleAppender)
-    }
-
 
     fun addEndPoint(endPointConnection: EndPoint<*>) {
         endPointConnections.add(endPointConnection)
@@ -252,12 +265,6 @@ abstract class BaseTest {
         if (autoFailThread != null) {
             autoFailThread!!.interrupt()
             autoFailThread = null
-        }
-
-        // Give sockets a chance to close before starting the next test.
-        try {
-            Thread.sleep(1000)
-        } catch (ignored: InterruptedException) {
         }
     }
 }

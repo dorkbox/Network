@@ -109,9 +109,7 @@ class PingPongTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
 

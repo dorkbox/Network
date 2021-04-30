@@ -21,7 +21,6 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.BaseTest
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicLong
@@ -38,18 +37,14 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
 
     @Test
     fun rmiNetwork() {
-        runBlocking {
-            rmi { configuration ->
-                configuration.enableIpcForLoopback = false
-            }
+        rmi {
+            enableIpc = false
         }
     }
 
     @Test
     fun rmiIpc() {
-        runBlocking {
-            rmi()
-        }
+        rmi()
     }
 
 
@@ -57,7 +52,7 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
      * In this test the server has two objects in an object space. The client
      * uses the first remote object to get the second remote object.
      */
-    suspend fun rmi(config: (Configuration) -> Unit = {}) {
+    fun rmi(config: Configuration.() -> Unit = {}) {
         val server: Server<Connection>
 
         val mod = 400L

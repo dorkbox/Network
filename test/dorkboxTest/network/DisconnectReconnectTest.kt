@@ -57,13 +57,85 @@ class DisconnectReconnectTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
 
-        waitForThreads()
+        waitForThreads(0)
+
+        System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
+        Assert.assertEquals(4, reconnectCount.value)
+    }
+
+    interface CloseIface {
+        suspend fun close()
+    }
+
+    class CloseImpl : CloseIface {
+        override suspend fun close() {
+            // the connection specific one is called instead
+        }
+
+        suspend fun close(connection: Connection) {
+            connection.close()
+        }
+    }
+
+
+    @Test
+    fun reconnectRmiClient() {
+        val CLOSE_ID = 33
+
+        run {
+            val config = serverConfig()
+            config.serialization.registerRmi(CloseIface::class.java)
+
+            val server: Server<Connection> = Server(config)
+            addEndPoint(server)
+            server.bind()
+
+
+            server.onConnect { connection ->
+                connection.logger.error("Disconnecting after 2 seconds.")
+                delay(2000)
+
+                connection.logger.error("Disconnecting via RMI ....")
+                val closerObject = connection.getGlobalObject<CloseIface>(CLOSE_ID)
+                closerObject.close()
+            }
+        }
+
+        run {
+            val config = clientConfig()
+            config.serialization.registerRmi(CloseIface::class.java, CloseImpl::class.java)
+
+            val client: Client<Connection> = Client(config)
+            addEndPoint(client)
+            client.saveGlobalObject(CloseImpl(), CLOSE_ID)
+
+            client.onDisconnect { connection ->
+                connection.logger.error("Disconnected!")
+
+                val count = reconnectCount.getAndIncrement()
+                if (count == 3) {
+                    connection.logger.error("Shutting down")
+                    stopEndPoints()
+                }
+                else {
+                    connection.logger.error("Reconnecting: $count")
+                    try {
+                        client.connect(LOOPBACK)
+                    } catch (e: IOException) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+
+            client.connect(LOOPBACK)
+        }
+
+
+        waitForThreads(0)
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)
@@ -116,17 +188,12 @@ class DisconnectReconnectTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
 
         waitForThreads()
-
-        runBlocking {
-            aeronDriver.close()
-        }
+        aeronDriver.close()
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)
@@ -134,6 +201,7 @@ class DisconnectReconnectTest : BaseTest() {
 
     @Test
     fun reconnectWithFallbackClient() {
+        // this tests IPC with fallback to UDP (because the server has IPC disabled, and the client has it enabled)
         run {
             val config = serverConfig()
             config.enableIpc = false
@@ -154,7 +222,6 @@ class DisconnectReconnectTest : BaseTest() {
         run {
             val config = clientConfig()
             config.enableIpc = true
-            config.enableIpcForLoopback = true
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
@@ -178,9 +245,7 @@ class DisconnectReconnectTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
 
@@ -224,9 +289,7 @@ class DisconnectReconnectTest : BaseTest() {
                 stopEndPoints()
             }
 
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
         server.close()

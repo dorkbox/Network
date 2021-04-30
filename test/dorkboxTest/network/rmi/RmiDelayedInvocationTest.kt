@@ -21,7 +21,6 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
-import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -31,17 +30,13 @@ class RmiDelayedInvocationTest : BaseTest() {
 
     @Test
     fun rmiNetwork() {
-        runBlocking {
-            rmi { configuration ->
-                configuration.enableIpcForLoopback = false
-            }
-        }
+        rmi()
     }
 
     @Test
     fun rmiIpc() {
-        runBlocking {
-            rmi()
+        rmi {
+            enableIpc = true
         }
     }
 
@@ -53,7 +48,7 @@ class RmiDelayedInvocationTest : BaseTest() {
      * In this test the server has two objects in an object space. The client
      * uses the first remote object to get the second remote object.
      */
-    suspend fun rmi(config: (Configuration) -> Unit = {}) {
+    fun rmi(config: Configuration.() -> Unit = {}) {
         run {
             val configuration = serverConfig()
             config(configuration)

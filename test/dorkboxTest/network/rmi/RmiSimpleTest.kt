@@ -52,72 +52,60 @@ class RmiSimpleTest : BaseTest() {
 
     @Test
     fun rmiIPv4NetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = false) { configuration ->
-            configuration.enableIpcForLoopback = false
-        }
+        rmiGlobal(isIpv4 = true, isIpv6 = false)
     }
 
     @Test
     fun rmiIPv6NetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = false) { configuration ->
-            configuration.enableIpcForLoopback = false
-        }
+        rmiGlobal(isIpv4 = true, isIpv6 = false)
     }
 
     @Test
     fun rmiBothIPv4ConnectNetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = true) { configuration ->
-            configuration.enableIpcForLoopback = false
-        }
+        rmiGlobal(isIpv4 = true, isIpv6 = true)
     }
 
     @Test
     fun rmiBothIPv6ConnectNetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = true, runIpv4Connect = true) { configuration ->
-            configuration.enableIpcForLoopback = false
-        }
+        rmiGlobal(isIpv4 = true, isIpv6 = true, runIpv4Connect = true)
     }
 
     @Test
     fun rmiIPv4NetworkConnection() {
-        rmi(isIpv4 = true, isIpv6 = false) { configuration ->
-            configuration.enableIpcForLoopback = false
-        }
+        rmi(isIpv4 = true, isIpv6 = false)
     }
 
     @Test
     fun rmiIPv6NetworkConnection() {
-        rmi(isIpv4 = false, isIpv6 = true) { configuration ->
-            configuration.enableIpcForLoopback = false
-        }
+        rmi(isIpv4 = false, isIpv6 = true)
     }
 
     @Test
     fun rmiBothIPv4ConnectNetworkConnection() {
-        rmi(isIpv4 = true, isIpv6 = true) { configuration ->
-            configuration.enableIpcForLoopback = false
-        }
+        rmi(isIpv4 = true, isIpv6 = true)
     }
 
 
     @Test
     fun rmiBothIPv6ConnectNetworkConnection() {
-        rmi(isIpv4 = true, isIpv6 = true, runIpv4Connect = true) { configuration ->
-            configuration.enableIpcForLoopback = false
-        }
+        rmi(isIpv4 = true, isIpv6 = true, runIpv4Connect = true)
     }
 
     @Test
     fun rmiIpcNetworkGlobal() {
-        rmiGlobal()
+        rmiGlobal() {
+            enableIpc = true
+        }
     }
 
     @Test
     fun rmiIpcNetworkConnection() {
-        rmi()
+        rmi() {
+            enableIpc = true
+        }
     }
 
-    fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: (Configuration) -> Unit = {}) {
+    fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
         run {
             val configuration = serverConfig()
             configuration.enableIPv4 = isIpv4
@@ -176,21 +164,19 @@ class RmiSimpleTest : BaseTest() {
                 stopEndPoints(2000)
             }
 
-            runBlocking {
-                when {
-                    isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST)
-                    isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
-                    isIpv4 -> client.connect(IPv4.LOCALHOST)
-                    isIpv6 -> client.connect(IPv6.LOCALHOST)
-                    else -> client.connect()
-                }
+            when {
+                isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST)
+                isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
+                isIpv4 -> client.connect(IPv4.LOCALHOST)
+                isIpv6 -> client.connect(IPv6.LOCALHOST)
+                else -> client.connect()
             }
         }
 
         waitForThreads()
     }
 
-    fun rmiGlobal(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: (Configuration) -> Unit = {}) {
+    fun rmiGlobal(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
         run {
             val configuration = serverConfig()
             configuration.enableIPv4 = isIpv4
@@ -244,18 +230,18 @@ class RmiSimpleTest : BaseTest() {
                 stopEndPoints(2000)
             }
 
+            when {
+                isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST)
+                isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
+                isIpv4 -> client.connect(IPv4.LOCALHOST)
+                isIpv6 -> client.connect(IPv6.LOCALHOST)
+                else -> client.connect()
+            }
+
+            client.logger.error("Starting test for: Client -> Server")
+
+            // this creates a GLOBAL object on the server (instead of a connection specific object)
             runBlocking {
-                when {
-                    isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST)
-                    isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
-                    isIpv4 -> client.connect(IPv4.LOCALHOST)
-                    isIpv6 -> client.connect(IPv6.LOCALHOST)
-                    else -> client.connect()
-                }
-
-                client.logger.error("Starting test for: Client -> Server")
-
-                // this creates a GLOBAL object on the server (instead of a connection specific object)
                 client.createObject<TestCow>(44) {
                     client.logger.error("Running test for: Client -> Server")
                     RmiCommonTest.runTests(client.connection, this, 44)

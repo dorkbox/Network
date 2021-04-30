@@ -51,8 +51,7 @@ class StorageTest : BaseTest() {
         }
         val client = Client<Connection>(config)
 
-
-        client.connect("localhost")
+        client.connect(LOOPBACK)
 
         Assert.assertTrue(server.storage.getSalt().contentEquals(client.storage.getSalt()))
 

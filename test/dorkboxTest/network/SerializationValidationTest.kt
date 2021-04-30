@@ -20,7 +20,6 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 
@@ -51,10 +50,7 @@ class SerializationValidationTest : BaseTest() {
                 connection.send(FinishedCommand())
             }
 
-
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
         waitForThreads()
@@ -113,10 +109,7 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
         waitForThreads()
@@ -160,10 +153,7 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-
-            runBlocking {
-                client.connect(LOOPBACK)
-            }
+            client.connect(LOOPBACK)
         }
 
         waitForThreads()

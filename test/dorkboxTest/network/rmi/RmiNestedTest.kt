@@ -19,16 +19,13 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
 
 
-@Suppress("unused", "RedundantSuspendModifier")
 class RmiNestedTest : BaseTest() {
-
     companion object {
         private val idCounter = AtomicInteger()
     }
@@ -118,9 +115,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                client.connect(LOOPBACK, 5000)
-            }
+            client.connect(LOOPBACK)
         }
         waitForThreads()
     }
@@ -185,9 +180,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                client.connect(LOOPBACK, 5000)
-            }
+            client.connect(LOOPBACK)
         }
         waitForThreads()
     }
@@ -245,9 +238,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                client.connect(LOOPBACK, 5000)
-            }
+            client.connect(LOOPBACK)
         }
         waitForThreads()
     }
@@ -306,9 +297,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            runBlocking {
-                client.connect(LOOPBACK, 5000)
-            }
+            client.connect(LOOPBACK)
         }
         waitForThreads()
     }
