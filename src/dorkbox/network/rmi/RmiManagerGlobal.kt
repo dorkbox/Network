@@ -24,6 +24,7 @@ import dorkbox.util.classes.ClassHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
+import java.lang.Throwable
 import java.lang.reflect.Proxy
 import java.util.*
 
@@ -287,7 +288,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
                                 insideResult = ex
                             }
                             else {
-                                insideResult.initCause(null)
+                                (insideResult as Throwable).initCause(null)
                             }
                         }
                         insideResult
@@ -326,7 +327,7 @@ internal class RmiManagerGlobal<CONNECTION : Connection>(logger: KLogger,
                             result = ex
                         }
                         else {
-                            result.initCause(null)
+                            (result as Throwable).initCause(null)
                         }
 
                         RmiUtils.cleanStackTraceForImpl(result as Exception, false)
