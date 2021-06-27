@@ -73,7 +73,7 @@ internal class ResponseManager(private val logger: KLogger, private val actionDi
         actionDispatch.launch {
             try {
                 for (it in ids) {
-                    waiterCache.offer(ResponseWaiter(it))
+                    waiterCache.trySend(ResponseWaiter(it))
                 }
             } catch (e: ClosedSendChannelException) {
                 // this can happen if we are starting/stopping an endpoint (and thus a response-manager) VERY quickly, and can be ignored
