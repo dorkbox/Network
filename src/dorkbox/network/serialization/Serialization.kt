@@ -405,7 +405,7 @@ open class Serialization(private val references: Boolean = true, private val fac
             // we have to allow CUSTOM classes to register (where the order does not matter), so that if the CLIENT is the RMI-SERVER, it can
             // specify IMPL classes for RMI.
             classesToRegister.forEach { registration ->
-                require(registration is ClassRegistrationForRmi) { "Unable to initialize a class registrations for anything OTHER than RMI!! To fix this, remove ${registration.clazz}" }
+                require(registration is ClassRegistrationForRmi) { "Unable to register a *class* by itself. This is only permitted for RMI. To fix this, remove xx.register(${registration.clazz.name})" }
             }
 
             @Suppress("UNCHECKED_CAST")
