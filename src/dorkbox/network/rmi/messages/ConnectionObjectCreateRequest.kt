@@ -22,7 +22,7 @@ import dorkbox.network.rmi.RmiUtils
  *
  * @param callbackId (LEFT) to know which callback to use when the object is created
  * @param interfaceClassId (RIGHT) the Kryo interface class ID to create
- * @param objectParameters the constructor parameters to create the object with
+ * @param objectParameters the constructor parameters to create the object with, can be null
  */
 data class ConnectionObjectCreateRequest(val packedIds: Int, val objectParameters: Array<Any?>?) : RmiMessage {
     override fun equals(other: Any?): Boolean {
