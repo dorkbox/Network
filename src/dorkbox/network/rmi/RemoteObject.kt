@@ -75,7 +75,9 @@ interface RemoteObject {
     fun enableHashCode(enabled: Boolean)
 
     /**
-     * Permits calls to [Object.equals] to actually return the `equals()` method on the object.
+     * Permits calls to [Object.equals] to actually return the `equals()` method on the object. This ONLY is applicable for *TWO* RMI objects.
+     *
+     * This will return false if one of those objects is NOT an RMI object!
      *
      * @param enabled  If false, calls to [Object.equals] will compare the "id" (where `id` is the remote object ID)
      *      instead of invoking the remote `equals()` method on the object.
