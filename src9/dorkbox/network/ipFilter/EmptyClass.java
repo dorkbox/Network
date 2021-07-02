@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2021 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.rmi.messages
+
+package dorkbox.network.ipFilter;
 
 /**
- * These use packed IDs, because both are REALLY shorts, but the JVM deals better with ints.
- *
- * @param interfaceClassId (LEFT) the Kryo interface class ID to create
- * @param callbackId (RIGHT) to know which callback to use when the object is created
- * @param objectParameters the constructor parameters to create the object with
+ * Required for intellij to not complain regarding `module-info` for a multi-release jar.
+ * This file is completely ignored by the gradle build process
  */
-data class GlobalObjectCreateRequest(val packedIds: Int, val objectParameters: Array<Any?>?) : RmiMessage
+public
+class EmptyClass {}
