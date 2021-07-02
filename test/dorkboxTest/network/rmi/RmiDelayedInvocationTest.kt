@@ -40,8 +40,8 @@ class RmiDelayedInvocationTest : BaseTest() {
         }
     }
 
-    fun register(serialization: Serialization) {
-        serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+    fun register(serialization: Serialization<Connection>) {
+        serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
     }
 
     /**
@@ -57,7 +57,7 @@ class RmiDelayedInvocationTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.saveGlobalObject(TestObjectImpl(iterateLock), OBJ_ID)
+            server.rmiGlobal.save(TestObjectImpl(iterateLock), OBJ_ID)
             server.bind()
         }
 
@@ -69,7 +69,7 @@ class RmiDelayedInvocationTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect {
-                val remoteObject = getGlobalObject<TestObject>(OBJ_ID)
+                val remoteObject = rmi.getGlobal<TestObject>(OBJ_ID)
 
                 val totalRuns = 100
                 var abort = false

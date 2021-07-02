@@ -39,14 +39,16 @@ object TestServer {
         configuration.enableRemoteSignatureValidation = false
         configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
 
-        configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+        configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
         configuration.serialization.register(MessageWithTestCow::class.java)
         configuration.serialization.register(UnsupportedOperationException::class.java)
 
         configuration.serialization.register(TestBabyCowImpl::class.java)
-        configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
+        configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
 
         val server = Server<Connection>(configuration)
+
+        server.rmiGlobal.save(TestCowImpl(12123), 12123)
 
         server.onMessage<MessageWithTestCow> { m ->
             logger.error("Received finish signal for test for: Client -> Server")

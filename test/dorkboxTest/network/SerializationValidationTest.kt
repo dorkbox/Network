@@ -60,7 +60,7 @@ class SerializationValidationTest : BaseTest() {
     fun checkTakeKryo() {
         val serialization = serverConfig().serialization
 
-        val kryos = mutableListOf<KryoExtra>()
+        val kryos = mutableListOf<KryoExtra<Connection>>()
         for (i in 0 until 17) {
             kryos.add(serialization.takeKryo())
         }
@@ -75,11 +75,13 @@ class SerializationValidationTest : BaseTest() {
     fun checkOutOfOrder() {
         run {
             val configuration = serverConfig()
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+            configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
             configuration.serialization.register(TestObjectImpl::class.java) // this is again, on purpose to verify registration order!
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
+
+            server.rmiGlobal.save(TestObjectImpl(), 1)
 
             server.onMessage<TestObject> { message ->
                 stopEndPoints()
@@ -96,7 +98,7 @@ class SerializationValidationTest : BaseTest() {
 
             client.onConnect {
                 logger.error("Connected")
-                createObject<TestObject> {
+                rmi.getGlobal<TestObject>(1).apply {
                     logger.error("Starting test")
                     setValue(43.21f)
 
@@ -119,11 +121,13 @@ class SerializationValidationTest : BaseTest() {
     fun checkOutOfOrder2() {
         run {
             val configuration = serverConfig()
-            configuration.serialization.registerRmi(TestObject::class.java)
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+            configuration.serialization.rmi.register(TestObject::class.java)
+            configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
+
+            server.rmiGlobal.save(TestObjectImpl(), 1)
 
             server.onMessage<TestObject> { message ->
                 stopEndPoints()
@@ -140,7 +144,7 @@ class SerializationValidationTest : BaseTest() {
 
             client.onConnect {
                 logger.error("Connected")
-                createObject<TestObject> {
+                rmi.getGlobal<TestObject>(1).apply {
                     logger.error("Starting test")
                     setValue(43.21f)
 
@@ -159,7 +163,7 @@ class SerializationValidationTest : BaseTest() {
         waitForThreads()
     }
 
-    private fun register(serialization: Serialization) {
+    private fun register(serialization: Serialization<Connection>) {
         serialization.register(Command1::class.java)
         serialization.register(Command2::class.java)
         serialization.register(Command3::class.java)

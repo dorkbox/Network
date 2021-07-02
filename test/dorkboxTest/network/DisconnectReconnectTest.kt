@@ -143,7 +143,7 @@ class DisconnectReconnectTest : BaseTest() {
 
         run {
             val config = serverConfig()
-            config.serialization.registerRmi(CloseIface::class.java)
+            config.serialization.rmi.register(CloseIface::class.java)
 
             val server: Server<Connection> = Server(config)
             addEndPoint(server)
@@ -155,18 +155,21 @@ class DisconnectReconnectTest : BaseTest() {
                 delay(2000)
 
                 logger.error("Disconnecting via RMI ....")
-                val closerObject = getGlobalObject<CloseIface>(CLOSE_ID)
+                val closerObject = rmi.getGlobal<CloseIface>(CLOSE_ID)
                 closerObject.close()
             }
         }
 
         run {
             val config = clientConfig()
-            config.serialization.registerRmi(CloseIface::class.java, CloseImpl::class.java)
+            config.serialization.rmi.register(CloseIface::class.java, CloseImpl::class.java)
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
-            client.saveGlobalObject(CloseImpl(), CLOSE_ID)
+
+            client.onConnect {
+                rmi.save(CloseImpl(), CLOSE_ID)
+            }
 
             client.onDisconnect {
                 logger.error("Disconnected!")

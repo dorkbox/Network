@@ -31,8 +31,6 @@ import java.util.concurrent.atomic.AtomicLong
 class MemoryTest : BaseTest() {
     private val counter = AtomicLong(0)
 
-    private val RMI_ID = 12251
-
     init {
         // the logger cannot keep-up if it's on trace
         setLogLevel(Level.DEBUG)
@@ -41,12 +39,14 @@ class MemoryTest : BaseTest() {
     @Test
     fun runForeverIpcAsyncNormal() {
         runBlocking {
+            val RMI_ID = 12251
+
             run {
                 val configuration = serverConfig()
-                configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+                configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
                 val server = Server<Connection>(configuration)
-                server.saveGlobalObject(TestObjectImpl(counter), RMI_ID)
+                server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
                 server.bind()
             }
 
@@ -54,7 +54,7 @@ class MemoryTest : BaseTest() {
             run {
                 val client = Client<Connection>(clientConfig())
                 client.onConnect {
-                    val remoteObject = getGlobalObject<TestObject>(RMI_ID)
+                    val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
                     val obj = remoteObject as RemoteObject
                     obj.async = true
 
@@ -79,13 +79,15 @@ class MemoryTest : BaseTest() {
 
     @Test
     fun runForeverIpcAsyncSuspend() {
+        val RMI_ID = 12251
+
         runBlocking {
             run {
                 val configuration = serverConfig()
-                configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+                configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
                 val server = Server<Connection>(configuration)
-                server.saveGlobalObject(TestObjectImpl(counter), RMI_ID)
+                server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
                 server.bind()
             }
 
@@ -93,7 +95,7 @@ class MemoryTest : BaseTest() {
             run {
                 val client = Client<Connection>(clientConfig())
                 client.onConnect {
-                    val remoteObject = getGlobalObject<TestObject>(RMI_ID)
+                    val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
                     val obj = remoteObject as RemoteObject
                     obj.async = true
 
@@ -155,23 +157,23 @@ class MemoryTest : BaseTest() {
         val serialization = serverConfig().serialization
 
         // 17 to force a pool size change
-        var kryo1: KryoExtra
-        var kryo2: KryoExtra
-        var kryo3: KryoExtra
-        var kryo4: KryoExtra
-        var kryo5: KryoExtra
-        var kryo6: KryoExtra
-        var kryo7: KryoExtra
-        var kryo8: KryoExtra
-        var kryo9: KryoExtra
-        var kryo10: KryoExtra
-        var kryo11: KryoExtra
-        var kryo12: KryoExtra
-        var kryo13: KryoExtra
-        var kryo14: KryoExtra
-        var kryo15: KryoExtra
-        var kryo16: KryoExtra
-        var kryo17: KryoExtra
+        var kryo1: KryoExtra<Connection>
+        var kryo2: KryoExtra<Connection>
+        var kryo3: KryoExtra<Connection>
+        var kryo4: KryoExtra<Connection>
+        var kryo5: KryoExtra<Connection>
+        var kryo6: KryoExtra<Connection>
+        var kryo7: KryoExtra<Connection>
+        var kryo8: KryoExtra<Connection>
+        var kryo9: KryoExtra<Connection>
+        var kryo10: KryoExtra<Connection>
+        var kryo11: KryoExtra<Connection>
+        var kryo12: KryoExtra<Connection>
+        var kryo13: KryoExtra<Connection>
+        var kryo14: KryoExtra<Connection>
+        var kryo15: KryoExtra<Connection>
+        var kryo16: KryoExtra<Connection>
+        var kryo17: KryoExtra<Connection>
 
         while (true) {
             kryo1 = serialization.takeKryo()

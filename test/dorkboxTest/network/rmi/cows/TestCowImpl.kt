@@ -65,20 +65,20 @@ open class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
     }
 
     override suspend fun withSuspend(value: String, v2: Int) {
-        throw RuntimeException("Should never be executed!")
+        throw RuntimeException("'$value : $v2' should never be executed!")
     }
 
     suspend fun withSuspend(connection: Connection, value: String, v2: Int) {
-        connection.logger.error("Suspending!")
+        connection.logger.error("Suspending '$value : $v2'!")
         delay(2000)
     }
 
     override suspend fun withSuspendAndReturn(value: String, v2: Int): Int {
-        throw RuntimeException("Should never be executed!")
+        throw RuntimeException("'$value : $v2' should never be executed!")
     }
 
     suspend fun withSuspendAndReturn(connection: Connection, value: String, v2: Int): Int {
-        connection.logger.error("Suspending with return!")
+        connection.logger.error("Suspending '$value' with return!")
         delay(2000)
         return v2
     }

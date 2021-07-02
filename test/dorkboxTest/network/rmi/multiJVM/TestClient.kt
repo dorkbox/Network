@@ -78,8 +78,8 @@ object TestClient {
         client.onConnect {
             logger.error("Starting test for: Client -> Server")
 
-            createObject<TestCow>(124123) {
-                RmiCommonTest.runTests(this@onConnect, this, 124123)
+            rmi.getGlobal<TestCow>(12123).apply {
+                RmiCommonTest.runTests(this@onConnect, this, 12123)
                 logger.error("DONE")
 
                 // now send this remote object ACROSS the wire to the server (on the server, this is where the IMPLEMENTATION lives)

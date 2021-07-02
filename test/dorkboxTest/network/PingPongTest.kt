@@ -120,7 +120,7 @@ class PingPongTest : BaseTest() {
         }
     }
 
-    private fun register(manager: Serialization) {
+    private fun register(manager: Serialization<Connection>) {
         manager.register(Data::class.java)
     }
 

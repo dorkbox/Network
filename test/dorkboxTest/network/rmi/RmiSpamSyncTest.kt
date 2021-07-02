@@ -63,12 +63,12 @@ class RmiSpamSyncTest : BaseTest() {
             val configuration = serverConfig()
             config(configuration)
 
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+            configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
             server = Server(configuration)
             addEndPoint(server)
 
-            server.saveGlobalObject(TestObjectImpl(counter), RMI_ID)
+            server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
             server.bind()
         }
 
@@ -82,7 +82,7 @@ class RmiSpamSyncTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect {
-                val remoteObject = getGlobalObject<TestObject>(RMI_ID)
+                val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
                 val obj = remoteObject as RemoteObject
                 obj.async = false
 

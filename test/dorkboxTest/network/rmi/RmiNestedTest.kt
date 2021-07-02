@@ -59,11 +59,13 @@ class RmiNestedTest : BaseTest() {
         run {
             val configuration = serverConfig()
 
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectAnnotImpl::class.java)
-            configuration.serialization.registerRmi(OtherObject::class.java, OtherObjectImpl::class.java)
+            configuration.serialization.rmi.register(TestObject::class.java, TestObjectAnnotImpl::class.java)
+            configuration.serialization.rmi.register(OtherObject::class.java, OtherObjectImpl::class.java)
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
+
+            server.rmiGlobal.save(TestObjectImpl(), 1)
 
             server.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
@@ -87,7 +89,7 @@ class RmiNestedTest : BaseTest() {
 
             client.onConnect {
                 logger.error("Connected")
-                createObject<TestObject> {
+                rmi.getGlobal<TestObject>(1).apply {
                     logger.error("Starting test")
                     setValue(43.21f)
 
@@ -124,11 +126,13 @@ class RmiNestedTest : BaseTest() {
     fun doubleRmi() {
         run {
             val configuration = serverConfig()
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectAnnotImpl::class.java)
-            configuration.serialization.registerRmi(OtherObject::class.java, OtherObjectImpl::class.java)
+            configuration.serialization.rmi.register(TestObject::class.java, TestObjectAnnotImpl::class.java)
+            configuration.serialization.rmi.register(OtherObject::class.java, OtherObjectImpl::class.java)
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
+
+            server.rmiGlobal.save(TestObjectImpl(), 1)
 
             server.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
@@ -152,7 +156,7 @@ class RmiNestedTest : BaseTest() {
 
             client.onConnect {
                 logger.error("Connected")
-                createObject<TestObject> {
+                rmi.getGlobal<TestObject>(1).apply {
                     logger.error("Starting test")
                     setValue(43.21f)
 
@@ -189,11 +193,13 @@ class RmiNestedTest : BaseTest() {
     fun singleRmi() {
         run {
             val configuration = serverConfig()
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+            configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
             configuration.serialization.register(OtherObjectImpl::class.java)
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
+
+            server.rmiGlobal.save(TestObjectImpl(), 1)
 
             server.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
@@ -217,7 +223,8 @@ class RmiNestedTest : BaseTest() {
 
             client.onConnect {
                 logger.error("Connected")
-                createObject<TestObject> {
+
+                rmi.getGlobal<TestObject>(1).apply {
                     logger.error("Starting test")
                     setOtherValue(43.21f)
 
@@ -247,7 +254,7 @@ class RmiNestedTest : BaseTest() {
     fun singleReverseRmi() {
         run {
             val configuration = serverConfig()
-            configuration.serialization.registerRmi(TestObject::class.java, null)
+            configuration.serialization.rmi.register(TestObject::class.java, null)
             configuration.serialization.register(OtherObjectImpl::class.java)
 
             val server = Server<Connection>(configuration)
@@ -255,7 +262,8 @@ class RmiNestedTest : BaseTest() {
 
             server.onConnect {
                 logger.error("Connected")
-                createObject<TestObject> {
+
+                rmi.get<TestObject>(1).apply {
                     logger.error("Starting test")
                     setOtherValue(43.21f)
 
@@ -282,10 +290,15 @@ class RmiNestedTest : BaseTest() {
 
         run {
             val configuration = clientConfig()
-            configuration.serialization.registerRmi(TestObject::class.java, TestObjectImpl::class.java)
+            configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
+
+            client.onConnect {
+                rmi.save(TestObjectImpl(), 1)
+            }
+
 
             client.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
@@ -347,6 +360,7 @@ class RmiNestedTest : BaseTest() {
             throw RuntimeException("Whoops!")
         }
 
+        @Suppress("UNUSED_PARAMETER")
         fun other(connection: Connection): Float {
             return aFloat
         }
@@ -388,6 +402,7 @@ class RmiNestedTest : BaseTest() {
             throw RuntimeException("Whoops!")
         }
 
+        @Suppress("UNUSED_PARAMETER")
         fun other(connection: Connection): Float {
             return aFloat
         }
