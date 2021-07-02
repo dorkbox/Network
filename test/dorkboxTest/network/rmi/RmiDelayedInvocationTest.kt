@@ -21,6 +21,7 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -85,13 +86,16 @@ class RmiDelayedInvocationTest : BaseTest() {
 
                     // sometimes, this method is never called right away.
                     remoteObject.setOther(i.toFloat())
-                    synchronized(iterateLock) {
-                        try {
-                            (iterateLock as Object).wait(1)
-                        } catch (e: InterruptedException) {
-                            logger.error("Failed after: $i")
-                            e.printStackTrace()
-                            abort = true
+
+                    runBlocking {
+                        synchronized(iterateLock) {
+                            try {
+                                (iterateLock as Object).wait(1)
+                            } catch (e: InterruptedException) {
+                                logger.error("Failed after: $i")
+                                e.printStackTrace()
+                                abort = true
+                            }
                         }
                     }
                 }
