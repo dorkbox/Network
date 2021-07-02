@@ -148,7 +148,7 @@ class RmiSimpleTest : BaseTest() {
                 val `object` = m.testCow
                 val id = `object`.id()
 
-                Assert.assertEquals(44, id.toLong())
+                Assert.assertEquals(44, id)
 
                 server.logger.error("Finished test for: Client -> Server")
 
@@ -176,7 +176,7 @@ class RmiSimpleTest : BaseTest() {
                 client.logger.error("Received finish signal for test for: Client -> Server")
                 val `object` = m.testCow
                 val id = `object`.id()
-                Assert.assertEquals(4, id.toLong())
+                Assert.assertEquals(4, id)
                 client.logger.error("Finished test for: Client -> Server")
                 stopEndPoints(2000)
             }
@@ -218,7 +218,7 @@ class RmiSimpleTest : BaseTest() {
                 server.logger.error("Received finish signal for test for: Client -> Server")
                 val `object` = m.testCow
                 val id = `object`.id()
-                Assert.assertEquals(23, id.toLong())
+                Assert.assertEquals(23, id)
                 server.logger.error("Finished test for: Client -> Server")
 
 
