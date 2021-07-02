@@ -222,13 +222,13 @@ class MemoryTest : BaseTest() {
 
     private class TestObjectImpl(private val counter: AtomicLong) : TestObject {
         @Override
-        override fun setOther(aFloat: Long): Boolean {
+        override fun setOther(value: Long): Boolean {
             counter.getAndIncrement()
             return true
         }
 
         @Override
-        override suspend fun setOtherSus(aFloat: Long): Boolean {
+        override suspend fun setOtherSus(value: Long): Boolean {
             counter.getAndIncrement()
             return true
         }

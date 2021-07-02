@@ -33,7 +33,7 @@ class SerializationValidationTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.onMessage<FinishedCommand> { message ->
+            server.onMessage<FinishedCommand> { _ ->
                 stopEndPoints()
             }
             server.bind()
@@ -83,7 +83,7 @@ class SerializationValidationTest : BaseTest() {
 
             server.rmiGlobal.save(TestObjectImpl(), 1)
 
-            server.onMessage<TestObject> { message ->
+            server.onMessage<TestObject> { _ ->
                 stopEndPoints()
             }
             server.bind()
@@ -129,7 +129,7 @@ class SerializationValidationTest : BaseTest() {
 
             server.rmiGlobal.save(TestObjectImpl(), 1)
 
-            server.onMessage<TestObject> { message ->
+            server.onMessage<TestObject> { _ ->
                 stopEndPoints()
             }
             server.bind()
@@ -573,6 +573,7 @@ class SerializationValidationTest : BaseTest() {
         fun other(): Float
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private class TestObjectImpl : TestObject {
         private var aFloat = 0f
         override suspend fun setValue(aFloat: Float) {

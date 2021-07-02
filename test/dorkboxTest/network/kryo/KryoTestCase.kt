@@ -161,6 +161,7 @@ abstract class KryoTestCase {
 
     /** @param length Pass Integer.MIN_VALUE to disable checking the length.
      */
+    @Suppress("UNCHECKED_CAST")
     fun <T> roundTripWithBufferFactory(length: Int, object1: T, sf: BufferFactory): T {
         val checkLength = length != Int.MIN_VALUE
         this.object1 = object1
@@ -174,7 +175,7 @@ abstract class KryoTestCase {
 
         // Test input from stream, large buffer.
         val out = outStream.toByteArray()
-        input = sf.createInput(ByteArrayInputStream(outStream.toByteArray()), 4096)
+        input = sf.createInput(ByteArrayInputStream(out), 4096)
         object2 = kryo!!.readClassAndObject(input)
         doAssertEquals(object1, object2)
         if (checkLength) {

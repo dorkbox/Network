@@ -183,7 +183,7 @@ class PingPongTest : BaseTest() {
                 return false
             }
 
-            val other = other as Data
+            other as Data
             if (!Booleans.contentEquals(other.Booleans)) {
                 return false
             }
