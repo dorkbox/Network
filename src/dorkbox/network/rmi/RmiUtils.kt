@@ -549,6 +549,12 @@ object RmiUtils {
         val packageName = RmiUtils::class.java.packageName
 
         val stackTrace = exception.stackTrace
+        val size = stackTrace.size
+
+        if (size == 0) {
+            return
+        }
+
         var newEndIndex = -1 // because we index by size, but access from 0
 
         // step 1: starting at 0, find the start of our RMI method invocation
@@ -582,7 +588,7 @@ object RmiUtils {
             }
 
             // if we are a KOTLIN suspend function, there is ONE stack frame extra we have to remove
-            if (isSuspendFunction) {
+            if (isSuspendFunction && newEndIndex > 0) {
                 newEndIndex--
             }
 

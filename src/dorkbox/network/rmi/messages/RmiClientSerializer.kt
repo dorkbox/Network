@@ -19,6 +19,8 @@ import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.RmiClient
 import dorkbox.network.serialization.KryoExtra
 import java.lang.reflect.Proxy
@@ -52,7 +54,8 @@ import java.lang.reflect.Proxy
  *  During the handshake, if the impl object 'lives' on the CLIENT, then the client must tell the server that the iface ID must use this serializer.
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
-class RmiClientSerializer : Serializer<Any>() {
+@Suppress("UNCHECKED_CAST")
+class RmiClientSerializer<CONNECTION: Connection>: Serializer<Any>() {
     override fun write(kryo: Kryo, output: Output, proxyObject: Any) {
         val handler = Proxy.getInvocationHandler(proxyObject) as RmiClient
         output.writeBoolean(handler.isGlobal)
@@ -63,8 +66,13 @@ class RmiClientSerializer : Serializer<Any>() {
         val isGlobal = input.readBoolean()
         val objectId = input.readInt(true)
 
-        kryo as KryoExtra
-        val connection = kryo.connection
-        return connection.endPoint.rmiGlobalSupport.getImplObject(isGlobal, objectId, connection)
+        kryo as KryoExtra<CONNECTION>
+        val endPoint: EndPoint<CONNECTION> = kryo.connection.endPoint as EndPoint<CONNECTION>
+
+        return if (isGlobal) {
+            endPoint.rmiGlobalSupport.getImplObject(objectId)
+        } else {
+            endPoint.rmiConnectionSupport.getImplObject(objectId)
+        }
     }
 }

@@ -15,21 +15,20 @@
  */
 package dorkbox.network.handshake
 
-import com.github.benmanes.caffeine.cache.Cache
-import com.github.benmanes.caffeine.cache.Caffeine
-import com.github.benmanes.caffeine.cache.RemovalCause
-import com.github.benmanes.caffeine.cache.RemovalListener
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverPairedConnection
 import dorkbox.network.connection.*
-import dorkbox.network.exceptions.*
+import dorkbox.network.exceptions.AllocationException
+import dorkbox.network.rmi.RmiManagerConnections
 import io.aeron.Publication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
+import net.jodah.expiringmap.ExpirationPolicy
+import net.jodah.expiringmap.ExpiringMap
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
@@ -44,21 +43,19 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                                         private val listenerManager: ListenerManager<CONNECTION>) {
 
     // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
-    private val pendingConnections: Cache<Int, CONNECTION> = Caffeine.newBuilder()
-        .expireAfterAccess(config.connectionCloseTimeoutInSeconds.toLong() * 2, TimeUnit.SECONDS)
-        .removalListener(RemovalListener<Int, CONNECTION> { sessionId, connection, cause ->
-            if (cause == RemovalCause.EXPIRED) {
-                connection!!
+    private val pendingConnections = ExpiringMap.builder()
+        .expiration(config.connectionCloseTimeoutInSeconds.toLong() * 2, TimeUnit.SECONDS)
+        .expirationPolicy(ExpirationPolicy.CREATED)
+        .expirationListener<Int, CONNECTION> { _, connection ->
+            // this blocks until it fully runs (which is ok. this is fast)
+            logger.error("[${connection.id}] Timed out waiting for registration response from client")
 
-                val exception = ClientTimedOutException("[${connection.id}] Waiting for registration response from client")
-                ListenerManager.noStackTrace(exception)
-                listenerManager.notifyError(exception)
-
-                runBlocking {
-                    connection.close()
-                }
+            runBlocking {
+                connection.close()
             }
-        }).build()
+        }
+        .build<Int, CONNECTION>()
+
 
     private val connectionsPerIpCounts = ConnectionCounts()
 
@@ -82,14 +79,16 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         // this can happen if there are multiple connections from the SAME ip address (ie: localhost)
         if (message.state == HandshakeMessage.HELLO) {
             // this should be null.
-            val hasExistingSessionId = pendingConnections.getIfPresent(sessionId) != null
+            val hasExistingSessionId = pendingConnections[sessionId] != null
             if (hasExistingSessionId) {
                 // WHOOPS! tell the client that it needs to retry, since a DIFFERENT client has a handshake in progress with the same sessionId
-                val exception = ClientException("[$sessionId] Connection from $connectionString had an in-use session ID! Telling client to retry.")
-                ListenerManager.noStackTrace(exception)
-                listenerManager.notifyError(exception)
+                logger.error("[$sessionId] Connection from $connectionString had an in-use session ID! Telling client to retry.")
 
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.retry("Handshake already in progress for sessionID!"))
+                try {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.retry("Handshake already in progress for sessionID!"))
+                } catch (e: Error) {
+                    logger.error("Handshake error!", e)
+                }
                 return false
             }
 
@@ -98,13 +97,11 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
         // check to see if this is a pending connection
         if (message.state == HandshakeMessage.DONE) {
-            val pendingConnection = pendingConnections.getIfPresent(sessionId)
-            pendingConnections.invalidate(sessionId)
+            val pendingConnection = pendingConnections[sessionId]
+            pendingConnections.remove(sessionId)
 
             if (pendingConnection == null) {
-                val exception = ServerException("[$sessionId] Error! Connection from client $connectionString was null, and cannot complete handshake!")
-                ListenerManager.noStackTrace(exception)
-                listenerManager.notifyError(exception)
+                logger.error("[$sessionId] Error! Connection from client $connectionString was null, and cannot complete handshake!")
             } else {
                 logger.trace { "[${pendingConnection.id}] Connection from client $connectionString done with handshake." }
 
@@ -112,11 +109,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 server.addConnection(pendingConnection)
 
                 // now tell the client we are done
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(message.oneTimeKey, sessionId))
+                try {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(message.oneTimeKey, sessionId))
 
-                // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                actionDispatch.eventLoop {
-                    listenerManager.notifyConnect(pendingConnection)
+                    // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                    actionDispatch.eventLoop {
+                        listenerManager.notifyConnect(pendingConnection)
+                    }
+                } catch (e: Exception) {
+                    logger.error("Handshake error!", e)
                 }
             }
 
@@ -139,11 +140,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
             if (server.connections.connectionCount() >= config.maxClientCount) {
-                val exception = ClientRejectedException("Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}")
-                ListenerManager.noStackTrace(exception)
-                listenerManager.notifyError(exception)
+                logger.error("Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}")
 
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
+                try {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
+                } catch (e: Exception) {
+                    logger.error("Handshake error!", e)
+                }
                 return false
             }
 
@@ -154,21 +157,24 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
                 connectionsPerIpCounts.decrement(clientAddress, currentCountForIp)
 
-                val exception = ClientRejectedException("Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}")
-                ListenerManager.noStackTrace(exception)
-                listenerManager.notifyError(exception)
+                logger.error("Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}")
 
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Too many connections for IP address"))
+                try {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Too many connections for IP address"))
+                } catch (e: Exception) {
+                    logger.error("Handshake error!", e)
+                }
                 return false
             }
             connectionsPerIpCounts.increment(clientAddress, currentCountForIp)
         } catch (e: Exception) {
-            val exception = ClientRejectedException("could not validate client message", e)
-            ListenerManager.noStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("could not validate client message", e)
 
-            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
-            return false
+            try {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
+            } catch (e: Exception) {
+                logger.error("Handshake error!", e)
+            }
         }
 
         return true
@@ -177,6 +183,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     fun processIpcHandshakeMessageServer(server: Server<CONNECTION>,
+                                         rmiConnectionSupport: RmiManagerConnections<CONNECTION>,
                                          handshakePublication: Publication,
                                          sessionId: Int,
                                          message: HandshakeMessage,
@@ -202,11 +209,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         try {
             connectionSessionId = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
-            val exception = ClientRejectedException("Connection from $connectionString not allowed! Unable to allocate a session ID for the client connection!")
-            ListenerManager.noStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("Connection from $connectionString not allowed! Unable to allocate a session ID for the client connection!")
 
-            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            try {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error("Handshake error!", e)
+            }
             return
         }
 
@@ -218,11 +227,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // have to unwind actions!
             sessionIdAllocator.free(connectionSessionId)
 
-            val exception = ClientRejectedException("Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!")
-            ListenerManager.noStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!")
 
-            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            try {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error("Handshake error!", e)
+            }
             return
         }
 
@@ -234,11 +245,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             sessionIdAllocator.free(connectionSessionId)
             sessionIdAllocator.free(connectionStreamPubId)
 
-            val exception = ClientRejectedException("Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!")
-            ListenerManager.noStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!")
 
-            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            try {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error("Handshake error!", e)
+            }
             return
         }
 
@@ -256,7 +269,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 "[${clientConnection.sessionId}] IPC connection established to [${clientConnection.streamIdSubscription}|${clientConnection.streamId}]"
             }
 
-            val connection = server.newConnection(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
+            val connection = server.newConnection(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID, rmiConnectionSupport))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
@@ -293,20 +306,19 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             pendingConnections.put(sessionId, connection)
 
             // this tells the client all of the info to connect.
-            server.writeHandshakeMessage(handshakePublication, successMessage)
+            server.writeHandshakeMessage(handshakePublication, successMessage) // exception is already caught!
         } catch (e: Exception) {
             // have to unwind actions!
             sessionIdAllocator.free(connectionSessionId)
             streamIdAllocator.free(connectionStreamPubId)
 
-            val exception = ServerException("Connection handshake from $connectionString crashed! Message $message", e)
-            ListenerManager.noStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("Connection handshake from $connectionString crashed! Message $message", e)
         }
     }
 
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     fun processUdpHandshakeMessageServer(server: Server<CONNECTION>,
+                                         rmiConnectionSupport: RmiManagerConnections<CONNECTION>,
                                          handshakePublication: Publication,
                                          sessionId: Int,
                                          clientAddressString: String,
@@ -326,9 +338,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         // VALIDATE:: check to see if the remote connection's public key has changed!
         validateRemoteAddress = server.crypto.validateRemoteAddress(clientAddress, clientPublicKeyBytes)
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
-            val exception = ClientRejectedException("Connection from $clientAddressString not allowed! Public key mismatch.")
-            ListenerManager.noStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("Connection from $clientAddressString not allowed! Public key mismatch.")
             return
         }
 
@@ -354,11 +364,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
 
-            val exception = ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a session ID for the client connection!")
-            ListenerManager.noStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("Connection from $clientAddressString not allowed! Unable to allocate a session ID for the client connection!")
 
-            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            try {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error("Handshake error!", e)
+            }
             return
         }
 
@@ -371,11 +383,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             connectionsPerIpCounts.decrementSlow(clientAddress)
             sessionIdAllocator.free(connectionSessionId)
 
-            val exception = ClientRejectedException("Connection from $clientAddressString not allowed! Unable to allocate a stream ID for the client connection!")
-            ListenerManager.noStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("Connection from $clientAddressString not allowed! Unable to allocate a stream ID for the client connection!")
 
-            server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            try {
+                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error("Handshake error!", e)
+            }
             return
         }
 
@@ -413,7 +427,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 "Creating new connection from $clientAddressString [$subscriptionPort|$publicationPort] [$connectionStreamId|$connectionSessionId] (reliable:${message.isReliable})"
             }
 
-            val connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress))
+            val connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress, rmiConnectionSupport))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)
@@ -423,11 +437,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 sessionIdAllocator.free(connectionSessionId)
                 streamIdAllocator.free(connectionStreamId)
 
-                val exception = ClientRejectedException("Connection $clientAddressString was not permitted!")
-                ListenerManager.cleanStackTrace(exception)
-                listenerManager.notifyError(connection, exception)
+                logger.error("Connection $clientAddressString was not permitted!")
 
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection was not permitted!"))
+                try {
+                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection was not permitted!"))
+                } catch (e: Exception) {
+                    logger.error("Handshake error!", e)
+                }
                 return
             }
 
@@ -458,16 +474,14 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             pendingConnections.put(sessionId, connection)
 
             // this tells the client all of the info to connect.
-            server.writeHandshakeMessage(handshakePublication, successMessage)
+            server.writeHandshakeMessage(handshakePublication, successMessage) // exception is already caught
         } catch (e: Exception) {
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
             sessionIdAllocator.free(connectionSessionId)
             streamIdAllocator.free(connectionStreamId)
 
-            val exception = ServerException("Connection handshake from $clientAddressString crashed! Message $message", e)
-            ListenerManager.noStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("Connection handshake from $clientAddressString crashed! Message $message", e)
         }
     }
 
@@ -487,7 +501,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         sessionIdAllocator.clear()
         streamIdAllocator.clear()
 
-        pendingConnections.invalidateAll()
-        pendingConnections.cleanUp()
+        pendingConnections.clear()
     }
 }

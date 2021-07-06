@@ -70,7 +70,6 @@ class PortAllocator(basePort: Int, numberOfPortsToAllocate: Int) {
      *
      * @throws PortAllocationException If there are fewer than `count` ports available to allocate
      */
-    @Throws(IllegalArgumentException::class)
     fun allocate(count: Int): IntArray {
         if (freePorts.size < count) {
             throw IllegalArgumentException("Too few ports available to allocate $count ports")

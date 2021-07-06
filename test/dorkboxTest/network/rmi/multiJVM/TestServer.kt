@@ -54,7 +54,7 @@ object TestServer {
             logger.error("Received finish signal for test for: Client -> Server")
             val `object` = m.testCow
             val id = `object`.id()
-            Assert.assertEquals(124123, id.toLong())
+            Assert.assertEquals(124123, id)
             logger.error("Finished test for: Client -> Server")
 
 //

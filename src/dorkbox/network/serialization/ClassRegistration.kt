@@ -17,9 +17,10 @@ package dorkbox.network.serialization
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
+import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.messages.RmiServerSerializer
 
-internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: Serializer<*>? = null, var id: Int = 0) {
+internal abstract class ClassRegistration<CONNECTION: Connection>(val clazz: Class<*>, val serializer: Serializer<*>? = null, var id: Int = 0) {
     companion object {
         const val IGNORE_REGISTRATION = -1
     }
@@ -32,7 +33,7 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
      * If so, we ignore it - any IFACE or IMPL that already has been assigned to an RMI serializer, *MUST* remain an RMI serializer
      * If this class registration will EVENTUALLY be for RMI, then [ClassRegistrationForRmi] will reassign the serializer
      */
-    open fun register(kryo: KryoExtra, rmi: RmiHolder) {
+    open fun register(kryo: KryoExtra<CONNECTION>, rmi: RmiHolder) {
         // ClassRegistrationForRmi overrides this method
         if (id == IGNORE_REGISTRATION) {
             // we have previously specified that this registration should be ignored!
@@ -61,7 +62,7 @@ internal abstract class ClassRegistration(val clazz: Class<*>, val serializer: S
         if (savedKryoId != null) {
             overriddenSerializer = kryo.classResolver.getRegistration(savedKryoId)?.serializer
             when (overriddenSerializer) {
-                is RmiServerSerializer -> {
+                is RmiServerSerializer<*> -> {
                     // do nothing, because this is ALREADY registered for RMI
                     info = if (serializer == null) {
                         "CONFLICTED $savedKryoId -> (RMI) Ignored duplicate registration for ${clazz.name}"

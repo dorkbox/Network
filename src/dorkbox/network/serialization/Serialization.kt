@@ -31,6 +31,7 @@ import dorkbox.objectPool.Pool
 import dorkbox.objectPool.PoolObject
 import dorkbox.os.OS
 import dorkbox.serializers.SerializationDefaults
+import kotlinx.atomicfu.AtomicBoolean
 import kotlinx.atomicfu.atomic
 import mu.KLogger
 import mu.KotlinLogging
@@ -63,7 +64,7 @@ import kotlin.coroutines.Continuation
  *                an object's type. Default is [ReflectionSerializerFactory] with [FieldSerializer]. @see
  *                Kryo#newDefaultSerializer(Class)
  */
-open class Serialization(private val references: Boolean = true, private val factory: SerializerFactory<*>? = null) {
+open class Serialization<CONNECTION: Connection>(private val references: Boolean = true, private val factory: SerializerFactory<*>? = null) {
 
     companion object {
         // -2 is the same value that kryo uses for invalid id's
@@ -74,6 +75,40 @@ open class Serialization(private val references: Boolean = true, private val fac
         }
     }
 
+    open class RmiSupport<CONNECTION: Connection> internal constructor(
+        private val initialized: AtomicBoolean,
+        private val classesToRegister: MutableList<ClassRegistration<CONNECTION>>,
+        private val rmiServerSerializer: RmiServerSerializer<CONNECTION>
+    ) {
+        /**
+         * There is additional overhead to using RMI.
+         *
+         * This enables a "remote endpoint" to access methods and create objects (RMI) for this endpoint.
+         *
+         * This is NOT bi-directional, and this endpoint cannot access or create remote objects on the "remote client".
+         *
+         * @param ifaceClass this must be the interface class used for RMI
+         * @param implClass this must be the implementation class used for RMI
+         *          If *null* it means that this endpoint is the rmi-client
+         *          If *not-null* it means that this endpoint is the rmi-server
+         *
+         * @throws IllegalArgumentException if the iface/impl have previously been overridden
+         */
+        @Synchronized
+        open fun <Iface, Impl : Iface> register(ifaceClass: Class<Iface>, implClass: Class<Impl>? = null): RmiSupport<CONNECTION> {
+            require(!initialized.value) { "Serialization 'registerRmi(Class, Class)' cannot happen after client/server initialization!" }
+
+            require(ifaceClass.isInterface) { "Cannot register an implementation for RMI access. It must be an interface." }
+
+            if (implClass != null) {
+                require(!implClass.isInterface) { "Cannot register an interface for RMI implementations. It must be an implementation." }
+            }
+
+            classesToRegister.add(ClassRegistrationForRmi(ifaceClass, implClass, rmiServerSerializer))
+            return this
+        }
+    }
+
     private lateinit var logger: KLogger
 
     private var initialized = atomic(false)
@@ -81,7 +116,7 @@ open class Serialization(private val references: Boolean = true, private val fac
     // used by operations performed during kryo initialization, which are by default package access (since it's an anon-inner class)
     // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
     // Object checking is performed during actual registration.
-    private val classesToRegister = mutableListOf<ClassRegistration>()
+    private val classesToRegister = mutableListOf<ClassRegistration<CONNECTION>>()
     private lateinit var savedRegistrationDetails: ByteArray
 
     // the purpose of the method cache, is to accelerate looking up methods for specific class
@@ -92,12 +127,21 @@ open class Serialization(private val references: Boolean = true, private val fac
     // StdInstantiatorStrategy will create classes bypasses the constructor (which can be useful in some cases) THIS IS A FALLBACK!
     private val instantiatorStrategy = DefaultInstantiatorStrategy(StdInstantiatorStrategy())
 
-    private val methodRequestSerializer = MethodRequestSerializer(methodCache) // note: the methodCache is configured BEFORE anything reads from it!
+    private val methodRequestSerializer = MethodRequestSerializer<CONNECTION>(methodCache) // note: the methodCache is configured BEFORE anything reads from it!
     private val methodResponseSerializer = MethodResponseSerializer()
     private val continuationSerializer = ContinuationSerializer()
 
-    private val rmiClientSerializer = RmiClientSerializer()
-    private val rmiServerSerializer = RmiServerSerializer()
+    private val rmiClientSerializer = RmiClientSerializer<CONNECTION>()
+    private val rmiServerSerializer = RmiServerSerializer<CONNECTION>()
+
+    /**
+     * There is additional overhead to using RMI.
+     *
+     * This enables access to methods from a "remote endpoint", in such a way as if it were local.
+     *
+     * This is NOT bi-directional.
+     */
+    val rmi: RmiSupport<CONNECTION>
 
     val rmiHolder = RmiHolder()
 
@@ -109,16 +153,17 @@ open class Serialization(private val references: Boolean = true, private val fac
     // NOTE: These following can ONLY be called on a single thread!
     private var readKryo = initGlobalKryo()
 
-    private val kryoPool: Pool<KryoExtra>
+    private val kryoPool: Pool<KryoExtra<CONNECTION>>
 
     init {
-        val poolObject = object : PoolObject<KryoExtra>() {
-            override fun newInstance(): KryoExtra {
+        val poolObject = object : PoolObject<KryoExtra<CONNECTION>>() {
+            override fun newInstance(): KryoExtra<CONNECTION> {
                 return initKryo()
             }
         }
 
         kryoPool = ObjectPool.nonBlocking(poolObject)
+        rmi = RmiSupport(initialized, classesToRegister, rmiServerSerializer)
     }
 
 
@@ -136,7 +181,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      *
      * This must happen before the creation of the client/server
      */
-    open fun <T> register(clazz: Class<T>): Serialization {
+    open fun <T> register(clazz: Class<T>): Serialization<CONNECTION> {
         require(!initialized.value) { "Serialization 'register(class)' cannot happen after client/server initialization!" }
 
         // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
@@ -161,7 +206,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      * @param id Must be >= 0. Smaller IDs are serialized more efficiently. IDs 0-8 are used by default for primitive types and String, but
      * these IDs can be repurposed.
      */
-    open fun <T> register(clazz: Class<T>, id: Int): Serialization {
+    open fun <T> register(clazz: Class<T>, id: Int): Serialization<CONNECTION> {
         require(!initialized.value) { "Serialization 'register(Class, int)' cannot happen after client/server initialization!" }
 
         // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
@@ -184,7 +229,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      * method. The order must be the same at deserialization as it was for serialization.
      */
     @Synchronized
-    open fun <T> register(clazz: Class<T>, serializer: Serializer<T>): Serialization {
+    open fun <T> register(clazz: Class<T>, serializer: Serializer<T>): Serialization<CONNECTION> {
         require(!initialized.value) { "Serialization 'register(Class, Serializer)' cannot happen after client/server initialization!" }
 
         // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
@@ -209,7 +254,7 @@ open class Serialization(private val references: Boolean = true, private val fac
      * these IDs can be repurposed.
      */
     @Synchronized
-    open fun <T> register(clazz: Class<T>, serializer: Serializer<T>, id: Int): Serialization {
+    open fun <T> register(clazz: Class<T>, serializer: Serializer<T>, id: Int): Serialization<CONNECTION> {
         require(!initialized.value) { "Serialization 'register(Class, Serializer, int)' cannot happen after client/server initialization!" }
 
         // The reason it must be an implementation, is because the reflection serializer DOES NOT WORK with field types, but rather
@@ -217,34 +262,6 @@ open class Serialization(private val references: Boolean = true, private val fac
         require(!clazz.isInterface) { "Cannot register '${clazz.name}'. It must be an implementation." }
 
         classesToRegister.add(ClassRegistration2(clazz, serializer, id))
-        return this
-    }
-
-    /**
-     * There is additional overhead to using RMI.
-     *
-     * This enables a "remote endpoint" to access methods and create objects (RMI) for this endpoint.
-     *
-     * This is NOT bi-directional, and this endpoint cannot access or create remote objects on the "remote client".
-     *
-     * @param ifaceClass this must be the interface class used for RMI
-     * @param implClass this must be the implementation class used for RMI
-     *          If *null* it means that this endpoint is the rmi-client
-     *          If *not-null* it means that this endpoint is the rmi-server
-     *
-     * @throws IllegalArgumentException if the iface/impl have previously been overridden
-     */
-    @Synchronized
-    open fun <Iface, Impl : Iface> registerRmi(ifaceClass: Class<Iface>, implClass: Class<Impl>? = null): Serialization {
-        require(!initialized.value) { "Serialization 'registerRmi(Class, Class)' cannot happen after client/server initialization!" }
-
-        require(ifaceClass.isInterface) { "Cannot register an implementation for RMI access. It must be an interface." }
-
-        if (implClass != null) {
-            require(!implClass.isInterface) { "Cannot register an interface for RMI implementations. It must be an implementation." }
-        }
-
-        classesToRegister.add(ClassRegistrationForRmi(ifaceClass, implClass, rmiServerSerializer))
         return this
     }
 
@@ -262,8 +279,8 @@ open class Serialization(private val references: Boolean = true, private val fac
     /**
      * Kryo specifically for handshakes
      */
-    internal fun initHandshakeKryo(): KryoExtra {
-        val kryo = KryoExtra()
+    internal fun initHandshakeKryo(): KryoExtra<CONNECTION> {
+        val kryo = KryoExtra<CONNECTION>()
 
         kryo.instantiatorStrategy = instantiatorStrategy
         kryo.references = references
@@ -283,10 +300,10 @@ open class Serialization(private val references: Boolean = true, private val fac
     /**
     * called as the first thing inside when initializing the classesToRegister
     */
-    private fun initGlobalKryo(): KryoExtra {
+    private fun initGlobalKryo(): KryoExtra<CONNECTION> {
         // NOTE:  classesToRegister.forEach will be called after serialization init!
 
-        val kryo = KryoExtra()
+        val kryo = KryoExtra<CONNECTION>()
 
         kryo.instantiatorStrategy = instantiatorStrategy
         kryo.references = references
@@ -309,11 +326,10 @@ open class Serialization(private val references: Boolean = true, private val fac
 //            serialization.register(Message::class.java) // must use full package name!
 
         // RMI stuff!
-        kryo.register(GlobalObjectCreateRequest::class.java)
-        kryo.register(GlobalObjectCreateResponse::class.java)
-
         kryo.register(ConnectionObjectCreateRequest::class.java)
         kryo.register(ConnectionObjectCreateResponse::class.java)
+        kryo.register(ConnectionObjectDeleteRequest::class.java)
+        kryo.register(ConnectionObjectDeleteResponse::class.java)
 
         kryo.register(MethodRequest::class.java, methodRequestSerializer)
         kryo.register(MethodResponse::class.java, methodResponseSerializer)
@@ -329,8 +345,8 @@ open class Serialization(private val references: Boolean = true, private val fac
     /**
      * called as the first thing inside when initializing the classesToRegister
      */
-    private fun initKryo(): KryoExtra {
-        val kryo = KryoExtra()
+    private fun initKryo(): KryoExtra<CONNECTION> {
+        val kryo = KryoExtra<CONNECTION>()
 
         kryo.instantiatorStrategy = instantiatorStrategy
         kryo.references = references
@@ -353,11 +369,10 @@ open class Serialization(private val references: Boolean = true, private val fac
 //            serialization.register(Message::class.java) // must use full package name!
 
         // RMI stuff!
-        kryo.register(GlobalObjectCreateRequest::class.java)
-        kryo.register(GlobalObjectCreateResponse::class.java)
-
         kryo.register(ConnectionObjectCreateRequest::class.java)
         kryo.register(ConnectionObjectCreateResponse::class.java)
+        kryo.register(ConnectionObjectDeleteRequest::class.java)
+        kryo.register(ConnectionObjectDeleteResponse::class.java)
 
         kryo.register(MethodRequest::class.java, methodRequestSerializer)
         kryo.register(MethodResponse::class.java, methodResponseSerializer)
@@ -409,7 +424,7 @@ open class Serialization(private val references: Boolean = true, private val fac
             }
 
             @Suppress("UNCHECKED_CAST")
-            val classesToRegisterForRmi = listOf(*classesToRegister.toTypedArray()) as List<ClassRegistrationForRmi>
+            val classesToRegisterForRmi = listOf(*classesToRegister.toTypedArray()) as List<ClassRegistrationForRmi<CONNECTION>>
             classesToRegister.clear()
 
             // NOTE: to be clear, the "client" can ONLY registerRmi(IFACE, IMPL), to have extra info as the RMI-SERVER!!
@@ -419,10 +434,10 @@ open class Serialization(private val references: Boolean = true, private val fac
         }
     }
 
-    private fun initializeClassRegistrations(kryo: KryoExtra): Boolean {
+    private fun initializeClassRegistrations(kryo: KryoExtra<CONNECTION>): Boolean {
         // now MERGE all of the registrations (since we can have registrations overwrite newer/specific registrations based on ID
         // in order to get the ID's, these have to be registered with a kryo instance!
-        val mergedRegistrations = mutableListOf<ClassRegistration>()
+        val mergedRegistrations = mutableListOf<ClassRegistration<CONNECTION>>()
         classesToRegister.forEach { registration ->
             val id = registration.id
 
@@ -540,8 +555,8 @@ open class Serialization(private val references: Boolean = true, private val fac
 
     @Suppress("UNCHECKED_CAST")
     private fun initializeClient(kryoRegistrationDetailsFromServer: ByteArray,
-                                 classesToRegisterForRmi: List<ClassRegistrationForRmi>,
-                                 kryo: KryoExtra): Boolean {
+                                 classesToRegisterForRmi: List<ClassRegistrationForRmi<CONNECTION>>,
+                                 kryo: KryoExtra<CONNECTION>): Boolean {
         val input = AeronInput(kryoRegistrationDetailsFromServer)
         val clientClassRegistrations = kryo.read(input) as Array<Array<Any>>
 
@@ -579,7 +594,9 @@ open class Serialization(private val references: Boolean = true, private val fac
                             }
                         }
 
-                        logger.trace("CLIENT RMI REG $clazz  $implClass")
+                        implClass!!
+
+                        logger.trace("REGISTRATION (RMI-CLIENT) ${clazz.name} -> ${implClass.name}")
 
                         // implClass MIGHT BE NULL!
                         classesToRegister.add(ClassRegistrationForRmi(clazz, implClass, rmiServerSerializer))
@@ -608,14 +625,14 @@ open class Serialization(private val references: Boolean = true, private val fac
     /**
      * @return takes a kryo instance from the pool, or creates one if the pool was empty
      */
-    fun takeKryo(): KryoExtra {
+    fun takeKryo(): KryoExtra<CONNECTION> {
         return kryoPool.take()
     }
 
     /**
      * Returns a kryo instance to the pool for re-use later on
      */
-    fun returnKryo(kryo: KryoExtra) {
+    fun returnKryo(kryo: KryoExtra<CONNECTION>) {
         kryoPool.put(kryo)
     }
 
@@ -695,7 +712,7 @@ open class Serialization(private val references: Boolean = true, private val fac
     }
 
     // NOTE: These following functions are ONLY called on a single thread!
-    fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, connection: Connection): Any? {
+    fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, connection: CONNECTION): Any? {
         return readKryo.read(buffer, offset, length, connection)
     }
 

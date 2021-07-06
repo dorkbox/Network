@@ -116,11 +116,11 @@
        Copyright 2021
          Jonathan Halterman and friends
 
-     - Caffeine - Caffeine is a high performance, near optimal caching library based on Java 8.
+     - Jodah Expiring Map - high performance thread-safe map that expires entries
        [The Apache Software License, Version 2.0]
-       https://github.com/ben-manes/caffeine
+       https://github.com/jhalterman/expiringmap
        Copyright 2021
-         Ben Manes
+         Jonathan Halterman
 
      - kotlin-logging - Lightweight logging framework for Kotlin
        [The Apache Software License, Version 2.0]
@@ -149,6 +149,21 @@
            http://www.slf4j.org
            Copyright 2021
              QOS.ch
+
+         - Updates - Software Update Management
+           [The Apache Software License, Version 2.0]
+           https://git.dorkbox.com/dorkbox/Updates
+           Copyright 2021
+             Dorkbox LLC
+
+           Extra license information
+             - Kotlin - 
+               [The Apache Software License, Version 2.0]
+               https://github.com/JetBrains/kotlin
+               Copyright 2020
+                 JetBrains s.r.o. and Kotlin Programming Language contributors
+               Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+               See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
      - Utilities - Utilities for use within Java projects
        [The Apache Software License, Version 2.0]
@@ -276,6 +291,18 @@
            Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
            See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
+         - JNA - Simplified native library access for Java.
+           [The Apache Software License, Version 2.0]
+           https://github.com/twall/jna
+           Copyright 2021
+             Timothy Wall
+
+         - JNA-Platform - Mappings for a number of commonly used platform functions
+           [The Apache Software License, Version 2.0]
+           https://github.com/twall/jna
+           Copyright 2021
+             Timothy Wall
+
          - Java Uuid Generator - A set of Java classes for working with UUIDs
            [The Apache Software License, Version 2.0]
            https://github.com/cowtowncoder/java-uuid-generator
@@ -326,21 +353,6 @@
            Copyright 2021
              Lasse Collin
              Igor Pavlov
-
-         - Updates - Software Update Management
-           [The Apache Software License, Version 2.0]
-           https://git.dorkbox.com/dorkbox/Updates
-           Copyright 2021
-             Dorkbox LLC
-
-           Extra license information
-             - Kotlin - 
-               [The Apache Software License, Version 2.0]
-               https://github.com/JetBrains/kotlin
-               Copyright 2020
-                 JetBrains s.r.o. and Kotlin Programming Language contributors
-               Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
-               See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
          - Executor - Shell, JVM, and SSH command execution on Linux, MacOS, or Windows for Java 8+
            [The Apache Software License, Version 2.0]
@@ -436,30 +448,20 @@
                    Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
                    See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
-         - SwtJavaFx - Swt and JavaFx Utilities
+         - Updates - Software Update Management
            [The Apache Software License, Version 2.0]
-           https://git.dorkbox.com/dorkbox/SwtJavaFx
+           https://git.dorkbox.com/dorkbox/Updates
            Copyright 2021
              Dorkbox LLC
 
            Extra license information
-             - Eclipse Platform - Frameworks and common services to support the use of Eclipse and it's tools (SWT)
-               [Eclipse Public License (EPL)]
-               https://projects.eclipse.org/projects/eclipse.platform
-               Copyright 2021
-                 The Eclipse Foundation, Inc.
-
-             - OpenJFX - OpenJFX client application platform for desktop, mobile and embedded systems
-               [GNU General Public License, version 2, with the Classpath Exception]
-               https://github.com/openjdk/jfx
-               Copyright 2021
-                 Oracle and/or its affiliates
-
-             - SLF4J - Simple facade or abstraction for various logging frameworks
-               [MIT License]
-               http://www.slf4j.org
-               Copyright 2021
-                 QOS.ch
+             - Kotlin - 
+               [The Apache Software License, Version 2.0]
+               https://github.com/JetBrains/kotlin
+               Copyright 2020
+                 JetBrains s.r.o. and Kotlin Programming Language contributors
+               Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+               See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
      - Updates - Software Update Management
        [The Apache Software License, Version 2.0]
@@ -483,12 +485,42 @@
          Dorkbox LLC
 
        Extra license information
-         - Kryo Serializers - Extra kryo serializers
+         - Kryo Serializers - 
            [The Apache Software License, Version 2.0]
            https://github.com/magro/kryo-serializers
            Copyright 2021
              Martin Grotzke
              Rafael Winterhalter
+
+         - Kotlin - 
+           [The Apache Software License, Version 2.0]
+           https://github.com/JetBrains/kotlin
+           Copyright 2020
+             JetBrains s.r.o. and Kotlin Programming Language contributors
+           Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+           See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+         - Kryo - Fast and efficient binary object graph serialization framework for Java
+           [BSD 3-Clause License]
+           https://github.com/EsotericSoftware/kryo
+           Copyright 2021
+             Nathan Sweet
+
+           Extra license information
+             - ReflectASM - 
+               [BSD 3-Clause License]
+               https://github.com/EsotericSoftware/reflectasm
+                 Nathan Sweet
+
+             - Objenesis  - 
+               [The Apache Software License, Version 2.0]
+               http://objenesis.org
+                 Objenesis Team and all contributors
+
+             - MinLog-SLF4J - 
+               [BSD 3-Clause License]
+               https://github.com/EsotericSoftware/minlog
+                 Nathan Sweet
 
          - Bouncy Castle Crypto - Lightweight cryptography API and JCE Extension
            [The Apache Software License, Version 2.0]
@@ -673,12 +705,6 @@
            Copyright 2021
              JetBrains s.r.o.
 
-         - SLF4J - Simple facade or abstraction for various logging frameworks
-           [MIT License]
-           http://www.slf4j.org
-           Copyright 2021
-             QOS.ch
-
          - Conversant Disruptor - Disruptor is the highest performing intra-thread transfer mechanism available in Java.
            [The Apache Software License, Version 2.0]
            https://github.com/conversant/disruptor
@@ -699,9 +725,3 @@
                  JetBrains s.r.o. and Kotlin Programming Language contributors
                Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
                See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
-
-             - PropertyLoader - Property annotation and loader for fields
-               [The Apache Software License, Version 2.0]
-               https://git.dorkbox.com/dorkbox/PropertyLoader
-               Copyright 2021
-                 Dorkbox LLC

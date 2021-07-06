@@ -155,7 +155,8 @@ class DisconnectReconnectTest : BaseTest() {
                 delay(2000)
 
                 logger.error("Disconnecting via RMI ....")
-                val closerObject = rmi.getGlobal<CloseIface>(CLOSE_ID)
+
+                val closerObject = rmi.get<CloseIface>(CLOSE_ID)
                 closerObject.close()
             }
         }

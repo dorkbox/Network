@@ -79,7 +79,6 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
 
 
     @Suppress("DuplicatedCode")
-    @Throws(ClientException::class)
     override fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         val aeronAddressString = aeronConnectionString(address)
 

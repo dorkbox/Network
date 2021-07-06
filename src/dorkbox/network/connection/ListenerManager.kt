@@ -24,13 +24,13 @@ import dorkbox.util.collections.IdentityMap
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import mu.KLogger
 import net.jodah.typetools.TypeResolver
-import java.io.IOException
 
 /**
  * Manages all of the different connect/disconnect/etc listeners
  */
-internal class ListenerManager<CONNECTION: Connection> {
+internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogger) {
     companion object {
         /**
          * Specifies the load-factor for the IdentityMap used to manage keeping track of the number of connections + listeners
@@ -38,23 +38,20 @@ internal class ListenerManager<CONNECTION: Connection> {
         val LOAD_FACTOR = OS.getFloat(ListenerManager::class.qualifiedName + "LOAD_FACTOR", 0.8f)
 
         /**
-         * Remove from the stacktrace EVERYTHING except the message. This is for propagating internal errors
-         *
-         * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
-         */
-        fun noStackTrace(throwable: Throwable) {
-            // keep just one, since it's a stack frame INSIDE our network library, and we need that!
-            throwable.stackTrace = throwable.stackTrace.copyOfRange(0, 1)
-        }
-
-        /**
          * Remove from the stacktrace kotlin coroutine info + dorkbox network call stack. This is NOT used by RMI
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
         fun cleanStackTrace(throwable: Throwable, adjustedStartOfStack: Int = 0) {
-            // we never care about coroutine stacks, so filter then to start with
-            val stackTrace = throwable.stackTrace.filterNot {
+            // we never care about coroutine stacks, so filter then to start with.
+            val origStackTrace = throwable.stackTrace
+            val size = origStackTrace.size
+
+            if (size == 0) {
+                return
+            }
+
+            val stackTrace = origStackTrace.filterNot {
                 val stackName = it.className
                 stackName.startsWith("kotlinx.coroutines.") ||
                 stackName.startsWith("kotlin.coroutines.")
@@ -67,7 +64,9 @@ internal class ListenerManager<CONNECTION: Connection> {
             var newStartIndex = adjustedStartOfStack
 
             // sometimes we want to see the VERY first invocation, but not always
-            val savedFirstStack = if (stackTrace[newStartIndex].methodName == "invokeSuspend") {
+            val savedFirstStack =
+                if (newEndIndex > 1 && newStartIndex < newEndIndex &&  // this fixes some out-of-bounds errors that can potentially occur
+                    stackTrace[newStartIndex].methodName == "invokeSuspend") {
                 newStartIndex++
                 stackTrace.copyOfRange(adjustedStartOfStack, newStartIndex)
             } else {
@@ -105,7 +104,13 @@ internal class ListenerManager<CONNECTION: Connection> {
         fun cleanStackTraceInternal(throwable: Throwable) {
             // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
             val stackTrace = throwable.stackTrace
-            var newEndIndex = stackTrace.size -1  // offset by 1 because we have to adjust for the access index
+            val size = stackTrace.size
+
+            if (size == 0) {
+                return
+            }
+
+            var newEndIndex = size -1  // offset by 1 because we have to adjust for the access index
 
             for (i in newEndIndex downTo 0) {
                 val stackName = stackTrace[i].className
@@ -325,7 +330,7 @@ internal class ListenerManager<CONNECTION: Connection> {
         // remote address will NOT be null at this stage, but best to verify.
         val remoteAddress = connection.remoteAddress
         if (remoteAddress == null) {
-            notifyError(connection, IOException("Unable to attempt connection stages when no remote address is present"))
+            logger.error("Connection ${connection.id}: Unable to attempt connection stages when no remote address is present")
             return false
         }
 
@@ -356,7 +361,7 @@ internal class ListenerManager<CONNECTION: Connection> {
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                 cleanStackTrace(t)
-                notifyError(connection, t)
+                logger.error("Connection ${connection.id} error", t)
             }
         }
     }
@@ -371,7 +376,7 @@ internal class ListenerManager<CONNECTION: Connection> {
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                 cleanStackTrace(t)
-                notifyError(connection, t)
+                logger.error("Connection ${connection.id} error", t)
             }
         }
     }
@@ -435,7 +440,7 @@ internal class ListenerManager<CONNECTION: Connection> {
                         func(connection, message)
                     } catch (t: Throwable) {
                         cleanStackTrace(t)
-                        notifyError(connection, t)
+                        logger.error("Connection ${connection.id} error", t)
                     }
                 }
             }
@@ -454,7 +459,7 @@ internal class ListenerManager<CONNECTION: Connection> {
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                 cleanStackTrace(t)
-                notifyError(connection, t)
+                logger.error("Connection ${connection.id} error", t)
             }
         }
     }

@@ -22,7 +22,8 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.coroutines.SuspendWaiter
-import dorkbox.network.exceptions.MessageNotRegisteredException
+import dorkbox.network.exceptions.ClientException
+import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.ping.Ping
@@ -30,6 +31,7 @@ import dorkbox.network.ping.PingManager
 import dorkbox.network.ping.PingMessage
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
+import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
@@ -75,7 +77,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
     internal val actionDispatch = CoroutineScope(Dispatchers.Default)
 
-    internal val listenerManager = ListenerManager<CONNECTION>()
+    internal val listenerManager = ListenerManager<CONNECTION>(logger)
     internal val connections = ConnectionManager<CONNECTION>()
 
     internal val pingManager = PingManager<CONNECTION>(logger, actionDispatch)
@@ -85,15 +87,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     /**
      * Returns the serialization wrapper if there is an object type that needs to be added outside of the basic types.
      */
-    val serialization: Serialization
+    val serialization: Serialization<CONNECTION>
 
-    private val handshakeKryo: KryoExtra
+    private val handshakeKryo: KryoExtra<CONNECTION>
 
     private val sendIdleStrategy: CoroutineIdleStrategy
     private val sendIdleStrategyHandShake: IdleStrategy
 
-    val pollIdleStrategy: CoroutineIdleStrategy
-    val pollIdleStrategyHandShake: IdleStrategy
+    private val pollIdleStrategy: CoroutineIdleStrategy
+    internal val pollIdleStrategyHandShake: IdleStrategy
 
     /**
      * Crypto and signature management
@@ -112,25 +114,16 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     val storage: SettingsStore
 
-    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch, config.serialization)
+    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch)
+    internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
     init {
         require(!config.previouslyUsed) { "${type.simpleName} configuration cannot be reused!" }
         config.validate()
 
-        runBlocking {
-            // our default onError handler. All error messages go though this
-            listenerManager.onError { throwable ->
-                logger.error("Error processing events", throwable)
-            }
-
-            listenerManager.onError { throwable ->
-                logger.error("Error processing events for connection $this", throwable)
-            }
-        }
-
         // serialization stuff
-        serialization = config.serialization
+        @Suppress("UNCHECKED_CAST")
+        serialization = config.serialization as Serialization<CONNECTION>
         sendIdleStrategy = config.sendIdleStrategy
         pollIdleStrategy = config.pollIdleStrategy
 
@@ -148,28 +141,43 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         try {
             aeronDriver = AeronDriver(config, type, logger)
         } catch (e: Exception) {
-            listenerManager.notifyError(e)
+            logger.error("Error initialize endpoint", e)
             throw e
+        }
+
+        if (type.javaClass == Server::class.java) {
+            // server cannot "get" global RMI objects, only the client can
+            @Suppress("UNCHECKED_CAST")
+            rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, config.serialization as Serialization<CONNECTION>)
+            { _, _, _ ->
+                throw IllegalAccessException("Global RMI access is only possible from a Client connection!")
+            }
+        } else {
+            @Suppress("UNCHECKED_CAST")
+            rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, config.serialization as Serialization<CONNECTION>)
+            { connection, objectId, interfaceClass ->
+                return@RmiManagerConnections rmiGlobalSupport.getGlobalRemoteObject(connection, objectId, interfaceClass)
+            }
         }
     }
 
+    /**
+     * @throws Exception if there is a problem starting the media driver
+     */
     internal fun initEndpointState() {
         shutdown.getAndSet(false)
         shutdownWaiter = SuspendWaiter()
 
         // Only starts the media driver if we are NOT already running!
-        try {
-            aeronDriver.start()
-        } catch (e: Exception) {
-            listenerManager.notifyError(e)
-            throw e
-        }
+        aeronDriver.start()
     }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
 
-    // used internally to remove a connection
+    // used internally to remove a connection. Will also remove all proxy objects
     internal fun removeConnection(connection: Connection) {
+        rmiConnectionSupport.close()
+
         @Suppress("UNCHECKED_CAST")
         removeConnection(connection as CONNECTION)
     }
@@ -211,14 +219,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     open fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION {
         @Suppress("UNCHECKED_CAST")
         return Connection(connectionParameters) as CONNECTION
-    }
-
-    /**
-     * Used for the client, because the client only has ONE ever support connection, and it allows us to create connection specific objects
-     * from a "global" context
-     */
-    internal open fun getRmiConnectionSupport() : RmiManagerConnections<CONNECTION> {
-        return RmiManagerConnections(logger, rmiGlobalSupport, serialization)
     }
 
     /**
@@ -320,9 +320,14 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         }
     }
 
+    /**
+     * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
+     *       CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+     *
+     * @return true if the message was successfully sent by aeron
+     */
     @Suppress("DuplicatedCode")
-    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    internal fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage) {
+    internal fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace {
             "[${publication.sessionId()}] send HS: $message"
@@ -339,7 +344,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 result = publication.offer(internalBuffer, 0, objectSize)
                 if (result >= 0) {
                     // success!
-                    return
+                    return true
                 }
 
                 /**
@@ -360,15 +365,21 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
+                // this exception will be a ClientException or a ServerException
                 val exception = newException("[${publication.sessionId()}] Error sending handshake message. $message (${errorCodeName(result)})")
                 ListenerManager.cleanStackTraceInternal(exception)
                 listenerManager.notifyError(exception)
-                return
+                throw exception
             }
         } catch (e: Exception) {
-            val exception = newException("[${publication.sessionId()}] Error serializing handshake message $message", e)
-            ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
-            listenerManager.notifyError(exception)
+            if (e is ClientException || e is ServerException) {
+                throw e
+            } else {
+                val exception = newException("[${publication.sessionId()}] Error serializing handshake message $message", e)
+                ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
+                listenerManager.notifyError(exception)
+                throw exception
+            }
         } finally {
             sendIdleStrategyHandShake.reset()
         }
@@ -384,24 +395,19 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
-        try {
+        return try {
             val message = handshakeKryo.read(buffer, offset, length)
 
             logger.trace {
                 "[${header.sessionId()}] received HS: $message"
             }
 
-            return message
+            message
         } catch (e: Exception) {
             // The handshake sessionId IS NOT globally unique
-            val sessionId = header.sessionId()
-
-            val exception = newException("[${sessionId}] Error de-serializing message", e)
-            ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
-            listenerManager.notifyError(exception)
-
             logger.error("Error de-serializing message on connection ${header.sessionId()}!", e)
-            return null
+            listenerManager.notifyError(e)
+            null
         }
     }
 
@@ -427,11 +433,8 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
         } catch (e: Exception) {
             // The handshake sessionId IS NOT globally unique
-            val sessionId = header.sessionId()
-
-            val exception = newException("[${sessionId}] Error de-serializing message", e)
-            ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
-            listenerManager.notifyError(connection, exception)
+            logger.error("[${header.sessionId()}] Error de-serializing message", e)
+            listenerManager.notifyError(connection, e)
 
             return // don't do anything!
         }
@@ -441,7 +444,12 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             is PingMessage -> {
                 // the ping listener
                 actionDispatch.launch {
-                    pingManager.manage(this@EndPoint, connection, message, logger)
+                    try {
+                        pingManager.manage(this@EndPoint, connection, message, logger)
+                    } catch (e: Exception) {
+                        logger.error("Error processing PING message", e)
+                        listenerManager.notifyError(connection, e)
+                    }
                 }
             }
 
@@ -452,48 +460,59 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 actionDispatch.launch {
                     // if we are an RMI message/registration, we have very specific, defined behavior.
                     // We do not use the "normal" listener callback pattern because this require special functionality
-                    rmiGlobalSupport.manage(this@EndPoint, connection, message, logger)
+                    try {
+                        rmiGlobalSupport.manage(this@EndPoint, connection, message, logger)
+                    } catch (e: Exception) {
+                        logger.error("Error processing RMI message", e)
+                        listenerManager.notifyError(connection, e)
+                    }
                 }
             }
             is Any -> {
                 actionDispatch.launch {
-                    @Suppress("UNCHECKED_CAST")
-                    var hasListeners = listenerManager.notifyOnMessage(connection, message)
+                    try {
+                        @Suppress("UNCHECKED_CAST")
+                        var hasListeners = listenerManager.notifyOnMessage(connection, message)
 
-                    // each connection registers, and is polled INDEPENDENTLY for messages.
-                    hasListeners = hasListeners or connection.notifyOnMessage(message)
+                        // each connection registers, and is polled INDEPENDENTLY for messages.
+                        hasListeners = hasListeners or connection.notifyOnMessage(message)
 
-                    if (!hasListeners) {
-                        val exception = MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
-                        ListenerManager.cleanStackTrace(exception)
-                        listenerManager.notifyError(connection, exception)
+                        if (!hasListeners) {
+                            logger.error("No message callbacks found for ${message::class.java.simpleName}")
+                        }
+                    } catch (e: Exception) {
+                        logger.error("Error processing message", e)
+                        listenerManager.notifyError(connection, e)
                     }
                 }
             }
             else -> {
                 // do nothing, there were problems with the message
-                val exception = if (message != null) {
-                    MessageNotRegisteredException("No message callbacks found for ${message::class.java.simpleName}")
+                if (message != null) {
+                    logger.error("No message callbacks found for ${message::class.java.simpleName}")
                 } else {
-                    MessageNotRegisteredException("Unknown message received!!")
+                    logger.error("Unknown message received!!")
                 }
-
-                ListenerManager.cleanStackTrace(exception)
-                listenerManager.notifyError(exception)
             }
         }
     }
 
-    // NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
-    @Suppress("DuplicatedCode")
-    internal suspend fun send(message: Any, publication: Publication, connection: Connection) {
+    /**
+     * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
+     *
+     * @return true if the message was successfully sent by aeron
+     */
+    @Suppress("DuplicatedCode", "UNCHECKED_CAST")
+    internal suspend fun send(message: Any, publication: Publication, connection: Connection): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace {
             "[${publication.sessionId()}] send: $message"
         }
 
+        connection as CONNECTION
+
         // since ANY thread can call 'send', we have to take kryo instances in a safe way
-        val kryo: KryoExtra = serialization.takeKryo()
+        val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
         try {
             val buffer = kryo.write(connection, message)
             val objectSize = buffer.position()
@@ -504,7 +523,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 result = publication.offer(internalBuffer, 0, objectSize)
                 if (result >= 0) {
                     // success!
-                    return
+                    return true
                 }
 
                 /**
@@ -530,7 +549,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                     // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
                     // send the message.
                     // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
-                    return
+                    return false
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
@@ -539,22 +558,29 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 // either client or server. No other choices. We create an exception, because it's more useful!
                 val exception = newException(errorMessage)
 
-                // 2 because we do not want to see the stack for the abstract `newException`
-                // 2 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+                // +2 because we do not want to see the stack for the abstract `newException`
+                // +2 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                 // where we see who is calling "send()"
                 ListenerManager.cleanStackTrace(exception, 4)
 
-                @Suppress("UNCHECKED_CAST")
-                listenerManager.notifyError(connection as CONNECTION, exception)
-
-                return
+                logger.error("Aeron error!", exception)
+                listenerManager.notifyError(connection, exception)
             }
         } catch (e: Exception) {
-            logger.error("[${publication.sessionId()}] Error serializing message $message", e)
+            if (message is MethodResponse && message.result is Exception) {
+                val result = message.result as Exception
+                logger.error("[${publication.sessionId()}] Error serializing message $message", result)
+                listenerManager.notifyError(connection, result)
+            } else {
+                logger.error("[${publication.sessionId()}] Error serializing message $message", e)
+                listenerManager.notifyError(connection, e)
+            }
         } finally {
             sendIdleStrategy.reset()
             serialization.returnKryo(kryo)
         }
+
+        return false
     }
 
 

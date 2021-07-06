@@ -24,7 +24,7 @@ import org.agrona.DirectBuffer
 /**
  * READ and WRITE are exclusive to each other and can be performed in different threads.
  */
-class KryoExtra() : Kryo() {
+class KryoExtra<CONNECTION: Connection>() : Kryo() {
     // for kryo serialization
     private val readerBuffer = AeronInput()
     private val writerBuffer = AeronOutput()
@@ -35,7 +35,7 @@ class KryoExtra() : Kryo() {
 //    private val temp = ByteArray(ABSOLUTE_MAX_SIZE_OBJECT)
 
     // This is unique per connection. volatile/etc is not necessary because it is set/read in the same thread
-    lateinit var connection: Connection
+    lateinit var connection: CONNECTION
 
 //    private val secureRandom = SecureRandom()
 //    private var cipher: Cipher? = null
@@ -87,7 +87,7 @@ class KryoExtra() : Kryo() {
      * ++++++++++++++++++++++++++
      */
     @Throws(Exception::class)
-    fun write(connection: Connection, message: Any): AeronOutput {
+    fun write(connection: CONNECTION, message: Any): AeronOutput {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
@@ -133,7 +133,7 @@ class KryoExtra() : Kryo() {
      * ++++++++++++++++++++++++++
      */
     @Throws(Exception::class)
-    fun read(buffer: DirectBuffer, offset: Int, length: Int, connection: Connection): Any {
+    fun read(buffer: DirectBuffer, offset: Int, length: Int, connection: CONNECTION): Any {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
@@ -173,7 +173,7 @@ class KryoExtra() : Kryo() {
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    private fun write(connection: Connection, writer: Output, message: Any) {
+    private fun write(connection: CONNECTION, writer: Output, message: Any) {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
@@ -200,7 +200,7 @@ class KryoExtra() : Kryo() {
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    private fun read(connection: Connection, reader: Input): Any {
+    private fun read(connection: CONNECTION, reader: Input): Any {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 

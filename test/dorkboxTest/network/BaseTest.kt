@@ -70,12 +70,6 @@ abstract class BaseTest {
     private var autoFailThread: Thread? = null
 
     companion object {
-        fun setLog() {
-            setLogLevel(Level.TRACE)
-//            setLogLevel(Level.ERROR)
-//            setLogLevel(Level.DEBUG)
-        }
-
         const val LOOPBACK = "loopback"
         fun clientConfig(block: Configuration.() -> Unit = {}): Configuration {
 
@@ -87,8 +81,6 @@ abstract class BaseTest {
             configuration.enableIpc = false
 
             block(configuration)
-
-            setLog()
             return configuration
         }
 
@@ -104,8 +96,6 @@ abstract class BaseTest {
             configuration.maxConnectionsPerIpAddress = 5
 
             block(configuration)
-
-            setLog()
             return configuration
         }
 
@@ -179,6 +169,16 @@ abstract class BaseTest {
 
     init {
         println("---- " + this.javaClass.simpleName)
+
+        setLogLevel(Level.TRACE)
+        //            setLogLevel(Level.ERROR)
+        //            setLogLevel(Level.DEBUG)
+
+        // we must always make sure that aeron is shut-down before starting again.
+        while (Server.isRunning(serverConfig())) {
+            println("Aeron was still running. Waiting for it to stop...")
+            Thread.sleep(2000)
+        }
     }
 
     fun addEndPoint(endPointConnection: EndPoint<*>) {

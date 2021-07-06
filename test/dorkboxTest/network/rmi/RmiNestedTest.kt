@@ -65,8 +65,6 @@ class RmiNestedTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.rmiGlobal.save(TestObjectImpl(), 1)
-
             server.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
                 // this 'object' is the REAL object, not a proxy, because this object is created within this connection.
@@ -89,7 +87,8 @@ class RmiNestedTest : BaseTest() {
 
             client.onConnect {
                 logger.error("Connected")
-                rmi.getGlobal<TestObject>(1).apply {
+
+                rmi.create<TestObject> {
                     logger.error("Starting test")
                     setValue(43.21f)
 
@@ -132,8 +131,6 @@ class RmiNestedTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.rmiGlobal.save(TestObjectImpl(), 1)
-
             server.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
                 // this 'object' is the REAL object, not a proxy, because this object is created within this connection.
@@ -156,7 +153,7 @@ class RmiNestedTest : BaseTest() {
 
             client.onConnect {
                 logger.error("Connected")
-                rmi.getGlobal<TestObject>(1).apply {
+                rmi.create<TestObject> {
                     logger.error("Starting test")
                     setValue(43.21f)
 
@@ -199,8 +196,6 @@ class RmiNestedTest : BaseTest() {
             val server = Server<Connection>(configuration)
             addEndPoint(server)
 
-            server.rmiGlobal.save(TestObjectImpl(), 1)
-
             server.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.
                 // this 'object' is the REAL object
@@ -224,7 +219,7 @@ class RmiNestedTest : BaseTest() {
             client.onConnect {
                 logger.error("Connected")
 
-                rmi.getGlobal<TestObject>(1).apply {
+                rmi.create<TestObject> {
                     logger.error("Starting test")
                     setOtherValue(43.21f)
 
@@ -263,7 +258,7 @@ class RmiNestedTest : BaseTest() {
             server.onConnect {
                 logger.error("Connected")
 
-                rmi.get<TestObject>(1).apply {
+                rmi.create<TestObject> {
                     logger.error("Starting test")
                     setOtherValue(43.21f)
 
@@ -294,11 +289,6 @@ class RmiNestedTest : BaseTest() {
 
             val client = Client<Connection>(configuration)
             addEndPoint(client)
-
-            client.onConnect {
-                rmi.save(TestObjectImpl(), 1)
-            }
-
 
             client.onMessage<OtherObject> { message ->
                 // The test is complete when the client sends the OtherObject instance.

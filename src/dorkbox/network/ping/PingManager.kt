@@ -59,7 +59,7 @@ class PingManager<CONNECTION : Connection>(logger: KLogger, actionDispatch: Coro
 //        }
     }
 
-    suspend fun ping(function1: Connection, function: suspend Ping.() -> Unit) {
+    suspend fun ping(function1: Connection, function: suspend Ping.() -> Unit): Boolean {
 //        val ping = PingMessage()
 //        ping.id = pingIdAllocator.allocate()
 //
@@ -86,6 +86,7 @@ class PingManager<CONNECTION : Connection>(logger: KLogger, actionDispatch: Coro
 ////        ping0(ping)
 ////        return pingFuture!!
 //        TODO()
+        return false
     }
 
 }

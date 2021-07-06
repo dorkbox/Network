@@ -17,8 +17,9 @@ package dorkbox.network.serialization
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
+import dorkbox.network.connection.Connection
 
-internal class ClassRegistration2(clazz: Class<*>, serializer: Serializer<*>, id: Int) : ClassRegistration(clazz, serializer, id) {
+internal class ClassRegistration2<CONNECTION: Connection>(clazz: Class<*>, serializer: Serializer<*>, id: Int) : ClassRegistration<CONNECTION>(clazz, serializer, id) {
 
     override fun register(kryo: Kryo) {
         kryo.register(clazz, serializer, id)

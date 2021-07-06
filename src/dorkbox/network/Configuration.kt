@@ -21,6 +21,7 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
+import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.storage.StorageType
 import dorkbox.network.storage.types.PropertyStore
@@ -28,6 +29,7 @@ import dorkbox.os.OS
 import io.aeron.driver.Configuration
 import io.aeron.driver.ThreadingMode
 import mu.KLogger
+import org.agrona.SystemUtil
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -279,7 +281,7 @@ open class Configuration {
     /**
      * Specify the serialization manager to use.
      */
-    var serialization: Serialization = Serialization()
+    var serialization: Serialization<Connection> = Serialization()
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -396,6 +398,25 @@ open class Configuration {
      * Default value is 1408 for internet; for a LAN, 9k is possible with jumbo frames (if the routers/interfaces support it)
      */
     var networkMtuSize = Configuration.MTU_LENGTH_DEFAULT
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+    /**
+     * Default initial window length for flow control sender to receiver purposes. This assumes a system free of pauses.
+     *
+     * Length of Initial Window:
+     *
+     * RTT (LAN) = 100 usec -- Throughput = 10 Gbps)
+     * RTT (LAN) = 100 usec -- Throughput = 1 Gbps
+     *
+     * Buffer = Throughput * RTT
+     *
+     * Buffer (10 Gps) = (10 * 1000 * 1000 * 1000 / 8) * 0.0001 = 125000  (Round to 128KB)
+     * Buffer (1 Gps) = (1 * 1000 * 1000 * 1000 / 8) * 0.0001 = 12500     (Round to 16KB)
+     */
+    var initialWindowLength = SystemUtil.getSizeAsInt(Configuration.INITIAL_WINDOW_LENGTH_PROP_NAME, 16 * 1024)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value

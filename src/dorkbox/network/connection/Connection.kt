@@ -23,10 +23,7 @@ import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.handshake.RandomIdAllocator
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingMessage
-import dorkbox.network.rmi.RemoteObject
-import dorkbox.network.rmi.RemoteObjectStorage
-import dorkbox.network.rmi.TimeoutException
-import dorkbox.util.classes.ClassHelper
+import dorkbox.network.rmi.RmiSupportConnection
 import io.aeron.FragmentAssembler
 import io.aeron.Publication
 import io.aeron.Subscription
@@ -36,7 +33,6 @@ import kotlinx.atomicfu.getAndUpdate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
-import java.io.IOException
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
@@ -124,8 +120,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // counter, which is also transmitted as an optimized int. (which is why it starts at 0, so the transmitted bytes are small)
 //    private val aes_gcm_iv = atomic(0)
 
-    // RMI support for this connection
-    internal val rmiConnectionSupport = endPoint.getRmiConnectionSupport()
+    /**
+     * Methods supporting Remote Method Invocation and Objects
+     */
+    val rmi: RmiSupportConnection<out Connection>
 
     // a record of how many messages are in progress of being sent. When closing the connection, this number must be 0
     private val messagesInProgress = atomic(0)
@@ -182,9 +180,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             endPoint.processMessage(buffer, offset, length, header, this@Connection)
         }
+
+        @Suppress("LeakingThis")
+        rmi = connectionParameters.rmiConnectionSupport.getNewRmiSupport(this)
     }
-
-
 
     /**
      * @return true if the remote public key changed. This can be useful if specific actions are necessary when the key has changed.
@@ -226,18 +225,24 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     /**
      * Safely sends objects to a destination.
+     *
+     * @return true if the message was successfully sent by aeron
      */
-    suspend fun send(message: Any) {
+    suspend fun send(message: Any): Boolean {
         messagesInProgress.getAndIncrement()
-        endPoint.send(message, publication, this)
+        val success = endPoint.send(message, publication, this)
         messagesInProgress.getAndDecrement()
+
+        return success
     }
 
     /**
      * Safely sends objects to a destination.
+     *
+     * @return true if the message was successfully sent by aeron
      */
-    fun sendBlocking(message: Any) {
-        runBlocking {
+    fun sendBlocking(message: Any): Boolean {
+        return runBlocking {
             send(message)
         }
     }
@@ -247,10 +252,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * Only 1 in-flight ping can be performed at a time. Calling ping() again, before the previous ping returns will do nothing.
      *
-     * @return Ping can have a listener attached, which will get called when the ping returns.
+     * @return true if the message was successfully sent by aeron
      */
-    suspend fun ping(function: suspend Ping.() -> Unit) {
-        endPoint.pingManager.ping(this, function)
+    suspend fun ping(function: suspend Ping.() -> Unit): Boolean {
+        return endPoint.pingManager.ping(this, function)
     }
 
     /**
@@ -275,7 +280,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     suspend fun onDisconnect(function: suspend Connection.() -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager()
+            origManager ?: ListenerManager(logger)
         }
 
         listenerManager.value!!.onDisconnect(function)
@@ -287,7 +292,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     suspend fun <MESSAGE> onMessage(function: suspend Connection.(MESSAGE) -> Unit) {
         // make sure we atomically create the listener manager, if necessary
         listenerManager.getAndUpdate { origManager ->
-            origManager ?: ListenerManager()
+            origManager ?: ListenerManager(logger)
         }
 
         listenerManager.value!!.onMessage(function)
@@ -380,10 +385,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             }
 
             if (logFile.exists()) {
-                listenerManager.value?.notifyError(this, IOException("Unable to delete aeron publication log on close: $logFile"))
+                logger.error("Connection $id: Unable to delete aeron publication log on close: $logFile")
             }
-
-            rmiConnectionSupport.clearProxyObjects()
 
             endPoint.removeConnection(this)
 
@@ -444,197 +447,5 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             sessionIdAllocator.free(id)
             streamIdAllocator.free(streamId)
         }
-    }
-
-    // RMI notes (in multiple places, copypasta, because this is confusing if not written down)
-    //
-    // only server can create a global object (in itself, via save)
-    // server
-    //  -> saveGlobal (global)
-    //
-    // client
-    //  -> save (connection)
-    //  -> get (connection)
-    //  -> create (connection)
-    //  -> saveGlobal (global)
-    //  -> getGlobal (global)
-    //
-    // connection
-    //  -> save (connection)
-    //  -> get (connection)
-    //  -> getGlobal (global)
-    //  -> create (connection)
-
-    //
-    //
-    // RMI methods
-    //
-    //
-
-    /**
-     * Tells us to save an an already created object in the CONNECTION scope, so a remote connection can get it via [Connection.getObject]
-     *
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     *
-     * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun saveObject(`object`: Any): Int {
-        val rmiId = rmiConnectionSupport.saveImplObject(`object`)
-        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.value?.notifyError(this, exception)
-        }
-
-        return rmiId
-    }
-
-    /**
-     * Tells us to save an an already created object in the CONNECTION scope using the specified ID, so a remote connection can get it via [Connection.getObject]
-     *
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @return true if the object was successfully saved for the specified ID. If false, an error log will be emitted
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun saveObject(`object`: Any, objectId: Int): Boolean {
-        val success = rmiConnectionSupport.saveImplObject(`object`, objectId)
-        if (!success) {
-            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.value?.notifyError(this, exception)
-        }
-        return success
-    }
-
-    /**
-     * Gets a CONNECTION scope remote object via the ID.
-     *
-     * Global remote objects are accessible to ALL connections, where as a connection specific remote object is only accessible/visible
-     * to the connection.
-     *
-     * If you want to access a connection specific remote object, call [Connection.get(Int, RemoteObjectCallback<Iface>)] on a connection
-     * The callback will be notified when the remote object has been created.
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
-     */
-    inline fun <reified Iface> getObject(objectId: Int): Iface {
-        // NOTE: It's not possible to have reified inside a virtual function
-        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        val kryoId = endPoint.serialization.getKryoIdForRmiClient(Iface::class.java)
-
-        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.getProxyObject(this, kryoId, objectId, Iface::class.java)
-    }
-
-    /**
-     * Gets a global REMOTE object via the ID.
-     *
-     * Global remote objects are accessible to ALL connections, where as a connection specific remote object is only accessible/visible
-     * to the connection.
-     *
-     * If you want to access a connection specific remote object, call [Connection.get(Int, RemoteObjectCallback<Iface>)] on a connection
-     * The callback will be notified when the remote object has been created.
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
-     */
-    inline fun <reified Iface> getGlobalObject(objectId: Int): Iface {
-        // NOTE: It's not possible to have reified inside a virtual function
-        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.rmiGlobalSupport.getGlobalRemoteObject(this, objectId, Iface::class.java)
-    }
-
-    /**
-     * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
-     * to an object that is created remotely.
-     *
-     * The callback will be notified when the remote object has been created.
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
-     */
-    suspend fun <Iface> createObject(vararg objectParameters: Any?, callback: suspend Iface.() -> Unit) {
-        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0)
-        val kryoId = endPoint.serialization.getKryoIdForRmiClient(iFaceClass)
-
-        @Suppress("UNCHECKED_CAST")
-        objectParameters as Array<Any?>
-
-        rmiConnectionSupport.createRemoteObject(this, kryoId, objectParameters, callback)
-    }
-
-    /**
-     * Tells the remote connection to create a new proxy object that implements the specified interface. The methods on this object "map"
-     * to an object that is created remotely.
-     *
-     * The callback will be notified when the remote object has been created.
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
-     */
-    suspend fun <Iface> createObject(callback: suspend Iface.() -> Unit) {
-        val iFaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(Function1::class.java, callback.javaClass, 0)
-        val kryoId = endPoint.serialization.getKryoIdForRmiClient(iFaceClass)
-
-        rmiConnectionSupport.createRemoteObject(this, kryoId, null, callback)
-    }
-
-    /**
-     * Removes
-     */
-    fun removeObject(rmiObjectId: Int) {
-        TODO("Not yet implemented")
     }
 }

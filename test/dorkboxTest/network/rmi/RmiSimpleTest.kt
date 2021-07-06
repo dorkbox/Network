@@ -170,6 +170,10 @@ class RmiSimpleTest : BaseTest() {
 
             client.onConnect {
                 rmi.save(TestCowImpl(4), 4)
+
+                client.logger.error("Running test for: Client -> Server")
+                RmiCommonTest.runTests(this, rmi.getGlobal(44), 44)
+                client.logger.error("Done with test for: Client -> Server")
             }
 
             client.onMessage<MessageWithTestCow> { m ->
@@ -187,9 +191,7 @@ class RmiSimpleTest : BaseTest() {
 
             // this creates a GLOBAL object on the server (instead of a connection specific object)
             runBlocking {
-                client.logger.error("Running test for: Client -> Server")
-                RmiCommonTest.runTests(client.connection, client.connection.rmi.getGlobal(44), 44)
-                client.logger.error("Done with test for: Client -> Server")
+
             }
         }
 
@@ -252,7 +254,7 @@ class RmiSimpleTest : BaseTest() {
                 client.logger.error("Received finish signal for test for: Client -> Server")
                 val `object` = m.testCow
                 val id = `object`.id()
-                Assert.assertEquals(123, id.toLong())
+                Assert.assertEquals(123, id)
                 client.logger.error("Finished test for: Client -> Server")
                 stopEndPoints(2000)
             }

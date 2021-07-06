@@ -26,10 +26,6 @@ import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
-import dorkbox.network.rmi.RemoteObject
-import dorkbox.network.rmi.RemoteObjectStorage
-import dorkbox.network.rmi.RmiManagerConnections
-import dorkbox.network.rmi.TimeoutException
 import dorkbox.util.Sys
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.launch
@@ -84,8 +80,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     private val previousClosedConnectionActivity: Long = 0
 
-    private val rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, serialization)
-
     // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
     // lock-stop ordering for how disconnect and connect work with each-other
     // GUARANTEE that the callbacks for 'onDisconnect' happens-before the 'onConnect'.
@@ -93,13 +87,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ClientException(message, cause)
-    }
-
-    /**
-     * So the client class can get remote objects that are THE SAME OBJECT as if called from a connection
-     */
-    final override fun getRmiConnectionSupport(): RmiManagerConnections<CONNECTION> {
-        return rmiConnectionSupport
     }
 
     /**
@@ -111,10 +98,11 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *  - a network name ("localhost", "loopback", "lo", "bob.example.org")
      *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
      *  - an InetAddress address
+     *  - if no address is specified, and IPC is disabled in the config, then loopback will be selected
      *
      * ### For the IPC (Inter-Process-Communication) it must be:
-     *  - `connect()`
-     *  - `connect("")`
+     *  - `connect()` (only if ipc is enabled in the configuration)
+     *  - `connect("")` (only if ipc is enabled in the configuration)
      *  - `connectIpc()`
      *
      * ### Case does not matter, and "localhost" is the default.
@@ -133,7 +121,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 reliable: Boolean = true) {
         when {
             // this is default IPC settings
-            remoteAddress.isEmpty() -> {
+            remoteAddress.isEmpty() && config.enableIpc == true -> {
                 connectIpc(connectionTimeoutMS = connectionTimeoutMS)
             }
 
@@ -254,6 +242,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
+     * @throws ClientException if there are misc errors
      */
     @Suppress("DuplicatedCode")
     private fun connect(remoteAddress: InetAddress? = null,
@@ -274,7 +263,12 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         connection0 = null
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
-        initEndpointState()
+        try {
+            initEndpointState()
+        } catch (e: Exception) {
+            logger.error("Unable to initialize the endpoint state", e)
+            return
+        }
 
         // only try to connect via IPv4 if we have a network interface that supports it!
         if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
@@ -298,7 +292,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         var isUsingIPC = false
         val autoChangeToIpc = (config.enableIpc && (remoteAddress == null || remoteAddress.isLoopbackAddress)) || (!config.enableIpc && remoteAddress == null)
 
-        val handshake = ClientHandshake(crypto, this)
+        val handshake = ClientHandshake(crypto, this, logger)
         val handshakeConnection = if (autoChangeToIpc) {
             logger.info {"IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC" }
 
@@ -359,8 +353,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
 
-        // @Throws(ConnectTimedOutException::class, ClientRejectedException::class)
-        val connectionInfo = handshake.handshakeHello(handshakeConnection, connectionTimeoutMS)
+        // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
+        val connectionInfo = try {
+            handshake.handshakeHello(handshakeConnection, connectionTimeoutMS)
+        } catch (e: Exception) {
+            logger.error("Handshake error", e)
+            throw e
+        }
 
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
@@ -373,7 +372,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
             handshakeConnection.close()
             val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} not allowed! Public key mismatch.")
-            listenerManager.notifyError(exception)
+            logger.error("Validation error", exception)
             throw exception
         }
 
@@ -429,17 +428,17 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} has incorrect class registration details!!")
             }
 
-            listenerManager.notifyError(exception)
+            logger.error("Initialization error", exception)
             throw exception
         }
 
 
+
         val newConnection: CONNECTION
         if (isUsingIPC) {
-            newConnection = newConnection(ConnectionParams(this, clientConnection, PublicKeyValidationState.VALID))
+            newConnection = newConnection(ConnectionParams(this, clientConnection, PublicKeyValidationState.VALID, rmiConnectionSupport))
         } else {
-            newConnection = newConnection(ConnectionParams(this, clientConnection, validateRemoteAddress))
-
+            newConnection = newConnection(ConnectionParams(this, clientConnection, validateRemoteAddress, rmiConnectionSupport))
             remoteAddress!!
 
             // VALIDATE are we allowed to connect to this server (now that we have the initial server information)
@@ -448,7 +447,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                 handshakeConnection.close()
                 val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress)} was not permitted!")
                 ListenerManager.cleanStackTrace(exception)
-                listenerManager.notifyError(exception)
+                logger.error("Permission error", exception)
                 throw exception
             }
 
@@ -465,7 +464,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
             // on the client, we want to GUARANTEE that the disconnect happens-before the connect.
             if (!lockStepForConnect.compareAndSet(null, SuspendWaiter())) {
-                listenerManager.notifyError(connection, IllegalStateException("lockStep for onConnect was in the wrong state!"))
+                logger.error("Connection ${newConnection.id}", "close lockStep for disconnect was in the wrong state!")
             }
         }
         newConnection.postCloseAction = {
@@ -486,7 +485,13 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         // tell the server our connection handshake is done, and the connection can now listen for data.
         // also closes the handshake (will also throw connect timeout exception)
-        val canFinishConnecting = handshake.handshakeDone(handshakeConnection, connectionTimeoutMS)
+        val canFinishConnecting = try {
+            handshake.handshakeDone(handshakeConnection, connectionTimeoutMS)
+        } catch (e: ClientException) {
+            logger.error("Error during handshake", e)
+            false
+        }
+
         if (canFinishConnecting) {
             isConnected = true
 
@@ -508,8 +513,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                         logger.debug {"[${newConnection.id}] connection expired"}
 
-                        // eventloop is required, because we want to run this code AFTER the current coroutine has finished. This prevents
-                        // odd race conditions when a client is restarted
+                        // event-loop is required, because we want to run this code AFTER the current coroutine has finished. This prevents
+                        // odd race conditions when a client is restarted. Can only be run from inside another co-routine!
                         actionDispatch.eventLoop {
                             // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
                             newConnection.close()
@@ -537,9 +542,10 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             }
         } else {
             close()
+
             val exception = ClientRejectedException("Unable to connect with server ${handshakeConnection.clientInfo()}")
             ListenerManager.cleanStackTrace(exception)
-            listenerManager.notifyError(exception)
+            logger.error("Connection ${connection.id}", exception)
             throw exception
         }
     }
@@ -600,7 +606,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
             true
         } else {
             val exception = ClientException("Cannot send a message when there is no connection!")
-            listenerManager.notifyError(exception)
+            logger.error("No connection!", exception)
             false
         }
     }
@@ -620,16 +626,19 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
      *
      * @param function called when the ping returns (ie: update time/latency counters/metrics/etc)
+     *
+     * @return true if the ping was successfully sent to the client
      */
-    suspend fun ping(function: suspend Ping.() -> Unit) {
+    suspend fun ping(function: suspend Ping.() -> Unit): Boolean {
         val c = connection0
 
         if (c != null) {
-            pingManager.ping(c, function)
+            return pingManager.ping(c, function)
         } else {
-            val exception = ClientException("Cannot send a ping when there is no connection!")
-            listenerManager.notifyError(exception)
+            logger.error("No connection!", ClientException("Cannot send a ping when there is no connection!"))
         }
+
+        return false
     }
 
     /**
@@ -637,8 +646,8 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @param function called when the ping returns (ie: update time/latency counters/metrics/etc)
      */
-    fun pingBlocking(function: suspend Ping.() -> Unit) {
-        runBlocking {
+    fun pingBlocking(function: suspend Ping.() -> Unit): Boolean {
+        return runBlocking {
             ping(function)
         }
     }
@@ -655,263 +664,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
     }
 
     // no impl
-    final override fun close0() {}
-
-
-    // RMI notes (in multiple places, copypasta, because this is confusing if not written down)
-    //
-    // only server can create a global object (in itself, via save)
-    // server
-    //  -> saveGlobal (global)
-    //
-    // client
-    //  -> save (connection)
-    //  -> get (connection)
-    //  -> create (connection)
-    //  -> saveGlobal (global)
-    //  -> getGlobal (global)
-    //
-    // connection
-    //  -> save (connection)
-    //  -> get (connection)
-    //  -> getGlobal (global)
-    //  -> create (connection)
-
-
-    //
-    //
-    // RMI - connection
-    //
-    //
-
-    /**
-     * Tells us to save an an already created object in the CONNECTION scope, so a remote connection can get it via [Connection.getObject]
-     *
-     * - This object is NOT THREAD SAFE, and is meant to ONLY be used from a single thread!
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     *
-     * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun saveObject(`object`: Any): Int {
-        val rmiId = rmiConnectionSupport.saveImplObject(`object`)
-        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.notifyError(exception)
-            return rmiId
-        }
-
-        return rmiId
-    }
-
-    /**
-     * Tells us to save an an already created object in the CONNECTION scope using the specified ID, so a remote connection can get it via [Connection.getObject]
-     *
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @return true if the object was successfully saved for the specified ID. If false, an error log will be emitted
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun saveObject(`object`: Any, objectId: Int): Boolean {
-        val success = rmiConnectionSupport.saveImplObject(`object`, objectId)
-        if (!success) {
-            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.notifyError(exception)
-        }
-        return success
-    }
-
-    /**
-     * Get a CONNECTION scope REMOTE object via the ID.
-     *
-     * Global remote objects are accessible to ALL connections, where as a connection specific remote object is only accessible/visible
-     * to the connection.
-     *
-     * If you want to access a connection specific remote object, call [Connection.get(Int, RemoteObjectCallback<Iface>)] on a connection
-     * The callback will be notified when the remote object has been created.
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
-     */
-    inline fun <reified Iface> getObject(objectId: Int): Iface {
-        // NOTE: It's not possible to have reified inside a virtual function
-        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        val kryoId = serialization.getKryoIdForRmiClient(Iface::class.java)
-
-        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiConnectionSupport.getProxyObject(connection, kryoId, objectId, Iface::class.java)
-    }
-
-    /**
-     * Tells the remote connection to create a new proxy object that implements the specified interface in the CONNECTION scope.
-     *
-     * The methods on this object "map" to an object that is created remotely.
-     *
-     * The callback will be notified when the remote object has been created.
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
-     */
-    suspend inline fun <reified Iface> createObject(vararg objectParameters: Any?, noinline callback: suspend Iface.() -> Unit) {
-        // NOTE: It's not possible to have reified inside a virtual function
-        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        val kryoId = serialization.getKryoIdForRmiClient(Iface::class.java)
-
-        @Suppress("UNCHECKED_CAST")
-        objectParameters as Array<Any?>
-
-        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        rmiConnectionSupport.createRemoteObject(connection, kryoId, objectParameters, callback)
-    }
-
-    /**
-     * Tells the remote connection to create a new proxy object that implements the specified interface in the CONNECTION scope.
-     *
-     * The methods on this object "map" to an object that is created remotely.
-     *
-     * The callback will be notified when the remote object has been created.
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
-     */
-    suspend inline fun <reified Iface> createObject(noinline callback: suspend Iface.() -> Unit) {
-        // NOTE: It's not possible to have reified inside a virtual function
-        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        val kryoId = serialization.getKryoIdForRmiClient(Iface::class.java)
-
-        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        rmiConnectionSupport.createRemoteObject(connection, kryoId, null, callback)
-    }
-
-    //
-    //
-    // RMI - global
-    //
-    //
-
-    /**
-     * Tells us to save an an already created object in the GLOBAL scope, so a remote connection can get it via [Connection.getGlobalObject]
-     *
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     *
-     * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun saveGlobalObject(`object`: Any): Int {
-        val rmiId = rmiGlobalSupport.saveImplObject(`object`)
-        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.notifyError(exception)
-        }
-        return rmiId
-    }
-
-    /**
-     * Tells us to save an an already created object in the GLOBAL scope using the specified ID, so a remote connection can get it via [Connection.getGlobalObject]
-     *
-     *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @return true if the object was successfully saved for the specified ID. If false, an error log will be emitted
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
-        val success = rmiGlobalSupport.saveImplObject(`object`, objectId)
-        if (!success) {
-            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.notifyError(exception)
-        }
-
-        return success
-    }
-
-    /**
-     * Get a GLOBAL scope remote object via the ID.
-     *
-     * Global remote objects are accessible to ALL connections, where as a connection specific remote object is only accessible/visible
-     * to the connection.
-     *
-     * If you want to access a connection specific remote object, call [Connection.get(Int, RemoteObjectCallback<Iface>)] on a connection
-     * The callback will be notified when the remote object has been created.
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @see RemoteObject
-     */
-    inline fun <reified Iface> getGlobalObject(objectId: Int): Iface {
-        // NOTE: It's not possible to have reified inside a virtual function
-        // https://stackoverflow.com/questions/60037849/kotlin-reified-generic-in-virtual-function
-        @Suppress("NON_PUBLIC_CALL_FROM_PUBLIC_INLINE")
-        return rmiGlobalSupport.getGlobalRemoteObject(connection, objectId, Iface::class.java)
+    final override fun close0() {
+        // when we close(), don't permit reconnect. add "close(boolean)" (aka "shutdown"), to deny a connect request (and permanently stay closed)
     }
 }

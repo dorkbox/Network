@@ -17,7 +17,7 @@ package dorkbox.network.rmi
 
 import kotlinx.coroutines.channels.Channel
 
-internal data class ResponseWaiter(val id: Int) {
+data class ResponseWaiter(val id: Int) {
     // this is bi-directional waiting. The method names to not reflect this, however there is no possibility of race conditions w.r.t. waiting
     // https://stackoverflow.com/questions/55421710/how-to-suspend-kotlin-coroutine-until-notified
     // https://kotlinlang.org/docs/reference/coroutines/channels.html
@@ -46,14 +46,14 @@ internal data class ResponseWaiter(val id: Int) {
     suspend fun doNotify() {
         try {
             channel.send(Unit)
-        } catch (ignored: Exception) {
+        } catch (ignored: Throwable) {
         }
     }
 
     suspend fun doWait() {
         try {
             channel.receive()
-        } catch (ignored: Exception) {
+        } catch (ignored: Throwable) {
         }
     }
 
@@ -61,7 +61,7 @@ internal data class ResponseWaiter(val id: Int) {
         try {
             isCancelled = true
             channel.cancel()
-        } catch (ignored: Exception) {
+        } catch (ignored: Throwable) {
         }
     }
 }

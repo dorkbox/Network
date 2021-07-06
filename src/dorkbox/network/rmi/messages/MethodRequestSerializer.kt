@@ -39,6 +39,7 @@ import com.esotericsoftware.kryo.KryoException
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
+import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.serialization.KryoExtra
@@ -49,7 +50,7 @@ import java.lang.reflect.Method
  * Internal message to invoke methods remotely.
  */
 @Suppress("ConstantConditionIf")
-class MethodRequestSerializer(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>) : Serializer<MethodRequest>() {
+class MethodRequestSerializer<CONNECTION: Connection>(private val methodCache: Int2ObjectHashMap<Array<CachedMethod>>) : Serializer<MethodRequest>() {
     override fun write(kryo: Kryo, output: Output, methodRequest: MethodRequest) {
         val method = methodRequest.cachedMethod
 
@@ -82,7 +83,7 @@ class MethodRequestSerializer(private val methodCache: Int2ObjectHashMap<Array<C
         val methodIndex = RmiUtils.unpackRight(methodInfo)
         val isGlobal = input.readBoolean()
 
-        (kryo as KryoExtra)
+        kryo as KryoExtra<CONNECTION>
 
         val cachedMethod = try {
             methodCache[methodClassId][methodIndex]

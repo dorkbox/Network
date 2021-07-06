@@ -59,7 +59,7 @@ import kotlin.concurrent.write
  *
  * @author Nathan Robinson
  */
-class RemoteObjectStorage(val logger: KLogger) {
+internal class RemoteObjectStorage(val logger: KLogger) {
 
     companion object {
         const val INVALID_RMI = 0
@@ -206,7 +206,7 @@ class RemoteObjectStorage(val logger: KLogger) {
             objectMap.put(nextObjectId, `object`)
 
             logger.trace {
-                "Object <proxy #$nextObjectId> registered with .toString() = '${`object`}'"
+                "Remote object <proxy:$nextObjectId> registered with .toString() = '${`object`}'"
             }
         }
 
@@ -226,7 +226,7 @@ class RemoteObjectStorage(val logger: KLogger) {
         objectMap.put(objectId, `object`)
 
         logger.trace {
-            "Object <proxy #${objectId}> registered with .toString() = '${`object`}'"
+            "Remote object <proxy:$objectId> registered with .toString() = '${`object`}'"
         }
 
         return true
@@ -243,7 +243,7 @@ class RemoteObjectStorage(val logger: KLogger) {
         returnId(objectId)
 
         logger.trace {
-            "Object <proxy #${objectId}> removed with .toString() = '${rmiObject}'"
+            "Object <proxy #${objectId}> removed"
         }
         @Suppress("UNCHECKED_CAST")
         return rmiObject

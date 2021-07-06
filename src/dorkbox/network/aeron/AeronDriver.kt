@@ -160,6 +160,8 @@ class AeronDriver(val config: Configuration,
                 .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
                 .threadingMode(config.threadingMode)
                 .mtuLength(config.networkMtuSize)
+
+                .initialWindowLength(config.initialWindowLength)
                 .socketSndbufLength(config.sendBufferSize)
                 .socketRcvbufLength(config.receiveBufferSize)
 

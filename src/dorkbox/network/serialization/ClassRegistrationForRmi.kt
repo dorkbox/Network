@@ -15,6 +15,7 @@
  */
 package dorkbox.network.serialization
 
+import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.messages.RmiServerSerializer
 
 /**
@@ -44,9 +45,9 @@ import dorkbox.network.rmi.messages.RmiServerSerializer
  *  During the handshake, if the impl object 'lives' on the CLIENT, then the client must tell the server that the iface ID must use this serializer.
  *  If the impl object 'lives' on the SERVER, then the server must tell the client about the iface ID
  */
-internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
-                                       var implClass: Class<*>?,
-                                       serializer: RmiServerSerializer) : ClassRegistration(ifaceClass, serializer) {
+internal class ClassRegistrationForRmi<CONNECTION: Connection>(ifaceClass: Class<*>,
+                                                               var implClass: Class<*>?,
+                                                               serializer: RmiServerSerializer<CONNECTION>) : ClassRegistration<CONNECTION>(ifaceClass, serializer) {
     /**
      * In general:
      *
@@ -103,7 +104,7 @@ internal class ClassRegistrationForRmi(ifaceClass: Class<*>,
      *        send: register IMPL object class with RmiServerSerializer
      *              lookup IMPL object -> rmiID
      */
-    override fun register(kryo: KryoExtra, rmi: RmiHolder) {
+    override fun register(kryo: KryoExtra<CONNECTION>, rmi: RmiHolder) {
         // we override this, because we ALWAYS will call our RMI registration!
         if (id == IGNORE_REGISTRATION) {
             // we have previously specified that this registration should be ignored!

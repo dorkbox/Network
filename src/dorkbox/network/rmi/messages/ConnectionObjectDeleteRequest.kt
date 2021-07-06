@@ -13,19 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.serialization
+package dorkbox.network.rmi.messages
 
-import com.esotericsoftware.kryo.Kryo
-import dorkbox.network.connection.Connection
-
-internal open class ClassRegistration3<CONNECTION: Connection>(clazz: Class<*>) : ClassRegistration<CONNECTION>(clazz) {
-
-    override fun register(kryo: Kryo) {
-        id = kryo.register(clazz).id
-        info = "Registered $id -> ${clazz.name}"
-    }
-
-    override fun getInfoArray(): Array<Any> {
-        return arrayOf(3, id, clazz.name, "")
+/**
+ * @param rmiId which rmi object to delete
+ */
+data class ConnectionObjectDeleteRequest(val rmiId: Int) : RmiMessage {
+    override fun toString(): String {
+        return "ConnectionObjectDeleteRequest(id: $rmiId)"
     }
 }

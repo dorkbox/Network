@@ -23,7 +23,7 @@ import mu.KLogger
  * The impl/proxy objects CANNOT be stored in the same data structure, because their IDs are not tied to the same ID source (and there
  * would be conflicts in the data structure)
  */
-internal open class RmiObjectCache(logger: KLogger) {
+open class RmiObjectCache(logger: KLogger) {
 
     private val implObjects = RemoteObjectStorage(logger)
 
@@ -41,9 +41,21 @@ internal open class RmiObjectCache(logger: KLogger) {
         return implObjects.register(rmiObject, objectId)
     }
 
+    /**
+     * @return the implementation object from the specified ID
+     */
     fun <T> getImplObject(rmiId: Int): T? {
         @Suppress("UNCHECKED_CAST")
         return implObjects[rmiId] as T?
+    }
+
+    /**
+     * Removes the object using the ID registered.
+     *
+     * @return the object or null if not found
+     */
+    fun <T> removeImplObject(rmiId: Int): T? {
+        return implObjects.remove(rmiId) as T?
     }
 
     /**
@@ -51,9 +63,5 @@ internal open class RmiObjectCache(logger: KLogger) {
      */
     fun <T> getId(implObject: T): Int {
         return implObjects.getId(implObject)
-    }
-
-    fun <T> removeImplObject(rmiId: Int): T? {
-        return implObjects.remove(rmiId) as T?
     }
 }

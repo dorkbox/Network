@@ -31,20 +31,22 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
     private val RMI_ID = 12251
 
     init {
-        // the logger cannot keep-up if it's on trace
-        setLogLevel(ch.qos.logback.classic.Level.DEBUG)
     }
 
     @Test
     fun rmiNetwork() {
-        rmi {
-            enableIpc = false
-        }
+        // the logger cannot keep-up if it's on trace
+        setLogLevel(ch.qos.logback.classic.Level.DEBUG)
+        rmi()
     }
 
     @Test
     fun rmiIpc() {
-        rmi()
+        // the logger cannot keep-up if it's on trace
+        setLogLevel(ch.qos.logback.classic.Level.DEBUG)
+        rmi {
+            enableIpc = true
+        }
     }
 
 

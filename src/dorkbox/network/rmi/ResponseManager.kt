@@ -32,7 +32,7 @@ import kotlin.concurrent.write
  *
  * response ID's and the memory they hold will leak if the response never arrives!
  */
-internal class ResponseManager(private val logger: KLogger, private val actionDispatch: CoroutineScope) {
+class ResponseManager(private val logger: KLogger, private val actionDispatch: CoroutineScope) {
     companion object {
         val TIMEOUT_EXCEPTION = Exception()
     }

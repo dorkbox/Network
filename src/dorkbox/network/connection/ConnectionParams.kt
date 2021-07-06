@@ -16,7 +16,11 @@
 package dorkbox.network.connection
 
 import dorkbox.network.aeron.MediaDriverConnection
+import dorkbox.network.rmi.RmiManagerConnections
 
-data class ConnectionParams<C : Connection>(val endPoint: EndPoint<C>,
+data class ConnectionParams<CONNECTION : Connection>(
+                                            val endPoint: EndPoint<CONNECTION>,
                                             val mediaDriverConnection: MediaDriverConnection,
-                                            val publicKeyValidation: PublicKeyValidationState)
+                                            val publicKeyValidation: PublicKeyValidationState,
+                                            val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
+)

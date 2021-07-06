@@ -22,18 +22,13 @@ import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverServerConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.eventLoop
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.coroutines.SuspendWaiter
-import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.handshake.ServerHandshake
-import dorkbox.network.rmi.RemoteObject
-import dorkbox.network.rmi.RemoteObjectStorage
-import dorkbox.network.rmi.RmiManagerConnections
-import dorkbox.network.rmi.TimeoutException
+import dorkbox.network.rmi.RmiSupportServer
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
@@ -73,6 +68,11 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             dorkbox.updates.Updates.add(Server::class.java, "90a2c3b1e4fa41ea90d31fbdf8b2c6ef", version)
         }
     }
+
+    /**
+     * Methods supporting Remote Method Invocation and Objects for GLOBAL scope objects (different than CONNECTION scope objects)
+     */
+    val rmiGlobal = RmiSupportServer(logger, rmiGlobalSupport)
 
     /**
      * @return true if this server has successfully bound to an IP address and is running
@@ -146,10 +146,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
         return ServerException(message, cause)
     }
 
-    final override fun getRmiConnectionSupport(): RmiManagerConnections<CONNECTION> {
-        return super.getRmiConnectionSupport()
-    }
-
     private fun getIpcPoller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
         val poller = if (config.enableIpc) {
             val driver = IpcMediaDriverConnection(streamIdSubscription = config.ipcSubscriptionId,
@@ -172,13 +168,18 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
                     // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                     if (message !is HandshakeMessage) {
-                        listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from IPC not allowed! Invalid connection request"))
+                        logger.error("[$sessionId] Connection from IPC not allowed! Invalid connection request")
 
-                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                        try {
+                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                        } catch (e: Exception) {
+                            logger.error("Handshake error!", e)
+                        }
                         return@FragmentAssembler
                     }
 
                     handshake.processIpcHandshakeMessageServer(this@Server,
+                                                               rmiConnectionSupport,
                                                                publication,
                                                                sessionId,
                                                                message,
@@ -250,13 +251,18 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
                     // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                     if (message !is HandshakeMessage) {
-                        listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"))
+                        logger.error("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request")
 
-                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                        try {
+                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                        } catch (e: Exception) {
+                            logger.error("Handshake error!", e)
+                        }
                         return@FragmentAssembler
                     }
 
                     handshake.processUdpHandshakeMessageServer(this@Server,
+                                                               rmiConnectionSupport,
                                                                publication,
                                                                sessionId,
                                                                clientAddressString,
@@ -331,13 +337,18 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
                     // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                     if (message !is HandshakeMessage) {
-                        listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"))
+                        logger.error("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request")
 
-                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                        try {
+                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                        } catch (e: Exception) {
+                            logger.error("Handshake error!", e)
+                        }
                         return@FragmentAssembler
                     }
 
                     handshake.processUdpHandshakeMessageServer(this@Server,
+                                                               rmiConnectionSupport,
                                                                publication,
                                                                sessionId,
                                                                clientAddressString,
@@ -412,13 +423,18 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 
                 // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                 if (message !is HandshakeMessage) {
-                    listenerManager.notifyError(ClientRejectedException("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"))
+                    logger.error("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request")
 
-                    writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                    try {
+                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
+                    } catch (e: Exception) {
+                        logger.error("Handshake error!", e)
+                    }
                     return@FragmentAssembler
                 }
 
                 handshake.processUdpHandshakeMessageServer(this@Server,
+                                                           rmiConnectionSupport,
                                                            publication,
                                                            sessionId,
                                                            clientAddressString,
@@ -447,7 +463,12 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
             return
         }
 
-        initEndpointState()
+        try {
+            initEndpointState()
+        } catch (e: Exception) {
+            logger.error("Unable to initialize the endpoint state", e)
+            return
+        }
 
         config as ServerConfiguration
 
@@ -575,7 +596,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                 jobs.forEach { it.join() }
             } catch (e: Exception) {
                 logger.error("Unexpected error during server message polling!", e)
-                listenerManager.notifyError(e)
             } finally {
                 ipv4Poller.close()
                 ipv6Poller.close()
@@ -610,15 +630,6 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
      */
     fun addConnectionRules(vararg rules: ConnectionRule) {
         connectionRules.addAll(listOf(*rules))
-    }
-
-    /**
-     * Safely sends objects to a destination.
-     */
-    suspend fun send(message: Any) {
-        connections.forEach {
-            it.send(message)
-        }
     }
 
     /**
@@ -677,138 +688,4 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
 //        logger.debug("Validating {}  Permitted type is: {}", remoteAddress, connectionType)
 //        return connectionType.type
 //    }
-
-
-    // RMI notes (in multiple places, copypasta, because this is confusing if not written down)
-    //
-    // only server can create a global object (in itself, via save)
-    // server
-    //  -> saveGlobal (global)
-    //
-    // client
-    //  -> save (connection)
-    //  -> get (connection)
-    //  -> create (connection)
-    //  -> saveGlobal (global)
-    //  -> getGlobal (global)
-    //
-    // connection
-    //  -> save (connection)
-    //  -> get (connection)
-    //  -> getGlobal (global)
-    //  -> create (connection)
-
-
-    //
-    //
-    // RMI
-    //
-    //
-
-
-
-    /**
-     * Tells us to save an an already created object, GLOBALLY, so a remote connection can get it via [Connection.getObject]
-     *
-     * FOR REMOTE CONNECTIONS:
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     *
-     * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun saveGlobalObject(`object`: Any): Int {
-        val rmiId = rmiGlobalSupport.saveImplObject(`object`)
-        if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.notifyError(exception)
-            return rmiId
-        }
-        return rmiId
-    }
-
-    /**
-     * Tells us to save an already created object, GLOBALLY using the specified ID, so a remote connection can get it via [Connection.getObject]
-     *
-     * FOR REMOTE CONNECTIONS:
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the
-     * response timeout [RemoteObject.responseTimeout].
-     *
-     * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
-     * will have the proxy object replaced with the registered (non-proxy) object.
-     *
-     * If one wishes to change the default behavior, cast the object to access the different methods.
-     * ie:  `val remoteObject = test as RemoteObject`
-     *
-     * @return true if the object was successfully saved for the specified ID. If false, an error log will be emitted
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun saveGlobalObject(`object`: Any, objectId: Int): Boolean {
-        val success = rmiGlobalSupport.saveImplObject(`object`, objectId)
-        if (!success) {
-            val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.notifyError(exception)
-        }
-        return success
-    }
-
-    /**
-     * Tells us to delete a previously saved object, GLOBALLY using the specified object.
-     *
-     * After this call, this object wil no longer be available to remote connections and the ID will be recycled (don't use it again)
-     *
-     * @return true if the object was successfully deleted. If false, an error log will be emitted
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun deleteGlobalObject(`object`: Any): Boolean {
-        val successRmiId = rmiGlobalSupport.getId(`object`)
-        val success = successRmiId != RemoteObjectStorage.INVALID_RMI
-
-        if (success) {
-            rmiGlobalSupport.removeImplObject<Any?>(successRmiId)
-        } else {
-            val exception = Exception("RMI implementation '${`object`::class.java}' could not be deleted! It does not exist")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.notifyError(exception)
-        }
-
-        return success
-    }
-
-    /**
-     * Tells us to delete a previously saved object, GLOBALLY using the specified ID.
-     *
-     * After this call, this object wil no longer be available to remote connections and the ID will be recycled (don't use it again)
-     *
-     * @return true if the object was successfully deleted. If false, an error log will be emitted
-     *
-     * @see RemoteObject
-     */
-    @Suppress("DuplicatedCode")
-    fun deleteGlobalObject(objectId: Int): Boolean {
-        val previousObject = rmiGlobalSupport.removeImplObject<Any?>(objectId)
-
-        val success = previousObject != null
-        if (!success) {
-            val exception = Exception("RMI implementation UD '$objectId' could not be deleted! It does not exist")
-            ListenerManager.cleanStackTrace(exception)
-            listenerManager.notifyError(exception)
-        }
-        return success
-    }
 }
