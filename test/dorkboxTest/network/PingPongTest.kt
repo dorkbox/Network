@@ -98,7 +98,7 @@ class PingPongTest : BaseTest() {
             }
 
             val counter = AtomicInteger(0)
-            client.onMessage<Data> { message ->
+            client.onMessage<Data> { _ ->
                 if (counter.getAndIncrement() <= tries) {
                     send(data)
                 } else {

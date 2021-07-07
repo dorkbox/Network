@@ -30,7 +30,7 @@ data class ResponseWaiter(val id: Int) {
     var channel: Channel<Unit> = Channel(Channel.RENDEZVOUS)
     var isCancelled = false
 
-    // holds the RMI result or callback. This is ALWAYS accessed from within a lock!
+    // holds the RMI result or callback. This is ALWAYS accessed from within a lock (so no synchronize/volatile/etc necessary)!
     var result: Any? = null
 
     /**

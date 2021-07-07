@@ -16,7 +16,6 @@
 package dorkbox.network.connection
 
 import dorkbox.network.ipFilter.IpFilterRule
-import dorkbox.network.ping.Ping
 import dorkbox.os.OS
 import dorkbox.util.classes.ClassHelper
 import dorkbox.util.classes.ClassHierarchy
@@ -154,9 +153,6 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
 
     private val onMessageMap = atomic(IdentityMap<Class<*>, Array<suspend CONNECTION.(Any) -> Unit>>(32, LOAD_FACTOR))
     private val onMessageMutex = Mutex()
-
-    private val onPingList = atomic(Array<suspend (CONNECTION.(Ping) -> Unit)>(0) { { } })
-    private val onPingMutex = Mutex()
 
     // used to keep a cache of class hierarchy for distributing messages
     private val classHierarchyCache = ClassHierarchy(LOAD_FACTOR)
@@ -308,18 +304,6 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     }
 
     /**
-     * Adds a function that will be called when a client/server "connects" with each other
-     *
-     * For a server, this function will be called for ALL clients.
-     */
-    suspend fun onPing(function: suspend CONNECTION.(Ping) -> Unit) {
-        onPingMutex.withLock {
-            // we have to follow the single-writer principle!
-            onPingList.lazySet(add(function, onPingList.value))
-        }
-    }
-
-    /**
      * Invoked just after a connection is created, but before it is connected.
      *
      * It is the responsibility of the custom filter to write the error, if there is one
@@ -447,20 +431,5 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         }
 
         return hasListeners
-    }
-
-    /**
-     * Invoked when a connection is 'pinged' by the remote endpoint
-     */
-    suspend fun notifyPing(ping: Ping, connection: CONNECTION) {
-        onPingList.value.forEach {
-            try {
-                it(connection, ping)
-            } catch (t: Throwable) {
-                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
-                logger.error("Connection ${connection.id} error", t)
-            }
-        }
     }
 }

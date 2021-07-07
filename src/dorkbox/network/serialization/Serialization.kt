@@ -23,6 +23,7 @@ import com.esotericsoftware.minlog.Log
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.handshake.HandshakeMessage
+import dorkbox.network.ping.Ping
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.rmi.messages.*
@@ -334,6 +335,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         kryo.register(MethodRequest::class.java, methodRequestSerializer)
         kryo.register(MethodResponse::class.java, methodResponseSerializer)
 
+        kryo.register(Ping::class.java)
+
         @Suppress("UNCHECKED_CAST")
         kryo.register(InvocationHandler::class.java as Class<Any>, rmiClientSerializer)
 
@@ -376,6 +379,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
         kryo.register(MethodRequest::class.java, methodRequestSerializer)
         kryo.register(MethodResponse::class.java, methodResponseSerializer)
+
+        kryo.register(Ping::class.java)
 
         @Suppress("UNCHECKED_CAST")
         kryo.register(InvocationHandler::class.java as Class<Any>, rmiClientSerializer)
@@ -420,7 +425,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
             // we have to allow CUSTOM classes to register (where the order does not matter), so that if the CLIENT is the RMI-SERVER, it can
             // specify IMPL classes for RMI.
             classesToRegister.forEach { registration ->
-                require(registration is ClassRegistrationForRmi) { "Unable to register a *class* by itself. This is only permitted for RMI. To fix this, remove xx.register(${registration.clazz.name})" }
+                require(registration is ClassRegistrationForRmi) { "Unable to register a *class* by itself. This is only permitted on the CLIENT for RMI. " +
+                        "To fix this, remove xx.register(${registration.clazz.name})" }
             }
 
             @Suppress("UNCHECKED_CAST")

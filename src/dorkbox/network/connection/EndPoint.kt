@@ -28,7 +28,7 @@ import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
-import dorkbox.network.ping.PingMessage
+import dorkbox.network.rmi.ResponseManager
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
 import dorkbox.network.rmi.messages.MethodResponse
@@ -80,8 +80,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     internal val listenerManager = ListenerManager<CONNECTION>(logger)
     internal val connections = ConnectionManager<CONNECTION>()
 
-    internal val pingManager = PingManager<CONNECTION>(logger, actionDispatch)
-
     internal val aeronDriver: AeronDriver
 
     /**
@@ -114,8 +112,11 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     val storage: SettingsStore
 
-    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger, actionDispatch)
+    internal val responseManager = ResponseManager(logger, actionDispatch)
+    internal val rmiGlobalSupport = RmiManagerGlobal(logger, listenerManager)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
+
+    internal val pingManager = PingManager<CONNECTION>()
 
     init {
         require(!config.previouslyUsed) { "${type.simpleName} configuration cannot be reused!" }
@@ -148,13 +149,13 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         if (type.javaClass == Server::class.java) {
             // server cannot "get" global RMI objects, only the client can
             @Suppress("UNCHECKED_CAST")
-            rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, config.serialization as Serialization<CONNECTION>)
+            rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, config.serialization as Serialization<CONNECTION>)
             { _, _, _ ->
                 throw IllegalAccessException("Global RMI access is only possible from a Client connection!")
             }
         } else {
             @Suppress("UNCHECKED_CAST")
-            rmiConnectionSupport = RmiManagerConnections(logger, rmiGlobalSupport, config.serialization as Serialization<CONNECTION>)
+            rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, config.serialization as Serialization<CONNECTION>)
             { connection, objectId, interfaceClass ->
                 return@RmiManagerConnections rmiGlobalSupport.getGlobalRemoteObject(connection, objectId, interfaceClass)
             }
@@ -310,17 +311,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     }
 
     /**
-     * Adds a function that will be called when a ping message is received
-     *
-     * @param function called when the ping returns (ie: update time/latency counters/metrics/etc)
-     */
-    fun onPing(function: suspend CONNECTION.(Ping) -> Unit) {
-        actionDispatch.launch {
-            listenerManager.onPing(function)
-        }
-    }
-
-    /**
      * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
      *       CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      *
@@ -441,11 +431,10 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
 
 
         when (message) {
-            is PingMessage -> {
-                // the ping listener
+            is Ping -> {
                 actionDispatch.launch {
                     try {
-                        pingManager.manage(this@EndPoint, connection, message, logger)
+                        pingManager.manage(connection, responseManager, message)
                     } catch (e: Exception) {
                         logger.error("Error processing PING message", e)
                         listenerManager.notifyError(connection, e)
@@ -457,16 +446,9 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
             // go in "lock step"
             is RmiMessage -> {
-                actionDispatch.launch {
-                    // if we are an RMI message/registration, we have very specific, defined behavior.
-                    // We do not use the "normal" listener callback pattern because this require special functionality
-                    try {
-                        rmiGlobalSupport.manage(this@EndPoint, connection, message, logger)
-                    } catch (e: Exception) {
-                        logger.error("Error processing RMI message", e)
-                        listenerManager.notifyError(connection, e)
-                    }
-                }
+                // if we are an RMI message/registration, we have very specific, defined behavior.
+                // We do not use the "normal" listener callback pattern because this require special functionality
+                rmiGlobalSupport.manage(this@EndPoint, serialization, connection, message, rmiConnectionSupport, actionDispatch)
             }
             is Any -> {
                 actionDispatch.launch {
@@ -680,7 +662,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
                 // Connections are closed first, because we want to make sure that no RMI messages can be received
                 // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
                 // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via and RMI method)
-                rmiGlobalSupport.close()
+                responseManager.close()
             }
 
             // the storage is closed via this as well.

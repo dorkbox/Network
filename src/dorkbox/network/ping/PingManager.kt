@@ -20,73 +20,55 @@
 package dorkbox.network.ping
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.handshake.RandomIdAllocator
 import dorkbox.network.rmi.ResponseManager
+import dorkbox.network.rmi.RmiUtils
 import kotlinx.coroutines.CoroutineScope
-import mu.KLogger
 
 /**
- *
+ * How to handle ping messages
  */
-class PingManager<CONNECTION : Connection>(logger: KLogger, actionDispatch: CoroutineScope) {
+internal class PingManager<CONNECTION : Connection> {
+    @Suppress("UNCHECKED_CAST")
+    suspend fun manage(connection: CONNECTION, responseManager: ResponseManager, message: Ping) {
+        if (message.pongTime == 0L) {
+            message.pongTime = System.currentTimeMillis()
+            connection.send(message)
+        } else {
+            message.finishedTime = System.currentTimeMillis()
+
+            val rmiId = RmiUtils.unpackUnsignedRight(message.packedId)
+
+            // process the ping message so that our ping callback does something
+
+            // this will be null if the ping took longer than 30 seconds and was cancelled
+            val result = responseManager.getWaiterCallback(rmiId) as (suspend Ping.() -> Unit)?
+            if (result != null) {
+                result(message)
+            }
+        }
+    }
+
     /**
-     * allocates ID's for use when pinging a remote endpoint
+     * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
+     *
+     * @return true if the message was successfully sent by aeron
      */
-    internal val pingIdAllocator = RandomIdAllocator(Integer.MIN_VALUE, Integer.MAX_VALUE)
+    internal suspend fun ping(connection: Connection, actionDispatch: CoroutineScope, responseManager: ResponseManager, function: suspend Ping.() -> Unit): Boolean {
+        val id = responseManager.prepWithCallback(function)
 
-    internal val responseManager = ResponseManager(logger, actionDispatch)
+        val ping = Ping()
+        ping.packedId = RmiUtils.unpackUnsignedRight(id)
+        ping.pingTime = System.currentTimeMillis()
 
-    /**
-     * Updates the ping times for this connection (called when this connection gets a REPLY ping message).
-     */
-    fun updatePingResponse(ping: PingMessage) {
-//
-//        @Volatile
-//        private var pingFuture: PingFuture? = null
-//
-//        pingFuture?.setSuccess(this, ping)
+        // NOTE: the timout MUST NOT be more than the max SHORT value!
+
+        // ALWAYS cancel the ping after 30 seconds
+        responseManager.cancelRequest(actionDispatch, 30_000L, id) {
+            // kill the callback, since we are now "cancelled". If there is a race here (and the response comes at the exact same time)
+            // we don't care since either it will be null or it won't (if it's not null, it will run the callback)
+            result = null
+        }
+
+        return connection.send(ping)
     }
-
-
-    suspend fun manage(endPoint: EndPoint<CONNECTION>, connection: CONNECTION, message: PingMessage, logger: KLogger) {
-//        if (message.isReply) {
-//            connection.updatePingResponse(message)
-//        } else {
-//            // return the ping from whence it came
-//            message.isReply = true
-//            connection.send(message)
-//        }
-    }
-
-    suspend fun ping(function1: Connection, function: suspend Ping.() -> Unit): Boolean {
-//        val ping = PingMessage()
-//        ping.id = pingIdAllocator.allocate()
-//
-//
-//        pingFuture = PingFuture()
-//
-////        function: suspend (CONNECTION) -> Unit
-//        // TODO: USE AERON FOR THIS
-////        val pingFuture2 = pingFuture
-////        if (pingFuture2 != null && !pingFuture2.isSuccess) {
-////            pingFuture2.cancel()
-////        }
-////        val newPromise: Promise<PingTuple<out Connection?>>
-////        newPromise = if (channelWrapper.udp() != null) {
-////            channelWrapper.udp()
-////                    .newPromise()
-////        } else {
-////            channelWrapper.tcp()
-////                    .newPromise()
-////        }
-//        pingFuture = PingFuture()
-////        val ping = PingMessage()
-////        ping.id = pingFuture!!.id
-////        ping0(ping)
-////        return pingFuture!!
-//        TODO()
-        return false
-    }
-
 }

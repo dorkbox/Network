@@ -633,7 +633,7 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
         val c = connection0
 
         if (c != null) {
-            return pingManager.ping(c, function)
+            return pingManager.ping(c, actionDispatch, responseManager, function)
         } else {
             logger.error("No connection!", ClientException("Cannot send a ping when there is no connection!"))
         }

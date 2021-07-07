@@ -17,17 +17,15 @@ package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.messages.MethodRequest
-import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.util.*
-import kotlin.coroutines.*
-
-object MyUnconfined : CoroutineDispatcher() {
-    override fun isDispatchNeeded(context: CoroutineContext): Boolean = false
-    override fun dispatch(context: CoroutineContext, block: Runnable) = block.run() // !!!
-}
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * Handles network communication when methods are invoked on a proxy.
@@ -78,7 +76,7 @@ internal class RmiClient(val isGlobal: Boolean,
     private var enableEquals = false
 
     // if we are ASYNC, then this method immediately returns
-    private suspend fun sendRequest(invokeMethod: MethodRequest): Any? {
+    private suspend fun sendRequest(actionDispatch: CoroutineScope, invokeMethod: MethodRequest): Any? {
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded
@@ -96,13 +94,12 @@ internal class RmiClient(val isGlobal: Boolean,
 
         invokeMethod.isGlobal = isGlobal
 
-        if (isAsync) {
-            // If we are async, we ignore the response....
-
+        return if (isAsync) {
+            // If we are async, we ignore the response (don't invoke the response manager at all)....
             invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, RemoteObjectStorage.ASYNC_RMI)
 
             connection.send(invokeMethod)
-            return null
+            null
         } else {
             // The response, even if there is NOT one (ie: not void) will always return a thing (so our code execution is in lockstep
             val rmiWaiter = responseManager.prep()
@@ -110,7 +107,7 @@ internal class RmiClient(val isGlobal: Boolean,
 
             connection.send(invokeMethod)
 
-            return responseManager.waitForReply(rmiWaiter, timeoutMillis)
+            responseManager.waitForReply(actionDispatch, rmiWaiter, timeoutMillis)
         }
     }
 
@@ -220,7 +217,7 @@ internal class RmiClient(val isGlobal: Boolean,
             val continuation = suspendCoroutineArg as Continuation<Any?>
 
             val suspendFunction: suspend () -> Any? = {
-                sendRequest(invokeMethod)
+                sendRequest(connection.endPoint.actionDispatch, invokeMethod)
             }
 
             // function suspension works differently !!
@@ -248,7 +245,7 @@ internal class RmiClient(val isGlobal: Boolean,
             })
         } else {
             val any = runBlocking {
-                sendRequest(invokeMethod)
+                sendRequest(connection.endPoint.actionDispatch, invokeMethod)
             }
             when (any) {
                 ResponseManager.TIMEOUT_EXCEPTION -> {

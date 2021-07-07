@@ -22,7 +22,6 @@ import dorkbox.network.aeron.UdpMediaDriverPairedConnection
 import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.handshake.RandomIdAllocator
 import dorkbox.network.ping.Ping
-import dorkbox.network.ping.PingMessage
 import dorkbox.network.rmi.RmiSupportConnection
 import io.aeron.FragmentAssembler
 import io.aeron.Publication
@@ -103,14 +102,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val connectionCheckIntervalInMS = connectionParameters.endPoint.config.connectionCheckIntervalInMS
     private val connectionExpirationTimoutInMS = connectionParameters.endPoint.config.connectionExpirationTimoutInMS
 
-    /**
-    //     * Returns the last calculated TCP return trip time, or -1 if or the [PingMessage] response has not yet been received.
-    //     */
-//    val lastRoundTripTime: Int
-//        get() {
-//            val pingFuture2 = pingFuture
-//            return pingFuture2?.response ?: -1
-//        }
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
     private val remoteKeyChanged = connectionParameters.publicKeyValidation == PublicKeyValidationState.TAMPERED
@@ -250,12 +241,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
      *
-     * Only 1 in-flight ping can be performed at a time. Calling ping() again, before the previous ping returns will do nothing.
-     *
      * @return true if the message was successfully sent by aeron
      */
     suspend fun ping(function: suspend Ping.() -> Unit): Boolean {
-        return endPoint.pingManager.ping(this, function)
+        return endPoint.pingManager.ping(this, endPoint.actionDispatch, endPoint.responseManager, function)
     }
 
     /**

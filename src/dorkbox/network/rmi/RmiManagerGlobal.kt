@@ -270,7 +270,10 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(private val logger: KLog
             is MethodResponse -> {
                 // notify the pending proxy requests that we have a response!
                 actionDispatch.launch {
-                    endPoint.responseManager.onRmiMessage(message)
+                    val rmiId = RmiUtils.unpackUnsignedRight(message.packedId)
+                    val result = message.result
+
+                    endPoint.responseManager.notifyWaiter(rmiId, result)
                 }
             }
         }
