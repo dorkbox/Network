@@ -452,6 +452,11 @@ object RmiUtils {
         return packedInt.toUShort().toInt()
     }
 
+    @Suppress("EXPERIMENTAL_API_USAGE")
+    fun unpackUnsignedRight(packedLong: Long): Int {
+        return packedLong.toUShort().toInt()
+    }
+
     fun makeFancyMethodName(method: CachedMethod): String {
         return makeFancyMethodName(method.method)
     }

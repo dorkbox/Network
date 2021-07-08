@@ -19,6 +19,7 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.messages.MethodRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
+import mu.KLogger
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.util.*
@@ -76,7 +77,7 @@ internal class RmiClient(val isGlobal: Boolean,
     private var enableEquals = false
 
     // if we are ASYNC, then this method immediately returns
-    private suspend fun sendRequest(actionDispatch: CoroutineScope, invokeMethod: MethodRequest): Any? {
+    private suspend fun sendRequest(actionDispatch: CoroutineScope, invokeMethod: MethodRequest, logger: KLogger): Any? {
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded
@@ -102,12 +103,12 @@ internal class RmiClient(val isGlobal: Boolean,
             null
         } else {
             // The response, even if there is NOT one (ie: not void) will always return a thing (so our code execution is in lockstep
-            val rmiWaiter = responseManager.prep()
+            val rmiWaiter = responseManager.prep(logger)
             invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, rmiWaiter.id)
 
             connection.send(invokeMethod)
 
-            responseManager.waitForReply(actionDispatch, rmiWaiter, timeoutMillis)
+            responseManager.waitForReply(actionDispatch, rmiWaiter, timeoutMillis, logger)
         }
     }
 
@@ -217,7 +218,7 @@ internal class RmiClient(val isGlobal: Boolean,
             val continuation = suspendCoroutineArg as Continuation<Any?>
 
             val suspendFunction: suspend () -> Any? = {
-                sendRequest(connection.endPoint.actionDispatch, invokeMethod)
+                sendRequest(connection.endPoint.actionDispatch, invokeMethod, connection.logger)
             }
 
             // function suspension works differently !!
@@ -245,7 +246,7 @@ internal class RmiClient(val isGlobal: Boolean,
             })
         } else {
             val any = runBlocking {
-                sendRequest(connection.endPoint.actionDispatch, invokeMethod)
+                sendRequest(connection.endPoint.actionDispatch, invokeMethod, connection.logger)
             }
             when (any) {
                 ResponseManager.TIMEOUT_EXCEPTION -> {

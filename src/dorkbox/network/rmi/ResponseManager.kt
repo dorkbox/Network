@@ -31,7 +31,7 @@ import kotlin.concurrent.write
  *
  * response ID's and the memory they hold will leak if the response never arrives!
  */
-internal class ResponseManager(private val logger: KLogger, actionDispatch: CoroutineScope) {
+internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) {
     companion object {
         val TIMEOUT_EXCEPTION = Exception()
     }
@@ -53,22 +53,22 @@ internal class ResponseManager(private val logger: KLogger, actionDispatch: Coro
     init {
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
         val ids = mutableListOf<Int>()
+
+        // MIN (32768) -> -1 (65535)
+        // ZERO is special, and is never added!
+        // ONE is special, and is used for ASYNC (the response will never be sent back)
+        // 2 (2) -> MAX (32767)
+
+
         for (id in Short.MIN_VALUE..-1) {
             ids.add(id)
         }
-
-        // MIN (32768) -> -1 (65535)
-        // 2 (2) -> MAX (32767)
-
-        // ZERO is special, and is never added!
-        // ONE is special, and is used for ASYNC (the response will never be sent back)
-
         for (id in 2..Short.MAX_VALUE) {
             ids.add(id)
         }
         ids.shuffle()
 
-        // populate the array of randomly assigned ID's + waiters. This can happen in a new thread
+        // populate the array of randomly assigned ID's + waiters. It is OK for this to happen in a new thread
         actionDispatch.launch {
             try {
                 for (it in ids) {
@@ -81,14 +81,13 @@ internal class ResponseManager(private val logger: KLogger, actionDispatch: Coro
         }
     }
 
-
     /**
      * Called when we receive the answer for our initial request. If no response data, then the pending rmi data entry is deleted
      *
      * resume any pending remote object method invocations (if they are not async, or not manually waiting)
      * NOTE: async RMI will never call this (because async doesn't return a response)
      */
-    suspend fun notifyWaiter(rmiId: Int, result: Any?) {
+    suspend fun notifyWaiter(rmiId: Int, result: Any?, logger: KLogger) {
         logger.trace { "RMI return message: $rmiId" }
 
         val previous = pendingLock.write {
@@ -111,7 +110,7 @@ internal class ResponseManager(private val logger: KLogger, actionDispatch: Coro
      *
      * This is ONLY called when we want to get the data out of the stored entry, because we are operating ASYNC. (pure RMI async is different)
      */
-    suspend fun <T> getWaiterCallback(rmiId: Int): T? {
+    suspend fun <T> getWaiterCallback(rmiId: Int, logger: KLogger): T? {
         logger.trace { "RMI return message: $rmiId" }
 
         val previous = pendingLock.write {
@@ -139,7 +138,7 @@ internal class ResponseManager(private val logger: KLogger, actionDispatch: Coro
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
-    suspend fun prep(): ResponseWaiter {
+    suspend fun prep(logger: KLogger): ResponseWaiter {
         val responseRmi = waiterCache.receive()
         rmiWaitersInUse.getAndIncrement()
         logger.trace { "RMI count: ${rmiWaitersInUse.value}" }
@@ -147,9 +146,11 @@ internal class ResponseManager(private val logger: KLogger, actionDispatch: Coro
         // this will replace the waiter if it was cancelled (waiters are not valid if cancelled)
         responseRmi.prep()
 
+        val rmiId = RmiUtils.unpackUnsignedRight(responseRmi.id)
+
         pendingLock.write {
             // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
-            pending[RmiUtils.unpackUnsignedRight(responseRmi.id)] = responseRmi
+            pending[rmiId] = responseRmi
         }
 
         return responseRmi
@@ -160,7 +161,7 @@ internal class ResponseManager(private val logger: KLogger, actionDispatch: Coro
      *
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
-    suspend fun prepWithCallback(function: Any): Int {
+    suspend fun prepWithCallback(function: Any, logger: KLogger): Int {
         val responseRmi = waiterCache.receive()
         rmiWaitersInUse.getAndIncrement()
         logger.trace { "RMI count: ${rmiWaitersInUse.value}" }
@@ -171,19 +172,22 @@ internal class ResponseManager(private val logger: KLogger, actionDispatch: Coro
         // assign the callback that will be notified when the return message is received
         responseRmi.result = function
 
+        // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
+        val rmiId = RmiUtils.unpackUnsignedRight(responseRmi.id)
+
         pendingLock.write {
             // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
-            pending[RmiUtils.unpackUnsignedRight(responseRmi.id)] = responseRmi
+            pending[rmiId] = responseRmi
         }
 
-        return responseRmi.id
+        return rmiId
     }
 
 
     /**
      * Cancels the RMI request in the given timeout, the callback is executed inside the read lock
      */
-    fun cancelRequest(actionDispatch: CoroutineScope, timeoutMillis: Long, rmiId: Int, onCancelled: ResponseWaiter.() -> Unit) {
+    fun cancelRequest(actionDispatch: CoroutineScope, timeoutMillis: Long, rmiId: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
         actionDispatch.launch {
             delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
@@ -207,7 +211,7 @@ internal class ResponseManager(private val logger: KLogger, actionDispatch: Coro
      *
      * @return the result (can be null) or timeout exception
      */
-    suspend fun waitForReply(actionDispatch: CoroutineScope, responseWaiter: ResponseWaiter, timeoutMillis: Long): Any? {
+    suspend fun waitForReply(actionDispatch: CoroutineScope, responseWaiter: ResponseWaiter, timeoutMillis: Long, logger: KLogger): Any? {
         val rmiId = RmiUtils.unpackUnsignedRight(responseWaiter.id)  // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
 
         logger.trace {

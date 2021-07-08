@@ -24,8 +24,6 @@ import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
 import dorkbox.network.serialization.Serialization
 import dorkbox.util.classes.ClassHelper
 import dorkbox.util.collections.LockFreeIntMap
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import mu.KLogger
 
 class RmiManagerConnections<CONNECTION: Connection> internal constructor(
@@ -140,12 +138,7 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
     /**
      * called on "server"
      */
-    fun onConnectionObjectCreateRequest(
-        serialization: Serialization<CONNECTION>,
-        connection: CONNECTION,
-        message: ConnectionObjectCreateRequest,
-        actionDispatch: CoroutineScope
-    ) {
+    suspend fun onConnectionObjectCreateRequest(serialization: Serialization<CONNECTION>, connection: CONNECTION, message: ConnectionObjectCreateRequest) {
         val callbackId = RmiUtils.unpackLeft(message.packedIds)
         val kryoId = RmiUtils.unpackRight(message.packedIds)
         val objectParameters = message.objectParameters
@@ -171,20 +164,14 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
             ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, rmiId))
         }
 
-        actionDispatch.launch {
-            // we send the message ALWAYS, because the client needs to know it worked or not
-            connection.send(response)
-        }
+        // we send the message ALWAYS, because the client needs to know it worked or not
+        connection.send(response)
     }
 
     /**
      * called on "client"
      */
-    fun onConnectionObjectCreateResponse(
-        connection: CONNECTION,
-        message: ConnectionObjectCreateResponse,
-        actionDispatch: CoroutineScope
-    ) {
+    suspend fun onConnectionObjectCreateResponse(connection: CONNECTION, message: ConnectionObjectCreateResponse) {
         val callbackId = RmiUtils.unpackLeft(message.packedIds)
         val rmiId = RmiUtils.unpackRight(message.packedIds)
 
@@ -204,25 +191,19 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
         val proxyObject = getProxyObject(false, connection, rmiId, interfaceClass)
 
         // this should be executed on a NEW coroutine!
-        actionDispatch.launch {
-            try {
-                callback(proxyObject)
-            } catch (e: Exception) {
-                ListenerManager.cleanStackTrace(e)
-                logger.error("RMI error connection ${connection.id}", e)
-                listenerManager.notifyError(connection, e)
-            }
+        try {
+            callback(proxyObject)
+        } catch (e: Exception) {
+            ListenerManager.cleanStackTrace(e)
+            logger.error("RMI error connection ${connection.id}", e)
+            listenerManager.notifyError(connection, e)
         }
     }
 
     /**
      * called on "client" or "server"
      */
-    fun onConnectionObjectDeleteRequest(
-        connection: CONNECTION,
-        message: ConnectionObjectDeleteRequest,
-        actionDispatch: CoroutineScope
-    ) {
+    suspend fun onConnectionObjectDeleteRequest(connection: CONNECTION, message: ConnectionObjectDeleteRequest) {
         val rmiId = message.rmiId
 
         // we only delete the impl object if the RMI id is valid!
@@ -238,10 +219,8 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
         removeProxyObject(rmiId)
         removeImplObject<Any?>(rmiId)
 
-        actionDispatch.launch {
-            // tell the "other side" to delete the proxy/impl object
-            connection.send(ConnectionObjectDeleteResponse(rmiId))
-        }
+        // tell the "other side" to delete the proxy/impl object
+        connection.send(ConnectionObjectDeleteResponse(rmiId))
     }
 
 

@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit
  * 'notifyConnect' must be THE ONLY THING in this class to use the action dispatch!
  */
 @Suppress("DuplicatedCode")
-internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLogger,
+internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
                                                         private val config: ServerConfiguration,
                                                         private val listenerManager: ListenerManager<CONNECTION>) {
 
@@ -68,12 +68,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
-    private fun validateMessageTypeAndDoPending(server: Server<CONNECTION>,
-                                                actionDispatch: CoroutineScope,
-                                                handshakePublication: Publication,
-                                                message: HandshakeMessage,
-                                                sessionId: Int,
-                                                connectionString: String): Boolean {
+    private fun validateMessageTypeAndDoPending(
+        server: Server<CONNECTION>,
+        actionDispatch: CoroutineScope,
+        handshakePublication: Publication,
+        message: HandshakeMessage,
+        sessionId: Int,
+        connectionString: String,
+        logger: KLogger
+    ): Boolean {
 
         // check to see if this sessionId is ALREADY in use by another connection!
         // this can happen if there are multiple connections from the SAME ip address (ie: localhost)
@@ -131,11 +134,14 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    private fun validateUdpConnectionInfo(server: Server<CONNECTION>,
-                                          handshakePublication: Publication,
-                                          config: ServerConfiguration,
-                                          clientAddressString: String,
-                                          clientAddress: InetAddress): Boolean {
+    private fun validateUdpConnectionInfo(
+        server: Server<CONNECTION>,
+        handshakePublication: Publication,
+        config: ServerConfiguration,
+        clientAddressString: String,
+        clientAddress: InetAddress,
+        logger: KLogger
+    ): Boolean {
 
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
@@ -182,16 +188,19 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
 
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    fun processIpcHandshakeMessageServer(server: Server<CONNECTION>,
-                                         rmiConnectionSupport: RmiManagerConnections<CONNECTION>,
-                                         handshakePublication: Publication,
-                                         sessionId: Int,
-                                         message: HandshakeMessage,
-                                         aeronDriver: AeronDriver) {
+    fun processIpcHandshakeMessageServer(
+        server: Server<CONNECTION>,
+        rmiConnectionSupport: RmiManagerConnections<CONNECTION>,
+        handshakePublication: Publication,
+        sessionId: Int,
+        message: HandshakeMessage,
+        aeronDriver: AeronDriver,
+        logger: KLogger
+    ) {
 
         val connectionString = "IPC"
 
-        if (!validateMessageTypeAndDoPending(server, server.actionDispatch, handshakePublication, message, sessionId, connectionString)) {
+        if (!validateMessageTypeAndDoPending(server, server.actionDispatch, handshakePublication, message, sessionId, connectionString, logger)) {
             return
         }
 
@@ -325,9 +334,18 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                                          clientAddress: InetAddress,
                                          message: HandshakeMessage,
                                          aeronDriver: AeronDriver,
-                                         isIpv6Wildcard: Boolean) {
+                                         isIpv6Wildcard: Boolean,
+                                         logger: KLogger) {
 
-        if (!validateMessageTypeAndDoPending(server, server.actionDispatch, handshakePublication, message, sessionId, clientAddressString)) {
+        if (!validateMessageTypeAndDoPending(
+                server,
+                server.actionDispatch,
+                handshakePublication,
+                message,
+                sessionId,
+                clientAddressString,
+                logger
+            )) {
             return
         }
 
@@ -343,7 +361,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         }
 
         if (!clientAddress.isLoopbackAddress &&
-            !validateUdpConnectionInfo(server, handshakePublication, config, clientAddressString, clientAddress)) {
+            !validateUdpConnectionInfo(server, handshakePublication, config, clientAddressString, clientAddress, logger)) {
             // we do not want to limit loopback addresses!
             return
         }

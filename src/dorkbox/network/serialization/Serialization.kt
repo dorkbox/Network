@@ -24,6 +24,7 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ping.Ping
+import dorkbox.network.ping.PingSerializer
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
 import dorkbox.network.rmi.messages.*
@@ -134,6 +135,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
     private val rmiClientSerializer = RmiClientSerializer<CONNECTION>()
     private val rmiServerSerializer = RmiServerSerializer<CONNECTION>()
+
+    private val pingSerializer = PingSerializer()
 
     /**
      * There is additional overhead to using RMI.
@@ -335,7 +338,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         kryo.register(MethodRequest::class.java, methodRequestSerializer)
         kryo.register(MethodResponse::class.java, methodResponseSerializer)
 
-        kryo.register(Ping::class.java)
+        kryo.register(Ping::class.java, pingSerializer)
 
         @Suppress("UNCHECKED_CAST")
         kryo.register(InvocationHandler::class.java as Class<Any>, rmiClientSerializer)
@@ -380,7 +383,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         kryo.register(MethodRequest::class.java, methodRequestSerializer)
         kryo.register(MethodResponse::class.java, methodResponseSerializer)
 
-        kryo.register(Ping::class.java)
+        kryo.register(Ping::class.java, pingSerializer)
 
         @Suppress("UNCHECKED_CAST")
         kryo.register(InvocationHandler::class.java as Class<Any>, rmiClientSerializer)

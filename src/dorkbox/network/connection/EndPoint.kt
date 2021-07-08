@@ -113,7 +113,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     val storage: SettingsStore
 
     internal val responseManager = ResponseManager(logger, actionDispatch)
-    internal val rmiGlobalSupport = RmiManagerGlobal(logger, listenerManager)
+    internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
     internal val pingManager = PingManager<CONNECTION>()
@@ -311,6 +311,15 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     }
 
     /**
+     * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
+     *
+     * @return true if the message was successfully sent by aeron
+     */
+    internal suspend fun ping(connection: Connection, pingTimeoutMs: Int, function: suspend Ping.() -> Unit): Boolean {
+        return pingManager.ping(connection, pingTimeoutMs, actionDispatch, responseManager, logger, function)
+    }
+
+    /**
      * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
      *       CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      *
@@ -386,6 +395,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
         return try {
+            // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = handshakeKryo.read(buffer, offset, length)
 
             logger.trace {
@@ -415,31 +425,35 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         @Suppress("UNCHECKED_CAST")
         connection as CONNECTION
 
-        val message: Any?
         try {
-            message = serialization.readMessage(buffer, offset, length, connection)
-            logger.trace {
-                "[${header.sessionId()}] received: $message"
+            // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
+            val message = serialization.readMessage(buffer, offset, length, connection)
+            logger.trace { "[${header.sessionId()}] received: $message" }
+
+
+            // NOTE: This MUST be on a new co-routine
+            actionDispatch.launch {
+                try {
+                    processMessage(message, connection)
+                } catch (e: Exception) {
+                    logger.error("Error processing message", e)
+                    listenerManager.notifyError(connection, e)
+                }
             }
         } catch (e: Exception) {
             // The handshake sessionId IS NOT globally unique
             logger.error("[${header.sessionId()}] Error de-serializing message", e)
             listenerManager.notifyError(connection, e)
-
-            return // don't do anything!
         }
+    }
 
-
+    /**
+     * Actually process the message.
+     */
+    private suspend fun processMessage(message: Any?, connection: CONNECTION) {
         when (message) {
             is Ping -> {
-                actionDispatch.launch {
-                    try {
-                        pingManager.manage(connection, responseManager, message)
-                    } catch (e: Exception) {
-                        logger.error("Error processing PING message", e)
-                        listenerManager.notifyError(connection, e)
-                    }
-                }
+                pingManager.manage(connection, responseManager, message, logger)
             }
 
             // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
@@ -448,26 +462,26 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             is RmiMessage -> {
                 // if we are an RMI message/registration, we have very specific, defined behavior.
                 // We do not use the "normal" listener callback pattern because this require special functionality
-                rmiGlobalSupport.manage(this@EndPoint, serialization, connection, message, rmiConnectionSupport, actionDispatch)
+                rmiGlobalSupport.manage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
             }
+
             is Any -> {
-                actionDispatch.launch {
-                    try {
-                        @Suppress("UNCHECKED_CAST")
-                        var hasListeners = listenerManager.notifyOnMessage(connection, message)
+                try {
+                    @Suppress("UNCHECKED_CAST")
+                    var hasListeners = listenerManager.notifyOnMessage(connection, message)
 
-                        // each connection registers, and is polled INDEPENDENTLY for messages.
-                        hasListeners = hasListeners or connection.notifyOnMessage(message)
+                    // each connection registers, and is polled INDEPENDENTLY for messages.
+                    hasListeners = hasListeners or connection.notifyOnMessage(message)
 
-                        if (!hasListeners) {
-                            logger.error("No message callbacks found for ${message::class.java.simpleName}")
-                        }
-                    } catch (e: Exception) {
-                        logger.error("Error processing message", e)
-                        listenerManager.notifyError(connection, e)
+                    if (!hasListeners) {
+                        logger.error("No message callbacks found for ${message::class.java.simpleName}")
                     }
+                } catch (e: Exception) {
+                    logger.error("Error processing message", e)
+                    listenerManager.notifyError(connection, e)
                 }
             }
+
             else -> {
                 // do nothing, there were problems with the message
                 if (message != null) {
@@ -478,6 +492,7 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
             }
         }
     }
+
 
     /**
      * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!

@@ -26,6 +26,7 @@ import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
+import dorkbox.network.ping.PingManager
 import dorkbox.util.Sys
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.launch
@@ -629,11 +630,11 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @return true if the ping was successfully sent to the client
      */
-    suspend fun ping(function: suspend Ping.() -> Unit): Boolean {
+    suspend fun ping(pingTimeoutSeconds: Int = PingManager.DEFAULT_TIMEOUT_SECONDS, function: suspend Ping.() -> Unit): Boolean {
         val c = connection0
 
         if (c != null) {
-            return pingManager.ping(c, actionDispatch, responseManager, function)
+            return pingManager.ping(c, pingTimeoutSeconds, actionDispatch, responseManager, logger, function)
         } else {
             logger.error("No connection!", ClientException("Cannot send a ping when there is no connection!"))
         }
@@ -646,9 +647,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
      *
      * @param function called when the ping returns (ie: update time/latency counters/metrics/etc)
      */
-    fun pingBlocking(function: suspend Ping.() -> Unit): Boolean {
+    fun pingBlocking(pingTimeoutSeconds: Int = PingManager.DEFAULT_TIMEOUT_SECONDS, function: suspend Ping.() -> Unit): Boolean {
         return runBlocking {
-            ping(function)
+            ping(pingTimeoutSeconds, function)
         }
     }
 

@@ -1,5 +1,6 @@
 package dorkboxTest.network
 
+import ch.qos.logback.classic.Level
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
@@ -12,6 +13,8 @@ import org.junit.Test
 class PingTest : BaseTest() {
     @Test
     fun RmiPing() {
+        setLogLevel(Level.TRACE)
+
         val clientSuccess = atomic(false)
 
         run {
@@ -29,14 +32,20 @@ class PingTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect {
-                ping {
-                    clientSuccess.value = true
+                repeat(100) {
+                    ping {
+                        println(it)
 
-                    logger.error("out-bound: $outbound")
-                    logger.error("in-bound: $inbound")
-                    logger.error("round-trip: $roundtrip")
+                        if (it == 99) {
+                            clientSuccess.value = true
 
-                    stopEndPoints()
+                            logger.error("out-bound: $outbound")
+                            logger.error("in-bound: $inbound")
+                            logger.error("round-trip: $roundtrip")
+
+                            stopEndPoints()
+                        }
+                    }
                 }
             }
 

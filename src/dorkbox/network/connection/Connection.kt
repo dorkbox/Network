@@ -22,6 +22,7 @@ import dorkbox.network.aeron.UdpMediaDriverPairedConnection
 import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.handshake.RandomIdAllocator
 import dorkbox.network.ping.Ping
+import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.RmiSupportConnection
 import io.aeron.FragmentAssembler
 import io.aeron.Publication
@@ -88,6 +89,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val listenerManager = atomic<ListenerManager<Connection>?>(null)
     val logger = endPoint.logger
 
+    private val isClosed = atomic(false)
 
     internal var preCloseAction: suspend () -> Unit = {}
     internal var postCloseAction: suspend () -> Unit = {}
@@ -95,9 +97,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // only accessed on a single thread!
     private var connectionLastCheckTime = 0L
     private var connectionTimeoutTime = 0L
-
-    private val isClosed = atomic(false)
-
 
     private val connectionCheckIntervalInMS = connectionParameters.endPoint.config.connectionCheckIntervalInMS
     private val connectionExpirationTimoutInMS = connectionParameters.endPoint.config.connectionExpirationTimoutInMS
@@ -243,8 +242,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return true if the message was successfully sent by aeron
      */
-    suspend fun ping(function: suspend Ping.() -> Unit): Boolean {
-        return endPoint.pingManager.ping(this, endPoint.actionDispatch, endPoint.responseManager, function)
+    suspend fun ping(pingTimeoutSeconds: Int = PingManager.DEFAULT_TIMEOUT_SECONDS, function: suspend Ping.() -> Unit): Boolean {
+        return endPoint.ping(this, pingTimeoutSeconds, function)
     }
 
     /**

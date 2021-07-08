@@ -183,7 +183,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                publication,
                                                                sessionId,
                                                                message,
-                                                               aeronDriver)
+                                                               aeronDriver,
+                                                               logger)
                 }
 
                 override fun poll(): Int { return subscription.poll(handler, 1) }
@@ -269,7 +270,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                clientAddress,
                                                                message,
                                                                aeronDriver,
-                                                               false)
+                                                               false,
+                                                               logger)
                 }
 
                 override fun poll(): Int { return subscription.poll(handler, 1) }
@@ -355,7 +357,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                clientAddress,
                                                                message,
                                                                aeronDriver,
-                                                               false)
+                                                               false,
+                                                               logger)
                 }
 
                 override fun poll(): Int { return subscription.poll(handler, 1) }
@@ -441,7 +444,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                            clientAddress,
                                                            message,
                                                            aeronDriver,
-                                                           true)
+                                                           true,
+                                                            logger)
            }
 
            override fun poll(): Int { return subscription.poll(handler, 1) }
