@@ -38,13 +38,24 @@ import java.net.InetAddress
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
  * ASYNC.
+ *
+ * @param config these are the specific connection options
+ * @param connectionFunc allows for custom connection implementations defined as a unit function
  */
-open class Client<CONNECTION : Connection>(config: Configuration = Configuration()) : EndPoint<CONNECTION>(config) {
+open class Client<CONNECTION : Connection>(
+    config: Configuration = Configuration(),
+    connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION = {
+        @Suppress("UNCHECKED_CAST")
+        Connection(it) as CONNECTION
+    })
+    : EndPoint<CONNECTION>(config, connectionFunc) {
+
+
     companion object {
         /**
          * Gets the version number.
          */
-        const val version = "5.2"
+        const val version = "5.3"
 
         /**
          * Checks to see if a client (using the specified configuration) is running.
@@ -437,9 +448,9 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         val newConnection: CONNECTION
         if (isUsingIPC) {
-            newConnection = newConnection(ConnectionParams(this, clientConnection, PublicKeyValidationState.VALID, rmiConnectionSupport))
+            newConnection = connectionFunc(ConnectionParams(this, clientConnection, PublicKeyValidationState.VALID, rmiConnectionSupport))
         } else {
-            newConnection = newConnection(ConnectionParams(this, clientConnection, validateRemoteAddress, rmiConnectionSupport))
+            newConnection = connectionFunc(ConnectionParams(this, clientConnection, validateRemoteAddress, rmiConnectionSupport))
             remoteAddress!!
 
             // VALIDATE are we allowed to connect to this server (now that we have the initial server information)
@@ -604,7 +615,6 @@ open class Client<CONNECTION : Connection>(config: Configuration = Configuration
 
         return if (c != null) {
             c.send(message)
-            true
         } else {
             val exception = ClientException("Cannot send a message when there is no connection!")
             logger.error("No connection!", exception)

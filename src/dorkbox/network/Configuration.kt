@@ -38,7 +38,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         /**
          * Gets the version number.
          */
-        const val version = "5.2"
+        const val version = "5.3"
     }
 
     /**
@@ -279,9 +279,9 @@ open class Configuration {
         }
 
     /**
-     * Specify the serialization manager to use.
+     * Specify the serialization manager to use. The type must extend `Connection`, since this will be cast
      */
-    var serialization: Serialization<Connection> = Serialization()
+    var serialization: Serialization<*> = Serialization<Connection>()
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value

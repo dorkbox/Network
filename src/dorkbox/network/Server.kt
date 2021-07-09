@@ -21,6 +21,7 @@ import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverServerConnection
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.eventLoop
 import dorkbox.network.connectionType.ConnectionRule
@@ -44,15 +45,24 @@ import java.util.concurrent.TimeUnit
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
  * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
  *
- *
  * To put it bluntly, ONLY have the server do work inside of a listener!
+ *
+ * @param config these are the specific connection options
+ * @param connectionFunc allows for custom connection implementations defined as a unit function
  */
-open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerConfiguration()) : EndPoint<CONNECTION>(config) {
+open class Server<CONNECTION : Connection>(
+    config: ServerConfiguration = ServerConfiguration(),
+    connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION = {
+        @Suppress("UNCHECKED_CAST")
+        Connection(it) as CONNECTION
+    })
+    : EndPoint<CONNECTION>(config, connectionFunc) {
+
     companion object {
         /**
          * Gets the version number.
          */
-        const val version = "5.2"
+        const val version = "5.3"
 
         /**
          * Checks to see if a server (using the specified configuration) is running.
@@ -184,6 +194,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                sessionId,
                                                                message,
                                                                aeronDriver,
+                        connectionFunc,
                                                                logger)
                 }
 
@@ -271,6 +282,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                message,
                                                                aeronDriver,
                                                                false,
+                                                               connectionFunc,
                                                                logger)
                 }
 
@@ -358,6 +370,7 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                                message,
                                                                aeronDriver,
                                                                false,
+                                                               connectionFunc,
                                                                logger)
                 }
 
@@ -445,7 +458,8 @@ open class Server<CONNECTION : Connection>(config: ServerConfiguration = ServerC
                                                            message,
                                                            aeronDriver,
                                                            true,
-                                                            logger)
+                                                           connectionFunc,
+                                                           logger)
            }
 
            override fun poll(): Int { return subscription.poll(handler, 1) }

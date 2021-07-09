@@ -195,6 +195,7 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
         sessionId: Int,
         message: HandshakeMessage,
         aeronDriver: AeronDriver,
+        connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ) {
 
@@ -278,7 +279,7 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
                 "[${clientConnection.sessionId}] IPC connection established to [${clientConnection.streamIdSubscription}|${clientConnection.streamId}]"
             }
 
-            val connection = server.newConnection(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID, rmiConnectionSupport))
+            val connection = connectionFunc(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID, rmiConnectionSupport))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
@@ -335,6 +336,7 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
                                          message: HandshakeMessage,
                                          aeronDriver: AeronDriver,
                                          isIpv6Wildcard: Boolean,
+                                         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                                          logger: KLogger) {
 
         if (!validateMessageTypeAndDoPending(
@@ -445,7 +447,7 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
                 "Creating new connection from $clientAddressString [$subscriptionPort|$publicationPort] [$connectionStreamId|$connectionSessionId] (reliable:${message.isReliable})"
             }
 
-            val connection = server.newConnection(ConnectionParams(server, clientConnection, validateRemoteAddress, rmiConnectionSupport))
+            val connection = connectionFunc(ConnectionParams(server, clientConnection, validateRemoteAddress, rmiConnectionSupport))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)

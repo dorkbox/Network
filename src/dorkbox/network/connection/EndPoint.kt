@@ -65,13 +65,20 @@ fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
  *
  * @param type this is either "Client" or "Server", depending on who is creating this endpoint.
  * @param config these are the specific connection options
+ * @param connectionFunc allows for custom connection implementations defined as a unit function
  *
- * @throws SecurityException if unable to initialize/generate ECC keys
+ *  @throws SecurityException if unable to initialize/generate ECC keys
 */
 abstract class EndPoint<CONNECTION : Connection>
-internal constructor(val type: Class<*>, internal val config: Configuration) : AutoCloseable {
-    protected constructor(config: Configuration) : this(Client::class.java, config)
-    protected constructor(config: ServerConfiguration) : this(Server::class.java, config)
+internal constructor(val type: Class<*>,
+                     internal val config: Configuration,
+                     @Suppress("UNCHECKED_CAST")
+                     internal val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION)
+                     : AutoCloseable {
+
+    @Suppress("UNCHECKED_CAST")
+    protected constructor(config: Configuration, connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION) : this(Client::class.java, config, connectionFunc)
+    protected constructor(config: ServerConfiguration, connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION) : this(Server::class.java, config, connectionFunc)
 
     val logger: KLogger = KotlinLogging.logger(type.simpleName)
 
@@ -149,13 +156,13 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
         if (type.javaClass == Server::class.java) {
             // server cannot "get" global RMI objects, only the client can
             @Suppress("UNCHECKED_CAST")
-            rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, config.serialization as Serialization<CONNECTION>)
+            rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, serialization)
             { _, _, _ ->
                 throw IllegalAccessException("Global RMI access is only possible from a Client connection!")
             }
         } else {
             @Suppress("UNCHECKED_CAST")
-            rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, config.serialization as Serialization<CONNECTION>)
+            rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, serialization)
             { connection, objectId, interfaceClass ->
                 return@RmiManagerConnections rmiGlobalSupport.getGlobalRemoteObject(connection, objectId, interfaceClass)
             }
@@ -205,21 +212,6 @@ internal constructor(val type: Class<*>, internal val config: Configuration) : A
      */
     fun removeConnection(connection: CONNECTION) {
         connections.remove(connection)
-    }
-
-    /**
-     * This method allows the connections used by the client/server to be subclassed (with custom implementations).
-     *
-     * As this is for the network stack, the new connection MUST subclass [Connection]
-     *
-     * The parameters are ALL NULL when getting the base class, as this instance is just thrown away.
-     *
-     * @return a new network connection
-     */
-    @Suppress("MemberVisibilityCanBePrivate")
-    open fun newConnection(connectionParameters: ConnectionParams<CONNECTION>): CONNECTION {
-        @Suppress("UNCHECKED_CAST")
-        return Connection(connectionParameters) as CONNECTION
     }
 
     /**
