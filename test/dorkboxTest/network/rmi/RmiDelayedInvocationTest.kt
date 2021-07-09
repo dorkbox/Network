@@ -41,7 +41,7 @@ class RmiDelayedInvocationTest : BaseTest() {
         }
     }
 
-    fun register(serialization: Serialization<Connection>) {
+    fun register(serialization: Serialization<*>) {
         serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
     }
 

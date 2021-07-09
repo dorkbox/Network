@@ -72,11 +72,8 @@ class ListenerTest : BaseTest() {
     @Test
     @Throws(SecurityException::class, InitializationException::class, IOException::class, InterruptedException::class)
     fun listener() {
-        val server: Server<TestConnectionA> = object : Server<TestConnectionA>(
-                serverConfig()) {
-            override fun newConnection(connectionParameters: ConnectionParams<TestConnectionA>): TestConnectionA {
-                return TestConnectionA(connectionParameters)
-            }
+        val server: Server<TestConnectionA> = Server(serverConfig()) {
+            TestConnectionA(it)
         }
         addEndPoint(server)
 
@@ -117,11 +114,8 @@ class ListenerTest : BaseTest() {
 
 
         // ----
-        val client: Client<TestConnectionA> = object : Client<TestConnectionA>(
-                clientConfig()) {
-            override fun newConnection(connectionParameters: ConnectionParams<TestConnectionA>): TestConnectionA {
-                return TestConnectionA(connectionParameters)
-            }
+        val client: Client<TestConnectionA> = Client(clientConfig()) {
+            TestConnectionA(it)
         }
         addEndPoint(client)
 

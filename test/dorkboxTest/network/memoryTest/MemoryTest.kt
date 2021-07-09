@@ -21,6 +21,7 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkbox.network.serialization.KryoExtra
+import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Ignore
@@ -154,7 +155,7 @@ class MemoryTest : BaseTest() {
 
     @Test
     fun runForeverTestKryoPool() {
-        val serialization = serverConfig().serialization
+        val serialization = serverConfig().serialization as Serialization<Connection>
 
         // 17 to force a pool size change
         var kryo1: KryoExtra<Connection>

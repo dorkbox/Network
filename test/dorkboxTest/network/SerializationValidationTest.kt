@@ -58,7 +58,7 @@ class SerializationValidationTest : BaseTest() {
 
     @Test
     fun checkTakeKryo() {
-        val serialization = serverConfig().serialization
+        val serialization = serverConfig().serialization as Serialization<Connection>
 
         val kryos = mutableListOf<KryoExtra<Connection>>()
         for (i in 0 until 17) {
@@ -163,7 +163,7 @@ class SerializationValidationTest : BaseTest() {
         waitForThreads()
     }
 
-    private fun register(serialization: Serialization<Connection>) {
+    private fun register(serialization: Serialization<*>) {
         serialization.register(Command1::class.java)
         serialization.register(Command2::class.java)
         serialization.register(Command3::class.java)

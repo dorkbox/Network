@@ -48,7 +48,7 @@ object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 8+"
     const val group = "com.dorkbox"
-    const val version = "5.2"
+    const val version = "5.3"
 
     // set as project.ext
     const val name = "Network"
@@ -74,10 +74,8 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_1_8) {
 //GradleUtils.jpms(JavaVersion.VERSION_1_9)
 
 
-// TODO: ping! (still WIP)
-
 // ratelimiter, "other" package
-// ping, rest of unit tests
+// rest of unit tests
 // getConnectionUpgradeType
 // ability to send with a function callback (using RMI waiter type stuff for callbacks)
 // use conscrypt?!
