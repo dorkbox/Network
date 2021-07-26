@@ -127,7 +127,7 @@ internal constructor(val type: Class<*>,
 
     init {
         require(!config.previouslyUsed) { "${type.simpleName} configuration cannot be reused!" }
-        config.validate()
+        config.validate() // this happens more than once! (this is ok)
 
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
@@ -147,7 +147,7 @@ internal constructor(val type: Class<*>,
 
         // Only starts the media driver if we are NOT already running!
         try {
-            aeronDriver = AeronDriver(config, type, logger)
+            aeronDriver = AeronDriver(config, type, logger, listenerManager.notifyError)
         } catch (e: Exception) {
             logger.error("Error initialize endpoint", e)
             throw e
@@ -281,11 +281,11 @@ internal constructor(val type: Class<*>,
     }
 
     /**
-     * Called when there is an error in general
+     * Called when there is a global error (and error that is not specific to a connection)
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onError(function: Throwable.() -> Unit) {
+    fun onErrorGlobal(function: (Throwable) -> Unit) {
         actionDispatch.launch {
             listenerManager.onError(function)
         }
