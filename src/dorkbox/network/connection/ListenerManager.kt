@@ -109,7 +109,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 return
             }
 
-            var newEndIndex = size -1  // offset by 1 because we have to adjust for the access index
+            var newEndIndex = size - 1  // offset by 1 because we have to adjust for the access index
 
             for (i in newEndIndex downTo 0) {
                 val stackName = stackTrace[i].className
@@ -372,18 +372,30 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      */
     fun notifyError(connection: CONNECTION, exception: Throwable) {
         onErrorList.value.forEach {
-            it(connection, exception)
+            try {
+                it(connection, exception)
+            } catch (t: Throwable) {
+                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                cleanStackTrace(t)
+                logger.error("Connection ${connection.id} error", t)
+            }
         }
     }
 
     /**
-     * Invoked when there is an error in general
+     * Invoked when there is a global error (no connection information)
      *
      * The error is also sent to an error log before notifying callbacks
      */
-    fun notifyError(exception: Throwable) {
+    val notifyError: (exception: Throwable) -> Unit = { exception ->
         onErrorGlobalList.value.forEach {
-            it(exception)
+            try {
+                it(exception)
+            } catch (t: Throwable) {
+                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                cleanStackTrace(t)
+                logger.error("Global error", t)
+            }
         }
     }
 
@@ -425,6 +437,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                     } catch (t: Throwable) {
                         cleanStackTrace(t)
                         logger.error("Connection ${connection.id} error", t)
+                        notifyError(connection, t)
                     }
                 }
             }

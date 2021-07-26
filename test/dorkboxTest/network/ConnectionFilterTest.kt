@@ -395,6 +395,7 @@ class ConnectionFilterTest : BaseTest() {
 
             server.onConnect {
                 serverConnectSuccess.value = true
+                logger.error { "closing" }
                 close()
             }
         }
@@ -413,6 +414,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
+                logger.error { "on close" }
                 stopEndPoints()
             }
 

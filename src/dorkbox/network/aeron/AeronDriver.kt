@@ -2,6 +2,7 @@ package dorkbox.network.aeron
 
 import dorkbox.network.Configuration
 import dorkbox.network.connection.ListenerManager
+import dorkbox.network.exceptions.AeronDriverException
 import dorkbox.util.NamedThreadFactory
 import io.aeron.Aeron
 import io.aeron.ChannelUriStringBuilder
@@ -12,8 +13,8 @@ import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.atomicfu.atomic
 import mu.KLogger
 import mu.KotlinLogging
-import org.agrona.concurrent.AgentTerminationException
 import org.agrona.concurrent.BackoffIdleStrategy
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.lang.Thread.sleep
 import java.net.BindException
@@ -21,9 +22,12 @@ import java.net.BindException
 /**
  * Class for managing the Aeron+Media drivers
  */
-class AeronDriver(val config: Configuration,
-                  val type: Class<*> = AeronDriver::class.java,
-                  val logger: KLogger = KotlinLogging.logger("AeronConfig")) {
+class AeronDriver(
+    val config: Configuration,
+    val type: Class<*> = AeronDriver::class.java,
+    val logger: KLogger = KotlinLogging.logger("AeronConfig"),
+    aeronErrorLogger: (exception: Throwable) -> Unit = { error -> LoggerFactory.getLogger("AeronDriver").error("Aeron error", error) }
+) {
 
     companion object {
         /**
@@ -50,28 +54,7 @@ class AeronDriver(val config: Configuration,
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
         private const val AERON_PUBLICATION_LINGER_TIMEOUT = 5_000L  // in MS
 
-        fun manageError(logger: KLogger, error: Throwable) {
-            if (error is DriverTimeoutException) {
-                // we suppress this because it is already handled
-                return
-            }
-
-            if (error is AgentTerminationException) {
-                // we suppress this because it is already handled
-                return
-            }
-
-            if (error.cause is BindException) {
-                // we suppress this because it is already handled
-                return
-            }
-
-            ListenerManager.cleanStackTrace(error)
-            logger.error("Error in Aeron", error)
-        }
-
         private fun setConfigDefaults(config: Configuration, logger: KLogger) {
-
             /*
              * Linux
              * Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and
@@ -135,12 +118,14 @@ class AeronDriver(val config: Configuration,
                 val aeronLogDirectory = File(baseFileLocation, "aeron")
                 config.aeronDirectory = aeronLogDirectory
             }
-
-            // cannot make any more changes to the configuration!
-            config.contextDefined = true
         }
 
-        private fun create(config: Configuration, threadFactory: NamedThreadFactory, logger: KLogger): MediaDriver.Context {
+        private fun create(
+            config: Configuration,
+            threadFactory: NamedThreadFactory,
+            aeronErrorHandler: (error: Throwable) -> Unit
+
+        ): MediaDriver.Context {
             // LOW-LATENCY SETTINGS
             // .termBufferSparseFile(false)
             //             .useWindowsHighResTimer(true)
@@ -155,7 +140,7 @@ class AeronDriver(val config: Configuration,
             //    setProperty("aeron.rcv.initial.window.length", "2097152");
 
             // driver context must happen in the initializer, because we have a Server.isRunning() method that uses the mediaDriverContext (without bind)
-            val context = MediaDriver.Context()
+            val mediaDriverContext = MediaDriver.Context()
                 .publicationReservedSessionIdLow(RESERVED_SESSION_ID_LOW)
                 .publicationReservedSessionIdHigh(RESERVED_SESSION_ID_HIGH)
                 .threadingMode(config.threadingMode)
@@ -165,31 +150,32 @@ class AeronDriver(val config: Configuration,
                 .socketSndbufLength(config.sendBufferSize)
                 .socketRcvbufLength(config.receiveBufferSize)
 
-            context
+            mediaDriverContext
                 .conductorThreadFactory(threadFactory)
                 .receiverThreadFactory(threadFactory)
                 .senderThreadFactory(threadFactory)
                 .sharedNetworkThreadFactory(threadFactory)
                 .sharedThreadFactory(threadFactory)
 
-            context.aeronDirectoryName(config.aeronDirectory!!.absolutePath)
+            mediaDriverContext.aeronDirectoryName(config.aeronDirectory!!.absolutePath)
 
-            if (context.ipcTermBufferLength() != io.aeron.driver.Configuration.ipcTermBufferLength()) {
+            if (mediaDriverContext.ipcTermBufferLength() != io.aeron.driver.Configuration.ipcTermBufferLength()) {
                 // default 64 megs each is HUGE
-                context.ipcTermBufferLength(8 * 1024 * 1024)
+                mediaDriverContext.ipcTermBufferLength(8 * 1024 * 1024)
             }
 
-            if (context.publicationTermBufferLength() != io.aeron.driver.Configuration.termBufferLength()) {
+            if (mediaDriverContext.publicationTermBufferLength() != io.aeron.driver.Configuration.termBufferLength()) {
                 // default 16 megs each is HUGE (we run out of space in production w/ lots of clients)
-                context.publicationTermBufferLength(2 * 1024 * 1024)
+                mediaDriverContext.publicationTermBufferLength(2 * 1024 * 1024)
             }
 
             // we DO NOT want to abort the JVM if there are errors.
-            context.errorHandler { error ->
-                manageError(logger, error)
+            // this replaces the default handler with one that doesn't abort the JVM
+            mediaDriverContext.errorHandler { error ->
+                aeronErrorHandler(AeronDriverException(error))
             }
 
-            return context
+            return mediaDriverContext
         }
     }
 
@@ -224,12 +210,27 @@ class AeronDriver(val config: Configuration,
         }
 
 
+    /**
+     * This is the error handler for Aeron *SPECIFIC* error messages.
+     */
+    private val aeronErrorHandler: (error: Throwable) -> Unit
+
     init {
-        // once we do this, we cannot change any of the config values!
-        config.validate()
+        config.validate() // this happens more than once! (this is ok)
         setConfigDefaults(config, logger)
 
-        context = createContext(config, logger)
+        // cannot make any more changes to the configuration!
+        config.contextDefined = true
+
+        val aeronErrorFilter = config.aeronErrorFilter
+        aeronErrorHandler = { error ->
+            if (aeronErrorFilter(error)) {
+                ListenerManager.cleanStackTrace(error)
+                aeronErrorLogger(AeronDriverException(error))
+            }
+        }
+
+        context = createContext()
         mediaDriverWasAlreadyRunning = isRunning()
     }
 
@@ -239,13 +240,13 @@ class AeronDriver(val config: Configuration,
      * @throws IllegalStateException if the configuration has already been used to create a context
      * @throws IllegalArgumentException if the aeron media driver directory cannot be setup
      */
-    private fun createContext(config: Configuration, logger: KLogger = KotlinLogging.logger("AeronConfig")): MediaDriver.Context {
+    private fun createContext(): MediaDriver.Context {
         if (threadFactory.group.isDestroyed) {
             // on close, we destroy the threadfactory -- and on driver restart, we might want it back
             threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronDriver"), true)
         }
 
-        var context = create(config, threadFactory, logger)
+        var context = create(config, threadFactory, aeronErrorHandler)
 
         // this happens EXACTLY once. Must be BEFORE the "isRunning" check!
         context.concludeAeronDirectory()
@@ -270,7 +271,7 @@ class AeronDriver(val config: Configuration,
                 val randomNum = (1..retryMax).shuffled().first()
                 val newDir = savedParent.resolve("${aeronDir.name}_$randomNum")
 
-                context = create(config, threadFactory, logger)
+                context = create(config, threadFactory, aeronErrorHandler)
                 context.aeronDirectoryName(newDir.path)
 
                 // this happens EXACTLY once. Must be BEFORE the "isRunning" check!
@@ -304,7 +305,7 @@ class AeronDriver(val config: Configuration,
             logger.debug("Resetting media driver context")
 
             // close was requested previously. we have to reset a few things
-            context = createContext(config, logger)
+            context = createContext()
 
             // we want to be able to "restart" aeron, as necessary, after a [close] method call
             closeRequested.value = false
@@ -398,7 +399,7 @@ class AeronDriver(val config: Configuration,
         // we DO NOT want to abort the JVM if there are errors.
         // this replaces the default handler with one that doesn't abort the JVM
         aeronDriverContext.errorHandler { error ->
-            manageError(logger, error)
+            aeronErrorHandler(AeronDriverException(error))
         }
 
         return aeronDriverContext
@@ -561,16 +562,21 @@ class AeronDriver(val config: Configuration,
         try {
             mediaDriver.close()
 
-            // on close, we want to wait for the driver to timeout before considering it "closed". Connections can still LINGER (see below)
-            // on close, the publication CAN linger (in case a client goes away, and then comes back)
-                // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-            sleep(driverTimeout + AERON_PUBLICATION_LINGER_TIMEOUT)
+            // make sure the context is also closed.
+            context!!.close()
 
+            // it can actually close faster, if everything is ideal.
+            if (isRunning()) {
+                // on close, we want to wait for the driver to timeout before considering it "closed". Connections can still LINGER (see below)
+                // on close, the publication CAN linger (in case a client goes away, and then comes back)
+                    // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+                sleep(driverTimeout + AERON_PUBLICATION_LINGER_TIMEOUT)
+            }
 
             // wait for the media driver to actually stop
             var count = 10
-            while (count-- >= 0 && isRunning()) {
-                logger.warn { "Aeron Media driver at '${driverDirectory}' is still running. Waiting for it to stop. Trying $count more times." }
+            while (--count >= 0 && isRunning()) {
+                logger.warn { "Aeron Media driver at '${driverDirectory}' is still running. Waiting for it to stop. Trying to close $count more times." }
                 sleep(driverTimeout)
             }
             logger.debug { "Closed the media driver at '${driverDirectory}'" }

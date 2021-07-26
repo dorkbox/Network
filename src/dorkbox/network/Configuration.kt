@@ -28,9 +28,12 @@ import dorkbox.network.storage.types.PropertyStore
 import dorkbox.os.OS
 import io.aeron.driver.Configuration
 import io.aeron.driver.ThreadingMode
+import io.aeron.exceptions.DriverTimeoutException
 import mu.KLogger
 import org.agrona.SystemUtil
+import org.agrona.concurrent.AgentTerminationException
 import java.io.File
+import java.net.BindException
 import java.util.concurrent.TimeUnit
 
 class ServerConfiguration : dorkbox.network.Configuration() {
@@ -457,6 +460,32 @@ open class Configuration {
             require(!contextDefined) { errorMessage }
             field = value
         }
+
+
+    /**
+     * This allows the user to setup the error filter for Aeron *SPECIFIC* error messages.
+     *
+     * Aeron WILL report more errors than normal (which is where there are suppression statements), because we cannot manage
+     * the emitted errors from Aeron when we attempt/retry connections. This filters out those errors so we can log (or perform an action)
+     * when those errors are encountered
+     *
+     * This is for advanced usage, and REALLY should never be over-riden.
+     *
+     * @return true if the error message should be logged, false to suppress the error
+     */
+    var aeronErrorFilter: (error: Throwable) -> Boolean = { error ->
+                when (error) {
+                    is DriverTimeoutException -> { false }     // we suppress this because it is already handled
+                    is AgentTerminationException -> { false }  // we suppress this because it is already handled
+                    is BindException -> { false }              // we suppress this because it is already handled
+                    else -> { true }
+                }
+            }
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
 
     /**
      * Internal property that tells us if this configuration has already been configured and used to create and start the Media Driver
