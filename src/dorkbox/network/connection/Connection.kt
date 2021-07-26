@@ -341,8 +341,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     suspend fun close() {
         // there are 2 ways to call close.
         //   MANUALLY
-        //   when a connection is disconnected via a timeout/expire.
-        // the compareAndSet is used to make sure that if we call close() MANUALLY, when the auto-cleanup/disconnect is called -- it doesn't
+        //   When a connection is disconnected via a timeout/expire.
+        // the compareAndSet is used to make sure that if we call close() MANUALLY, (and later) when the auto-cleanup/disconnect is called -- it doesn't
         // try to do it again.
 
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
@@ -357,7 +357,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
             // we want a timeout-check, otherwise this will run forever
             while (messagesInProgress.value != 0 && System.currentTimeMillis() < closeTimeoutTime) {
-                delay(100)
+                delay(50)
             }
 
             // on close, we want to make sure this file is DELETED!
