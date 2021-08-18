@@ -255,7 +255,21 @@ class AeronDriver(
         val aeronDir = context.aeronDirectory()
 
         val driverTimeout = context.driverTimeoutMs()
-        var isRunning = context.isDriverActive(driverTimeout) { }
+
+        // sometimes when starting up, if a PREVIOUS run was corrupted (during startup, for example)
+        // we ONLY do this during the initial startup check because it will delete the directory, and we don't
+        // always want to do this.
+        var isRunning = try {
+                context.isDriverActive(driverTimeout) { }
+            } catch (e: DriverTimeoutException) {
+                // we have to delete the directory, since it was corrupted, and we try again.
+                if (aeronDir.deleteRecursively()) {
+                    context.isDriverActive(driverTimeout) { }
+                } else {
+                    // unable to delete the directory
+                    throw e
+                }
+            }
 
         // this is incompatible with IPC, and will not be set if IPC is enabled
         if (config.aeronDirectoryForceUnique && isRunning) {
