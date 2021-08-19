@@ -32,12 +32,12 @@ gradle.startParameter.warningMode = WarningMode.All
 //}
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "2.8"
-    id("com.dorkbox.Licensing") version "2.8.1"
-    id("com.dorkbox.VersionUpdate") version "2.3"
+    id("com.dorkbox.GradleUtils") version "2.9"
+    id("com.dorkbox.Licensing") version "2.9.2"
+    id("com.dorkbox.VersionUpdate") version "2.4"
     id("com.dorkbox.GradlePublish") version "1.11"
 
-    kotlin("jvm") version "1.5.20"
+    kotlin("jvm") version "1.5.21"
 }
 
 //apply(plugin = "com.dorkbox.GradleUtils")
@@ -48,7 +48,7 @@ object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 8+"
     const val group = "com.dorkbox"
-    const val version = "5.4"
+    const val version = "5.5"
 
     // set as project.ext
     const val name = "Network"
@@ -63,15 +63,15 @@ object Extras {
 ///////////////////////////////
 /////  assign 'Extras'
 ///////////////////////////////
-GradleUtils.load("$projectDir/../../gradle.properties", Extras)
-GradleUtils.defaults()
+dorkbox.gradle.GradleUtils.load("$projectDir/../../gradle.properties", Extras)
+dorkbox.gradle.GradleUtils.defaults()
 // because of the api changes for stacktrace stuff, it's best for us to ONLY support 11+
 GradleUtils.compileConfiguration(JavaVersion.VERSION_1_8) {
     // see: https://kotlinlang.org/docs/reference/using-gradle.html
     // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
     freeCompilerArgs = listOf("-Xinline-classes")
 }
-//GradleUtils.jpms(JavaVersion.VERSION_1_9)
+GradleUtils.jpms(JavaVersion.VERSION_1_9)
 
 
 // ratelimiter, "other" package
@@ -151,32 +151,33 @@ tasks.jar.get().apply {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:atomicfu:0.16.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.0")
+    implementation("org.jetbrains.kotlinx:atomicfu:0.16.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.1")
 
     // https://github.com/dorkbox
     implementation("com.dorkbox:MinLog:2.4")
-    implementation("com.dorkbox:Utilities:1.12")
-    implementation("com.dorkbox:Updates:1.1")
-    implementation("com.dorkbox:Serializers:1.2")
     implementation("com.dorkbox:NetworkUtils:2.8")
     implementation("com.dorkbox:ObjectPool:3.4")
+    implementation("com.dorkbox:Serializers:2.0")
+//    implementation("com.dorkbox:Storage:1.0")
+    implementation("com.dorkbox:Updates:1.1")
+    implementation("com.dorkbox:Utilities:1.12")
 
 
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.34.0"
+    val aeronVer = "1.35.0"
     // REMOVE UdpChannel when ISSUE https://github.com/real-logic/aeron/issues/1057 is resolved! (hopefully in 1.30.0)
     implementation("io.aeron:aeron-client:$aeronVer")
     implementation("io.aeron:aeron-driver:$aeronVer")
 
     // https://github.com/EsotericSoftware/kryo
-    implementation("com.esotericsoftware:kryo:5.1.1") {
+    implementation("com.esotericsoftware:kryo:5.2.0") {
         exclude("com.esotericsoftware", "minlog") // we use our own minlog, that logs to SLF4j instead
     }
 
     // https://github.com/magro/kryo-serializers
     implementation("de.javakaffee:kryo-serializers:0.45"){
-        exclude("com.esotericsoftware", "kryo") // we use our own min-log, that logs to SLF4j
+        exclude("com.esotericsoftware", "kryo") // we use na updated kryo+ our own min-log, that logs to SLF4j
     }
 
     // https://github.com/jpountz/lz4-java
@@ -191,31 +192,37 @@ dependencies {
     // https://github.com/jhalterman/typetools
     implementation("net.jodah:typetools:0.6.3")
 
-    // really fast storage
-    // https://github.com/lmdbjava/lmdbjava
-    val lmdbJava = "org.lmdbjava:lmdbjava:0.8.1"
-    compileOnly(lmdbJava)
-
-    // https://github.com/OpenHFT/Chronicle-Map
-    val chronicleMap = "net.openhft:chronicle-map:3.20.84"
-    compileOnly(chronicleMap)
-
+//    // really fast storage
+//    // https://github.com/lmdbjava/lmdbjava
+//    val lmdbJava = "org.lmdbjava:lmdbjava:0.8.1"
+//    compileOnly(lmdbJava)
+//
+//    // https://github.com/OpenHFT/Chronicle-Map
+//    val chronicleMap = "net.openhft:chronicle-map:3.20.84"
+//    compileOnly(chronicleMap) {
+//        exclude("com.intellij", "annotations") // not even available at runtime
+//        // optional from chronicle-map. These cause JPMS to fail!
+//        exclude("com.thoughtworks.xstream", "xstream")
+//        exclude("org.ops4j.pax.url", "pax-url-aether")
+//        exclude("org.codehaus.jettison", "jettison")
+//    }
+//
 
     // Jodah Expiring Map (A high performance thread-safe map that expires entries)
     // https://github.com/jhalterman/expiringmap
-    implementation("net.jodah:expiringmap:0.5.9")
+    implementation("net.jodah:expiringmap:0.5.10")
 
 
 
     // https://github.com/MicroUtils/kotlin-logging
-    implementation("io.github.microutils:kotlin-logging:2.0.8")
+    implementation("io.github.microutils:kotlin-logging:2.0.10")
     implementation("org.slf4j:slf4j-api:1.8.0-beta4")
 
 
 
 
-    testImplementation(lmdbJava)
-    testImplementation(chronicleMap)
+//    testImplementation(lmdbJava)
+//    testImplementation(chronicleMap)
 
     testImplementation("junit:junit:4.13.1")
     testImplementation("ch.qos.logback:logback-classic:1.3.0-alpha4")

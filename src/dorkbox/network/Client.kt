@@ -31,7 +31,6 @@ import dorkbox.util.Sys
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.slf4j.LoggerFactory
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -56,7 +55,7 @@ open class Client<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "5.4"
+        const val version = "5.5"
 
         /**
          * Checks to see if a client (using the specified configuration) is running.
