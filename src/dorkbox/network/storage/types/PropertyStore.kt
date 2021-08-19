@@ -36,7 +36,7 @@ import java.util.*
 class PropertyStore(val dbFile: File, val logger: KLogger): GenericStore {
     companion object {
         fun type(dbFile: String) : StorageType {
-            return LmdbStore.type(File(dbFile))
+            return type(File(dbFile))
         }
 
         fun type(dbFile: File) = object : StorageType {

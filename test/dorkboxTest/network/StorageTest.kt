@@ -20,7 +20,9 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.storage.SettingsStore
 import dorkbox.network.storage.StorageType
-import dorkbox.network.storage.types.*
+import dorkbox.network.storage.types.MemoryAccess
+import dorkbox.network.storage.types.MemoryStore
+import dorkbox.network.storage.types.PropertyStore
 import mu.KLogger
 import mu.KotlinLogging
 import org.junit.Assert
@@ -71,26 +73,26 @@ class StorageTest : BaseTest() {
         Assert.assertFalse(salt2.contentEquals(salt3))
     }
 
-    @Test
-    fun lmdbTest() {
-        val file = File("test.db").absoluteFile
-        val fileLock = File("test.db-lock").absoluteFile
-
-        val salt1 = LmdbStore.type(file).create().use { it.getSalt() }
-        val salt2 = LmdbStore.type(file).create().use { it.getSalt() }
-
-        Assert.assertArrayEquals(salt1, salt2)
-        file.delete()
-        fileLock.delete()
-
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = LmdbStore.type(file) }).use { it.storage.getSalt() }
-        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = LmdbStore.type(file) }).use { it.storage.getSalt() }
-
-        Assert.assertArrayEquals(salt3, salt4)
-        Assert.assertFalse(salt1.contentEquals(salt4))
-        file.delete()
-        fileLock.delete()
-    }
+//    @Test
+//    fun lmdbTest() {
+//        val file = File("test.db").absoluteFile
+//        val fileLock = File("test.db-lock").absoluteFile
+//
+//        val salt1 = LmdbStore.type(file).create().use { it.getSalt() }
+//        val salt2 = LmdbStore.type(file).create().use { it.getSalt() }
+//
+//        Assert.assertArrayEquals(salt1, salt2)
+//        file.delete()
+//        fileLock.delete()
+//
+//        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = LmdbStore.type(file) }).use { it.storage.getSalt() }
+//        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = LmdbStore.type(file) }).use { it.storage.getSalt() }
+//
+//        Assert.assertArrayEquals(salt3, salt4)
+//        Assert.assertFalse(salt1.contentEquals(salt4))
+//        file.delete()
+//        fileLock.delete()
+//    }
 
     @Test
     fun propFileTest() {
@@ -110,21 +112,21 @@ class StorageTest : BaseTest() {
         file.delete()
     }
 
-    @Test
-    fun chronicleMapTest() {
-        val file = File("test.db").absoluteFile
-
-        val salt1 = ChronicleMapStore.type(file).create().use { it.getSalt() }
-        val salt2 = ChronicleMapStore.type(file).create().use { it.getSalt() }
-
-        Assert.assertArrayEquals(salt1, salt2)
-        file.delete()
-
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = ChronicleMapStore.type(file) }).use { it.storage.getSalt() }
-        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = ChronicleMapStore.type(file) }).use { it.storage.getSalt() }
-
-        Assert.assertArrayEquals(salt3, salt4)
-        Assert.assertFalse(salt1.contentEquals(salt4))
-        file.delete()
-    }
+//    @Test
+//    fun chronicleMapTest() {
+//        val file = File("test.db").absoluteFile
+//
+//        val salt1 = ChronicleMapStore.type(file).create().use { it.getSalt() }
+//        val salt2 = ChronicleMapStore.type(file).create().use { it.getSalt() }
+//
+//        Assert.assertArrayEquals(salt1, salt2)
+//        file.delete()
+//
+//        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = ChronicleMapStore.type(file) }).use { it.storage.getSalt() }
+//        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = ChronicleMapStore.type(file) }).use { it.storage.getSalt() }
+//
+//        Assert.assertArrayEquals(salt3, salt4)
+//        Assert.assertFalse(salt1.contentEquals(salt4))
+//        file.delete()
+//    }
 }

@@ -1,486 +1,486 @@
-/*-
- * #%L
- * LmdbJava
- * %%
- * Copyright (C) 2016 - 2020 The LmdbJava Open Source Project
- * %%
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * 
- *      http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- * #L%
- */
+///*-
+// * #%L
+// * LmdbJava
+// * %%
+// * Copyright (C) 2016 - 2020 The LmdbJava Open Source Project
+// * %%
+// * Licensed under the Apache License, Version 2.0 (the "License");
+// * you may not use this file except in compliance with the License.
+// * You may obtain a copy of the License at
+// *
+// *      http://www.apache.org/licenses/LICENSE-2.0
+// *
+// * Unless required by applicable law or agreed to in writing, software
+// * distributed under the License is distributed on an "AS IS" BASIS,
+// * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// * See the License for the specific language governing permissions and
+// * limitations under the License.
+// * #L%
+// */
 package dorkboxTest.network.lmdb
-
-import org.agrona.MutableDirectBuffer
-import org.agrona.concurrent.UnsafeBuffer
-import org.hamcrest.CoreMatchers
-import org.hamcrest.MatcherAssert
-import org.junit.Assert
-import org.junit.Ignore
-import org.junit.Rule
-import org.junit.Test
-import org.junit.rules.TemporaryFolder
-import org.lmdbjava.ByteBufferProxy
-import org.lmdbjava.DbiFlags
-import org.lmdbjava.DirectBufferProxy
-import org.lmdbjava.Env
-import org.lmdbjava.GetOp
-import org.lmdbjava.KeyRange
-import org.lmdbjava.SeekOp
-import org.lmdbjava.Verifier
-import java.io.File
-import java.io.IOException
-import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-
-/**
- * Welcome to LmdbJava!
- *
- *
- *
- * This short tutorial will walk you through using LmdbJava step-by-step.
- *
- *
- *
- * If you are using a 64-bit Windows, Linux or OS X machine, you can simply run
- * this tutorial by adding the LmdbJava JAR to your classpath. It includes the
- * required system libraries. If you are using another 64-bit platform, you'll
- * need to install the LMDB system library yourself. 32-bit platforms are not
- * supported.
- */
-@Ignore
-class TutorialTest {
-
-    private val folder = TemporaryFolder()
-
-    @Rule
-    fun tmp(): TemporaryFolder {
-        return folder
-    }
-
-    /**
-     * In this first tutorial we will use LmdbJava with some basic defaults.
-     *
-     * @throws IOException if a path was unavailable for memory mapping
-     */
-    @Test
-    @Throws(IOException::class)
-    fun tutorial1() {
-        // We need a storage directory first.
-        // The path cannot be on a remote file system.
-        val path = tmp().newFolder()
-
-        // We always need an Env. An Env owns a physical on-disk storage file. One
-        // Env can store many different databases (ie sorted maps).
-        val env = Env.create() // LMDB also needs to know how large our DB might be. Over-estimating is OK.
-            .setMapSize(10485760) // LMDB also needs to know how many DBs (Dbi) we want to store in this Env.
-            .setMaxDbs(1) // Now let's open the Env. The same path can be concurrently opened and
-            // used in different processes, but do not open the same path twice in
-            // the same process at the same time.
-            .open(path)
-
-        // We need a Dbi for each DB. A Dbi roughly equates to a sorted map. The
-        // MDB_CREATE flag causes the DB to be created if it doesn't already exist.
-        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
-
-        // We want to store some data, so we will need a direct ByteBuffer.
-        // Note that LMDB keys cannot exceed maxKeySize bytes (511 bytes by default).
-        // Values can be larger.
-        val key = ByteBuffer.allocateDirect(env.maxKeySize)
-        val `val` = ByteBuffer.allocateDirect(700)
-        key.put("greeting".toByteArray(StandardCharsets.UTF_8)).flip()
-        `val`.put("Hello world".toByteArray(StandardCharsets.UTF_8)).flip()
-        val valSize = `val`.remaining()
-
-        // Now store it. Dbi.put() internally begins and commits a transaction (Txn).
-        db.put(key, `val`)
-
-        // To fetch any data from LMDB we need a Txn. A Txn is very important in
-        // LmdbJava because it offers ACID characteristics and internally holds a
-        // read-only key buffer and read-only value buffer. These read-only buffers
-        // are always the same two Java objects, but point to different LMDB-managed
-        // memory as we use Dbi (and Cursor) methods. These read-only buffers remain
-        // valid only until the Txn is released or the next Dbi or Cursor call. If
-        // you need data afterwards, you should copy the bytes to your own buffer.
-        env.txnRead().use { txn ->
-            val found = db[txn, key]
-            Assert.assertNotNull(found)
-
-            // The fetchedVal is read-only and points to LMDB memory
-            val fetchedVal = txn.`val`()
-            MatcherAssert.assertThat(fetchedVal.remaining(), CoreMatchers.`is`(valSize))
-
-            // Let's double-check the fetched value is correct
-            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(fetchedVal).toString(), CoreMatchers.`is`("Hello world"))
-        }
-
-        // We can also delete. The simplest way is to let Dbi allocate a new Txn...
-        db.delete(key)
-        env.txnRead().use { txn -> Assert.assertNull(db[txn, key]) }
-        env.close()
-    }
-
-    /**
-     * In this second tutorial we'll learn more about LMDB's ACID Txns.
-     *
-     * @throws IOException          if a path was unavailable for memory mapping
-     * @throws InterruptedException if executor shutdown interrupted
-     */
-    @Test
-    @Throws(IOException::class, InterruptedException::class)
-    fun tutorial2() {
-        val env = createSimpleEnv(tmp().newFolder())
-        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
-        val key = ByteBuffer.allocateDirect(env.maxKeySize)
-        val `val` = ByteBuffer.allocateDirect(700)
-
-        // Let's write and commit "key1" via a Txn. A Txn can include multiple Dbis.
-        // Note write Txns block other write Txns, due to writes being serialized.
-        // It's therefore important to avoid unnecessarily long-lived write Txns.
-        env.txnWrite().use { txn ->
-            key.put("key1".toByteArray(StandardCharsets.UTF_8)).flip()
-            `val`.put("lmdb".toByteArray(StandardCharsets.UTF_8)).flip()
-            db.put(txn, key, `val`)
-
-            // We can read data too, even though this is a write Txn.
-            val found = db[txn, key]
-            Assert.assertNotNull(found)
-
-            // An explicit commit is required, otherwise Txn.close() rolls it back.
-            txn.commit()
-        }
-
-        // Open a read-only Txn. It only sees data that existed at Txn creation time.
-        val rtx = env.txnRead()
-
-        // Our read Txn can fetch key1 without problem, as it existed at Txn creation.
-        var found = db[rtx, key]
-        Assert.assertNotNull(found)
-
-        // Note that our main test thread holds the Txn. Only one Txn per thread is
-        // typically permitted (the exception is a read-only Env with MDB_NOTLS).
-        //
-        // Let's write out a "key2" via a new write Txn in a different thread.
-        val es = Executors.newCachedThreadPool()
-        es.execute {
-            env.txnWrite().use { txn ->
-                key.clear()
-                key.put("key2".toByteArray(StandardCharsets.UTF_8)).flip()
-                db.put(txn, key, `val`)
-                txn.commit()
-            }
-        }
-        es.shutdown()
-        es.awaitTermination(10, TimeUnit.SECONDS)
-
-        // Even though key2 has been committed, our read Txn still can't see it.
-        found = db[rtx, key]
-        Assert.assertNull(found)
-
-        // To see key2, we could create a new Txn. But a reset/renew is much faster.
-        // Reset/renew is also important to avoid long-lived read Txns, as these
-        // prevent the re-use of free pages by write Txns (ie the DB will grow).
-        rtx.reset()
-        // ... potentially long operation here ...
-        rtx.renew()
-        found = db[rtx, key]
-        Assert.assertNotNull(found)
-
-        // Don't forget to close the read Txn now we're completely finished. We could
-        // have avoided this if we used a try-with-resources block, but we wanted to
-        // play around with multiple concurrent Txns to demonstrate the "I" in ACID.
-        rtx.close()
-        env.close()
-    }
-
-    /**
-     * In this third tutorial we'll have a look at the Cursor. Up until now we've
-     * just used Dbi, which is good enough for simple cases but unsuitable if you
-     * don't know the key to fetch, or want to iterate over all the data etc.
-     *
-     * @throws IOException if a path was unavailable for memory mapping
-     */
-    @Test
-    @Throws(IOException::class)
-    fun tutorial3() {
-        val env = createSimpleEnv(tmp().newFolder())
-        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
-        val key = ByteBuffer.allocateDirect(env.maxKeySize)
-        val `val` = ByteBuffer.allocateDirect(700)
-        env.txnWrite().use { txn ->
-            // A cursor always belongs to a particular Dbi.
-            val c = db.openCursor(txn)
-
-            // We can put via a Cursor. Note we're adding keys in a strange order,
-            // as we want to show you that LMDB returns them in sorted order.
-            key.put("zzz".toByteArray(StandardCharsets.UTF_8)).flip()
-            `val`.put("lmdb".toByteArray(StandardCharsets.UTF_8)).flip()
-            c.put(key, `val`)
-            key.clear()
-            key.put("aaa".toByteArray(StandardCharsets.UTF_8)).flip()
-            c.put(key, `val`)
-            key.clear()
-            key.put("ccc".toByteArray(StandardCharsets.UTF_8)).flip()
-            c.put(key, `val`)
-
-            // We can read from the Cursor by key.
-            c[key, GetOp.MDB_SET]
-            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.key()).toString(), CoreMatchers.`is`("ccc"))
-
-            // Let's see that LMDB provides the keys in appropriate order....
-            c.seek(SeekOp.MDB_FIRST)
-            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.key()).toString(), CoreMatchers.`is`("aaa"))
-
-            c.seek(SeekOp.MDB_LAST)
-            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.key()).toString(), CoreMatchers.`is`("zzz"))
-
-            c.seek(SeekOp.MDB_PREV)
-            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.key()).toString(), CoreMatchers.`is`("ccc"))
-
-            // Cursors can also delete the current key.
-            c.delete()
-
-            c.close()
-            txn.commit()
-        }
-
-        // A read-only Cursor can survive its original Txn being closed. This is
-        // useful if you want to close the original Txn (eg maybe you created the
-        // Cursor during the constructor of a singleton with a throw-away Txn). Of
-        // course, you cannot use the Cursor if its Txn is closed or currently reset.
-        val tx1 = env.txnRead()
-        val c = db.openCursor(tx1)
-        tx1.close()
-
-        // The Cursor becomes usable again by "renewing" it with an active read Txn.
-        val tx2 = env.txnRead()
-        c.renew(tx2)
-        c.seek(SeekOp.MDB_FIRST)
-
-        // As usual with read Txns, we can reset and renew them. The Cursor does
-        // not need any special handling if we do this.
-        tx2.reset()
-
-        // ... potentially long operation here ...
-        tx2.renew()
-        c.seek(SeekOp.MDB_LAST)
-        tx2.close()
-        env.close()
-    }
-
-    /**
-     * In this fourth tutorial we'll take a quick look at the iterators. These are
-     * a more Java idiomatic form of using the Cursors we looked at in tutorial 3.
-     *
-     * @throws IOException if a path was unavailable for memory mapping
-     */
-    @Test
-    @Throws(IOException::class)
-    fun tutorial4() {
-        val env = createSimpleEnv(tmp().newFolder())
-        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
-        env.txnWrite().use { txn ->
-            val key = ByteBuffer.allocateDirect(env.maxKeySize)
-            val `val` = ByteBuffer.allocateDirect(700)
-
-            // Insert some data. Note that ByteBuffer order defaults to Big Endian.
-            // LMDB does not persist the byte order, but it's critical to sort keys.
-            // If your numeric keys don't sort as expected, review buffer byte order.
-            `val`.putInt(100)
-            key.putInt(1)
-            db.put(txn, key, `val`)
-            key.clear()
-            key.putInt(2)
-            db.put(txn, key, `val`)
-            key.clear()
-
-            // Each iterable uses a cursor and must be closed when finished. Iterate
-            // forward in terms of key ordering starting with the first key.
-            db.iterate(txn, KeyRange.all()).use { ci ->
-                for (kv in ci) {
-                    MatcherAssert.assertThat(kv.key(), CoreMatchers.notNullValue())
-                    MatcherAssert.assertThat(kv.`val`(), CoreMatchers.notNullValue())
-                }
-            }
-
-            // Iterate backward in terms of key ordering starting with the last key.
-            db.iterate(txn, KeyRange.allBackward()).use { ci ->
-                for (kv in ci) {
-                    MatcherAssert.assertThat(kv.key(), CoreMatchers.notNullValue())
-                    MatcherAssert.assertThat(kv.`val`(), CoreMatchers.notNullValue())
-                }
-            }
-
-            // There are many ways to control the desired key range via KeyRange, such
-            // as arbitrary start and stop values, direction etc. We've adopted Guava's
-            // terminology for our range classes (see KeyRangeType for further details).
-            key.putInt(1)
-            val range = KeyRange.atLeastBackward(key)
-            db.iterate(txn, range).use { ci ->
-                for (kv in ci) {
-                    MatcherAssert.assertThat(kv.key(), CoreMatchers.notNullValue())
-                    MatcherAssert.assertThat(kv.`val`(), CoreMatchers.notNullValue())
-                }
-            }
-        }
-
-
-        env.close()
-    }
-
-    /**
-     * In this fifth tutorial we'll explore multiple values sharing a single key.
-     *
-     * @throws IOException if a path was unavailable for memory mapping
-     */
-    @Test
-    @Throws(IOException::class)
-    fun tutorial5() {
-        val env = createSimpleEnv(tmp().newFolder())
-
-        // This time we're going to tell the Dbi it can store > 1 value per key.
-        // There are other flags available if we're storing integers etc.
-        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE, DbiFlags.MDB_DUPSORT)
-
-        // Duplicate support requires both keys and values to be <= max key size.
-        val key = ByteBuffer.allocateDirect(env.maxKeySize)
-        val `val` = ByteBuffer.allocateDirect(env.maxKeySize)
-
-        env.txnWrite().use { txn ->
-            val c = db.openCursor(txn)
-
-            // Store one key, but many values, and in non-natural order.
-            key.put("key".toByteArray(StandardCharsets.UTF_8)).flip()
-            `val`.put("xxx".toByteArray(StandardCharsets.UTF_8)).flip()
-            c.put(key, `val`)
-            `val`.clear()
-            `val`.put("kkk".toByteArray(StandardCharsets.UTF_8)).flip()
-            c.put(key, `val`)
-            `val`.clear()
-            `val`.put("lll".toByteArray(StandardCharsets.UTF_8)).flip()
-            c.put(key, `val`)
-
-            // Cursor can tell us how many values the current key has.
-            val count = c.count()
-            MatcherAssert.assertThat(count, CoreMatchers.`is`(3L))
-
-            // Let's position the Cursor. Note sorting still works.
-            c.seek(SeekOp.MDB_FIRST)
-            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.`val`()).toString(), CoreMatchers.`is`("kkk"))
-
-            c.seek(SeekOp.MDB_LAST)
-            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.`val`()).toString(), CoreMatchers.`is`("xxx"))
-
-            c.seek(SeekOp.MDB_PREV)
-            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.`val`()).toString(), CoreMatchers.`is`("lll"))
-
-            c.close()
-            txn.commit()
-        }
-
-        env.close()
-    }
-
-    /**
-     * Next up we'll show you how to easily check your platform (operating system
-     * and Java version) is working properly with LmdbJava and the embedded LMDB
-     * native library.
-     *
-     * @throws IOException if a path was unavailable for memory mapping
-     */
-    @Test
-    @Throws(IOException::class)
-    fun tutorial6() {
-        // Note we need to specify the Verifier's DBI_COUNT for the Env.
-        val env = Env.create(ByteBufferProxy.PROXY_OPTIMAL).setMapSize(10485760).setMaxDbs(Verifier.DBI_COUNT).open(tmp().newFolder())
-
-        // Create a Verifier (it's a Callable<Long> for those needing full control).
-        val v = Verifier(env)
-
-        // We now run the verifier for 3 seconds; it raises an exception on failure.
-        // The method returns the number of entries it successfully verified.
-        v.runFor(3, TimeUnit.SECONDS)
-        env.close()
-    }
-
-    /**
-     * In this final tutorial we'll look at using Agrona's DirectBuffer.
-     *
-     * @throws IOException if a path was unavailable for memory mapping
-     */
-    @Test
-    @Throws(IOException::class)
-    fun tutorial7() {
-        // The critical difference is we pass the PROXY_DB field to Env.create().
-        // There's also a PROXY_SAFE if you want to stop ByteBuffer's Unsafe use.
-        // Aside from that and a different type argument, it's the same as usual...
-        val env = Env.create(DirectBufferProxy.PROXY_DB).setMapSize(10485760).setMaxDbs(1).open(tmp().newFolder())
-
-        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
-
-        val keyBb = ByteBuffer.allocateDirect(env.maxKeySize)
-        val key: MutableDirectBuffer = UnsafeBuffer(keyBb)
-        val `val`: MutableDirectBuffer = UnsafeBuffer(ByteBuffer.allocateDirect(700))
-
-        env.txnWrite().use { txn ->
-            db.openCursor(txn).use { c ->
-                // Agrona is faster than ByteBuffer and its methods are nicer...
-                `val`.putStringWithoutLengthUtf8(0, "The Value")
-                key.putStringWithoutLengthUtf8(0, "yyy")
-                c.put(key, `val`)
-
-                key.putStringWithoutLengthUtf8(0, "ggg")
-                c.put(key, `val`)
-
-                c.seek(SeekOp.MDB_FIRST)
-                MatcherAssert.assertThat(c.key().getStringWithoutLengthUtf8(0, env.maxKeySize), CoreMatchers.startsWith("ggg"))
-
-                c.seek(SeekOp.MDB_LAST)
-                MatcherAssert.assertThat(c.key().getStringWithoutLengthUtf8(0, env.maxKeySize), CoreMatchers.startsWith("yyy"))
-
-                // DirectBuffer has no position concept. Often you don't want to store
-                // the unnecessary bytes of a varying-size buffer. Let's have a look...
-                val keyLen = key.putStringWithoutLengthUtf8(0, "12characters")
-                MatcherAssert.assertThat(keyLen, CoreMatchers.`is`(12))
-                MatcherAssert.assertThat(key.capacity(), CoreMatchers.`is`(env.maxKeySize))
-
-                // To only store the 12 characters, we simply call wrap:
-                key.wrap(key, 0, keyLen)
-                MatcherAssert.assertThat(key.capacity(), CoreMatchers.`is`(keyLen))
-                c.put(key, `val`)
-                c.seek(SeekOp.MDB_FIRST)
-                MatcherAssert.assertThat(c.key().capacity(), CoreMatchers.`is`(keyLen))
-                MatcherAssert.assertThat(c.key().getStringWithoutLengthUtf8(0, c.key().capacity()), CoreMatchers.`is`("12characters"))
-
-                // To store bigger values again, just wrap the original buffer.
-                key.wrap(keyBb)
-                MatcherAssert.assertThat(key.capacity(), CoreMatchers.`is`(env.maxKeySize))
-            }
-            txn.commit()
-        }
-
-        env.close()
-    }
-
-    // You've finished! There are lots of other neat things we could show you (eg
-    // how to speed up inserts by appending them in key order, using integer
-    // or reverse ordered keys, using Env.DISABLE_CHECKS_PROP etc), but you now
-    // know enough to tackle the JavaDocs with confidence. Have fun!
-    private fun createSimpleEnv(path: File): Env<ByteBuffer> {
-        return Env.create().setMapSize(10485760).setMaxDbs(1).setMaxReaders(1).open(path)
-    }
-
-    companion object {
-        private const val DB_NAME = "my DB"
-    }
-}
+//
+//import org.agrona.MutableDirectBuffer
+//import org.agrona.concurrent.UnsafeBuffer
+//import org.hamcrest.CoreMatchers
+//import org.hamcrest.MatcherAssert
+//import org.junit.Assert
+//import org.junit.Ignore
+//import org.junit.Rule
+//import org.junit.Test
+//import org.junit.rules.TemporaryFolder
+//import org.lmdbjava.ByteBufferProxy
+//import org.lmdbjava.DbiFlags
+//import org.lmdbjava.DirectBufferProxy
+//import org.lmdbjava.Env
+//import org.lmdbjava.GetOp
+//import org.lmdbjava.KeyRange
+//import org.lmdbjava.SeekOp
+//import org.lmdbjava.Verifier
+//import java.io.File
+//import java.io.IOException
+//import java.nio.ByteBuffer
+//import java.nio.charset.StandardCharsets
+//import java.util.concurrent.Executors
+//import java.util.concurrent.TimeUnit
+//
+///**
+// * Welcome to LmdbJava!
+// *
+// *
+// *
+// * This short tutorial will walk you through using LmdbJava step-by-step.
+// *
+// *
+// *
+// * If you are using a 64-bit Windows, Linux or OS X machine, you can simply run
+// * this tutorial by adding the LmdbJava JAR to your classpath. It includes the
+// * required system libraries. If you are using another 64-bit platform, you'll
+// * need to install the LMDB system library yourself. 32-bit platforms are not
+// * supported.
+// */
+//@Ignore
+//class TutorialTest {
+//
+//    private val folder = TemporaryFolder()
+//
+//    @Rule
+//    fun tmp(): TemporaryFolder {
+//        return folder
+//    }
+//
+//    /**
+//     * In this first tutorial we will use LmdbJava with some basic defaults.
+//     *
+//     * @throws IOException if a path was unavailable for memory mapping
+//     */
+//    @Test
+//    @Throws(IOException::class)
+//    fun tutorial1() {
+//        // We need a storage directory first.
+//        // The path cannot be on a remote file system.
+//        val path = tmp().newFolder()
+//
+//        // We always need an Env. An Env owns a physical on-disk storage file. One
+//        // Env can store many different databases (ie sorted maps).
+//        val env = Env.create() // LMDB also needs to know how large our DB might be. Over-estimating is OK.
+//            .setMapSize(10485760) // LMDB also needs to know how many DBs (Dbi) we want to store in this Env.
+//            .setMaxDbs(1) // Now let's open the Env. The same path can be concurrently opened and
+//            // used in different processes, but do not open the same path twice in
+//            // the same process at the same time.
+//            .open(path)
+//
+//        // We need a Dbi for each DB. A Dbi roughly equates to a sorted map. The
+//        // MDB_CREATE flag causes the DB to be created if it doesn't already exist.
+//        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
+//
+//        // We want to store some data, so we will need a direct ByteBuffer.
+//        // Note that LMDB keys cannot exceed maxKeySize bytes (511 bytes by default).
+//        // Values can be larger.
+//        val key = ByteBuffer.allocateDirect(env.maxKeySize)
+//        val `val` = ByteBuffer.allocateDirect(700)
+//        key.put("greeting".toByteArray(StandardCharsets.UTF_8)).flip()
+//        `val`.put("Hello world".toByteArray(StandardCharsets.UTF_8)).flip()
+//        val valSize = `val`.remaining()
+//
+//        // Now store it. Dbi.put() internally begins and commits a transaction (Txn).
+//        db.put(key, `val`)
+//
+//        // To fetch any data from LMDB we need a Txn. A Txn is very important in
+//        // LmdbJava because it offers ACID characteristics and internally holds a
+//        // read-only key buffer and read-only value buffer. These read-only buffers
+//        // are always the same two Java objects, but point to different LMDB-managed
+//        // memory as we use Dbi (and Cursor) methods. These read-only buffers remain
+//        // valid only until the Txn is released or the next Dbi or Cursor call. If
+//        // you need data afterwards, you should copy the bytes to your own buffer.
+//        env.txnRead().use { txn ->
+//            val found = db[txn, key]
+//            Assert.assertNotNull(found)
+//
+//            // The fetchedVal is read-only and points to LMDB memory
+//            val fetchedVal = txn.`val`()
+//            MatcherAssert.assertThat(fetchedVal.remaining(), CoreMatchers.`is`(valSize))
+//
+//            // Let's double-check the fetched value is correct
+//            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(fetchedVal).toString(), CoreMatchers.`is`("Hello world"))
+//        }
+//
+//        // We can also delete. The simplest way is to let Dbi allocate a new Txn...
+//        db.delete(key)
+//        env.txnRead().use { txn -> Assert.assertNull(db[txn, key]) }
+//        env.close()
+//    }
+//
+//    /**
+//     * In this second tutorial we'll learn more about LMDB's ACID Txns.
+//     *
+//     * @throws IOException          if a path was unavailable for memory mapping
+//     * @throws InterruptedException if executor shutdown interrupted
+//     */
+//    @Test
+//    @Throws(IOException::class, InterruptedException::class)
+//    fun tutorial2() {
+//        val env = createSimpleEnv(tmp().newFolder())
+//        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
+//        val key = ByteBuffer.allocateDirect(env.maxKeySize)
+//        val `val` = ByteBuffer.allocateDirect(700)
+//
+//        // Let's write and commit "key1" via a Txn. A Txn can include multiple Dbis.
+//        // Note write Txns block other write Txns, due to writes being serialized.
+//        // It's therefore important to avoid unnecessarily long-lived write Txns.
+//        env.txnWrite().use { txn ->
+//            key.put("key1".toByteArray(StandardCharsets.UTF_8)).flip()
+//            `val`.put("lmdb".toByteArray(StandardCharsets.UTF_8)).flip()
+//            db.put(txn, key, `val`)
+//
+//            // We can read data too, even though this is a write Txn.
+//            val found = db[txn, key]
+//            Assert.assertNotNull(found)
+//
+//            // An explicit commit is required, otherwise Txn.close() rolls it back.
+//            txn.commit()
+//        }
+//
+//        // Open a read-only Txn. It only sees data that existed at Txn creation time.
+//        val rtx = env.txnRead()
+//
+//        // Our read Txn can fetch key1 without problem, as it existed at Txn creation.
+//        var found = db[rtx, key]
+//        Assert.assertNotNull(found)
+//
+//        // Note that our main test thread holds the Txn. Only one Txn per thread is
+//        // typically permitted (the exception is a read-only Env with MDB_NOTLS).
+//        //
+//        // Let's write out a "key2" via a new write Txn in a different thread.
+//        val es = Executors.newCachedThreadPool()
+//        es.execute {
+//            env.txnWrite().use { txn ->
+//                key.clear()
+//                key.put("key2".toByteArray(StandardCharsets.UTF_8)).flip()
+//                db.put(txn, key, `val`)
+//                txn.commit()
+//            }
+//        }
+//        es.shutdown()
+//        es.awaitTermination(10, TimeUnit.SECONDS)
+//
+//        // Even though key2 has been committed, our read Txn still can't see it.
+//        found = db[rtx, key]
+//        Assert.assertNull(found)
+//
+//        // To see key2, we could create a new Txn. But a reset/renew is much faster.
+//        // Reset/renew is also important to avoid long-lived read Txns, as these
+//        // prevent the re-use of free pages by write Txns (ie the DB will grow).
+//        rtx.reset()
+//        // ... potentially long operation here ...
+//        rtx.renew()
+//        found = db[rtx, key]
+//        Assert.assertNotNull(found)
+//
+//        // Don't forget to close the read Txn now we're completely finished. We could
+//        // have avoided this if we used a try-with-resources block, but we wanted to
+//        // play around with multiple concurrent Txns to demonstrate the "I" in ACID.
+//        rtx.close()
+//        env.close()
+//    }
+//
+//    /**
+//     * In this third tutorial we'll have a look at the Cursor. Up until now we've
+//     * just used Dbi, which is good enough for simple cases but unsuitable if you
+//     * don't know the key to fetch, or want to iterate over all the data etc.
+//     *
+//     * @throws IOException if a path was unavailable for memory mapping
+//     */
+//    @Test
+//    @Throws(IOException::class)
+//    fun tutorial3() {
+//        val env = createSimpleEnv(tmp().newFolder())
+//        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
+//        val key = ByteBuffer.allocateDirect(env.maxKeySize)
+//        val `val` = ByteBuffer.allocateDirect(700)
+//        env.txnWrite().use { txn ->
+//            // A cursor always belongs to a particular Dbi.
+//            val c = db.openCursor(txn)
+//
+//            // We can put via a Cursor. Note we're adding keys in a strange order,
+//            // as we want to show you that LMDB returns them in sorted order.
+//            key.put("zzz".toByteArray(StandardCharsets.UTF_8)).flip()
+//            `val`.put("lmdb".toByteArray(StandardCharsets.UTF_8)).flip()
+//            c.put(key, `val`)
+//            key.clear()
+//            key.put("aaa".toByteArray(StandardCharsets.UTF_8)).flip()
+//            c.put(key, `val`)
+//            key.clear()
+//            key.put("ccc".toByteArray(StandardCharsets.UTF_8)).flip()
+//            c.put(key, `val`)
+//
+//            // We can read from the Cursor by key.
+//            c[key, GetOp.MDB_SET]
+//            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.key()).toString(), CoreMatchers.`is`("ccc"))
+//
+//            // Let's see that LMDB provides the keys in appropriate order....
+//            c.seek(SeekOp.MDB_FIRST)
+//            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.key()).toString(), CoreMatchers.`is`("aaa"))
+//
+//            c.seek(SeekOp.MDB_LAST)
+//            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.key()).toString(), CoreMatchers.`is`("zzz"))
+//
+//            c.seek(SeekOp.MDB_PREV)
+//            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.key()).toString(), CoreMatchers.`is`("ccc"))
+//
+//            // Cursors can also delete the current key.
+//            c.delete()
+//
+//            c.close()
+//            txn.commit()
+//        }
+//
+//        // A read-only Cursor can survive its original Txn being closed. This is
+//        // useful if you want to close the original Txn (eg maybe you created the
+//        // Cursor during the constructor of a singleton with a throw-away Txn). Of
+//        // course, you cannot use the Cursor if its Txn is closed or currently reset.
+//        val tx1 = env.txnRead()
+//        val c = db.openCursor(tx1)
+//        tx1.close()
+//
+//        // The Cursor becomes usable again by "renewing" it with an active read Txn.
+//        val tx2 = env.txnRead()
+//        c.renew(tx2)
+//        c.seek(SeekOp.MDB_FIRST)
+//
+//        // As usual with read Txns, we can reset and renew them. The Cursor does
+//        // not need any special handling if we do this.
+//        tx2.reset()
+//
+//        // ... potentially long operation here ...
+//        tx2.renew()
+//        c.seek(SeekOp.MDB_LAST)
+//        tx2.close()
+//        env.close()
+//    }
+//
+//    /**
+//     * In this fourth tutorial we'll take a quick look at the iterators. These are
+//     * a more Java idiomatic form of using the Cursors we looked at in tutorial 3.
+//     *
+//     * @throws IOException if a path was unavailable for memory mapping
+//     */
+//    @Test
+//    @Throws(IOException::class)
+//    fun tutorial4() {
+//        val env = createSimpleEnv(tmp().newFolder())
+//        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
+//        env.txnWrite().use { txn ->
+//            val key = ByteBuffer.allocateDirect(env.maxKeySize)
+//            val `val` = ByteBuffer.allocateDirect(700)
+//
+//            // Insert some data. Note that ByteBuffer order defaults to Big Endian.
+//            // LMDB does not persist the byte order, but it's critical to sort keys.
+//            // If your numeric keys don't sort as expected, review buffer byte order.
+//            `val`.putInt(100)
+//            key.putInt(1)
+//            db.put(txn, key, `val`)
+//            key.clear()
+//            key.putInt(2)
+//            db.put(txn, key, `val`)
+//            key.clear()
+//
+//            // Each iterable uses a cursor and must be closed when finished. Iterate
+//            // forward in terms of key ordering starting with the first key.
+//            db.iterate(txn, KeyRange.all()).use { ci ->
+//                for (kv in ci) {
+//                    MatcherAssert.assertThat(kv.key(), CoreMatchers.notNullValue())
+//                    MatcherAssert.assertThat(kv.`val`(), CoreMatchers.notNullValue())
+//                }
+//            }
+//
+//            // Iterate backward in terms of key ordering starting with the last key.
+//            db.iterate(txn, KeyRange.allBackward()).use { ci ->
+//                for (kv in ci) {
+//                    MatcherAssert.assertThat(kv.key(), CoreMatchers.notNullValue())
+//                    MatcherAssert.assertThat(kv.`val`(), CoreMatchers.notNullValue())
+//                }
+//            }
+//
+//            // There are many ways to control the desired key range via KeyRange, such
+//            // as arbitrary start and stop values, direction etc. We've adopted Guava's
+//            // terminology for our range classes (see KeyRangeType for further details).
+//            key.putInt(1)
+//            val range = KeyRange.atLeastBackward(key)
+//            db.iterate(txn, range).use { ci ->
+//                for (kv in ci) {
+//                    MatcherAssert.assertThat(kv.key(), CoreMatchers.notNullValue())
+//                    MatcherAssert.assertThat(kv.`val`(), CoreMatchers.notNullValue())
+//                }
+//            }
+//        }
+//
+//
+//        env.close()
+//    }
+//
+//    /**
+//     * In this fifth tutorial we'll explore multiple values sharing a single key.
+//     *
+//     * @throws IOException if a path was unavailable for memory mapping
+//     */
+//    @Test
+//    @Throws(IOException::class)
+//    fun tutorial5() {
+//        val env = createSimpleEnv(tmp().newFolder())
+//
+//        // This time we're going to tell the Dbi it can store > 1 value per key.
+//        // There are other flags available if we're storing integers etc.
+//        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE, DbiFlags.MDB_DUPSORT)
+//
+//        // Duplicate support requires both keys and values to be <= max key size.
+//        val key = ByteBuffer.allocateDirect(env.maxKeySize)
+//        val `val` = ByteBuffer.allocateDirect(env.maxKeySize)
+//
+//        env.txnWrite().use { txn ->
+//            val c = db.openCursor(txn)
+//
+//            // Store one key, but many values, and in non-natural order.
+//            key.put("key".toByteArray(StandardCharsets.UTF_8)).flip()
+//            `val`.put("xxx".toByteArray(StandardCharsets.UTF_8)).flip()
+//            c.put(key, `val`)
+//            `val`.clear()
+//            `val`.put("kkk".toByteArray(StandardCharsets.UTF_8)).flip()
+//            c.put(key, `val`)
+//            `val`.clear()
+//            `val`.put("lll".toByteArray(StandardCharsets.UTF_8)).flip()
+//            c.put(key, `val`)
+//
+//            // Cursor can tell us how many values the current key has.
+//            val count = c.count()
+//            MatcherAssert.assertThat(count, CoreMatchers.`is`(3L))
+//
+//            // Let's position the Cursor. Note sorting still works.
+//            c.seek(SeekOp.MDB_FIRST)
+//            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.`val`()).toString(), CoreMatchers.`is`("kkk"))
+//
+//            c.seek(SeekOp.MDB_LAST)
+//            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.`val`()).toString(), CoreMatchers.`is`("xxx"))
+//
+//            c.seek(SeekOp.MDB_PREV)
+//            MatcherAssert.assertThat(StandardCharsets.UTF_8.decode(c.`val`()).toString(), CoreMatchers.`is`("lll"))
+//
+//            c.close()
+//            txn.commit()
+//        }
+//
+//        env.close()
+//    }
+//
+//    /**
+//     * Next up we'll show you how to easily check your platform (operating system
+//     * and Java version) is working properly with LmdbJava and the embedded LMDB
+//     * native library.
+//     *
+//     * @throws IOException if a path was unavailable for memory mapping
+//     */
+//    @Test
+//    @Throws(IOException::class)
+//    fun tutorial6() {
+//        // Note we need to specify the Verifier's DBI_COUNT for the Env.
+//        val env = Env.create(ByteBufferProxy.PROXY_OPTIMAL).setMapSize(10485760).setMaxDbs(Verifier.DBI_COUNT).open(tmp().newFolder())
+//
+//        // Create a Verifier (it's a Callable<Long> for those needing full control).
+//        val v = Verifier(env)
+//
+//        // We now run the verifier for 3 seconds; it raises an exception on failure.
+//        // The method returns the number of entries it successfully verified.
+//        v.runFor(3, TimeUnit.SECONDS)
+//        env.close()
+//    }
+//
+//    /**
+//     * In this final tutorial we'll look at using Agrona's DirectBuffer.
+//     *
+//     * @throws IOException if a path was unavailable for memory mapping
+//     */
+//    @Test
+//    @Throws(IOException::class)
+//    fun tutorial7() {
+//        // The critical difference is we pass the PROXY_DB field to Env.create().
+//        // There's also a PROXY_SAFE if you want to stop ByteBuffer's Unsafe use.
+//        // Aside from that and a different type argument, it's the same as usual...
+//        val env = Env.create(DirectBufferProxy.PROXY_DB).setMapSize(10485760).setMaxDbs(1).open(tmp().newFolder())
+//
+//        val db = env.openDbi(DB_NAME, DbiFlags.MDB_CREATE)
+//
+//        val keyBb = ByteBuffer.allocateDirect(env.maxKeySize)
+//        val key: MutableDirectBuffer = UnsafeBuffer(keyBb)
+//        val `val`: MutableDirectBuffer = UnsafeBuffer(ByteBuffer.allocateDirect(700))
+//
+//        env.txnWrite().use { txn ->
+//            db.openCursor(txn).use { c ->
+//                // Agrona is faster than ByteBuffer and its methods are nicer...
+//                `val`.putStringWithoutLengthUtf8(0, "The Value")
+//                key.putStringWithoutLengthUtf8(0, "yyy")
+//                c.put(key, `val`)
+//
+//                key.putStringWithoutLengthUtf8(0, "ggg")
+//                c.put(key, `val`)
+//
+//                c.seek(SeekOp.MDB_FIRST)
+//                MatcherAssert.assertThat(c.key().getStringWithoutLengthUtf8(0, env.maxKeySize), CoreMatchers.startsWith("ggg"))
+//
+//                c.seek(SeekOp.MDB_LAST)
+//                MatcherAssert.assertThat(c.key().getStringWithoutLengthUtf8(0, env.maxKeySize), CoreMatchers.startsWith("yyy"))
+//
+//                // DirectBuffer has no position concept. Often you don't want to store
+//                // the unnecessary bytes of a varying-size buffer. Let's have a look...
+//                val keyLen = key.putStringWithoutLengthUtf8(0, "12characters")
+//                MatcherAssert.assertThat(keyLen, CoreMatchers.`is`(12))
+//                MatcherAssert.assertThat(key.capacity(), CoreMatchers.`is`(env.maxKeySize))
+//
+//                // To only store the 12 characters, we simply call wrap:
+//                key.wrap(key, 0, keyLen)
+//                MatcherAssert.assertThat(key.capacity(), CoreMatchers.`is`(keyLen))
+//                c.put(key, `val`)
+//                c.seek(SeekOp.MDB_FIRST)
+//                MatcherAssert.assertThat(c.key().capacity(), CoreMatchers.`is`(keyLen))
+//                MatcherAssert.assertThat(c.key().getStringWithoutLengthUtf8(0, c.key().capacity()), CoreMatchers.`is`("12characters"))
+//
+//                // To store bigger values again, just wrap the original buffer.
+//                key.wrap(keyBb)
+//                MatcherAssert.assertThat(key.capacity(), CoreMatchers.`is`(env.maxKeySize))
+//            }
+//            txn.commit()
+//        }
+//
+//        env.close()
+//    }
+//
+//    // You've finished! There are lots of other neat things we could show you (eg
+//    // how to speed up inserts by appending them in key order, using integer
+//    // or reverse ordered keys, using Env.DISABLE_CHECKS_PROP etc), but you now
+//    // know enough to tackle the JavaDocs with confidence. Have fun!
+//    private fun createSimpleEnv(path: File): Env<ByteBuffer> {
+//        return Env.create().setMapSize(10485760).setMaxDbs(1).setMaxReaders(1).open(path)
+//    }
+//
+//    companion object {
+//        private const val DB_NAME = "my DB"
+//    }
+//}
