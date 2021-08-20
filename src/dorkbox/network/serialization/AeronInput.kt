@@ -262,8 +262,8 @@ class AeronInput
         var b = internalBuffer!!.getByte(position++).toInt()
         var result = b and 0x7F
         if (b and 0x80 != 0) {
-            val byteBuf = internalBuffer
-            b = byteBuf!!.getByte(position++).toInt()
+            val byteBuf = internalBuffer!!
+            b = byteBuf.getByte(position++).toInt()
             result = result or (b and 0x7F shl 7)
             if (b and 0x80 != 0) {
                 b = byteBuf.getByte(position++).toInt()
