@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2018, Nathan Sweet
+/* Copyright (c) 2008-2020, Nathan Sweet
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following
@@ -19,21 +19,22 @@
 package dorkboxTest.network.kryo
 
 import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.io.Input
-import com.esotericsoftware.kryo.io.Output
-import dorkbox.network.serialization.AeronInput
-import dorkbox.network.serialization.AeronOutput
+import com.esotericsoftware.kryo.io.*
+import dorkboxTest.network.kryo.KryoAssert.assertDoubleEquals
+import dorkboxTest.network.kryo.KryoAssert.assertFloatEquals
 import org.junit.Assert
 import org.junit.Test
-import java.io.IOException
+import java.io.*
+import java.nio.Buffer
+import java.nio.ByteBuffer
 import java.util.*
 
 /** @author Nathan Sweet
  */
-class InputOutputByteBufTest : KryoTestCase() {
+internal class InputOutputTest : KryoTestCase() {
     @Test
     fun testByteBufferInputEnd() {
-        val `in` = AeronInput(byteArrayOf(123, 0, 0, 0))
+        val `in` = Input(ByteArrayInputStream(byteArrayOf(123, 0, 0, 0)))
         Assert.assertFalse(`in`.end())
         `in`.setPosition(4)
         Assert.assertTrue(`in`.end())
@@ -41,8 +42,9 @@ class InputOutputByteBufTest : KryoTestCase() {
 
     @Test
     @Throws(IOException::class)
-    fun testOutputBytes() {
-        val output = AeronOutput(0)
+    fun testOutputStream() {
+        val buffer = ByteArrayOutputStream()
+        val output = Output(buffer, 2)
         output.writeBytes(byteArrayOf(11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26))
         output.writeBytes(byteArrayOf(31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46))
         output.writeBytes(byteArrayOf(51, 52, 53, 54, 55, 56, 57, 58))
@@ -54,48 +56,28 @@ class InputOutputByteBufTest : KryoTestCase() {
                 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,  //
                 51, 52, 53, 54, 55, 56, 57, 58,  //
                 61, 62, 63, 64, 65
-            ), output.toBytes()
+            ), buffer.toByteArray()
         )
     }
 
     @Test
     @Throws(IOException::class)
-    fun testOutputBytesArray() {
-        val buffer = byteArrayOf( //
-            11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,  //
-            31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,  //
-            51, 52, 53, 54, 55, 56, 57, 58,  //
-            61, 62, 63, 64, 65
-        )
-        val output = AeronOutput(buffer)
-        output.setPosition(buffer.size)
-        Assert.assertArrayEquals(
-            byteArrayOf( //
-                11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,  //
-                31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,  //
-                51, 52, 53, 54, 55, 56, 57, 58,  //
-                61, 62, 63, 64, 65
-            ), output.toBytes()
-        )
-    }
-
-    @Test
-    @Throws(IOException::class)
-    fun testInputBytes() {
+    fun testInputStream() {
         val bytes = byteArrayOf( //
             11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,  //
             31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,  //
             51, 52, 53, 54, 55, 56, 57, 58,  //
             61, 62, 63, 64, 65
         )
-        var input = AeronInput(bytes)
+        val buffer = ByteArrayInputStream(bytes)
+        var input = Input(buffer, 2)
         val temp = ByteArray(1024)
         var count = input.read(temp, 512, bytes.size)
         Assert.assertEquals(bytes.size.toLong(), count.toLong())
         var temp2 = ByteArray(count)
         System.arraycopy(temp, 512, temp2, 0, count)
         Assert.assertArrayEquals(bytes, temp2)
-        input = AeronInput(bytes)
+        input = Input(bytes)
         count = input.read(temp, 512, 512)
         Assert.assertEquals(bytes.size.toLong(), count.toLong())
         temp2 = ByteArray(count)
@@ -106,7 +88,7 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(IOException::class)
     fun testWriteBytes() {
-        val buffer = AeronOutput(512)
+        val buffer = Output(512)
         buffer.writeBytes(byteArrayOf(11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26))
         buffer.writeBytes(byteArrayOf(31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46))
         buffer.writeByte(51)
@@ -130,12 +112,13 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(IOException::class)
     fun testStrings() {
-        runStringTest(AeronOutput(4096))
-        runStringTest(AeronOutput(897))
-        val write: Output = AeronOutput(21)
+        runStringTest(Output(4096))
+        runStringTest(Output(897))
+        runStringTest(Output(ByteArrayOutputStream()))
+        val write = Output(21)
         val value = "abcdef\u00E1\u00E9\u00ED\u00F3\u00FA\u1234"
         write.writeString(value)
-        var read: Input = AeronInput(write.toBytes())
+        var read = Input(write.toBytes())
         Assert.assertEquals(value, read.readString())
         write.reset()
         write.writeString(null)
@@ -155,12 +138,11 @@ class InputOutputByteBufTest : KryoTestCase() {
 
     @Test
     fun testGrowingBufferForAscii() {
-        // Initial size of 2.
-        val output = AeronOutput(2)
+        // Initial size of 0.
+        val output = Output(0, 1024)
         // Check that it is possible to write an ASCII string into the output buffer.
         output.writeString("node/read")
-        val input: Input = AeronInput(output.toBytes(), 0, output.position())
-        Assert.assertEquals("node/read", input.readString())
+        Assert.assertEquals("node/read", Input(output.buffer, 0, output.position()).readString())
     }
 
     @Throws(IOException::class)
@@ -171,27 +153,27 @@ class InputOutputByteBufTest : KryoTestCase() {
         val value = buffer.toString()
         write.writeString(value)
         write.writeString(value)
-        var read = AeronInput(write.toBytes())
+        var read = Input(write.toBytes())
         Assert.assertEquals(value, read.readString())
         Assert.assertEquals(value, read.readStringBuilder().toString())
         write.reset()
         write.writeString(buffer.toString())
         write.writeString(buffer.toString())
-        read = AeronInput(write.toBytes())
+        read = Input(write.toBytes())
         Assert.assertEquals(value, read.readStringBuilder().toString())
         Assert.assertEquals(value, read.readString())
         if (length <= 127) {
             write.reset()
             write.writeAscii(value)
             write.writeAscii(value)
-            read = AeronInput(write.toBytes())
+            read = Input(write.toBytes())
             Assert.assertEquals(value, read.readStringBuilder().toString())
             Assert.assertEquals(value, read.readString())
         }
     }
 
     @Throws(IOException::class)
-    private fun runStringTest(write: AeronOutput) {
+    private fun runStringTest(write: Output) {
         val value1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\rabcdefghijklmnopqrstuvwxyz\n1234567890\t\"!`?'.,;:()[]{}<>|/@\\^$-%+=#_&~*"
         val value2 = "abcdef\u00E1\u00E9\u00ED\u00F3\u00FA\u1234"
         write.writeString("")
@@ -205,7 +187,7 @@ class InputOutputByteBufTest : KryoTestCase() {
         write.writeString(value2)
         for (i in 0..126) write.writeString(i.toChar().toString())
         for (i in 0..126) write.writeString(i.toChar().toString() + "abc")
-        val read = AeronInput(write.toBytes())
+        val read = Input(write.toBytes())
         Assert.assertEquals("", read.readString())
         Assert.assertEquals("1", read.readString())
         Assert.assertEquals("22", read.readString())
@@ -217,8 +199,6 @@ class InputOutputByteBufTest : KryoTestCase() {
         Assert.assertEquals(value2, read.readString())
         for (i in 0..126) Assert.assertEquals(i.toChar().toString(), read.readString())
         for (i in 0..126) Assert.assertEquals(i.toChar().toString() + "abc", read.readString())
-
-        // now test string builder
         read.reset()
         Assert.assertEquals("", read.readStringBuilder().toString())
         Assert.assertEquals("1", read.readStringBuilder().toString())
@@ -236,11 +216,11 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(IOException::class)
     fun testCanReadInt() {
-        val write = AeronOutput(32)
-        var read = AeronInput(write.toBytes())
+        val write = Output(ByteArrayOutputStream())
+        var read = Input(write.toBytes())
         Assert.assertFalse(read.canReadVarInt())
         write.writeVarInt(400, true)
-        read = AeronInput(write.toBytes())
+        read = Input(write.toBytes())
         Assert.assertTrue(read.canReadVarInt())
         read.setLimit(read.limit() - 1)
         Assert.assertFalse(read.canReadVarInt())
@@ -249,16 +229,16 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(IOException::class)
     fun testVarIntFlagOutput() {
-        val output = AeronOutput(4096)
-        val input = AeronInput(output.internalBuffer)
+        val output = Output(4096)
+        val input = Input(output.buffer)
         runVarIntFlagsTest(output, input)
     }
 
     @Test
     @Throws(IOException::class)
     fun testVarIntFlagByteBufferOutput() {
-        val output = AeronOutput(4096)
-        val input = AeronInput(output.internalBuffer)
+        val output = ByteBufferOutput(4096)
+        val input = ByteBufferInput(output.byteBuffer)
         runVarIntFlagsTest(output, input)
     }
 
@@ -295,8 +275,8 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(IOException::class)
     fun testInts() {
-        runIntTest(AeronOutput(4096))
-        runIntTest(AeronOutput(32))
+        runIntTest(Output(4096))
+        runIntTest(Output(ByteArrayOutputStream()))
     }
 
     @Throws(IOException::class)
@@ -368,7 +348,7 @@ class InputOutputByteBufTest : KryoTestCase() {
         Assert.assertEquals(5, write.writeVarInt(Int.MAX_VALUE - 1, true).toLong())
         Assert.assertEquals(5, write.writeVarInt(Int.MAX_VALUE, false).toLong())
         Assert.assertEquals(5, write.writeVarInt(Int.MAX_VALUE, true).toLong())
-        val read = AeronInput(write.toBytes())
+        val read = Input(write.toBytes())
         Assert.assertEquals(0, read.readInt().toLong())
         Assert.assertEquals(63, read.readInt().toLong())
         Assert.assertEquals(64, read.readInt().toLong())
@@ -457,8 +437,8 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(IOException::class)
     fun testLongs() {
-        runLongTest(AeronOutput(4096))
-        runLongTest(AeronOutput(32))
+        runLongTest(Output(4096))
+        runLongTest(Output(ByteArrayOutputStream()))
     }
 
     @Throws(IOException::class)
@@ -524,7 +504,7 @@ class InputOutputByteBufTest : KryoTestCase() {
         Assert.assertEquals(9, write.writeVarLong(-134217728, true).toLong())
         Assert.assertEquals(5, write.writeVarLong(-134217729, false).toLong())
         Assert.assertEquals(9, write.writeVarLong(-134217729, true).toLong())
-        val read = AeronInput(write.toBytes())
+        val read = Input(write.toBytes())
         Assert.assertEquals(0, read.readLong())
         Assert.assertEquals(63, read.readLong())
         Assert.assertEquals(64, read.readLong())
@@ -603,8 +583,8 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(IOException::class)
     fun testShorts() {
-        runShortTest(AeronOutput(4096))
-        runShortTest(AeronOutput(32))
+        runShortTest(Output(4096))
+        runShortTest(Output(ByteArrayOutputStream()))
     }
 
     @Throws(IOException::class)
@@ -624,7 +604,7 @@ class InputOutputByteBufTest : KryoTestCase() {
         write.writeShort(-8192)
         write.writeShort(-16384)
         write.writeShort(-32768)
-        val read = AeronInput(write.toBytes())
+        val read = Input(write.toBytes())
         Assert.assertEquals(0, read.readShort().toLong())
         Assert.assertEquals(63, read.readShort().toLong())
         Assert.assertEquals(64, read.readShort().toLong())
@@ -645,8 +625,8 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(IOException::class)
     fun testFloats() {
-        runFloatTest(AeronOutput(4096))
-        runFloatTest(AeronOutput(32))
+        runFloatTest(Output(4096))
+        runFloatTest(Output(ByteArrayOutputStream()))
     }
 
     @Throws(IOException::class)
@@ -692,55 +672,55 @@ class InputOutputByteBufTest : KryoTestCase() {
         Assert.assertEquals(5, write.writeVarFloat(-65f, 1000f, true).toLong())
         Assert.assertEquals(4, write.writeVarFloat(-8192f, 1000f, false).toLong())
         Assert.assertEquals(5, write.writeVarFloat(-8192f, 1000f, true).toLong())
-        val read = AeronInput(write.toBytes())
-        KryoAssert.assertFloatEquals(read.readFloat(), 0.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), 63.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), 64.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), 127.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), 128.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), 8192.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), 16384.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), 32767.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), -63.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), -64.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), -127.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), -128.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), -8192.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), -16384.0)
-        KryoAssert.assertFloatEquals(read.readFloat(), -32768.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 0.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 0.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 63.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 63.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 64.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 64.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 127.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 127.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 128.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 128.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 8191.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 8191.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 8192.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 8192.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 16383.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 16383.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 16384.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 16384.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), 32767.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), 32767.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), -64.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), -64.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), -65.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), -65.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, false), -8192.0)
-        KryoAssert.assertFloatEquals(read.readVarFloat(1000f, true), -8192.0)
+        val read = Input(write.toBytes())
+        assertFloatEquals(read.readFloat(), 0f)
+        assertFloatEquals(read.readFloat(), 63f)
+        assertFloatEquals(read.readFloat(), 64f)
+        assertFloatEquals(read.readFloat(), 127f)
+        assertFloatEquals(read.readFloat(), 128f)
+        assertFloatEquals(read.readFloat(), 8192f)
+        assertFloatEquals(read.readFloat(), 16384f)
+        assertFloatEquals(read.readFloat(), 32767f)
+        assertFloatEquals(read.readFloat(), -63f)
+        assertFloatEquals(read.readFloat(), -64f)
+        assertFloatEquals(read.readFloat(), -127f)
+        assertFloatEquals(read.readFloat(), -128f)
+        assertFloatEquals(read.readFloat(), -8192f)
+        assertFloatEquals(read.readFloat(), -16384f)
+        assertFloatEquals(read.readFloat(), -32768f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 0f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 0f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 63f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 63f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 64f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 64f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 127f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 127f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 128f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 128f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 8191f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 8191f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 8192f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 8192f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 16383f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 16383f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 16384f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 16384f)
+        assertFloatEquals(read.readVarFloat(1000f, true), 32767f)
+        assertFloatEquals(read.readVarFloat(1000f, false), 32767f)
+        assertFloatEquals(read.readVarFloat(1000f, false), -64f)
+        assertFloatEquals(read.readVarFloat(1000f, true), -64f)
+        assertFloatEquals(read.readVarFloat(1000f, false), -65f)
+        assertFloatEquals(read.readVarFloat(1000f, true), -65f)
+        assertFloatEquals(read.readVarFloat(1000f, false), -8192f)
+        assertFloatEquals(read.readVarFloat(1000f, true), -8192f)
     }
 
     @Test
     @Throws(IOException::class)
     fun testDoubles() {
-        runDoubleTest(AeronOutput(4096))
-        runDoubleTest(AeronOutput(32))
+        runDoubleTest(Output(4096))
+        runDoubleTest(Output(ByteArrayOutputStream()))
     }
 
     @Throws(IOException::class)
@@ -787,56 +767,56 @@ class InputOutputByteBufTest : KryoTestCase() {
         Assert.assertEquals(4, write.writeVarDouble(-8192.0, 1000.0, false).toLong())
         Assert.assertEquals(9, write.writeVarDouble(-8192.0, 1000.0, true).toLong())
         write.writeDouble(1.23456)
-        val read = AeronInput(write.toBytes())
-        KryoAssert.assertDoubleEquals(read.readDouble(), 0.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), 63.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), 64.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), 127.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), 128.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), 8192.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), 16384.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), 32767.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), -63.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), -64.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), -127.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), -128.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), -8192.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), -16384.0)
-        KryoAssert.assertDoubleEquals(read.readDouble(), -32768.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 0.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 0.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 63.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 63.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 64.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 64.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 127.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 127.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 128.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 128.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 8191.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 8191.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 8192.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 8192.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 16383.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 16383.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 16384.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 16384.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), 32767.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), 32767.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), -64.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), -64.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), -65.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), -65.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, false), -8192.0)
-        KryoAssert.assertDoubleEquals(read.readVarDouble(1000.0, true), -8192.0)
-        KryoAssert.assertDoubleEquals(1.23456, read.readDouble())
+        val read = Input(write.toBytes())
+        assertDoubleEquals(read.readDouble(), 0.0)
+        assertDoubleEquals(read.readDouble(), 63.0)
+        assertDoubleEquals(read.readDouble(), 64.0)
+        assertDoubleEquals(read.readDouble(), 127.0)
+        assertDoubleEquals(read.readDouble(), 128.0)
+        assertDoubleEquals(read.readDouble(), 8192.0)
+        assertDoubleEquals(read.readDouble(), 16384.0)
+        assertDoubleEquals(read.readDouble(), 32767.0)
+        assertDoubleEquals(read.readDouble(), -63.0)
+        assertDoubleEquals(read.readDouble(), -64.0)
+        assertDoubleEquals(read.readDouble(), -127.0)
+        assertDoubleEquals(read.readDouble(), -128.0)
+        assertDoubleEquals(read.readDouble(), -8192.0)
+        assertDoubleEquals(read.readDouble(), -16384.0)
+        assertDoubleEquals(read.readDouble(), -32768.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 0.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 0.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 63.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 63.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 64.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 64.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 127.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 127.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 128.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 128.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 8191.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 8191.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 8192.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 8192.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 16383.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 16383.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 16384.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 16384.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), 32767.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), 32767.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), -64.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), -64.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), -65.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), -65.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, false), -8192.0)
+        assertDoubleEquals(read.readVarDouble(1000.0, true), -8192.0)
+        assertDoubleEquals(1.23456, read.readDouble())
     }
 
     @Test
     @Throws(IOException::class)
     fun testBooleans() {
-        runBooleanTest(AeronOutput(4096))
-        runBooleanTest(AeronOutput(32))
+        runBooleanTest(Output(4096))
+        runBooleanTest(Output(ByteArrayOutputStream()))
     }
 
     @Throws(IOException::class)
@@ -845,7 +825,7 @@ class InputOutputByteBufTest : KryoTestCase() {
             write.writeBoolean(true)
             write.writeBoolean(false)
         }
-        val read = AeronInput(write.toBytes())
+        val read = Input(write.toBytes())
         for (i in 0..99) {
             Assert.assertTrue(read.readBoolean())
             Assert.assertFalse(read.readBoolean())
@@ -855,8 +835,8 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(IOException::class)
     fun testChars() {
-        runCharTest(AeronOutput(4096))
-        runCharTest(AeronOutput(32))
+        runCharTest(Output(4096))
+        runCharTest(Output(ByteArrayOutputStream()))
     }
 
     @Throws(IOException::class)
@@ -870,34 +850,39 @@ class InputOutputByteBufTest : KryoTestCase() {
         write.writeChar(16384.toChar())
         write.writeChar(32767.toChar())
         write.writeChar(65535.toChar())
-        val read = AeronInput(write.toBytes())
-        Assert.assertEquals(0, read.readChar().code)
-        Assert.assertEquals(63, read.readChar().code)
-        Assert.assertEquals(64, read.readChar().code)
-        Assert.assertEquals(127, read.readChar().code)
-        Assert.assertEquals(128, read.readChar().code)
-        Assert.assertEquals(8192, read.readChar().code)
-        Assert.assertEquals(16384, read.readChar().code)
-        Assert.assertEquals(32767, read.readChar().code)
-        Assert.assertEquals(65535, read.readChar().code)
+        val read = Input(write.toBytes())
+        Assert.assertEquals(0, read.readChar().code.toLong())
+        Assert.assertEquals(63, read.readChar().code.toLong())
+        Assert.assertEquals(64, read.readChar().code.toLong())
+        Assert.assertEquals(127, read.readChar().code.toLong())
+        Assert.assertEquals(128, read.readChar().code.toLong())
+        Assert.assertEquals(8192, read.readChar().code.toLong())
+        Assert.assertEquals(16384, read.readChar().code.toLong())
+        Assert.assertEquals(32767, read.readChar().code.toLong())
+        Assert.assertEquals(65535, read.readChar().code.toLong())
     }
 
     @Test
     @Throws(Exception::class)
     fun testInputWithOffset() {
         val buf = ByteArray(30)
-        val `in` = AeronInput(buf, 10, 10)
+        val `in` = Input(buf, 10, 10)
         Assert.assertEquals(10, `in`.available().toLong())
     }
 
     @Test
     @Throws(Exception::class)
     fun testSmallBuffers() {
-        val testOutput = AeronOutput(32)
+        val buf = ByteBuffer.allocate(1024)
+        val byteBufferOutputStream = ByteBufferOutputStream(buf)
+        val testOutput = Output(byteBufferOutputStream)
         testOutput.writeBytes(ByteArray(512))
         testOutput.writeBytes(ByteArray(512))
         testOutput.flush()
-        val input = AeronInput(testOutput.internalBuffer)
+        val testInputs = ByteBufferInputStream()
+        (buf as Buffer).flip()
+        testInputs.byteBuffer = buf
+        val input = Input(testInputs, 512)
         val toRead = ByteArray(512)
         input.readBytes(toRead)
         input.readBytes(toRead)
@@ -907,7 +892,7 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Throws(Exception::class)
     fun testVerySmallBuffers() {
         val out1 = Output(4, -1)
-        val out2: Output = AeronOutput(4)
+        val out2: Output = ByteBufferOutput(4, -1)
         for (i in 0..15) {
             out1.writeVarInt(92, false)
         }
@@ -920,10 +905,11 @@ class InputOutputByteBufTest : KryoTestCase() {
     @Test
     @Throws(Exception::class)
     fun testZeroLengthOutputs() {
+        val kryo = Kryo()
         val output = Output(0, 10000)
-        kryo!!.writeClassAndObject(output, "Test string")
-        val byteBufferOutput = AeronOutput(0)
-        kryo!!.writeClassAndObject(byteBufferOutput, "Test string")
+        kryo.writeClassAndObject(output, "Test string")
+        val byteBufferOutput: Output = ByteBufferOutput(0, 10000)
+        kryo.writeClassAndObject(byteBufferOutput, "Test string")
     }
 
     @Test
@@ -931,21 +917,37 @@ class InputOutputByteBufTest : KryoTestCase() {
     fun testFlushRoundTrip() {
         val kryo = Kryo()
         val s1 = "12345"
-        val output = AeronOutput(32)
+        val os = ByteArrayOutputStream()
+        val objOutput = ObjectOutputStream(os)
+        val output = Output(objOutput)
         kryo.writeClass(output, s1.javaClass)
         kryo.writeObject(output, s1)
-        val input = AeronInput(output.internalBuffer)
+        output.flush()
+        // objOutput.flush(); // this layer wasn't flushed prior to this bugfix, add it for a workaround
+        val b = os.toByteArray()
+        println("size: " + b.size)
+        val `in` = ByteArrayInputStream(b)
+        val objIn = ObjectInputStream(`in`)
+        val input = Input(objIn)
         val r = kryo.readClass(input)
         val s2 = kryo.readObject(input, r.type) as String
         Assert.assertEquals(s1, s2)
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun testSetOutputBufferMinusOne() {
+    @Test
+    fun testNewOutputMaxBufferSizeLessThanBufferSize() {
         val bufferSize = 2
-        val output = AeronOutput(-1)
+        val maxBufferSize = 1
+        Assert.assertThrows(IllegalArgumentException::class.java) { Output(bufferSize, maxBufferSize) }
+    }
+
+    @Test
+    fun testSetOutputMaxBufferSizeLessThanBufferSize() {
+        val bufferSize = 2
+        val maxBufferSize = 1
+        val output = Output(bufferSize, bufferSize)
         Assert.assertNotNull(output)
-        output.buffer = ByteArray(bufferSize)
+        Assert.assertThrows(IllegalArgumentException::class.java) { output.setBuffer(ByteArray(bufferSize), maxBufferSize) }
     }
 
     @Test
@@ -961,7 +963,7 @@ class InputOutputByteBufTest : KryoTestCase() {
     fun testSetOutputMaxBufferSizeIsMinusOne() {
         val bufferSize = 2
         val maxBufferSize = -1
-        val output: Output = AeronOutput(bufferSize)
+        val output = Output(bufferSize, bufferSize)
         Assert.assertNotNull(output)
         output.setBuffer(ByteArray(bufferSize), maxBufferSize)
         // This test should pass as long as no exception thrown

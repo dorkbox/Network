@@ -42,7 +42,7 @@ import java.nio.ByteBuffer
  * @author Nathan Sweet
  */
 abstract class KryoTestCase {
-    protected var kryo: Kryo? = null
+    public var kryo: Kryo? = null
     protected var output: Output? = null
     protected var input: Input? = null
     protected var object1: Any? = null
