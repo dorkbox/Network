@@ -237,7 +237,7 @@ class KryoExtra<CONNECTION: Connection>() : Kryo() {
 //        val compressedLength = compressor.compress(writer.buffer, 0, length, compressOutput, 0, maxCompressedLength)
 //
 //        if (DEBUG) {
-//            val orig = Sys.bytesToHex(writer.buffer, 0, length)
+//            val orig = Sys.bytesToHex(writer.buffer, 0, length) use String.toHexBytes() instead
 //            val compressed = Sys.bytesToHex(compressOutput, 0, compressedLength)
 //            logger.error(OS.LINE_SEPARATOR +
 //                         "ORIG: (" + length + ")" + OS.LINE_SEPARATOR + orig +

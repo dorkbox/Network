@@ -16,12 +16,12 @@
 package dorkbox.network.connection
 
 import dorkbox.bytes.Hash
+import dorkbox.bytes.toHexString
 import dorkbox.netUtil.IP
 import dorkbox.network.handshake.ClientConnectionInfo
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
 import dorkbox.network.storage.SettingsStore
-import dorkbox.util.Sys
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.exceptions.SecurityException
 import mu.KLogger
@@ -109,13 +109,15 @@ internal class CryptoManagement(val logger: KLogger,
             }
         }
 
-        logger.info("ECC public key: ${Sys.bytesToHex(publicKeyBytes)}")
+        publicKeyBytes!!
+
+        logger.info("ECC public key: ${publicKeyBytes.toHexString()}")
 
         this.publicKey = keyFactory.generatePublic(XECPublicKeySpec(X25519KeySpec, BigInteger(publicKeyBytes))) as XECPublicKey
         this.privateKey = keyFactory.generatePrivate(XECPrivateKeySpec(X25519KeySpec, privateKeyBytes)) as XECPrivateKey
 
         this.privateKeyBytes = privateKeyBytes!!
-        this.publicKeyBytes = publicKeyBytes!!
+        this.publicKeyBytes = publicKeyBytes
     }
 
     private fun createKeyPair(secureRandom: SecureRandom): Pair<XECPublicKeySpec, XECPrivateKeySpec> {

@@ -15,6 +15,7 @@
  */
 package dorkbox.network
 
+import dorkbox.bytes.toHexString
 import dorkbox.netUtil.*
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.IpcMediaDriverConnection
@@ -27,7 +28,6 @@ import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
-import dorkbox.util.Sys
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -463,7 +463,7 @@ open class Client<CONNECTION : Connection>(
                 throw exception
             }
 
-            logger.info("Adding new signature for ${IP.toString(remoteAddress)} : ${Sys.bytesToHex(connectionInfo.publicKey)}")
+            logger.info("Adding new signature for ${IP.toString(remoteAddress)} : ${connectionInfo.publicKey.toHexString()}")
             storage.addRegisteredServerKey(remoteAddress, connectionInfo.publicKey)
         }
 
