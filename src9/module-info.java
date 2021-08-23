@@ -31,6 +31,7 @@ module dorkbox.network {
     requires org.agrona.core;
 
     requires atomicfu.jvm;
+    requires org.slf4j;
     requires kotlin.logging.jvm;
 
     requires kotlin.stdlib;
