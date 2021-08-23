@@ -141,7 +141,7 @@ internal constructor(val type: Class<*>,
         handshakeKryo = serialization.initHandshakeKryo()
 
         // we have to be able to specify the property store
-        storage = config.settingsStore.create(logger)
+        storage = SettingsStore(config.settingsStore.logger(logger), logger)
 
         crypto = CryptoManagement(logger, storage, type, config.enableRemoteSignatureValidation)
 
@@ -218,7 +218,7 @@ internal constructor(val type: Class<*>,
      * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
      *
      * By default, if there are no filter rules, then all connections are allowed to connect
-     * If there are filter rules - then ONLY connections for the a filter that returns true are allowed to connect (all else are denied)
+     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
      *
      * This function will be called for **only** network clients (IPC client are excluded)
      */
@@ -233,7 +233,7 @@ internal constructor(val type: Class<*>,
      * should be allowed
      *
      * By default, if there are no filter rules, then all connections are allowed to connect
-     * If there are filter rules - then ONLY connections for the a filter that returns true are allowed to connect (all else are denied)
+     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
      *
      * It is the responsibility of the custom filter to write the error, if there is one
      *
