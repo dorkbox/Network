@@ -13,17 +13,18 @@ module dorkbox.network {
     exports dorkbox.network.storage;
     exports dorkbox.network.storage.types;
 
+    requires dorkbox.bytes;
     requires dorkbox.updates;
     requires dorkbox.utilities;
     requires dorkbox.netutil;
     requires dorkbox.minlog;
     requires dorkbox.serializers;
-//    requires dorkbox.storage;
+    requires dorkbox.storage;
     requires dorkbox.objectpool;
 
     requires expiringmap;
     requires net.jodah.typetools;
-    requires de.javakaffee.kryoserializers;
+//    requires de.javakaffee.kryoserializers;
     requires com.esotericsoftware.kryo;
     requires com.esotericsoftware.reflectasm;
     requires org.objenesis;

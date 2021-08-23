@@ -45,8 +45,8 @@ import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.storage.types.MemoryStore
 import dorkbox.os.OS
+import dorkbox.storage.Storage
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException
@@ -74,7 +74,7 @@ abstract class BaseTest {
         fun clientConfig(block: Configuration.() -> Unit = {}): Configuration {
 
             val configuration = Configuration()
-            configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
+            configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
             configuration.subscriptionPort = 2200
             configuration.publicationPort = 2201
 
@@ -86,7 +86,7 @@ abstract class BaseTest {
 
         fun serverConfig(block: ServerConfiguration.() -> Unit = {}): ServerConfiguration {
             val configuration = ServerConfiguration()
-            configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
+            configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
 
             configuration.subscriptionPort = 2200
             configuration.publicationPort = 2201

@@ -23,9 +23,8 @@ import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
-import dorkbox.network.storage.StorageType
-import dorkbox.network.storage.types.PropertyStore
 import dorkbox.os.OS
+import dorkbox.storage.Storage
 import io.aeron.driver.Configuration
 import io.aeron.driver.ThreadingMode
 import io.aeron.exceptions.DriverTimeoutException
@@ -92,16 +91,8 @@ class ServerConfiguration : dorkbox.network.Configuration() {
 
     /**
      * Allows the user to change how endpoint settings and public key information are saved.
-     *
-     * For example, a custom database instead of the default, in-memory storage.
-     *
-     * Included types are:
-     *  * ChronicleMapStore.type(file)  -- high performance, but non-transactional and not recommended to be shared
-     *  * LmdbStore.type(file)          -- high performance, ACID, and can be shared
-     *  * MemoryStore.type()            -- v. high performance, but not persistent
-     *  * PropertyStore.type(file)      -- slow performance on write, but can easily be edited by user (similar to how openSSH server key info is)
      */
-    override var settingsStore: StorageType = PropertyStore.type("settings-server.db")
+    override var settingsStore: Storage.Builder = Storage.Property().file("settings-server.db")
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -265,17 +256,9 @@ open class Configuration {
     /**
      * Allows the user to change how endpoint settings and public key information are saved.
      *
-     * For example, a custom database instead of the default, in-memory storage.
-     *
-     * Included types are:
-     *  * ChronicleMapStore.type(file)  -- high performance, but non-transactional and not recommended to be shared
-     *  * LmdbStore.type(file)          -- high performance, ACID, and can be shared
-     *  * MemoryStore.type()            -- v. high performance, but not persistent
-     *  * PropertyStore.type(file)      -- slow performance on write, but can easily be edited by user (similar to how openSSH server key info is)
-     *
      *  Note: This field is overridden for server configurations, so that the file used is different for client/server
      */
-    open var settingsStore: StorageType = PropertyStore.type("settings-client.db")
+    open var settingsStore: Storage.Builder = Storage.Property().file("settings-client.db")
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value

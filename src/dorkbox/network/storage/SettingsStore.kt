@@ -15,10 +15,17 @@
  */
 package dorkbox.network.storage
 
+import dorkbox.bytes.decodeBase58
+import dorkbox.bytes.encodeToBase58String
+import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.connection.CryptoManagement
+import dorkbox.serializers.SerializationDefaults
+import dorkbox.storage.Storage
 import mu.KLogger
+import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.security.SecureRandom
 
@@ -26,7 +33,7 @@ import java.security.SecureRandom
  * This class provides a way for the network stack to use a database of some sort.
  */
 @Suppress("unused")
-class SettingsStore(val logger: KLogger, val store: GenericStore) : AutoCloseable {
+class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : AutoCloseable {
     companion object {
         /**
          * Address 0.0.0.0 or ::0 may be used as a source address for this host on this network.
@@ -40,9 +47,83 @@ class SettingsStore(val logger: KLogger, val store: GenericStore) : AutoCloseabl
         internal const val privateKey = "_private"
     }
 
+
+
+    val store: Storage
+
     init {
+        store = storageBuilder.logger(logger).apply {
+            if (!isStringBased) {
+                // have to load/save keys+values as strings
+                onLoad { key, value, load ->
+                    // key/value will be strings for a string based storage system
+                    key as String
+                    value as String
+
+                    // we want the keys to be easy to read in case we are using string based storage
+                    val xKey: Any? = when (key) {
+                        saltKey, privateKey -> key
+                        else -> {
+                          IP.toAddress(key)
+                        }
+                    }
+
+                    if (xKey == null) {
+                        logger.error("Unable to parse onLoad key property [$key] $value")
+                        return@onLoad
+                    }
+
+                    val xValue = value.decodeBase58()
+                    load(xKey, xValue)
+                }.onSave { key, value, save ->
+                    // we want the keys to be easy to read in case we are using string based storage
+                    val xKey =  when (key) {
+                        saltKey, privateKey, Storage.versionTag -> key
+                        is InetAddress -> IP.toString(key)
+                        else -> null
+                    }
+
+                    if (xKey == null) {
+                        logger.error("Unable to parse onSave key property [$key] $value")
+                        return@onSave
+                    }
+
+                    val xValue = when(value) {
+                        is Long -> value.toString()
+                        is ByteArray -> value.encodeToBase58String()
+                        else -> null
+                    }
+
+                    if (xValue == null) {
+                        logger.error("Unable to parse onSave value property [$key] $value")
+                        return@onSave
+                    }
+
+                    // all values are stored as bytes
+                    save(xKey, xValue)
+                }
+            } else {
+                // everything is stored as bytes. We use a serializer instead to register types for easy serialization
+                onNewSerializer {
+                    register(ByteArray::class.java)
+                    register(Inet4Address::class.java, SerializationDefaults.inet4AddressSerializer)
+                    register(Inet6Address::class.java, SerializationDefaults.inet6AddressSerializer)
+                }
+           }
+       }.build()
+
+
+
+
+
+
+
+
+
+
         // have to init salt
-        if (store[saltKey] == null) {
+        val currentValue: ByteArray? = store[saltKey]
+        if (currentValue == null) {
             val secureRandom = SecureRandom()
 
             // server salt is used to salt usernames and other various connection handshake parameters

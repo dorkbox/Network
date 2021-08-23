@@ -19,11 +19,7 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.storage.SettingsStore
-import dorkbox.network.storage.StorageType
-import dorkbox.network.storage.types.MemoryAccess
-import dorkbox.network.storage.types.MemoryStore
-import dorkbox.network.storage.types.PropertyStore
-import mu.KLogger
+import dorkbox.storage.Storage
 import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
@@ -33,14 +29,7 @@ class StorageTest : BaseTest() {
     @Test
     fun sharedStoreTest() {
         // we want the server + client to have the SAME info
-        val store = MemoryAccess(KotlinLogging.logger("StorageType"))
-
-        val sharedStore = object : StorageType {
-            override fun create(logger: KLogger): SettingsStore {
-                return SettingsStore(logger, store)
-            }
-        }
-
+        val sharedStore = Storage.Memory().shared()
 
         val serverConfig = serverConfig {
             settingsStore = sharedStore
@@ -63,10 +52,10 @@ class StorageTest : BaseTest() {
 
     @Test
     fun memoryTest() {
-        val salt1 = MemoryStore.type().create().use { it.getSalt() }
+        val salt1 = SettingsStore(Storage.Memory(), KotlinLogging.logger("test1")).use { it.getSalt() }
 
-        val salt2 = Server<Connection>(serverConfig().apply { settingsStore = MemoryStore.type() }).use { it.storage.getSalt() }
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = MemoryStore.type() }).use { it.storage.getSalt() }
+        val salt2 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Memory() }).use { it.storage.getSalt() }
+        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Memory() }).use { it.storage.getSalt() }
 
         Assert.assertFalse(salt1.contentEquals(salt2))
         Assert.assertFalse(salt1.contentEquals(salt3))
@@ -98,14 +87,14 @@ class StorageTest : BaseTest() {
     fun propFileTest() {
         val file = File("test.db").absoluteFile
 
-        val salt1 = PropertyStore.type(file).create().use { it.getSalt() }
-        val salt2 = PropertyStore.type(file).create().use { it.getSalt() }
+        val salt1 = SettingsStore(Storage.Property(), KotlinLogging.logger("test1")).use { it.getSalt() }
+        val salt2 = SettingsStore(Storage.Property(), KotlinLogging.logger("test2")).use { it.getSalt() }
 
         Assert.assertArrayEquals(salt1, salt2)
         file.delete()
 
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = PropertyStore.type(file) }).use { it.storage.getSalt() }
-        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = PropertyStore.type(file) }).use { it.storage.getSalt() }
+        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Property().file(file) }).use { it.storage.getSalt() }
+        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Property().file(file) }).use { it.storage.getSalt() }
 
         Assert.assertArrayEquals(salt3, salt4)
         Assert.assertFalse(salt1.contentEquals(salt4))

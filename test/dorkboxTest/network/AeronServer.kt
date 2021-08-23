@@ -24,7 +24,7 @@ import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
-import dorkbox.network.storage.types.MemoryStore
+import dorkbox.storage.Storage
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
@@ -72,7 +72,7 @@ object AeronServer {
     @JvmStatic
     fun main(args: Array<String>) {
         val configuration = ServerConfiguration()
-        configuration.settingsStore = MemoryStore.type() // don't want to persist anything on disk!
+        configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.listenIpAddress = "127.0.0.1"
         configuration.subscriptionPort = 2000
         configuration.publicationPort = 2001
