@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2021 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.storage
+package dorkbox.network.serialization
 
 import dorkbox.bytes.decodeBase58
 import dorkbox.bytes.encodeToBase58String
@@ -53,7 +53,7 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
 
     init {
         store = storageBuilder.logger(logger).apply {
-            if (!isStringBased) {
+            if (isStringBased) {
                 // have to load/save keys+values as strings
                 onLoad { key, value, load ->
                     // key/value will be strings for a string based storage system
@@ -64,7 +64,7 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
                     val xKey: Any? = when (key) {
                         saltKey, privateKey -> key
                         else -> {
-                          IP.toAddress(key)
+                            IP.toAddress(key)
                         }
                     }
 
@@ -111,14 +111,6 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
                 }
            }
        }.build()
-
-
-
-
-
-
-
-
 
 
         // have to init salt

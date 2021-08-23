@@ -18,7 +18,7 @@ package dorkboxTest.network
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.network.storage.SettingsStore
+import dorkbox.network.serialization.SettingsStore
 import dorkbox.storage.Storage
 import mu.KotlinLogging
 import org.junit.Assert

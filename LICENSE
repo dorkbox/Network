@@ -79,13 +79,6 @@
            https://github.com/EsotericSoftware/minlog
              Nathan Sweet
 
-     - Kryo Serializers - Extra kryo serializers
-       [The Apache Software License, Version 2.0]
-       https://github.com/magro/kryo-serializers
-       Copyright 2021
-         Martin Grotzke
-         Rafael Winterhalter
-
      - Conversant Disruptor - Disruptor is the highest performing intra-thread transfer mechanism available in Java.
        [The Apache Software License, Version 2.0]
        https://github.com/conversant/disruptor
@@ -115,6 +108,96 @@
        http://www.slf4j.org
        Copyright 2021
          QOS.ch
+
+     - ByteUtilties - Byte manipulation and Unsigned Number Utilities
+       [The Apache Software License, Version 2.0]
+       https://git.dorkbox.com/dorkbox/ByteUtilities
+       Copyright 2021
+         Dorkbox LLC
+
+       Extra license information
+         - Byte Utils (UByte, UInteger, ULong, Unsigned, UNumber, UShort) - 
+           [The Apache Software License, Version 2.0]
+           https://github.com/jOOQ/jOOQ/tree/master/jOOQ/src/main/java/org/jooq/types
+           Copyright 2017
+             Data Geekery GmbH (http://www.datageekery.com)
+             Lukas Eder
+             Ed Schaller
+             Jens Nerche
+             Ivan Sokolov
+
+         - Kryo Serialization - 
+           [BSD 3-Clause License]
+           https://github.com/EsotericSoftware/kryo
+           Copyright 2020
+             Nathan Sweet
+
+         - Kotlin Hex - 
+           [MIT License]
+           https://github.com/komputing/KHex
+           Copyright 2017
+             ligi
+
+         - Base58 - 
+           [The Apache Software License, Version 2.0]
+           https://bitcoinj.github.io
+           https://github.com/komputing/KBase58
+           Copyright 2018
+             Google Inc
+             Andreas Schildbach
+             ligi
+
+         - Kotlin - 
+           [The Apache Software License, Version 2.0]
+           https://github.com/JetBrains/kotlin
+           Copyright 2020
+             JetBrains s.r.o. and Kotlin Programming Language contributors
+           Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+           See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+         - Netty - An event-driven asynchronous network application framework
+           [The Apache Software License, Version 2.0]
+           https://netty.io
+           Copyright 2021
+             The Netty Project
+             Contributors. See source NOTICE
+
+         - Kryo - Fast and efficient binary object graph serialization framework for Java
+           [BSD 3-Clause License]
+           https://github.com/EsotericSoftware/kryo
+           Copyright 2021
+             Nathan Sweet
+
+           Extra license information
+             - ReflectASM - 
+               [BSD 3-Clause License]
+               https://github.com/EsotericSoftware/reflectasm
+                 Nathan Sweet
+
+             - Objenesis  - 
+               [The Apache Software License, Version 2.0]
+               http://objenesis.org
+                 Objenesis Team and all contributors
+
+             - MinLog-SLF4J - 
+               [BSD 3-Clause License]
+               https://github.com/EsotericSoftware/minlog
+                 Nathan Sweet
+
+         - Updates - Software Update Management
+           [The Apache Software License, Version 2.0]
+           https://git.dorkbox.com/dorkbox/Updates
+           Copyright 2021
+             Dorkbox LLC
+
+           Extra license information
+             - Kotlin - 
+               [The Apache Software License, Version 2.0]
+               https://github.com/JetBrains/kotlin
+               Copyright 2020
+                 JetBrains s.r.o. and Kotlin Programming Language contributors
+               Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+               See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
      - MinLog - Drop-in replacement for MinLog to log through SLF4j.
        [BSD 3-Clause License]
@@ -394,6 +477,267 @@
                [BSD 3-Clause License]
                https://github.com/EsotericSoftware/minlog
                  Nathan Sweet
+
+         - Updates - Software Update Management
+           [The Apache Software License, Version 2.0]
+           https://git.dorkbox.com/dorkbox/Updates
+           Copyright 2021
+             Dorkbox LLC
+
+           Extra license information
+             - Kotlin - 
+               [The Apache Software License, Version 2.0]
+               https://github.com/JetBrains/kotlin
+               Copyright 2020
+                 JetBrains s.r.o. and Kotlin Programming Language contributors
+               Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+               See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+     - Storage - Storage system for Java
+       [The Apache Software License, Version 2.0]
+       https://git.dorkbox.com/dorkbox/Storage
+       Copyright 2021
+         Dorkbox LLC
+
+       Extra license information
+         - Kotlin - 
+           [The Apache Software License, Version 2.0]
+           https://github.com/JetBrains/kotlin
+           Copyright 2020
+             JetBrains s.r.o. and Kotlin Programming Language contributors
+           Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+           See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+         - kotlin-logging - Lightweight logging framework for Kotlin
+           [The Apache Software License, Version 2.0]
+           https://github.com/MicroUtils/kotlin-logging
+           Copyright 2021
+             Ohad Shai
+
+         - SLF4J - Simple facade or abstraction for various logging frameworks
+           [MIT License]
+           http://www.slf4j.org
+           Copyright 2021
+             QOS.ch
+
+         - Kryo - Fast and efficient binary object graph serialization framework for Java
+           [BSD 3-Clause License]
+           https://github.com/EsotericSoftware/kryo
+           Copyright 2021
+             Nathan Sweet
+
+           Extra license information
+             - ReflectASM - 
+               [BSD 3-Clause License]
+               https://github.com/EsotericSoftware/reflectasm
+                 Nathan Sweet
+
+             - Objenesis  - 
+               [The Apache Software License, Version 2.0]
+               http://objenesis.org
+                 Objenesis Team and all contributors
+
+             - MinLog-SLF4J - 
+               [BSD 3-Clause License]
+               https://github.com/EsotericSoftware/minlog
+                 Nathan Sweet
+
+         - ByteUtilties - Byte manipulation and Unsigned Number Utilities
+           [The Apache Software License, Version 2.0]
+           https://git.dorkbox.com/dorkbox/ByteUtilities
+           Copyright 2021
+             Dorkbox LLC
+
+           Extra license information
+             - Byte Utils (UByte, UInteger, ULong, Unsigned, UNumber, UShort) - 
+               [The Apache Software License, Version 2.0]
+               https://github.com/jOOQ/jOOQ/tree/master/jOOQ/src/main/java/org/jooq/types
+               Copyright 2017
+                 Data Geekery GmbH (http://www.datageekery.com)
+                 Lukas Eder
+                 Ed Schaller
+                 Jens Nerche
+                 Ivan Sokolov
+
+             - Kryo Serialization - 
+               [BSD 3-Clause License]
+               https://github.com/EsotericSoftware/kryo
+               Copyright 2020
+                 Nathan Sweet
+
+             - Kotlin Hex - 
+               [MIT License]
+               https://github.com/komputing/KHex
+               Copyright 2017
+                 ligi
+
+             - Base58 - 
+               [The Apache Software License, Version 2.0]
+               https://bitcoinj.github.io
+               https://github.com/komputing/KBase58
+               Copyright 2018
+                 Google Inc
+                 Andreas Schildbach
+                 ligi
+
+             - Kotlin - 
+               [The Apache Software License, Version 2.0]
+               https://github.com/JetBrains/kotlin
+               Copyright 2020
+                 JetBrains s.r.o. and Kotlin Programming Language contributors
+               Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+               See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+             - Netty - An event-driven asynchronous network application framework
+               [The Apache Software License, Version 2.0]
+               https://netty.io
+               Copyright 2021
+                 The Netty Project
+                 Contributors. See source NOTICE
+
+             - Kryo - Fast and efficient binary object graph serialization framework for Java
+               [BSD 3-Clause License]
+               https://github.com/EsotericSoftware/kryo
+               Copyright 2021
+                 Nathan Sweet
+
+               Extra license information
+                 - ReflectASM - 
+                   [BSD 3-Clause License]
+                   https://github.com/EsotericSoftware/reflectasm
+                     Nathan Sweet
+
+                 - Objenesis  - 
+                   [The Apache Software License, Version 2.0]
+                   http://objenesis.org
+                     Objenesis Team and all contributors
+
+                 - MinLog-SLF4J - 
+                   [BSD 3-Clause License]
+                   https://github.com/EsotericSoftware/minlog
+                     Nathan Sweet
+
+             - Updates - Software Update Management
+               [The Apache Software License, Version 2.0]
+               https://git.dorkbox.com/dorkbox/Updates
+               Copyright 2021
+                 Dorkbox LLC
+
+               Extra license information
+                 - Kotlin - 
+                   [The Apache Software License, Version 2.0]
+                   https://github.com/JetBrains/kotlin
+                   Copyright 2020
+                     JetBrains s.r.o. and Kotlin Programming Language contributors
+                   Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+                   See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+         - Serializers - Kryo based serializers
+           [The Apache Software License, Version 2.0]
+           https://git.dorkbox.com/dorkbox/Serializers
+           Copyright 2021
+             Dorkbox LLC
+
+           Extra license information
+             - Kryo Serializers - 
+               [The Apache Software License, Version 2.0]
+               https://github.com/magro/kryo-serializers
+               Copyright 2021
+                 Martin Grotzke
+                 Rafael Winterhalter
+
+             - Kotlin - 
+               [The Apache Software License, Version 2.0]
+               https://github.com/JetBrains/kotlin
+               Copyright 2020
+                 JetBrains s.r.o. and Kotlin Programming Language contributors
+               Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+               See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+             - Bouncy Castle Crypto - Lightweight cryptography API and JCE Extension
+               [The Apache Software License, Version 2.0]
+               http://www.bouncycastle.org
+               Copyright 2021
+                 The Legion of the Bouncy Castle Inc
+
+             - Kryo - Fast and efficient binary object graph serialization framework for Java
+               [BSD 3-Clause License]
+               https://github.com/EsotericSoftware/kryo
+               Copyright 2021
+                 Nathan Sweet
+
+               Extra license information
+                 - ReflectASM - 
+                   [BSD 3-Clause License]
+                   https://github.com/EsotericSoftware/reflectasm
+                     Nathan Sweet
+
+                 - Objenesis  - 
+                   [The Apache Software License, Version 2.0]
+                   http://objenesis.org
+                     Objenesis Team and all contributors
+
+                 - MinLog-SLF4J - 
+                   [BSD 3-Clause License]
+                   https://github.com/EsotericSoftware/minlog
+                     Nathan Sweet
+
+             - Updates - Software Update Management
+               [The Apache Software License, Version 2.0]
+               https://git.dorkbox.com/dorkbox/Updates
+               Copyright 2021
+                 Dorkbox LLC
+
+               Extra license information
+                 - Kotlin - 
+                   [The Apache Software License, Version 2.0]
+                   https://github.com/JetBrains/kotlin
+                   Copyright 2020
+                     JetBrains s.r.o. and Kotlin Programming Language contributors
+                   Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+                   See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+         - ObjectPool - Fast, lightweight, and compatible blocking/non-blocking/soft-reference object pool for Java 8+
+           [The Apache Software License, Version 2.0]
+           https://git.dorkbox.com/dorkbox/ObjectPool
+           Copyright 2021
+             Dorkbox LLC
+
+           Extra license information
+             - Kotlin - 
+               [The Apache Software License, Version 2.0]
+               https://github.com/JetBrains/kotlin
+               Copyright 2020
+                 JetBrains s.r.o. and Kotlin Programming Language contributors
+               Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+               See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+             - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
+               [The Apache Software License, Version 2.0]
+               https://github.com/Kotlin/kotlinx.coroutines
+               Copyright 2021
+                 JetBrains s.r.o.
+
+             - Conversant Disruptor - Disruptor is the highest performing intra-thread transfer mechanism available in Java.
+               [The Apache Software License, Version 2.0]
+               https://github.com/conversant/disruptor
+               Copyright 2021
+                 Conversant, Inc
+
+             - Updates - Software Update Management
+               [The Apache Software License, Version 2.0]
+               https://git.dorkbox.com/dorkbox/Updates
+               Copyright 2021
+                 Dorkbox LLC
+
+               Extra license information
+                 - Kotlin - 
+                   [The Apache Software License, Version 2.0]
+                   https://github.com/JetBrains/kotlin
+                   Copyright 2020
+                     JetBrains s.r.o. and Kotlin Programming Language contributors
+                   Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+                   See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
          - Updates - Software Update Management
            [The Apache Software License, Version 2.0]

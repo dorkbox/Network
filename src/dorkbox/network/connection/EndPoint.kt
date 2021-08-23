@@ -35,7 +35,7 @@ import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
-import dorkbox.network.storage.SettingsStore
+import dorkbox.network.serialization.SettingsStore
 import dorkbox.util.exceptions.SecurityException
 import io.aeron.Publication
 import io.aeron.driver.MediaDriver

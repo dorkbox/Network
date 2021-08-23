@@ -23,13 +23,6 @@ import java.time.Instant
 ///////////////////////////////
 
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
-gradle.startParameter.warningMode = WarningMode.All
-
-//buildscript {
-//    dependencies {
-//        classpath(project.files("D:\\Code\\dorkbox\\public_projects_build_system\\GradleUtils\\build\\libs\\GradleUtils-2.7.jar"))
-//    }
-//}
 
 plugins {
     id("com.dorkbox.GradleUtils") version "2.9"
@@ -39,10 +32,6 @@ plugins {
 
     kotlin("jvm") version "1.5.21"
 }
-
-//apply(plugin = "com.dorkbox.GradleUtils")
-//val GradleUtils = (project as org.gradle.api.plugins.ExtensionAware).extensions.getByName("GradleUtils") as dorkbox.gradle.StaticMethodsAndTools
-
 
 object Extras {
     // set for the project
@@ -63,8 +52,8 @@ object Extras {
 ///////////////////////////////
 /////  assign 'Extras'
 ///////////////////////////////
-dorkbox.gradle.GradleUtils.load("$projectDir/../../gradle.properties", Extras)
-dorkbox.gradle.GradleUtils.defaults()
+GradleUtils.load("$projectDir/../../gradle.properties", Extras)
+GradleUtils.defaults()
 // because of the api changes for stacktrace stuff, it's best for us to ONLY support 11+
 GradleUtils.compileConfiguration(JavaVersion.VERSION_1_8) {
     // see: https://kotlinlang.org/docs/reference/using-gradle.html
@@ -155,11 +144,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.1")
 
     // https://github.com/dorkbox
+    implementation("com.dorkbox:ByteUtilities:1.3")
     implementation("com.dorkbox:MinLog:2.4")
     implementation("com.dorkbox:NetworkUtils:2.8")
     implementation("com.dorkbox:ObjectPool:3.4")
-    implementation("com.dorkbox:Serializers:2.0")
-//    implementation("com.dorkbox:Storage:1.0")
+    implementation("com.dorkbox:Serializers:2.5")
+    implementation("com.dorkbox:Storage:1.0")
     implementation("com.dorkbox:Updates:1.1")
     implementation("com.dorkbox:Utilities:1.12")
 
@@ -173,11 +163,6 @@ dependencies {
     // https://github.com/EsotericSoftware/kryo
     implementation("com.esotericsoftware:kryo:5.2.0") {
         exclude("com.esotericsoftware", "minlog") // we use our own minlog, that logs to SLF4j instead
-    }
-
-    // https://github.com/magro/kryo-serializers
-    implementation("de.javakaffee:kryo-serializers:0.45"){
-        exclude("com.esotericsoftware", "kryo") // we use na updated kryo+ our own min-log, that logs to SLF4j
     }
 
     // https://github.com/jpountz/lz4-java
@@ -217,8 +202,6 @@ dependencies {
     // https://github.com/MicroUtils/kotlin-logging
     implementation("io.github.microutils:kotlin-logging:2.0.10")
     implementation("org.slf4j:slf4j-api:1.8.0-beta4")
-
-
 
 
 //    testImplementation(lmdbJava)

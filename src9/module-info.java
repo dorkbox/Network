@@ -10,8 +10,6 @@ module dorkbox.network {
     exports dorkbox.network.ping;
     exports dorkbox.network.rmi;
     exports dorkbox.network.serialization;
-    exports dorkbox.network.storage;
-    exports dorkbox.network.storage.types;
 
     requires dorkbox.bytes;
     requires dorkbox.updates;
@@ -24,7 +22,6 @@ module dorkbox.network {
 
     requires expiringmap;
     requires net.jodah.typetools;
-//    requires de.javakaffee.kryoserializers;
     requires com.esotericsoftware.kryo;
     requires com.esotericsoftware.reflectasm;
     requires org.objenesis;

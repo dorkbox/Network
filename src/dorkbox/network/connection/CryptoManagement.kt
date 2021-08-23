@@ -21,7 +21,7 @@ import dorkbox.netUtil.IP
 import dorkbox.network.handshake.ClientConnectionInfo
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
-import dorkbox.network.storage.SettingsStore
+import dorkbox.network.serialization.SettingsStore
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.exceptions.SecurityException
 import mu.KLogger
