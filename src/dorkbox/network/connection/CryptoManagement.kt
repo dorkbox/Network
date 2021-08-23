@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.bytes.Hash
 import dorkbox.netUtil.IP
 import dorkbox.network.handshake.ClientConnectionInfo
 import dorkbox.network.serialization.AeronInput
@@ -28,7 +29,6 @@ import java.math.BigInteger
 import java.net.InetAddress
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
-import java.security.MessageDigest
 import java.security.SecureRandom
 import java.security.interfaces.XECPrivateKey
 import java.security.interfaces.XECPublicKey
@@ -55,8 +55,7 @@ internal class CryptoManagement(val logger: KLogger,
     private val keyFactory = KeyFactory.getInstance(X25519)  // key size is 32 bytes (256 bits)
     private val keyAgreement = KeyAgreement.getInstance("XDH")
 
-    private val aesCipher = Cipher.getInstance("AES/GCM/PKCS5Padding")
-    private val hash = MessageDigest.getInstance("SHA-256");
+    private val aesCipher = Cipher.getInstance("AES/GCM/NoPadding")
 
     companion object {
         const val curve25519 = "curve25519"
@@ -178,6 +177,7 @@ internal class CryptoManagement(val logger: KLogger,
         val sharedSecret = keyAgreement.generateSecret()
 
         // Derive a key from the shared secret and both public keys
+        val hash = Hash.sha256
         hash.reset()
         hash.update(sharedSecret)
         hash.update(bytesA)
