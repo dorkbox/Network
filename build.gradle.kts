@@ -140,11 +140,11 @@ tasks.jar.get().apply {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:atomicfu:0.16.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.1")
+    implementation("org.jetbrains.kotlinx:atomicfu:0.16.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
 
     // https://github.com/dorkbox
-    implementation("com.dorkbox:ByteUtilities:1.3")
+    implementation("com.dorkbox:ByteUtilities:1.4")
     implementation("com.dorkbox:MinLog:2.4")
     implementation("com.dorkbox:NetworkUtils:2.8")
     implementation("com.dorkbox:ObjectPool:3.4")
@@ -155,8 +155,7 @@ dependencies {
 
 
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.35.0"
-    // REMOVE UdpChannel when ISSUE https://github.com/real-logic/aeron/issues/1057 is resolved! (hopefully in 1.30.0)
+    val aeronVer = "1.35.1"
     implementation("io.aeron:aeron-client:$aeronVer")
     implementation("io.aeron:aeron-driver:$aeronVer")
 
@@ -200,14 +199,14 @@ dependencies {
 
 
     // https://github.com/MicroUtils/kotlin-logging
-    implementation("io.github.microutils:kotlin-logging:2.0.10")
+    implementation("io.github.microutils:kotlin-logging:2.0.11")
     implementation("org.slf4j:slf4j-api:1.8.0-beta4")
 
 
 //    testImplementation(lmdbJava)
 //    testImplementation(chronicleMap)
 
-    testImplementation("junit:junit:4.13.1")
+    testImplementation("junit:junit:4.13.2")
     testImplementation("ch.qos.logback:logback-classic:1.3.0-alpha4")
 }
 

@@ -37,14 +37,6 @@
          The Netty Project
          Contributors. See source NOTICE
 
-     - Kotlin - 
-       [The Apache Software License, Version 2.0]
-       https://github.com/JetBrains/kotlin
-       Copyright 2020
-         JetBrains s.r.o. and Kotlin Programming Language contributors
-       Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
-       See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
-
      - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
        [The Apache Software License, Version 2.0]
        https://github.com/Kotlin/kotlinx.coroutines
@@ -108,6 +100,14 @@
        http://www.slf4j.org
        Copyright 2021
          QOS.ch
+
+     - Kotlin - 
+       [The Apache Software License, Version 2.0]
+       https://github.com/JetBrains/kotlin
+       Copyright 2020
+         JetBrains s.r.o. and Kotlin Programming Language contributors
+       Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+       See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
      - ByteUtilties - Byte manipulation and Unsigned Number Utilities
        [The Apache Software License, Version 2.0]
