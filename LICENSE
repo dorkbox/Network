@@ -887,6 +887,12 @@
            Copyright 2020
              Square, Inc
 
+         - Resource Listing - Listing the contents of a resource directory
+           [The Apache Software License, Version 2.0]
+           http://www.uofr.net/~greg/java/get-resource-listing.html
+           Copyright 2017
+             Greg Briggs
+
          - Kotlin - 
            [The Apache Software License, Version 2.0]
            https://github.com/JetBrains/kotlin
