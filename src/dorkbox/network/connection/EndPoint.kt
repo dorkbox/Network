@@ -41,7 +41,12 @@ import io.aeron.Publication
 import io.aeron.driver.MediaDriver
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
@@ -554,6 +559,7 @@ internal constructor(val type: Class<*>,
 
                 logger.error("Aeron error!", exception)
                 listenerManager.notifyError(connection, exception)
+                throw exception
             }
         } catch (e: Exception) {
             if (message is MethodResponse && message.result is Exception) {
