@@ -218,7 +218,7 @@
        [BSD 3-Clause License]
        https://git.dorkbox.com/dorkbox/MinLog-SLF4J
        https://github.com/EsotericSoftware/minlog
-       Copyright 2021
+       Copyright 2022
          Dorkbox LLC
          Nathan Sweet
          Dan Brown
@@ -227,7 +227,7 @@
          - SLF4J - Simple facade or abstraction for various logging frameworks
            [MIT License]
            http://www.slf4j.org
-           Copyright 2021
+           Copyright 2022
              QOS.ch
 
          - Updates - Software Update Management
@@ -753,6 +753,37 @@
                  JetBrains s.r.o. and Kotlin Programming Language contributors
                Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
                See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+             - Updates - Software Update Management
+               [The Apache Software License, Version 2.0]
+               https://git.dorkbox.com/dorkbox/Updates
+               Copyright 2021
+                 Dorkbox LLC
+
+               Extra license information
+                 - Kotlin - 
+                   [The Apache Software License, Version 2.0]
+                   https://github.com/JetBrains/kotlin
+                   Copyright 2020
+                     JetBrains s.r.o. and Kotlin Programming Language contributors
+                   Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+                   See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+         - MinLog - Drop-in replacement for MinLog to log through SLF4j.
+           [BSD 3-Clause License]
+           https://git.dorkbox.com/dorkbox/MinLog-SLF4J
+           https://github.com/EsotericSoftware/minlog
+           Copyright 2022
+             Dorkbox LLC
+             Nathan Sweet
+             Dan Brown
+
+           Extra license information
+             - SLF4J - Simple facade or abstraction for various logging frameworks
+               [MIT License]
+               http://www.slf4j.org
+               Copyright 2022
+                 QOS.ch
 
              - Updates - Software Update Management
                [The Apache Software License, Version 2.0]

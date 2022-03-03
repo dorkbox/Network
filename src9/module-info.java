@@ -11,29 +11,29 @@ module dorkbox.network {
     exports dorkbox.network.rmi;
     exports dorkbox.network.serialization;
 
-    requires dorkbox.bytes;
-    requires dorkbox.updates;
-    requires dorkbox.utilities;
-    requires dorkbox.netutil;
-    requires dorkbox.minlog;
-    requires dorkbox.serializers;
-    requires dorkbox.storage;
-    requires dorkbox.objectpool;
+    requires transitive dorkbox.bytes;
+    requires transitive dorkbox.updates;
+    requires transitive dorkbox.utilities;
+    requires transitive dorkbox.netutil;
+    requires transitive dorkbox.minlog;
+    requires transitive dorkbox.serializers;
+    requires transitive dorkbox.storage;
+    requires transitive dorkbox.objectpool;
 
-    requires expiringmap;
-    requires net.jodah.typetools;
-    requires com.esotericsoftware.kryo;
-    requires com.esotericsoftware.reflectasm;
-    requires org.objenesis;
+    requires transitive expiringmap;
+    requires  net.jodah.typetools;
+    requires transitive com.esotericsoftware.kryo;
+    requires transitive com.esotericsoftware.reflectasm;
+    requires transitive org.objenesis;
 
     requires io.aeron.driver;
     requires io.aeron.client;
     requires org.agrona.core;
 
-    requires org.slf4j;
+    requires transitive org.slf4j;
     requires kotlin.logging.jvm;
 
-    requires kotlinx.atomicfu;
+    requires transitive kotlinx.atomicfu;
 
     requires kotlin.stdlib;
     requires kotlin.stdlib.jdk7;
@@ -73,5 +73,4 @@ module dorkbox.network {
 
     requires annotations;
     requires java.base;
-
 }
