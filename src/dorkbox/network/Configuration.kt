@@ -33,7 +33,7 @@ import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
 import java.io.File
 import java.net.BindException
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 
 class ServerConfiguration : dorkbox.network.Configuration() {
     companion object {
@@ -487,7 +487,7 @@ open class Configuration {
      */
     fun suggestAeronLogLocation(logger: KLogger): File {
         return when {
-            OS.isMacOsX() -> {
+            OS.isMacOsX -> {
                 // does the recommended location exist??
                 val suggestedLocation = File("/Volumes/DevShm")
                 if (suggestedLocation.exists()) {
@@ -499,7 +499,7 @@ open class Configuration {
                     File(System.getProperty("java.io.tmpdir"))
                 }
             }
-            OS.isLinux() -> {
+            OS.isLinux -> {
                 // this is significantly faster for linux than using the temp dir
                 File("/dev/shm/")
             }

@@ -27,7 +27,17 @@ import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingSerializer
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
-import dorkbox.network.rmi.messages.*
+import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
+import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
+import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
+import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
+import dorkbox.network.rmi.messages.ContinuationSerializer
+import dorkbox.network.rmi.messages.MethodRequest
+import dorkbox.network.rmi.messages.MethodRequestSerializer
+import dorkbox.network.rmi.messages.MethodResponse
+import dorkbox.network.rmi.messages.MethodResponseSerializer
+import dorkbox.network.rmi.messages.RmiClientSerializer
+import dorkbox.network.rmi.messages.RmiServerSerializer
 import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.Pool
 import dorkbox.objectPool.PoolObject
@@ -150,7 +160,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     val rmiHolder = RmiHolder()
 
     // reflectASM doesn't work on android
-    private val useAsm = !OS.isAndroid()
+    private val useAsm = !OS.isAndroid
 
     // These are GLOBAL, single threaded only kryo instances.
     // The readKryo WILL RE-CONFIGURED during the client handshake! (it is all the same thread, so object visibility is not a problem)
