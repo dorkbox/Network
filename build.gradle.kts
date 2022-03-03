@@ -25,19 +25,19 @@ import java.time.Instant
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "2.14"
-    id("com.dorkbox.Licensing") version "2.9.2"
+    id("com.dorkbox.GradleUtils") version "2.16.1"
+    id("com.dorkbox.Licensing") version "2.12"
     id("com.dorkbox.VersionUpdate") version "2.4"
-    id("com.dorkbox.GradlePublish") version "1.11"
+    id("com.dorkbox.GradlePublish") version "1.12"
 
-    kotlin("jvm") version "1.5.21"
+    kotlin("jvm") version "1.6.10"
 }
 
 object Extras {
     // set for the project
     const val description = "Encrypted, high-performance, and event-driven/reactive network stack for Java 8+"
     const val group = "com.dorkbox"
-    const val version = "5.7"
+    const val version = "5.8"
 
     // set as project.ext
     const val name = "Network"
@@ -140,27 +140,28 @@ tasks.jar.get().apply {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:atomicfu:0.16.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
+    api("org.jetbrains.kotlinx:atomicfu:0.17.1")
+    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0")
 
     // https://github.com/dorkbox
-    implementation("com.dorkbox:ByteUtilities:1.4")
-    implementation("com.dorkbox:MinLog:2.4")
-    implementation("com.dorkbox:NetworkUtils:2.8")
-    implementation("com.dorkbox:ObjectPool:3.4")
-    implementation("com.dorkbox:Serializers:2.5")
-    implementation("com.dorkbox:Storage:1.0")
-    implementation("com.dorkbox:Updates:1.1")
-    implementation("com.dorkbox:Utilities:1.12")
+    api("com.dorkbox:Updates:1.1")
+
+    api("com.dorkbox:ByteUtilities:1.5")
+    api("com.dorkbox:MinLog:2.4")
+    api("com.dorkbox:NetworkUtils:2.9.1")
+    api("com.dorkbox:ObjectPool:3.5")
+    api("com.dorkbox:Serializers:2.6")
+    api("com.dorkbox:Storage:1.0.1")
+    api("com.dorkbox:Utilities:1.13")
 
 
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.35.1"
-    implementation("io.aeron:aeron-client:$aeronVer")
-    implementation("io.aeron:aeron-driver:$aeronVer")
+    val aeronVer = "1.37.0"
+    api("io.aeron:aeron-client:$aeronVer")
+    api("io.aeron:aeron-driver:$aeronVer")
 
     // https://github.com/EsotericSoftware/kryo
-    implementation("com.esotericsoftware:kryo:5.2.0") {
+    api("com.esotericsoftware:kryo:5.3.0") {
         exclude("com.esotericsoftware", "minlog") // we use our own minlog, that logs to SLF4j instead
     }
 
@@ -171,10 +172,10 @@ dependencies {
     // This is just a really fast queue (where LMAX is a fast queue + other things w/ a difficult DSL)
     // https://github.com/conversant/disruptor_benchmark
     // https://www.youtube.com/watch?v=jVMOgQgYzWU
-    implementation("com.conversantmedia:disruptor:1.2.19")
+    api("com.conversantmedia:disruptor:1.2.19")
 
     // https://github.com/jhalterman/typetools
-    implementation("net.jodah:typetools:0.6.3")
+    api("net.jodah:typetools:0.6.3")
 
 //    // really fast storage
 //    // https://github.com/lmdbjava/lmdbjava
@@ -194,13 +195,13 @@ dependencies {
 
     // Jodah Expiring Map (A high performance thread-safe map that expires entries)
     // https://github.com/jhalterman/expiringmap
-    implementation("net.jodah:expiringmap:0.5.10")
+    api("net.jodah:expiringmap:0.5.10")
 
 
 
     // https://github.com/MicroUtils/kotlin-logging
-    implementation("io.github.microutils:kotlin-logging:2.0.11")
-    implementation("org.slf4j:slf4j-api:1.8.0-beta4")
+    api("io.github.microutils:kotlin-logging:2.1.21")
+    api("org.slf4j:slf4j-api:1.8.0-beta4")
 
 
 //    testImplementation(lmdbJava)

@@ -30,9 +30,10 @@ module dorkbox.network {
     requires io.aeron.client;
     requires org.agrona.core;
 
-    requires atomicfu.jvm;
     requires org.slf4j;
     requires kotlin.logging.jvm;
+
+    requires kotlinx.atomicfu;
 
     requires kotlin.stdlib;
     requires kotlin.stdlib.jdk7;
@@ -70,5 +71,7 @@ module dorkbox.network {
 //    requires static jnr.ffi;
 
 
+    requires annotations;
     requires java.base;
+
 }
