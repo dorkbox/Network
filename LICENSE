@@ -937,6 +937,12 @@
            Copyright 2016
              zhanhb
 
+         - UrlRewriteFilter - UrlRewriteFilter is a Java Web Filter for any J2EE compliant web application server
+           [BSD 3-Clause License]
+           https://github.com/paultuckey/urlrewritefilter
+           Copyright 2022
+             Paul Tuckey
+
          - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
            [The Apache Software License, Version 2.0]
            https://github.com/Kotlin/kotlinx.coroutines
