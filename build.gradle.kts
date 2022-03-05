@@ -145,6 +145,7 @@ dependencies {
 
     // https://github.com/dorkbox
     api("com.dorkbox:Updates:1.1")
+    api("com.dorkbox:OS:1.0")
 
     api("com.dorkbox:ByteUtilities:1.5")
     api("com.dorkbox:MinLog:2.4")
@@ -152,7 +153,7 @@ dependencies {
     api("com.dorkbox:ObjectPool:3.5")
     api("com.dorkbox:Serializers:2.6")
     api("com.dorkbox:Storage:1.1")
-    api("com.dorkbox:Utilities:1.16")
+    api("com.dorkbox:Utilities:1.17")
 
 
     // https://github.com/real-logic/aeron
