@@ -26,6 +26,7 @@ import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
 import mu.KLogger
 import org.agrona.DirectBuffer
+import java.util.concurrent.*
 
 internal class ClientHandshake<CONNECTION: Connection>(
     private val crypto: CryptoManagement,
@@ -79,7 +80,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 return@FragmentAssembler
             }
 
-            // this is an retry message
+            // this is a retry message
             // this can happen if there are multiple connections from the SAME ip address (ie: localhost)
             if (message.state == HandshakeMessage.RETRY) {
                 needToRetry = true
@@ -143,7 +144,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
-    fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long) : ClientConnectionInfo {
+    fun handshakeHello(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) : ClientConnectionInfo {
         failed = false
         oneTimeKey = endPoint.crypto.secureRandom.nextInt()
         val publicKey = endPoint.storage.getPublicKey()!!
@@ -163,8 +164,9 @@ internal class ClientHandshake<CONNECTION: Connection>(
         // block until we receive the connection information from the server
         var pollCount: Int
 
-        val startTime = System.currentTimeMillis()
-        while (connectionTimeoutMS == 0L || System.currentTimeMillis() - startTime < connectionTimeoutMS) {
+        val startTime = System.nanoTime()
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             pollCount = subscription.poll(handler, 1)
@@ -192,7 +194,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
-    fun handshakeDone(handshakeConnection: MediaDriverConnection, connectionTimeoutMS: Long): Boolean {
+    fun handshakeDone(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int): Boolean {
         val registrationMessage = HandshakeMessage.doneFromClient(oneTimeKey)
 
         // Send the done message to the server.
@@ -210,8 +212,9 @@ internal class ClientHandshake<CONNECTION: Connection>(
         val subscription = handshakeConnection.subscription
         val pollIdleStrategy = endPoint.pollIdleStrategyHandShake
 
-        var startTime = System.currentTimeMillis()
-        while (connectionTimeoutMS == 0L || System.currentTimeMillis() - startTime < connectionTimeoutMS) {
+        val timoutInNanos = TimeUnit.SECONDS.toMillis(connectionTimeoutSec.toLong())
+        var startTime = System.nanoTime()
+        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             pollCount = subscription.poll(handler, 1)
@@ -224,7 +227,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 needToRetry = false
 
                 // start over with the timeout!
-                startTime = System.currentTimeMillis()
+                startTime = System.nanoTime()
             }
 
             // 0 means we idle. >0 means reset and don't idle (because there are likely more)

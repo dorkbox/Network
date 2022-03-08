@@ -18,8 +18,8 @@ package dorkbox.network.aeron
 
 abstract class UdpMediaDriverConnection(publicationPort: Int, subscriptionPort: Int,
                                         streamId: Int, sessionId: Int,
-                                        connectionTimeoutMS: Long, isReliable: Boolean) :
+                                        connectionTimeoutSec: Int, isReliable: Boolean) :
         MediaDriverConnection(publicationPort, subscriptionPort,
                               streamId, sessionId,
-                              connectionTimeoutMS, isReliable) {
+                              connectionTimeoutSec, isReliable) {
 }

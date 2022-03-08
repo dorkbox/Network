@@ -15,7 +15,11 @@
  */
 package dorkbox.network
 
-import dorkbox.netUtil.*
+import dorkbox.netUtil.IP
+import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
+import dorkbox.netUtil.Inet4
+import dorkbox.netUtil.Inet6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.IpcMediaDriverConnection
@@ -38,8 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
 import java.net.InetAddress
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 
 /**
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
@@ -223,7 +226,7 @@ open class Server<CONNECTION : Connection>(
                     subscriptionPort = config.subscriptionPort,
                     streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                     sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                    connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
+                    connectionTimeoutSec = config.connectionCloseTimeoutInSeconds)
 
             driver.buildServer(aeronDriver, logger)
 
@@ -311,7 +314,7 @@ open class Server<CONNECTION : Connection>(
                     subscriptionPort = config.subscriptionPort,
                     streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                     sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                    connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
+                    connectionTimeoutSec = config.connectionCloseTimeoutInSeconds)
 
             driver.buildServer(aeronDriver, logger)
 
@@ -398,7 +401,7 @@ open class Server<CONNECTION : Connection>(
                 subscriptionPort = config.subscriptionPort,
                 streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                connectionTimeoutMS = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong()))
+                connectionTimeoutSec = config.connectionCloseTimeoutInSeconds)
 
         driver.buildServer(aeronDriver, logger)
 

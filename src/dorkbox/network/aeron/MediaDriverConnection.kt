@@ -17,7 +17,6 @@
 
 package dorkbox.network.aeron
 
-import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.Publication
 import io.aeron.Subscription
 import mu.KLogger
@@ -25,7 +24,7 @@ import mu.KLogger
 abstract class MediaDriverConnection(
                                 val publicationPort: Int, val subscriptionPort: Int,
                                 val streamId: Int, val sessionId: Int,
-                                val connectionTimeoutMS: Long, val isReliable: Boolean) : AutoCloseable {
+                                val connectionTimeoutSec: Int, val isReliable: Boolean) : AutoCloseable {
 
     lateinit var subscription: Subscription
     lateinit var publication: Publication

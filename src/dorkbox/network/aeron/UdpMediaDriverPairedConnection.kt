@@ -29,9 +29,9 @@ internal class UdpMediaDriverPairedConnection(listenAddress: InetAddress,
                                               subscriptionPort: Int,
                                               streamId: Int,
                                               sessionId: Int,
-                                              connectionTimeoutMS: Long = 0,
+                                              connectionTimeoutSec: Int = 0,
                                               isReliable: Boolean = true) :
-    UdpMediaDriverServerConnection(listenAddress, publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutMS, isReliable) {
+    UdpMediaDriverServerConnection(listenAddress, publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
     override fun toString(): String {
         return "$remoteAddressString [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"

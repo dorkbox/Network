@@ -34,9 +34,9 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
                                                    subscriptionPort: Int,
                                                    streamId: Int,
                                                    sessionId: Int,
-                                                   connectionTimeoutMS: Long = 0,
+                                                   connectionTimeoutSec: Int = 0,
                                                    isReliable: Boolean = true) :
-    UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutMS, isReliable) {
+    UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
     var success: Boolean = false
 

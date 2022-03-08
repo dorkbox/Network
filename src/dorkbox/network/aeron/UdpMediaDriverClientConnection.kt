@@ -25,7 +25,7 @@ import mu.KLogger
 import java.lang.Thread.sleep
 import java.net.Inet4Address
 import java.net.InetAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 
 /**
  * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER.
@@ -36,9 +36,9 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                                               subscriptionPort: Int,
                                               streamId: Int,
                                               sessionId: Int,
-                                              connectionTimeoutMS: Long = 0,
+                                              connectionTimeoutSec: Int = 0,
                                               isReliable: Boolean = true) :
-    UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutMS, isReliable) {
+    UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
     var success: Boolean = false
 
@@ -110,7 +110,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
 
 
         // this will wait for the server to acknowledge the connection (all via aeron)
-        val timoutInNanos = TimeUnit.MILLISECONDS.toNanos(connectionTimeoutMS)
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
         var startTime = System.nanoTime()
         while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
             if (subscription.isConnected) {
@@ -118,7 +118,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                 break
             }
 
-            sleep(100L)
+            sleep(500L)
         }
 
         if (!success) {
@@ -139,7 +139,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                 break
             }
 
-            sleep(100L)
+            sleep(500L)
         }
 
         if (!success) {

@@ -16,11 +16,20 @@
 package dorkbox.network
 
 import dorkbox.bytes.toHexString
-import dorkbox.netUtil.*
+import dorkbox.netUtil.IP
+import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
+import dorkbox.netUtil.Inet4
+import dorkbox.netUtil.Inet6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverClientConnection
-import dorkbox.network.connection.*
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.PublicKeyValidationState
+import dorkbox.network.connection.eventLoop
 import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRejectedException
@@ -90,7 +99,6 @@ open class Client<CONNECTION : Connection>(
     // is valid when there is a connection to the server, otherwise it is null
     private var connection0: CONNECTION? = null
 
-    private val previousClosedConnectionActivity: Long = 0
 
     // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
     // lock-stop ordering for how disconnect and connect work with each-other
@@ -120,7 +128,7 @@ open class Client<CONNECTION : Connection>(
      * ### Case does not matter, and "localhost" is the default.
      *
      * @param remoteAddress The network host or ip address
-     * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
      * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
      *
      * @throws IllegalArgumentException if the remote address is invalid
@@ -129,18 +137,18 @@ open class Client<CONNECTION : Connection>(
      */
     @Suppress("BlockingMethodInNonBlockingContext")
     fun connect(remoteAddress: String = "",
-                connectionTimeoutMS: Long = 30_000L,
+                connectionTimeoutSec: Int = 30,
                 reliable: Boolean = true) {
         when {
             // this is default IPC settings
             remoteAddress.isEmpty() && config.enableIpc == true -> {
-                connectIpc(connectionTimeoutMS = connectionTimeoutMS)
+                connectIpc(connectionTimeoutSec = connectionTimeoutSec)
             }
 
             IPv4.isPreferred -> {
                 connect(
                     remoteAddress = Inet4.toAddress(remoteAddress),
-                    connectionTimeoutMS = connectionTimeoutMS,
+                    connectionTimeoutSec = connectionTimeoutSec,
                     reliable = reliable
                 )
             }
@@ -148,7 +156,7 @@ open class Client<CONNECTION : Connection>(
             IPv6.isPreferred -> {
                 connect(
                     remoteAddress = Inet6.toAddress(remoteAddress),
-                    connectionTimeoutMS = connectionTimeoutMS,
+                    connectionTimeoutSec = connectionTimeoutSec,
                     reliable = reliable
                 )
             }
@@ -157,7 +165,7 @@ open class Client<CONNECTION : Connection>(
             else -> {
                 connect(
                     remoteAddress = Inet4.toAddress(remoteAddress),
-                    connectionTimeoutMS = connectionTimeoutMS,
+                    connectionTimeoutSec = connectionTimeoutSec,
                     reliable = reliable
                 )
             }
@@ -182,7 +190,7 @@ open class Client<CONNECTION : Connection>(
      * ### Case does not matter, and "localhost" is the default.
      *
      * @param remoteAddress The network or if localhost, IPC address for the client to connect to
-     * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
      * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
      *
      * @throws IllegalArgumentException if the remote address is invalid
@@ -190,14 +198,14 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientRejectedException if the client connection is rejected
      */
     fun connect(remoteAddress: InetAddress,
-                connectionTimeoutMS: Long = 30_000L,
+                connectionTimeoutSec: Int = 30,
                 reliable: Boolean = true) {
 
         // Default IPC ports are flipped because they are in the perspective of the SERVER
         connect(remoteAddress = remoteAddress,
                 ipcPublicationId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
                 ipcSubscriptionId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
-                connectionTimeoutMS = connectionTimeoutMS,
+                connectionTimeoutSec = connectionTimeoutSec,
                 reliable = reliable)
     }
 
@@ -206,7 +214,7 @@ open class Client<CONNECTION : Connection>(
      *
      * @param ipcPublicationId The IPC publication address for the client to connect to
      * @param ipcSubscriptionId The IPC subscription address for the client to connect to
-     * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely.
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
      *
      * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
@@ -215,7 +223,7 @@ open class Client<CONNECTION : Connection>(
     @Suppress("DuplicatedCode")
     fun connectIpc(ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
                    ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
-                   connectionTimeoutMS: Long = 30_000L) {
+                   connectionTimeoutSec: Int = 30) {
         // Default IPC ports are flipped because they are in the perspective of the SERVER
 
         require(ipcPublicationId != ipcSubscriptionId) { "IPC publication and subscription ports cannot be the same! The must match the server's configuration." }
@@ -223,7 +231,7 @@ open class Client<CONNECTION : Connection>(
         connect(remoteAddress = null, // required!
                 ipcPublicationId = ipcPublicationId,
                 ipcSubscriptionId = ipcSubscriptionId,
-                connectionTimeoutMS = connectionTimeoutMS)
+                connectionTimeoutSec = connectionTimeoutSec)
     }
 
     /**
@@ -248,7 +256,7 @@ open class Client<CONNECTION : Connection>(
      * @param remoteAddress The network or if localhost, IPC address for the client to connect to
      * @param ipcPublicationId The IPC publication address for the client to connect to
      * @param ipcSubscriptionId The IPC subscription address for the client to connect to
-     * @param connectionTimeoutMS wait for x milliseconds. 0 will wait indefinitely.
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
      * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
      *
      * @throws IllegalArgumentException if the remote address is invalid
@@ -261,9 +269,9 @@ open class Client<CONNECTION : Connection>(
                         // Default IPC ports are flipped because they are in the perspective of the SERVER
                         ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
                         ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
-                        connectionTimeoutMS: Long = 30_000L,
+                        connectionTimeoutSec: Int = 30,
                         reliable: Boolean = true) {
-        require(connectionTimeoutMS >= 0) { "connectionTimeoutMS '$connectionTimeoutMS' is invalid. It must be >=0" }
+        require(connectionTimeoutSec >= 0) { "connectionTimeoutMS '$connectionTimeoutSec' is invalid. It must be >=0" }
 
         if (isConnected) {
             logger.error("Unable to connect when already connected!")
@@ -336,7 +344,7 @@ open class Client<CONNECTION : Connection>(
                         subscriptionPort = config.publicationPort,
                         streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                         sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                        connectionTimeoutMS = connectionTimeoutMS,
+                        connectionTimeoutSec = connectionTimeoutSec,
                         isReliable = reliable)
 
                 // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
@@ -351,7 +359,7 @@ open class Client<CONNECTION : Connection>(
                     subscriptionPort = config.publicationPort,
                     streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                     sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                    connectionTimeoutMS = connectionTimeoutMS,
+                    connectionTimeoutSec = connectionTimeoutSec,
                     isReliable = reliable)
 
             // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
@@ -367,7 +375,7 @@ open class Client<CONNECTION : Connection>(
 
         // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
         val connectionInfo = try {
-            handshake.handshakeHello(handshakeConnection, connectionTimeoutMS)
+            handshake.handshakeHello(handshakeConnection, connectionTimeoutSec)
         } catch (e: Exception) {
             logger.error("Handshake error", e)
             throw e
@@ -410,7 +418,7 @@ open class Client<CONNECTION : Connection>(
                 subscriptionPort = connectionInfo.publicationPort,
                 streamId = connectionInfo.streamId,
                 sessionId = connectionInfo.sessionId,
-                connectionTimeoutMS = connectionTimeoutMS,
+                connectionTimeoutSec = connectionTimeoutSec,
                 isReliable = handshakeConnection.isReliable)
         }
 
@@ -498,7 +506,7 @@ open class Client<CONNECTION : Connection>(
         // tell the server our connection handshake is done, and the connection can now listen for data.
         // also closes the handshake (will also throw connect timeout exception)
         val canFinishConnecting = try {
-            handshake.handshakeDone(handshakeConnection, connectionTimeoutMS)
+            handshake.handshakeDone(handshakeConnection, connectionTimeoutSec)
         } catch (e: ClientException) {
             logger.error("Error during handshake", e)
             false

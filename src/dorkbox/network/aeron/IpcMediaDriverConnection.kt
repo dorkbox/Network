@@ -20,6 +20,7 @@ import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
 import mu.KLogger
 import java.lang.Thread.sleep
+import java.util.concurrent.*
 
 /**
  * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
@@ -61,25 +62,25 @@ internal open class IpcMediaDriverConnection(streamId: Int,
             logger.trace("IPC server sub URI: ${subscriptionUri.build()}")
         }
 
+        var success = false
+
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
-
-        var startTime = System.currentTimeMillis()
-
-        var success = false
 
         // If we start/stop too quickly, we might have the aeron connectivity issues! Retry a few times.
         val publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
         val subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamIdSubscription)
 
         // this will wait for the server to acknowledge the connection (all via aeron)
-        while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+        var startTime = System.nanoTime()
+        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
             if (subscription.isConnected && subscription.imageCount() > 0) {
                 success = true
                 break
             }
 
-            sleep(100L)
+            sleep(500L)
         }
 
 
@@ -93,13 +94,13 @@ internal open class IpcMediaDriverConnection(streamId: Int,
 
         // this will wait for the server to acknowledge the connection (all via aeron)
         startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < connectionTimeoutMS) {
+        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
             if (publication.isConnected) {
                 success = true
                 break
             }
 
-            sleep(100L)
+            sleep(500L)
         }
 
         if (!success) {
