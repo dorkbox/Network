@@ -496,7 +496,7 @@ open class Configuration {
                 else {
                     logger.info("It is recommended to create a RAM drive for best performance. For example\n" + "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`\n" + "\t After this, set config.aeronLogDirectory = \"/Volumes/DevShm\"")
 
-                    File(System.getProperty("java.io.tmpdir"))
+                    OS.TEMP_DIR
                 }
             }
             OS.isLinux -> {
@@ -504,7 +504,7 @@ open class Configuration {
                 File("/dev/shm/")
             }
             else -> {
-                File(System.getProperty("java.io.tmpdir"))
+                OS.TEMP_DIR
             }
         }
     }
