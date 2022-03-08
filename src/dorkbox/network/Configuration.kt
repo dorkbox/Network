@@ -145,6 +145,9 @@ class ServerConfiguration : dorkbox.network.Configuration() {
 open class Configuration {
     companion object {
         internal const val errorMessage = "Cannot set a property after the configuration context has been created!"
+
+        @Volatile
+        private var alreadyShownTips = false
     }
 
     /**
@@ -489,12 +492,17 @@ open class Configuration {
         return when {
             OS.isMacOsX -> {
                 // does the recommended location exist??
+
+                // Default is to try the RAM drive
                 val suggestedLocation = File("/Volumes/DevShm")
                 if (suggestedLocation.exists()) {
                     suggestedLocation
                 }
                 else {
-                    logger.info("It is recommended to create a RAM drive for best performance. For example\n" + "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`\n" + "\t After this, set config.aeronLogDirectory = \"/Volumes/DevShm\"")
+                    if (!alreadyShownTips) {
+                        alreadyShownTips = true
+                        logger.info("It is recommended to create a RAM drive for best performance. For example\n" + "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`")
+                    }
 
                     OS.TEMP_DIR
                 }
