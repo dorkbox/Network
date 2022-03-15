@@ -447,6 +447,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
             classesToRegister.clear()
 
             // NOTE: to be clear, the "client" can ONLY registerRmi(IFACE, IMPL), to have extra info as the RMI-SERVER!!
+            // the client DOES NOT need to register anything! It will register what the server sends.
 
             val kryo = initKryo() // this will initialize the class registrations
             initializeClient(kryoRegistrationDetailsFromServer, classesToRegisterForRmi, kryo)
@@ -590,7 +591,19 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
                 val clazzName = bytes[2] as String
                 val serializerName = bytes[3] as String
 
-                val clazz = Class.forName(clazzName)
+                // if we are a primitive type, use the type directly
+                val clazz = when (clazzName) {
+                    "boolean"   -> Boolean::class.java
+                    "byte"      -> Byte::class.java
+                    "char"      -> Char::class.java
+                    "short"     -> Short::class.java
+                    "int"       -> Int::class.java
+                    "float"     -> Float::class.java
+                    "long"      -> Long::class.java
+                    "double"    -> Double::class.java
+
+                    else        -> Class.forName(clazzName)
+                }
 
                 when (typeId) {
                     0 -> classesToRegister.add(ClassRegistration0(clazz, maker.newInstantiatorOf(Class.forName(serializerName)).newInstance() as Serializer<Any>))
