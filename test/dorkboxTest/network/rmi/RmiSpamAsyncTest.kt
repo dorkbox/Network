@@ -22,6 +22,7 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.BaseTest
+import kotlinx.coroutines.delay
 import org.junit.Assert
 import org.junit.Test
 import java.util.concurrent.atomic.*
@@ -106,6 +107,16 @@ class RmiSpamAsyncTest : BaseTest() {
                         e.printStackTrace()
                     }
                 }
+
+                // The async nature means that we don't know EXACTLY when all the messages will arrive. For testing, this is the closest
+                // we can do to attempt to have a correct info lookup.
+                var count = 0
+                while (counter.get() < totalRuns && count < 30) {
+                    logger.error("Waiting for ${totalRuns - counter.get()} more messages...")
+                    count++
+                    delay(1_000)
+                }
+
 
                 // have to do this first, so it will wait for the client responses!
                 // if we close the client first, the connection will be closed, and the responses will never arrive to the server
