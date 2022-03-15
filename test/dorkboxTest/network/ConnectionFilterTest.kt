@@ -45,7 +45,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e
@@ -94,7 +94,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e
@@ -142,7 +142,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e
@@ -191,7 +191,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e
@@ -232,7 +232,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 e.printStackTrace()
                 stopEndPoints()
@@ -281,7 +281,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 e.printStackTrace()
                 stopEndPoints()
@@ -321,7 +321,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e
@@ -367,7 +367,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e
@@ -419,7 +419,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e
@@ -462,7 +462,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e
@@ -500,7 +500,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOOPBACK)
+                client.connect(LOCALHOST)
             } catch (e: Exception) {
                 stopEndPoints()
                 throw e

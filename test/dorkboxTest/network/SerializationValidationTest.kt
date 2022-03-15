@@ -50,7 +50,7 @@ class SerializationValidationTest : BaseTest() {
                 send(FinishedCommand())
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()
@@ -112,7 +112,7 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()
@@ -158,7 +158,7 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()

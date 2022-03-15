@@ -40,7 +40,7 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import org.junit.Assert
 import org.junit.Test
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.*
 
 class PingPongTest : BaseTest() {
     @Volatile
@@ -108,7 +108,7 @@ class PingPongTest : BaseTest() {
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
 

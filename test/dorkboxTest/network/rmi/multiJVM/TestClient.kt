@@ -102,7 +102,7 @@ object TestClient {
             close()
         }
 
-        client.connect(BaseTest.LOOPBACK)
+        client.connect(BaseTest.LOCALHOST)
 
         runBlocking {
             client.waitForClose()

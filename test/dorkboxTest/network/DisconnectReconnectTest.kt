@@ -49,14 +49,14 @@ class DisconnectReconnectTest : BaseTest() {
                 else {
                     logger.error("Reconnecting: $count")
                     try {
-                        client.connect(LOOPBACK)
+                        client.connect(LOCALHOST)
                     } catch (e: IOException) {
                         e.printStackTrace()
                     }
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
 
@@ -105,14 +105,14 @@ class DisconnectReconnectTest : BaseTest() {
                 else {
                     logger.error("Reconnecting: $count")
                     try {
-                        client.connect(LOOPBACK)
+                        client.connect(LOCALHOST)
                     } catch (e: IOException) {
                         e.printStackTrace()
                     }
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
 
@@ -183,14 +183,14 @@ class DisconnectReconnectTest : BaseTest() {
                 else {
                     logger.error("Reconnecting: $count")
                     try {
-                        client.connect(LOOPBACK)
+                        client.connect(LOCALHOST)
                     } catch (e: IOException) {
                         e.printStackTrace()
                     }
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
 
@@ -239,14 +239,14 @@ class DisconnectReconnectTest : BaseTest() {
                 else {
                     logger.error("Reconnecting: $count")
                     try {
-                        client.connect(LOOPBACK)
+                        client.connect(LOCALHOST)
                     } catch (e: IOException) {
                         e.printStackTrace()
                     }
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
 
@@ -296,14 +296,14 @@ class DisconnectReconnectTest : BaseTest() {
                 else {
                     logger.error("Reconnecting: $count")
                     try {
-                        client.connect(LOOPBACK)
+                        client.connect(LOCALHOST)
                     } catch (e: IOException) {
                         e.printStackTrace()
                     }
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
 
@@ -347,7 +347,7 @@ class DisconnectReconnectTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         server.close()

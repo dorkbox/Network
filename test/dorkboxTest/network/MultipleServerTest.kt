@@ -43,8 +43,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.*
 
 class MultipleServerTest : BaseTest() {
     val total = 5
@@ -113,7 +112,7 @@ class MultipleServerTest : BaseTest() {
                 send("client_$count")
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()
@@ -188,7 +187,7 @@ class MultipleServerTest : BaseTest() {
                 send("client_$count")
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()

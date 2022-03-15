@@ -21,7 +21,7 @@ import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
 import org.junit.Assert
 import org.junit.Test
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.*
 
 
 
@@ -116,7 +116,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
         waitForThreads()
     }
@@ -181,7 +181,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
         waitForThreads()
     }
@@ -240,7 +240,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
         waitForThreads()
     }
@@ -300,7 +300,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
         waitForThreads()
     }

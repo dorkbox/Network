@@ -49,7 +49,7 @@ class PingTest : BaseTest() {
                 }
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()
@@ -106,7 +106,7 @@ class PingTest : BaseTest() {
                 send(ping)
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()

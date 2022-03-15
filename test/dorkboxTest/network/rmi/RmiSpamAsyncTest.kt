@@ -24,7 +24,7 @@ import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.BaseTest
 import org.junit.Assert
 import org.junit.Test
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.*
 
 class RmiSpamAsyncTest : BaseTest() {
     private val counter = AtomicLong(0)
@@ -112,7 +112,7 @@ class RmiSpamAsyncTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()

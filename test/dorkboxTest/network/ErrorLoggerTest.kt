@@ -71,7 +71,7 @@ class ErrorLoggerTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()

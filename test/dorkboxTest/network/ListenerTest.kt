@@ -151,7 +151,7 @@ class ListenerTest : BaseTest() {
         }
 
 
-        client.connect(LOOPBACK)
+        client.connect(LOCALHOST)
 
         waitForThreads()
 

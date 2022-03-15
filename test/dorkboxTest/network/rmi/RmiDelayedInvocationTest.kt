@@ -23,7 +23,7 @@ import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.*
 
 class RmiDelayedInvocationTest : BaseTest() {
     private val iterateLock = Any()
@@ -104,7 +104,7 @@ class RmiDelayedInvocationTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOOPBACK)
+            client.connect(LOCALHOST)
         }
 
         waitForThreads()

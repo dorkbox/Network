@@ -58,9 +58,7 @@ import org.slf4j.LoggerFactory
 import java.lang.Thread.sleep
 import java.lang.reflect.Field
 import java.lang.reflect.Method
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 
 abstract class BaseTest {
     @Volatile
@@ -70,7 +68,7 @@ abstract class BaseTest {
     private var autoFailThread: Thread? = null
 
     companion object {
-        const val LOOPBACK = "loopback"
+        const val LOCALHOST = "localhost"
         fun clientConfig(block: Configuration.() -> Unit = {}): Configuration {
 
             val configuration = Configuration()
