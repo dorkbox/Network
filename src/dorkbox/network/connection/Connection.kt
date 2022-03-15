@@ -34,7 +34,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
 import java.net.InetAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 
 /**
  * This connection is established once the registration information is validated, and the various connect/filter checks have passed
@@ -385,11 +385,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
             endPoint.actionDispatch.eventLoop {
-                // a connection might have also registered for disconnect events (THIS IS NOT THE "CLIENT" listenerManager!)
+                // a connection might have also registered for disconnect events (THIS IS NOT THE "CLIENT/SERVER" listenerManager!)
                 listenerManager.value?.notifyDisconnect(this@Connection)
             }
 
-            // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
+            // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other
             postCloseAction()
         }
