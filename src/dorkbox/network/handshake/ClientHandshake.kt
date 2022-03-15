@@ -212,7 +212,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         val subscription = handshakeConnection.subscription
         val pollIdleStrategy = endPoint.pollIdleStrategyHandShake
 
-        val timoutInNanos = TimeUnit.SECONDS.toMillis(connectionTimeoutSec.toLong())
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
         var startTime = System.nanoTime()
         while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
