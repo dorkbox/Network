@@ -415,6 +415,9 @@ class AeronDriver(
         aeronDriverContext.errorHandler { error ->
             aeronErrorHandler(AeronDriverException(error))
         }
+        aeronDriverContext.subscriberErrorHandler { error ->
+            aeronErrorHandler(error)
+        }
 
         return aeronDriverContext
     }
