@@ -58,6 +58,7 @@ class SerializationValidationTest : BaseTest() {
 
     @Test
     fun checkTakeKryo() {
+        @Suppress("UNCHECKED_CAST")
         val serialization = serverConfig().serialization as Serialization<Connection>
 
         val kryos = mutableListOf<KryoExtra<Connection>>()

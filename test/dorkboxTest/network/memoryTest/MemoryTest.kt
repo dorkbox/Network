@@ -155,6 +155,7 @@ class MemoryTest : BaseTest() {
 
     @Test
     fun runForeverTestKryoPool() {
+        @Suppress("UNCHECKED_CAST")
         val serialization = serverConfig().serialization as Serialization<Connection>
 
         // 17 to force a pool size change
