@@ -151,7 +151,7 @@ dependencies {
     api("com.dorkbox:MinLog:2.4")
     api("com.dorkbox:NetworkUtils:2.9.1")
     api("com.dorkbox:ObjectPool:3.5")
-    api("com.dorkbox:Serializers:2.6")
+    api("com.dorkbox:Serializers:2.7")
     api("com.dorkbox:Storage:1.1")
     api("com.dorkbox:Utilities:1.19")
 
