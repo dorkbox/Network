@@ -285,14 +285,14 @@ class ConnectionFilterTest : BaseTest() {
             } catch (e: Exception) {
                 e.printStackTrace()
                 stopEndPoints()
-                throw e
+                // this is expected.
             }
         }
 
         waitForThreads()
 
-        Assert.assertTrue(serverConnectSuccess.value)
-        Assert.assertTrue(clientConnectSuccess.value)
+        Assert.assertFalse(serverConnectSuccess.value)
+        Assert.assertFalse(clientConnectSuccess.value)
     }
 
     @Test(expected = ClientException::class)
