@@ -153,7 +153,7 @@ dependencies {
     api("com.dorkbox:ObjectPool:3.5")
     api("com.dorkbox:Serializers:2.6")
     api("com.dorkbox:Storage:1.1")
-    api("com.dorkbox:Utilities:1.17")
+    api("com.dorkbox:Utilities:1.19")
 
 
     // https://github.com/real-logic/aeron
