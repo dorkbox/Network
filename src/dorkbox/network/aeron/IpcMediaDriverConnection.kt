@@ -30,7 +30,7 @@ internal open class IpcMediaDriverConnection(streamId: Int,
                                         val streamIdSubscription: Int,
                                         sessionId: Int,
                                         ) :
-        MediaDriverConnection(0, 0, streamId, sessionId, 1_000, true) {
+        MediaDriverConnection(0, 0, streamId, sessionId, 1, true) {
 
     var success: Boolean = false
 
@@ -93,7 +93,7 @@ internal open class IpcMediaDriverConnection(streamId: Int,
         success = false
 
         // this will wait for the server to acknowledge the connection (all via aeron)
-        startTime = System.currentTimeMillis()
+        startTime = System.nanoTime()
         while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
             if (publication.isConnected) {
                 success = true
