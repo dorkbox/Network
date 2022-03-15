@@ -115,10 +115,10 @@ open class Client<CONNECTION : Connection>(
      * Default connection is to localhost
      *
      * ### For a network address, it can be:
-     *  - a network name ("localhost", "loopback", "lo", "bob.example.org")
+     *  - a network name ("localhost", "bob.example.org")
      *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
      *  - an InetAddress address
-     *  - if no address is specified, and IPC is disabled in the config, then loopback will be selected
+     *  - if no address is specified, and IPC is disabled in the config, then localhost will be selected
      *
      * ### For the IPC (Inter-Process-Communication) it must be:
      *  - `connect()` (only if ipc is enabled in the configuration)
@@ -240,7 +240,7 @@ open class Client<CONNECTION : Connection>(
      * Default connection is to localhost
      *
      * ### For a network address, it can be:
-     *  - a network name ("localhost", "loopback", "lo", "bob.example.org")
+     *  - a network name ("localhost", "bob.example.org")
      *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
      *  - an InetAddress address
      *
@@ -503,13 +503,18 @@ open class Client<CONNECTION : Connection>(
         connection0 = newConnection
         addConnection(newConnection)
 
+        logger.error { "Connection created, finishing handshake" }
+
         // tell the server our connection handshake is done, and the connection can now listen for data.
         // also closes the handshake (will also throw connect timeout exception)
-        val canFinishConnecting = try {
-            handshake.handshakeDone(handshakeConnection, connectionTimeoutSec)
-        } catch (e: ClientException) {
-            logger.error("Error during handshake", e)
-            false
+        val canFinishConnecting: Boolean
+        runBlocking {
+            canFinishConnecting = try {
+                handshake.handshakeDone(handshakeConnection, connectionTimeoutSec)
+            } catch (e: ClientException) {
+                logger.error("Error during handshake", e)
+                false
+            }
         }
 
         if (canFinishConnecting) {
