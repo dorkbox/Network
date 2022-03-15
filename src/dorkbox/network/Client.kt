@@ -271,7 +271,7 @@ open class Client<CONNECTION : Connection>(
                         ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
                         connectionTimeoutSec: Int = 30,
                         reliable: Boolean = true) {
-        require(connectionTimeoutSec >= 0) { "connectionTimeoutMS '$connectionTimeoutSec' is invalid. It must be >=0" }
+        require(connectionTimeoutSec >= 0) { "connectionTimeoutSec '$connectionTimeoutSec' is invalid. It must be >=0" }
 
         if (isConnected) {
             logger.error("Unable to connect when already connected!")
