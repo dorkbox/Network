@@ -20,7 +20,11 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverPairedConnection
-import dorkbox.network.connection.*
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.PublicKeyValidationState
+import dorkbox.network.connection.eventLoop
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.rmi.RmiManagerConnections
 import io.aeron.Publication
@@ -31,7 +35,7 @@ import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
 import java.net.Inet4Address
 import java.net.InetAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 
 
 /**
@@ -107,6 +111,16 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
                 logger.error("[$sessionId] Error! Connection from client $connectionString was null, and cannot complete handshake!")
             } else {
                 logger.trace { "[${pendingConnection.id}] Connection from client $connectionString done with handshake." }
+
+                pendingConnection.postCloseAction = {
+                    // this is called whenever connection.close() is called by the framework or via client.close()
+
+                    // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                    actionDispatch.eventLoop {
+                        listenerManager.notifyDisconnect(pendingConnection)
+                    }
+                }
+
 
                 // this enables the connection to start polling for messages
                 server.addConnection(pendingConnection)
@@ -313,7 +327,7 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
             successMessage.publicKey = server.crypto.publicKeyBytes
 
             // before we notify connect, we have to wait for the client to tell us that they can receive data
-            pendingConnections.put(sessionId, connection)
+            pendingConnections[sessionId] = connection
 
             // this tells the client all of the info to connect.
             server.writeHandshakeMessage(handshakePublication, successMessage) // exception is already caught!
@@ -491,7 +505,7 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
             successMessage.publicKey = server.crypto.publicKeyBytes
 
             // before we notify connect, we have to wait for the client to tell us that they can receive data
-            pendingConnections.put(sessionId, connection)
+            pendingConnections[sessionId] = connection
 
             // this tells the client all of the info to connect.
             server.writeHandshakeMessage(handshakePublication, successMessage) // exception is already caught
