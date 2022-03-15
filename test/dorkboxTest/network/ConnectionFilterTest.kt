@@ -245,6 +245,8 @@ class ConnectionFilterTest : BaseTest() {
 
     @Test
     fun rejectServerIpc() {
+        // we do not want to limit loopback addresses! Even with filtering, IPC is always allowed to connect
+
         val serverConnectSuccess = atomic(false)
         val clientConnectSuccess = atomic(false)
 
@@ -291,8 +293,8 @@ class ConnectionFilterTest : BaseTest() {
 
         waitForThreads()
 
-        Assert.assertFalse(serverConnectSuccess.value)
-        Assert.assertFalse(clientConnectSuccess.value)
+        Assert.assertTrue(serverConnectSuccess.value)
+        Assert.assertTrue(clientConnectSuccess.value)
     }
 
     @Test(expected = ClientException::class)
