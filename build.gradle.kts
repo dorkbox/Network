@@ -173,7 +173,7 @@ dependencies {
     // This is just a really fast queue (where LMAX is a fast queue + other things w/ a difficult DSL)
     // https://github.com/conversant/disruptor_benchmark
     // https://www.youtube.com/watch?v=jVMOgQgYzWU
-    api("com.conversantmedia:disruptor:1.2.19")
+//    api("com.conversantmedia:disruptor:1.2.19")
 
     // https://github.com/jhalterman/typetools
     api("net.jodah:typetools:0.6.3")

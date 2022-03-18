@@ -71,12 +71,6 @@
            https://github.com/EsotericSoftware/minlog
              Nathan Sweet
 
-     - Conversant Disruptor - Disruptor is the highest performing intra-thread transfer mechanism available in Java.
-       [The Apache Software License, Version 2.0]
-       https://github.com/conversant/disruptor
-       Copyright 2022
-         Conversant, Inc
-
      - TypeTools - A simple, zero-dependency library for working with types. Supports Java 1.6+ and Android.
        [The Apache Software License, Version 2.0]
        https://github.com/jhalterman/typetools
