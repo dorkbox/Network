@@ -43,7 +43,6 @@ import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -87,7 +86,7 @@ internal constructor(val type: Class<*>,
 
     val logger: KLogger = KotlinLogging.logger(type.simpleName)
 
-    internal val actionDispatch = CoroutineScope(Dispatchers.Default)
+    internal val actionDispatch = config.dispatch
 
     internal val listenerManager = ListenerManager<CONNECTION>(logger)
     internal val connections = ConnectionManager<CONNECTION>()
@@ -458,7 +457,7 @@ internal constructor(val type: Class<*>,
             // go in "lock step"
             is RmiMessage -> {
                 // if we are an RMI message/registration, we have very specific, defined behavior.
-                // We do not use the "normal" listener callback pattern because this require special functionality
+                // We do not use the "normal" listener callback pattern because this requires special functionality
                 rmiGlobalSupport.manage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
             }
 
@@ -480,12 +479,7 @@ internal constructor(val type: Class<*>,
             }
 
             else -> {
-                // do nothing, there were problems with the message
-                if (message != null) {
-                    logger.error("No message callbacks found for ${message::class.java.simpleName}")
-                } else {
-                    logger.error("Unknown message received!!")
-                }
+                logger.error("Unknown message received!!")
             }
         }
     }

@@ -28,6 +28,8 @@ import dorkbox.storage.Storage
 import io.aeron.driver.Configuration
 import io.aeron.driver.ThreadingMode
 import io.aeron.exceptions.DriverTimeoutException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import mu.KLogger
 import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
@@ -255,6 +257,11 @@ open class Configuration {
             field = value
         }
 
+    /**
+     * The dispatch responsible for executing events that arrive via the network. Normally, events should be
+     * dispatched asynchronously across a thread pool, but in certain circumstances you may want to constrain this to a single thread dispatcher, I/O, or a custom dispatcher.
+     */
+    var dispatch = CoroutineScope(Dispatchers.Default)
 
     /**
      * Allows the user to change how endpoint settings and public key information are saved.
