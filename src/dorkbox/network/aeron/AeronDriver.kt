@@ -55,6 +55,11 @@ class AeronDriver(
         private const val AERON_PUBLICATION_LINGER_TIMEOUT = 5_000L  // in MS
 
         private fun setConfigDefaults(config: Configuration, logger: KLogger) {
+            // explicitly don't set defaults if we already have the context defined!
+            if (config.contextDefined) {
+                return
+            }
+
             /*
              * Linux
              * Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and
@@ -81,7 +86,7 @@ class AeronDriver(
 
 
             if (config.sendBufferSize == 0) {
-                config.receiveBufferSize = io.aeron.driver.Configuration.SOCKET_SNDBUF_LENGTH_DEFAULT
+                config.sendBufferSize = io.aeron.driver.Configuration.SOCKET_SNDBUF_LENGTH_DEFAULT
                 //            when {
                 //                OS.isLinux() ->
                 //                OS.isWindows() ->
