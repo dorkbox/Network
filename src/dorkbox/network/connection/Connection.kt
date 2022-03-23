@@ -351,12 +351,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             subscription.close()
 
-            val timeOut = TimeUnit.SECONDS.toMillis(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
-            var closeTimeoutTime = System.currentTimeMillis() + timeOut
+
+            val timoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
+            var closeTimeoutTime = System.nanoTime()
 
             // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
             // we want a timeout-check, otherwise this will run forever
-            while (messagesInProgress.value != 0 && System.currentTimeMillis() < closeTimeoutTime) {
+            while (messagesInProgress.value != 0 && System.nanoTime() - closeTimeoutTime < timoutInNanos) {
                 delay(50)
             }
 
@@ -364,8 +365,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             val logFile = endPoint.aeronDriver.getMediaDriverPublicationFile(publication.registrationId())
             publication.close()
 
-            closeTimeoutTime = System.currentTimeMillis() + timeOut
-            while (logFile.exists() && System.currentTimeMillis() < closeTimeoutTime) {
+
+            closeTimeoutTime = System.nanoTime()
+            while (logFile.exists() && System.nanoTime() - closeTimeoutTime < timoutInNanos) {
                 if (logFile.delete()) {
                     break
                 }

@@ -30,7 +30,7 @@ abstract class MediaDriverConnection(
     lateinit var publication: Publication
 
 
-    abstract fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
+    abstract suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
     abstract fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
 
     abstract fun clientInfo() : String

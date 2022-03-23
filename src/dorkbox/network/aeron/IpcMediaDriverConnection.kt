@@ -18,19 +18,20 @@ package dorkbox.network.aeron
 
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
+import kotlinx.coroutines.delay
 import mu.KLogger
 import java.lang.Thread.sleep
 import java.util.concurrent.*
 
 /**
  * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
- * NOTE: IPC connection will ALWAYS have a timeout of 1 second to connect. This is IPC, it should connect fast
+ * NOTE: IPC connection will ALWAYS have a timeout of 10 second to connect. This is IPC, it should connect fast
  */
 internal open class IpcMediaDriverConnection(streamId: Int,
                                         val streamIdSubscription: Int,
                                         sessionId: Int,
                                         ) :
-        MediaDriverConnection(0, 0, streamId, sessionId, 1, true) {
+        MediaDriverConnection(0, 0, streamId, sessionId, 10, true) {
 
     var success: Boolean = false
 
@@ -48,7 +49,7 @@ internal open class IpcMediaDriverConnection(streamId: Int,
      *
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
-    override fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
+    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
@@ -74,13 +75,13 @@ internal open class IpcMediaDriverConnection(streamId: Int,
         // this will wait for the server to acknowledge the connection (all via aeron)
         val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
         var startTime = System.nanoTime()
-        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < timoutInNanos) {
             if (subscription.isConnected && subscription.imageCount() > 0) {
                 success = true
                 break
             }
 
-            sleep(500L)
+            delay(500L) // not delay? maybe coroutines?
         }
 
 
@@ -94,13 +95,13 @@ internal open class IpcMediaDriverConnection(streamId: Int,
 
         // this will wait for the server to acknowledge the connection (all via aeron)
         startTime = System.nanoTime()
-        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < timoutInNanos) {
             if (publication.isConnected) {
                 success = true
                 break
             }
 
-            sleep(500L)
+            delay(500L) // not delay? maybe coroutines?
         }
 
         if (!success) {

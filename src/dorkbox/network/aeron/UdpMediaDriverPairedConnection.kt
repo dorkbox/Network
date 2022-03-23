@@ -29,7 +29,7 @@ internal class UdpMediaDriverPairedConnection(listenAddress: InetAddress,
                                               subscriptionPort: Int,
                                               streamId: Int,
                                               sessionId: Int,
-                                              connectionTimeoutSec: Int = 0,
+                                              connectionTimeoutSec: Int,
                                               isReliable: Boolean = true) :
     UdpMediaDriverServerConnection(listenAddress, publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 

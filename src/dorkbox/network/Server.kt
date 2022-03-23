@@ -485,7 +485,9 @@ open class Server<CONNECTION : Connection>(
         }
 
         try {
-            initEndpointState()
+            runBlocking {
+                initEndpointState()
+            }
         } catch (e: Exception) {
             logger.error("Unable to initialize the endpoint state", e)
             return
@@ -622,7 +624,7 @@ open class Server<CONNECTION : Connection>(
                 ipv6Poller.close()
                 ipcPoller.close()
 
-                // clear all of the handshake info
+                // clear all the handshake info
                 handshake.clear()
 
                 // finish closing -- this lets us make sure that we don't run into race conditions on the thread that calls close()

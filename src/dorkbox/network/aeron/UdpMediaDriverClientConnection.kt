@@ -21,8 +21,8 @@ import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
+import kotlinx.coroutines.delay
 import mu.KLogger
-import java.lang.Thread.sleep
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.*
@@ -79,7 +79,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
 
 
     @Suppress("DuplicatedCode")
-    override fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
+    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         val aeronAddressString = aeronConnectionString(address)
 
         // Create a publication at the given address and port, using the given stream ID.
@@ -112,13 +112,13 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         // this will wait for the server to acknowledge the connection (all via aeron)
         val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
         var startTime = System.nanoTime()
-        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < timoutInNanos) {
             if (subscription.isConnected) {
                 success = true
                 break
             }
 
-            sleep(500L)
+            delay(500L)
         }
 
         if (!success) {
@@ -133,13 +133,13 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
 
         // this will wait for the server to acknowledge the connection (all via aeron)
         startTime = System.nanoTime()
-        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < timoutInNanos) {
             if (publication.isConnected) {
                 success = true
                 break
             }
 
-            sleep(500L)
+            delay(500L)
         }
 
         if (!success) {

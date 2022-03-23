@@ -36,7 +36,6 @@ import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.serialization.SettingsStore
-import dorkbox.util.exceptions.SecurityException
 import io.aeron.Publication
 import io.aeron.driver.MediaDriver
 import io.aeron.logbuffer.Header
@@ -176,7 +175,7 @@ internal constructor(val type: Class<*>,
     /**
      * @throws Exception if there is a problem starting the media driver
      */
-    internal fun initEndpointState() {
+    internal suspend fun initEndpointState() {
         shutdown.getAndSet(false)
         shutdownWaiter = SuspendWaiter()
 

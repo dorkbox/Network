@@ -42,7 +42,7 @@ import java.util.concurrent.*
  * 'notifyConnect' must be THE ONLY THING in this class to use the action dispatch!
  */
 @Suppress("DuplicatedCode")
-internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
+internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLogger,
                                                         private val config: ServerConfiguration,
                                                         private val listenerManager: ListenerManager<CONNECTION>) {
 
@@ -50,13 +50,8 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
     private val pendingConnections = ExpiringMap.builder()
         .expiration(config.connectionCloseTimeoutInSeconds.toLong() * 2, TimeUnit.SECONDS)
         .expirationPolicy(ExpirationPolicy.CREATED)
-        .expirationListener<Int, CONNECTION> { _, connection ->
-            // this blocks until it fully runs (which is ok. this is fast)
-            logger.error("[${connection.id}] Timed out waiting for registration response from client")
-
-            runBlocking {
-                connection.close()
-            }
+        .expirationListener<Int, CONNECTION> { sessionId, connection ->
+            expirePendingConnections(sessionId, connection)
         }
         .build<Int, CONNECTION>()
 
@@ -67,6 +62,16 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
     private val sessionIdAllocator = RandomIdAllocator(AeronDriver.RESERVED_SESSION_ID_LOW, AeronDriver.RESERVED_SESSION_ID_HIGH)
     private val streamIdAllocator = RandomIdAllocator(1, Integer.MAX_VALUE)
 
+
+    private fun expirePendingConnections(sessionId: Int, connection: CONNECTION) {
+        // this blocks until it fully runs (which is ok. this is fast)
+        logger.error("[${connection.id}] Timed out waiting for registration response from client")
+
+        pendingConnections.remove(sessionId)
+        runBlocking {
+            connection.close()
+        }
+    }
 
     /**
      * @return true if we should continue parsing the incoming message, false if we should abort
@@ -427,7 +432,7 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
             return
         }
 
-        // the pub/sub do not necessarily have to be the same. The can be ANY port
+        // the pub/sub do not necessarily have to be the same. They can be ANY port
         val publicationPort = config.publicationPort
         val subscriptionPort = config.subscriptionPort
 
@@ -507,7 +512,7 @@ internal class ServerHandshake<CONNECTION : Connection>(logger: KLogger,
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[sessionId] = connection
 
-            // this tells the client all of the info to connect.
+            // this tells the client all the info to connect.
             server.writeHandshakeMessage(handshakePublication, successMessage) // exception is already caught
         } catch (e: Exception) {
             // have to unwind actions!
