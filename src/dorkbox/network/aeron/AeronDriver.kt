@@ -11,6 +11,8 @@ import io.aeron.Subscription
 import io.aeron.driver.MediaDriver
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.concurrent.BackoffIdleStrategy
@@ -53,6 +55,9 @@ class AeronDriver(
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
         private const val AERON_PUBLICATION_LINGER_TIMEOUT = 5_000L  // in MS
+
+        // prevents multiple instances, within the same JVM, from starting at the exact same time.
+        private val startMutex = Mutex()
 
         private fun setConfigDefaults(config: Configuration, logger: KLogger) {
             // explicitly don't set defaults if we already have the context defined!
@@ -312,25 +317,25 @@ class AeronDriver(
         return context
     }
 
-
     /**
      * If the driver is not already running, this will start the driver
      *
      * @throws Exception if there is a problem starting the media driver
      */
-    @Synchronized
-    fun start() {
-        if (closeRequested.value) {
-            logger.debug("Resetting media driver context")
+    suspend fun start() {
+        startMutex.withLock {
+            if (closeRequested.value) {
+                logger.debug("Resetting media driver context")
 
-            // close was requested previously. we have to reset a few things
-            context = createContext()
+                // close was requested previously. we have to reset a few things
+                context = createContext()
 
-            // we want to be able to "restart" aeron, as necessary, after a [close] method call
-            closeRequested.value = false
+                // we want to be able to "restart" aeron, as necessary, after a [close] method call
+                closeRequested.value = false
+            }
+
+            restart()
         }
-
-        restart()
     }
 
     /**
