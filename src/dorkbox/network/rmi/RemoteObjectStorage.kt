@@ -15,10 +15,10 @@
  */
 package dorkbox.network.rmi
 
-import dorkbox.util.collections.LockFreeIntBiMap
+import dorkbox.collections.LockFreeIntBiMap
 import mu.KLogger
 import org.agrona.collections.IntArrayList
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.concurrent.locks.*
 import kotlin.concurrent.write
 
 /**

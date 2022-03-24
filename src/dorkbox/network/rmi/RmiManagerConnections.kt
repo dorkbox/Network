@@ -15,6 +15,7 @@
  */
 package dorkbox.network.rmi
 
+import dorkbox.collections.LockFreeIntMap
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
@@ -23,7 +24,6 @@ import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
 import dorkbox.network.serialization.Serialization
 import dorkbox.util.classes.ClassHelper
-import dorkbox.util.collections.LockFreeIntMap
 import mu.KLogger
 
 class RmiManagerConnections<CONNECTION: Connection> internal constructor(

@@ -23,7 +23,6 @@ import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
 import dorkbox.network.serialization.SettingsStore
 import dorkbox.util.entropy.Entropy
-import dorkbox.util.exceptions.SecurityException
 import mu.KLogger
 import java.math.BigInteger
 import java.net.InetAddress

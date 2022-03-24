@@ -15,9 +15,9 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.util.collections.ConcurrentEntry
-import dorkbox.util.collections.ConcurrentIterator
-import dorkbox.util.collections.ConcurrentIterator.headREF
+import dorkbox.collections.ConcurrentEntry
+import dorkbox.collections.ConcurrentIterator
+import dorkbox.collections.ConcurrentIterator.headREF
 
 // .equals() compares the identity on purpose,this because we cannot create two separate objects that are somehow equal to each other.
 @Suppress("UNCHECKED_CAST")
@@ -37,7 +37,6 @@ internal open class ConnectionManager<CONNECTION: Connection>() {
 
     /**
      * Removes a custom connection to the server.
-     *
      *
      * This should only be used in situations where there can be DIFFERENT types of connections (such as a 'web-based' connection) and
      * you want *this* server instance to manage listeners + message dispatch

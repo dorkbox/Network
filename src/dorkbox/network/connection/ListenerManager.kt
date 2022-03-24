@@ -15,11 +15,11 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.collections.IdentityMap
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.os.OS
 import dorkbox.util.classes.ClassHelper
 import dorkbox.util.classes.ClassHierarchy
-import dorkbox.util.collections.IdentityMap
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
