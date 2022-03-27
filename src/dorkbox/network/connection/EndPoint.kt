@@ -83,6 +83,32 @@ internal constructor(val type: Class<*>,
     protected constructor(config: Configuration, connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION) : this(Client::class.java, config, connectionFunc)
     protected constructor(config: ServerConfiguration, connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION) : this(Server::class.java, config, connectionFunc)
 
+    companion object {
+        /**
+         * @return the error code text for the specified number
+         */
+        private fun errorCodeName(result: Long): String {
+            return when (result) {
+                // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
+                Publication.NOT_CONNECTED -> "Not connected"
+
+                // The offer failed due to back pressure from the subscribers preventing further transmission.
+                Publication.BACK_PRESSURED -> "Back pressured"
+
+                // The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
+                Publication.ADMIN_ACTION -> "Administrative action"
+
+                // The Publication has been closed and should no longer be used.
+                Publication.CLOSED -> "Publication is closed"
+
+                // If this happens then the publication should be closed and a new one added. To make it less likely to happen then increase the term buffer length.
+                Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
+
+                else -> throw IllegalStateException("Unknown error code: $result")
+            }
+        }
+    }
+
     val logger: KLogger = KotlinLogging.logger(type.simpleName)
 
     internal val actionDispatch = config.dispatch
@@ -321,7 +347,7 @@ internal constructor(val type: Class<*>,
      * @return true if the message was successfully sent by aeron
      */
     @Suppress("DuplicatedCode")
-    internal fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage): Boolean {
+    internal fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage) {
         // The handshake sessionId IS NOT globally unique
         logger.trace {
             "[${publication.sessionId()}] send HS: $message"
@@ -338,7 +364,7 @@ internal constructor(val type: Class<*>,
                 result = publication.offer(internalBuffer, 0, objectSize)
                 if (result >= 0) {
                     // success!
-                    return true
+                    return
                 }
 
                 /**
@@ -487,7 +513,7 @@ internal constructor(val type: Class<*>,
     /**
      * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
      *
-     * @return true if the message was successfully sent by aeron
+     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
     @Suppress("DuplicatedCode", "UNCHECKED_CAST")
     internal suspend fun send(message: Any, publication: Publication, connection: Connection): Boolean {
@@ -552,7 +578,7 @@ internal constructor(val type: Class<*>,
 
                 logger.error("Aeron error!", exception)
                 listenerManager.notifyError(connection, exception)
-                throw exception
+                return false
             }
         } catch (e: Exception) {
             if (message is MethodResponse && message.result is Exception) {
@@ -569,31 +595,6 @@ internal constructor(val type: Class<*>,
         }
 
         return false
-    }
-
-
-    /**
-     * @return the error code text for the specified number
-     */
-    private fun errorCodeName(result: Long): String {
-        return when (result) {
-            // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-            Publication.NOT_CONNECTED -> "Not connected"
-
-            // The offer failed due to back pressure from the subscribers preventing further transmission.
-            Publication.BACK_PRESSURED -> "Back pressured"
-
-            // The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-            Publication.ADMIN_ACTION -> "Administrative action"
-
-            // The Publication has been closed and should no longer be used.
-            Publication.CLOSED -> "Publication is closed"
-
-            // If this happens then the publication should be closed and a new one added. To make it less likely to happen then increase the term buffer length.
-            Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
-
-            else -> throw IllegalStateException("Unknown error code: $result")
-        }
     }
 
     override fun toString(): String {

@@ -216,7 +216,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Safely sends objects to a destination.
      *
-     * @return true if the message was successfully sent by aeron
+     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
     suspend fun send(message: Any): Boolean {
         messagesInProgress.getAndIncrement()
