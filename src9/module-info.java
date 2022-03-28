@@ -12,6 +12,7 @@ module dorkbox.network {
     exports dorkbox.network.serialization;
 
     requires transitive dorkbox.bytes;
+    requires transitive dorkbox.collections;
     requires transitive dorkbox.updates;
     requires transitive dorkbox.utilities;
     requires transitive dorkbox.netutil;
@@ -19,9 +20,10 @@ module dorkbox.network {
     requires transitive dorkbox.serializers;
     requires transitive dorkbox.storage;
     requires transitive dorkbox.objectpool;
+    requires transitive dorkbox.os;
 
     requires transitive expiringmap;
-    requires  net.jodah.typetools;
+    requires net.jodah.typetools;
     requires transitive com.esotericsoftware.kryo;
     requires transitive com.esotericsoftware.reflectasm;
     requires transitive org.objenesis;

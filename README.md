@@ -7,14 +7,16 @@ Network
 The Network project is an encrypted, high-performance, event-driven/reactive Network stack with DNS and RMI, using Netty, Kryo, KryoNet RMI, and LZ4 via TCP/UDP. 
 
 These are the main features:
-- The connection between endpoints is AES256-GCM / EC curve25519.
-- The connection data is LZ4 compressed and byte-packed for small payload sizes.
+* The connection between endpoints is AES256-GCM / EC curve25519. (WIP, this was updated for use with Aeron, which changes this)
+* The connection data is LZ4 compressed and byte-packed for small payload sizes. (WIP, this was updated for use with Aeron, which 
+  changes this)
 - The connection supports:
  - Remote Method Invocation
    - Blocking
    - Non-Blocking
    - Void returns
    - Exceptions can be returned
+   - Kotlin coroutine suspend functions
  - Sending data when Idle
  - "Pinging" the remote end (for measuring round-trip time)
  - Firewall connections by IP+CIDR
@@ -25,7 +27,7 @@ These are the main features:
 - There are simple wrapper classes for:
   - Server
   - Client
-  - MultiCast Broadcast client and server discovery
+  * MultiCast Broadcast client and server discovery (WIP, this was updated for use with Aeron, which changes this)
   
 
 - Note: There is a maximum packet size for UDP, 508 bytes *to guarantee it's unfragmented*
@@ -93,7 +95,7 @@ Maven Info
     <dependency>
       <groupId>com.dorkbox</groupId>
       <artifactId>Network</artifactId>
-      <version>5.9.1</version>
+      <version>5.9.2</version>
     </dependency>
 </dependencies>
 ```
@@ -103,7 +105,7 @@ Gradle Info
 ```
 dependencies {
     ...
-    implementation("com.dorkbox:Network:5.9.1")
+    implementation("com.dorkbox:Network:5.9.2")
 }
 ```
 
@@ -111,4 +113,3 @@ License
 ---------
 This project is © 2021 dorkbox llc, and is distributed under the terms of the Apache v2.0 License. See file "LICENSE" for further 
 references.
-
