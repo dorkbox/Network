@@ -296,14 +296,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
-     * We must account for network blips. They blips will be recovered by aeron, but we want to make sure that we are actually
+     * We must account for network blips. The blips will be recovered by aeron, but we want to make sure that we are actually
      * disconnected for a set period of time before we start the close process for a connection
      *
      * @return `true` if this connection has been closed via aeron
      */
     fun isClosedViaAeron(): Boolean {
         // we ONLY want to actually, legit check, 1 time every XXX ms.
-        val now = System.nanoTime()
+        val now = System.currentTimeMillis()
 
         if (now - connectionLastCheckTime < connectionCheckIntervalInMS) {
             // we haven't waited long enough for another check. always return false (true means we are closed)
