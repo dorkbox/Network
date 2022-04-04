@@ -115,10 +115,11 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 throwable.stackTrace = stackTrace.filterIndexed { index, element ->
                 val stackName = element.className
                 if (index <= firstDorkboxIndex && index >= lastDorkboxIndex) {
-                    true
+                    false
                 } else {
-                    !(stackName.startsWith("kotlinx.coroutines.") ||
+                    val isCoroutine = !(stackName.startsWith("kotlinx.coroutines.") ||
                       stackName.startsWith("kotlin.coroutines."))
+                    isCoroutine && element.methodName != "invokeSuspend"
                 }
             }.toTypedArray()
         }
