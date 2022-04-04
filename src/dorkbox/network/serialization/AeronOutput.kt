@@ -72,7 +72,7 @@ class AeronOutput : Output {
     constructor(bufferSize: Int = 32) {
         require(bufferSize >= 0) { "bufferSize must be >= 0!" }
         // Minimum buffer size allowed is size = 2 (because it grows by 1.5x the current size)
-        internalBuffer = ExpandableDirectByteBuffer(Math.max(2, bufferSize))
+        internalBuffer = ExpandableDirectByteBuffer(2.coerceAtLeast(bufferSize))
     }
 
     /**
