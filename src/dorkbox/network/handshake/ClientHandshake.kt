@@ -186,10 +186,13 @@ internal class ClientHandshake<CONNECTION: Connection>(
             ListenerManager.cleanStackTraceInternal(failedEx)
             throw failedEx
         }
+
         if (connectionHelloInfo == null) {
             // no longer necessary to hold this connection open (if not a failure, we close the handshake after the DONE message)
             handshakeConnection.close()
-            throw ClientTimedOutException("Waiting for registration response from server")
+            val exception = ClientTimedOutException("Waiting for registration response from server")
+            ListenerManager.cleanStackTraceInternal(exception)
+            throw exception
         }
 
         return connectionHelloInfo!!
@@ -203,7 +206,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
         try {
             endPoint.writeHandshakeMessage(handshakeConnection.publication, registrationMessage)
         } catch (e: Exception) {
-            logger.error("Handshake error!", e)
             return false
         }
 
@@ -247,7 +249,9 @@ internal class ClientHandshake<CONNECTION: Connection>(
         }
 
         if (!connectionDone) {
-            throw ClientTimedOutException("Waiting for registration response from server")
+            val exception = ClientTimedOutException("Waiting for registration response from server")
+            ListenerManager.cleanStackTraceInternal(exception)
+            throw exception
         }
 
         return connectionDone
