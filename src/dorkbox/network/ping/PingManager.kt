@@ -23,6 +23,7 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.ResponseManager
 import kotlinx.coroutines.CoroutineScope
 import mu.KLogger
+import java.util.concurrent.*
 
 /**
  * How to handle ping messages
@@ -79,7 +80,7 @@ internal class PingManager<CONNECTION : Connection> {
         }
 
         // ALWAYS cancel the ping after 30 seconds
-        responseManager.cancelRequest(actionDispatch, pingTimeoutSeconds.toLong(), id, logger) {
+        responseManager.cancelRequest(actionDispatch, TimeUnit.SECONDS.toMillis(pingTimeoutSeconds.toLong()), id, logger) {
             // kill the callback, since we are now "cancelled". If there is a race here (and the response comes at the exact same time)
             // we don't care since either it will be null or it won't (if it's not null, it will run the callback)
             result = null
