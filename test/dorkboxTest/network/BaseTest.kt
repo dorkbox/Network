@@ -229,7 +229,7 @@ abstract class BaseTest {
         endPointConnections.clear()
     }
     /**
-     * Wait for network client/server threads to shutdown for the specified time.
+     * Wait for network client/server threads to shutdown for the specified time. 0 will wait forever
      *
      * it should close as close to naturally as possible, otherwise there are problems
      *
@@ -246,6 +246,9 @@ abstract class BaseTest {
         } catch (e: InterruptedException) {
             e.printStackTrace()
         }
+
+        // always stop the endpoints
+        stopEndPoints()
     }
 
     @Before
