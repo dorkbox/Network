@@ -118,7 +118,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 logger.trace { "[${pendingConnection.id}] Connection from client $connectionString done with handshake." }
 
                 pendingConnection.postCloseAction = {
-                    // this is called whenever connection.close() is called by the framework or via client.close()
+                    // called on connection.close()
 
                     // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
                     actionDispatch.eventLoop {
