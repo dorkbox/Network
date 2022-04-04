@@ -147,7 +147,7 @@ open class Client<CONNECTION : Connection>(
         when {
             // this is default IPC settings
             remoteAddress.isEmpty() && config.enableIpc -> {
-                connectIpc(connectionTimeoutSec)
+                connectIpc(connectionTimeoutSec = connectionTimeoutSec)
             }
 
             IPv4.isPreferred -> {
@@ -323,9 +323,14 @@ open class Client<CONNECTION : Connection>(
             while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
                 try {
                     val handshakeConnection = if (autoChangeToIpc) {
-                        buildIpcHandshake(ipcSubscriptionId, ipcPublicationId, handshakeTimeout, reliable)
+                        buildIpcHandshake(
+                            ipcSubscriptionId = ipcSubscriptionId,
+                            ipcPublicationId = ipcPublicationId,
+                            connectionTimeoutSec = handshakeTimeout,
+                            reliable = reliable
+                        )
                     } else {
-                        buildUdpHandshake(handshakeTimeout, reliable)
+                        buildUdpHandshake(connectionTimeoutSec = handshakeTimeout, reliable = reliable)
                     }
 
                     logger.info(handshakeConnection.clientInfo())
@@ -356,8 +361,14 @@ open class Client<CONNECTION : Connection>(
     }
 
     private suspend fun buildIpcHandshake(ipcSubscriptionId: Int, ipcPublicationId: Int, connectionTimeoutSec: Int, reliable: Boolean): MediaDriverConnection {
-        logger.info {
-            "IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC"
+        if (remoteAddress == null) {
+            logger.info {
+                "IPC enabled."
+            }
+        } else {
+            logger.info {
+                "IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC"
+            }
         }
 
         // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
@@ -373,8 +384,17 @@ open class Client<CONNECTION : Connection>(
         } catch (e: Exception) {
             if (remoteAddress == null) {
                 // if we specified that we MUST use IPC, then we have to throw the exception, because there is no IPC
-                throw ClientException("Unable to connect via IPC to server. No address was specified", e)
+                val clientException = ClientException("Unable to connect via IPC to server. No address was specified", e)
+                ListenerManager.cleanStackTraceInternal(clientException)
+                throw clientException
             }
+        }
+
+        if (remoteAddress == null) {
+            // if we specified that we MUST use IPC, then we have to throw the exception, because there is no IPC
+            val clientException = ClientException("Unable to connect via IPC to server. No address was specified")
+            ListenerManager.cleanStackTraceInternal(clientException)
+            throw clientException
         }
 
         logger.info { "IPC for loopback enabled, but unable to connect. Retrying with address ${IP.toString(remoteAddress!!)}" }
@@ -485,6 +505,7 @@ open class Client<CONNECTION : Connection>(
             } else {
                 ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} has incorrect class registration details!!")
             }
+            ListenerManager.cleanStackTraceInternal(exception)
             throw exception
         }
 
