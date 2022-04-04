@@ -124,7 +124,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         if (!success) {
             subscription.close()
             val ex = ClientTimedOutException("Cannot create subscription: $ip ${subscriptionUri.build()} in ${timoutInNanos}ms")
-            ListenerManager.cleanStackTrace(ex)
+            ListenerManager.cleanStackTraceInternal(ex)
             throw ex
         }
 

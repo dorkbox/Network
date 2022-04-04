@@ -16,11 +16,11 @@
 
 package dorkbox.network.aeron
 
+import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
 import kotlinx.coroutines.delay
 import mu.KLogger
-import java.lang.Thread.sleep
 import java.util.concurrent.*
 
 /**
@@ -81,13 +81,15 @@ internal open class IpcMediaDriverConnection(streamId: Int,
                 break
             }
 
-            delay(500L) // not delay? maybe coroutines?
+            delay(500L)
         }
 
 
         if (!success) {
             subscription.close()
-            throw ClientTimedOutException("Creating subscription connection to aeron")
+            val clientTimedOutException = ClientTimedOutException("Creating subscription connection to aeron")
+            ListenerManager.cleanStackTraceInternal(clientTimedOutException)
+            throw clientTimedOutException
         }
 
 
@@ -101,13 +103,16 @@ internal open class IpcMediaDriverConnection(streamId: Int,
                 break
             }
 
-            delay(500L) // not delay? maybe coroutines?
+            delay(500L)
         }
 
         if (!success) {
             subscription.close()
             publication.close()
-            throw ClientTimedOutException("Creating publication connection to aeron")
+
+            val clientTimedOutException = ClientTimedOutException("Creating publication connection to aeron")
+            ListenerManager.cleanStackTraceInternal(clientTimedOutException)
+            throw clientTimedOutException
         }
 
         this.success = true
