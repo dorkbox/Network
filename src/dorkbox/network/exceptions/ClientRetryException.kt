@@ -16,7 +16,6 @@
 package dorkbox.network.exceptions
 
 /**
- * The client timed out when it attempted to connect to the server.
+ * The server rejected this client when it tried to connect, but it should retry
  */
-class ClientTimedOutException(message: String, cause: Throwable? = null) : ClientRetryException(message, cause) {
-}
+open class ClientRetryException(message: String, cause: Throwable? = null) : ClientException(message, cause)

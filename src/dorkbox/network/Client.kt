@@ -34,6 +34,7 @@ import dorkbox.network.connection.eventLoop
 import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRejectedException
+import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
@@ -68,7 +69,7 @@ open class Client<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "5.9.2"
+        const val version = "5.10"
 
         /**
          * Checks to see if a client (using the specified configuration) is running.
@@ -334,7 +335,7 @@ open class Client<CONNECTION : Connection>(
 
                     // once we're done with the connection process, stop trying
                     break
-                } catch (e: ClientException) {
+                } catch (e: ClientRetryException) {
                     handshake.reset()
 
                     // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
@@ -346,7 +347,8 @@ open class Client<CONNECTION : Connection>(
                     }
 
                 } catch (e: Exception) {
-                    logger.error("Un-recoverable error. Aborting.", e)
+                    logger.error("Un-recoverable error during handshake. Aborting.", e)
+                    listenerManager.notifyError(e)
                     throw e
                 }
             }
@@ -416,13 +418,7 @@ open class Client<CONNECTION : Connection>(
 
 
         // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
-        val connectionInfo = try {
-            handshake.hello(handshakeConnection, connectionTimeoutSec)
-        } catch (e: Exception) {
-            logger.error("Handshake error", e)
-            throw e
-        }
-
+        val connectionInfo = handshake.hello(handshakeConnection, connectionTimeoutSec)
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
         val validateRemoteAddress = if (isUsingIPC) {
@@ -489,8 +485,6 @@ open class Client<CONNECTION : Connection>(
             } else {
                 ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} has incorrect class registration details!!")
             }
-
-            logger.error("Initialization error", exception)
             throw exception
         }
 
@@ -571,7 +565,7 @@ open class Client<CONNECTION : Connection>(
             // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
 
             // these have to be in two SEPARATE actionDispatch.launch commands.... otherwise...
-            // if something inside of notifyConnect is blocking or suspends, then polling will never happen!
+            // if something inside-of notifyConnect is blocking or suspends, then polling will never happen!
             actionDispatch.launch {
                 waiter.doNotify()
 
@@ -614,7 +608,6 @@ open class Client<CONNECTION : Connection>(
 
             val exception = ClientRejectedException("Unable to connect with server ${handshakeConnection.clientInfo()}")
             ListenerManager.cleanStackTrace(exception)
-            logger.error("Connection ${connection.id}", exception)
             throw exception
         }
     }

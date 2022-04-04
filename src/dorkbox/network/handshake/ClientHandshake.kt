@@ -19,8 +19,10 @@ import dorkbox.network.Client
 import dorkbox.network.aeron.MediaDriverConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
-import dorkbox.network.exceptions.ClientException
+import dorkbox.network.connection.ListenerManager
+import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientTimedOutException
+import dorkbox.network.exceptions.ServerException
 import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
@@ -54,10 +56,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     private var needToRetry = false
 
     @Volatile
-    private var failedMessage: String = ""
-
-    @Volatile
-    private var failed: Boolean = true
+    private var failedException: Exception? = null
 
     init {
         // now we have a bi-directional connection with the server on the handshake "socket".
@@ -67,17 +66,19 @@ internal class ClientHandshake<CONNECTION: Connection>(
             val message = endPoint.readHandshakeMessage(buffer, offset, length, header)
             val sessionId = header.sessionId()
 
+            failedException = null
+            needToRetry = false
+
             // it must be a registration message
             if (message !is HandshakeMessage) {
-                failedMessage = "[$sessionId] cancelled handshake for unrecognized message: $message"
-                failed = true
+                failedException = ClientRejectedException("[$sessionId] cancelled handshake for unrecognized message: $message")
                 return@FragmentAssembler
             }
 
             // this is an error message
             if (message.state == HandshakeMessage.INVALID) {
-                failedMessage = "[$sessionId] cancelled handshake for error: ${message.errorMessage}"
-                failed = true
+                val cause = ServerException(message.errorMessage ?: "Unknown").apply { stackTrace = stackTrace.copyOfRange(0, 1) }
+                failedException = ClientRejectedException("[$sessionId] cancelled handshake", cause)
                 return@FragmentAssembler
             }
 
@@ -105,8 +106,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                     if (registrationData != null && serverPublicKeyBytes != null) {
                         connectionHelloInfo = crypto.decrypt(registrationData, serverPublicKeyBytes)
                     } else {
-                        failedMessage = "[$message.sessionId] canceled handshake for message without registration and/or public key info"
-                        failed = true
+                        failedException = ClientRejectedException("[$message.sessionId] canceled handshake for message without registration and/or public key info")
                     }
                 }
                 HandshakeMessage.HELLO_ACK_IPC -> {
@@ -129,16 +129,15 @@ internal class ClientHandshake<CONNECTION: Connection>(
                                                                    publicationPort = streamPubId,
                                                                    kryoRegistrationDetails = regDetails)
                     } else {
-                        failedMessage = "[$message.sessionId] canceled handshake for message without registration data"
-                        failed = true
+                        failedException = ClientRejectedException("[$message.sessionId] canceled handshake for message without registration data")
                     }
                 }
                 HandshakeMessage.DONE_ACK -> {
                     connectionDone = true
                 }
                 else -> {
-                    failedMessage = "[$sessionId] cancelled handshake for message that is ${HandshakeMessage.toStateString(message.state)}"
-                    failed = true
+                    val stateString = HandshakeMessage.toStateString(message.state)
+                    failedException = ClientRejectedException("[$sessionId] cancelled handshake for message that is $stateString")
                 }
             }
         }
@@ -146,7 +145,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     fun hello(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) : ClientConnectionInfo {
-        failed = false
+        failedException = null
         oneTimeKey = endPoint.crypto.secureRandom.nextInt()
         val publicKey = endPoint.storage.getPublicKey()!!
 
@@ -172,7 +171,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             pollCount = subscription.poll(handler, 1)
 
-            if (failed || connectionHelloInfo != null) {
+            if (failedException != null || connectionHelloInfo != null) {
                 break
             }
 
@@ -180,10 +179,12 @@ internal class ClientHandshake<CONNECTION: Connection>(
             pollIdleStrategy.idle(pollCount)
         }
 
-        if (failed) {
+        val failedEx = failedException
+        if (failedEx != null) {
             // no longer necessary to hold this connection open (if not a failure, we close the handshake after the DONE message)
             handshakeConnection.close()
-            throw ClientException(failedMessage)
+            ListenerManager.cleanStackTraceInternal(failedEx)
+            throw failedEx
         }
         if (connectionHelloInfo == null) {
             // no longer necessary to hold this connection open (if not a failure, we close the handshake after the DONE message)
@@ -208,7 +209,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         // block until we receive the connection information from the server
 
-        failed = false
+        failedException = null
         var pollCount: Int
         val subscription = handshakeConnection.subscription
         val pollIdleStrategy = endPoint.pollIdleStrategyHandShake
@@ -220,7 +221,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             pollCount = subscription.poll(handler, 1)
 
-            if (failed || connectionDone) {
+            if (failedException != null || connectionDone) {
                 break
             }
 
@@ -240,9 +241,11 @@ internal class ClientHandshake<CONNECTION: Connection>(
         // finished with the handshake, so always close the connection
         handshakeConnection.close()
 
-        if (failed) {
-            throw ClientException(failedMessage)
+        val failedEx = failedException
+        if (failedEx != null) {
+            throw failedEx
         }
+
         if (!connectionDone) {
             throw ClientTimedOutException("Waiting for registration response from server")
         }
@@ -255,7 +258,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
         connectionHelloInfo = null
         connectionDone = false
         needToRetry = false
-        failedMessage = ""
-        failed = true
+        failedException = null
     }
 }
