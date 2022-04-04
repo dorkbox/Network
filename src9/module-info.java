@@ -2,6 +2,7 @@ module dorkbox.network {
     exports dorkbox.network;
     exports dorkbox.network.aeron;
     exports dorkbox.network.connection;
+    exports dorkbox.network.connection.streaming;
     exports dorkbox.network.connectionType;
     exports dorkbox.network.coroutines;
     exports dorkbox.network.exceptions;
