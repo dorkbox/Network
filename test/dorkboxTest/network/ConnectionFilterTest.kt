@@ -169,6 +169,7 @@ class ConnectionFilterTest : BaseTest() {
 
             server.onConnect {
                 serverConnectSuccess.value = true
+                println("Closing server connection")
                 close()
             }
         }
