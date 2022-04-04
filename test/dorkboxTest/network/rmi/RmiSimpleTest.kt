@@ -34,6 +34,7 @@
  */
 package dorkboxTest.network.rmi
 
+import ch.qos.logback.classic.Level
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
@@ -201,6 +202,8 @@ class RmiSimpleTest : BaseTest() {
 
 
     fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
+        setLogLevel(Level.TRACE)
+
         run {
             val configuration = serverConfig()
             configuration.enableIPv4 = isIpv4
