@@ -34,6 +34,7 @@ class PingTest : BaseTest() {
             client.onConnect {
                 repeat(100) {
                     ping {
+                        // a ping object is returned, once the round-trip is complete
                         println(it)
 
                         if (it == 99) {
