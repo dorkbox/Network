@@ -18,10 +18,17 @@ package dorkbox.network.serialization
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.SerializerFactory
+import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import com.esotericsoftware.minlog.Log
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.streaming.StreamingControl
+import dorkbox.network.connection.streaming.StreamingControlSerializer
+import dorkbox.network.connection.streaming.StreamingData
+import dorkbox.network.connection.streaming.StreamingDataSerializer
+import dorkbox.network.connection.streaming.StreamingMessage
+import dorkbox.network.connection.streaming.StreamingState
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingSerializer
@@ -146,6 +153,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     private val rmiClientSerializer = RmiClientSerializer<CONNECTION>()
     private val rmiServerSerializer = RmiServerSerializer<CONNECTION>()
 
+    private val streamingControlSerializer = StreamingControlSerializer()
+    private val streamingDataSerializer = StreamingDataSerializer()
     private val pingSerializer = PingSerializer()
 
     /**
@@ -348,6 +357,10 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         kryo.register(MethodRequest::class.java, methodRequestSerializer)
         kryo.register(MethodResponse::class.java, methodResponseSerializer)
 
+        // Streaming/Chunked Messages!
+        kryo.register(StreamingControl::class.java, streamingControlSerializer)
+        kryo.register(StreamingData::class.java, streamingDataSerializer)
+
         kryo.register(Ping::class.java, pingSerializer)
 
         @Suppress("UNCHECKED_CAST")
@@ -362,43 +375,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      * called as the first thing inside when initializing the classesToRegister
      */
     private fun initKryo(): KryoExtra<CONNECTION> {
-        val kryo = KryoExtra<CONNECTION>()
-
-        kryo.instantiatorStrategy = instantiatorStrategy
-        kryo.references = references
-
-        if (factory != null) {
-            kryo.setDefaultSerializer(factory)
-        }
-
-        // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
-        SerializationDefaults.register(kryo)
-
-//            serialization.register(PingMessage::class.java) // TODO this is built into aeron!??!?!?!
-
-        // TODO: this is for diffie hellmen handshake stuff!
-//            serialization.register(IESParameters::class.java, IesParametersSerializer())
-//            serialization.register(IESWithCipherParameters::class.java, IesWithCipherParametersSerializer())
-        // TODO: fix kryo to work the way we want, so we can register interfaces + serializers with kryo
-//            serialization.register(XECPublicKey::class.java, XECPublicKeySerializer())
-//            serialization.register(XECPrivateKey::class.java, XECPrivateKeySerializer())
-//            serialization.register(Message::class.java) // must use full package name!
-
-        // RMI stuff!
-        kryo.register(ConnectionObjectCreateRequest::class.java)
-        kryo.register(ConnectionObjectCreateResponse::class.java)
-        kryo.register(ConnectionObjectDeleteRequest::class.java)
-        kryo.register(ConnectionObjectDeleteResponse::class.java)
-
-        kryo.register(MethodRequest::class.java, methodRequestSerializer)
-        kryo.register(MethodResponse::class.java, methodResponseSerializer)
-
-        kryo.register(Ping::class.java, pingSerializer)
-
-        @Suppress("UNCHECKED_CAST")
-        kryo.register(InvocationHandler::class.java as Class<Any>, rmiClientSerializer)
-
-        kryo.register(Continuation::class.java, continuationSerializer)
+        val kryo = initGlobalKryo()
 
         // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
         // note, we have to check to make sure a class is not ALREADY registered for RMI before it is registered again
@@ -747,6 +724,11 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, connection: CONNECTION): Any? {
         return readKryo.read(buffer, offset, length, connection)
     }
+
+    fun readRaw(): Input {
+        return readKryo.readerBuffer
+    }
+
 
 //    /**
 //     * # BLOCKING

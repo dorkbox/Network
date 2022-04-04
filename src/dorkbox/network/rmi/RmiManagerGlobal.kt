@@ -18,6 +18,7 @@ package dorkbox.network.rmi
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.messages.*
 import dorkbox.network.serialization.Serialization
+import kotlinx.coroutines.launch
 import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
@@ -88,7 +89,7 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
      * Manages ALL OF THE RMI SCOPES
      */
     @Suppress("DuplicatedCode")
-    suspend fun manage(
+    suspend fun processMessage(
         serialization: Serialization<CONNECTION>,
         connection: CONNECTION,
         message: Any,

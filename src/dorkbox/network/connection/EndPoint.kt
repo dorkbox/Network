@@ -21,6 +21,9 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.CoroutineIdleStrategy
+import dorkbox.network.connection.streaming.StreamingControl
+import dorkbox.network.connection.streaming.StreamingData
+import dorkbox.network.connection.streaming.StreamingManager
 import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ServerException
@@ -48,6 +51,7 @@ import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
+import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
 
 fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
@@ -151,6 +155,8 @@ internal constructor(val type: Class<*>,
     internal val responseManager = ResponseManager(logger, actionDispatch)
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
+
+    internal val streamingManager = StreamingManager<CONNECTION>(logger, actionDispatch)
 
     internal val pingManager = PingManager<CONNECTION>()
 
@@ -451,14 +457,86 @@ internal constructor(val type: Class<*>,
             val message = serialization.readMessage(buffer, offset, length, connection)
             logger.trace { "[${header.sessionId()}] received: $message" }
 
+            // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept date BEFORE it goes to a coroutine
 
-            // NOTE: This MUST be on a new co-routine
-            actionDispatch.launch {
-                try {
-                    processMessage(message, connection)
-                } catch (e: Exception) {
-                    logger.error("Error processing message", e)
-                    listenerManager.notifyError(connection, e)
+            when (message) {
+                is Ping -> {
+                    // NOTE: This MUST be on a new co-routine
+                    actionDispatch.launch {
+                        try {
+                            pingManager.manage(connection, responseManager, message, logger)
+                        } catch (e: Exception) {
+                            logger.error("Error processing message", e)
+                            listenerManager.notifyError(connection, e)
+                        }
+                    }
+                }
+
+                // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
+                // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
+                // go in "lock step"
+                is RmiMessage -> {
+                    // if we are an RMI message/registration, we have very specific, defined behavior.
+                    // We do not use the "normal" listener callback pattern because this requires special functionality
+                    // NOTE: This MUST be on a new co-routine
+                    actionDispatch.launch {
+                        try {
+                            rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
+                        } catch (e: Exception) {
+                            logger.error("Error processing message", e)
+                            listenerManager.notifyError(connection, e)
+                        }
+                    }
+                }
+
+                // streaming/chunked message. This is used when the published data is too large for a single Aeron message.
+                // TECHNICALLY, we could arbitrarily increase the size of the permitted Aeron message, however this doesn't let us
+                // send arbitrarily large pieces of data (gigs in size, potentially).
+                // This will recursively call into this method for each of the unwrapped chunks of data.
+                is StreamingControl -> {
+                    streamingManager.processControlMessage(message, this@EndPoint, connection)
+                }
+                is StreamingData -> {
+                    // NOTE: this will read extra data from the kryo input as necessary (which is why it's not on action dispatch)!
+                    val rawInput = serialization.readRaw()
+                    val dataLength = rawInput.readVarInt(true)
+                    message.payload = rawInput.readBytes(dataLength)
+
+
+                    // NOTE: This MUST be on a new co-routine
+                    actionDispatch.launch {
+                        try {
+                            streamingManager.processDataMessage(message, this@EndPoint, connection)
+                        } catch (e: Exception) {
+                            logger.error("Error processing StreamingMessage", e)
+                            listenerManager.notifyError(connection, e)
+                        }
+                    }
+                }
+
+
+                is Any -> {
+                    // NOTE: This MUST be on a new co-routine
+                    actionDispatch.launch {
+                        try {
+                            @Suppress("UNCHECKED_CAST")
+                            var hasListeners = listenerManager.notifyOnMessage(connection, message)
+
+                            // each connection registers, and is polled INDEPENDENTLY for messages.
+                            hasListeners = hasListeners or connection.notifyOnMessage(message)
+
+                            if (!hasListeners) {
+                                logger.error("No message callbacks found for ${message::class.java.name}")
+                            }
+                        } catch (e: Exception) {
+                            logger.error("Error processing message ${message::class.java.name}", e)
+                            listenerManager.notifyError(connection, e)
+                        }
+                    }
+                }
+
+                else -> {
+                    logger.error("Unknown message received!!")
                 }
             }
         } catch (e: Exception) {
@@ -467,48 +545,6 @@ internal constructor(val type: Class<*>,
             listenerManager.notifyError(connection, e)
         }
     }
-
-    /**
-     * Actually process the message.
-     */
-    private suspend fun processMessage(message: Any?, connection: CONNECTION) {
-        when (message) {
-            is Ping -> {
-                pingManager.manage(connection, responseManager, message, logger)
-            }
-
-            // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
-            // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
-            // go in "lock step"
-            is RmiMessage -> {
-                // if we are an RMI message/registration, we have very specific, defined behavior.
-                // We do not use the "normal" listener callback pattern because this requires special functionality
-                rmiGlobalSupport.manage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
-            }
-
-            is Any -> {
-                try {
-                    @Suppress("UNCHECKED_CAST")
-                    var hasListeners = listenerManager.notifyOnMessage(connection, message)
-
-                    // each connection registers, and is polled INDEPENDENTLY for messages.
-                    hasListeners = hasListeners or connection.notifyOnMessage(message)
-
-                    if (!hasListeners) {
-                        logger.error("No message callbacks found for ${message::class.java.simpleName}")
-                    }
-                } catch (e: Exception) {
-                    logger.error("Error processing message", e)
-                    listenerManager.notifyError(connection, e)
-                }
-            }
-
-            else -> {
-                logger.error("Unknown message received!!")
-            }
-        }
-    }
-
 
     /**
      * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
@@ -531,62 +567,28 @@ internal constructor(val type: Class<*>,
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
-            var result: Long
-            while (true) {
-                result = publication.offer(internalBuffer, 0, objectSize)
-                if (result >= 0) {
-                    // success!
-                    return true
-                }
 
-                /**
-                 * The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
-                 *  val NOT_CONNECTED: Long = -1
-                 *
-                 * The offer failed due to back pressure from the subscribers preventing further transmission.
-                 *  val BACK_PRESSURED: Long = -2
-                 *
-                 * The offer failed due to an administration action and should be retried.
-                 * The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
-                 *  val ADMIN_ACTION: Long = -3
-                 */
-                if (result >= Publication.ADMIN_ACTION) {
-                    // we should retry, BUT we want suspend ANYONE ELSE trying to write at the same time!
-                    sendIdleStrategy.idle()
-                    continue
-                }
-
-
-                if (result == Publication.CLOSED && connection.isClosedViaAeron()) {
-                    // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
-                    // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
-                    // send the message.
-                    // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
-                    return false
-                }
-
-                // more critical error sending the message. we shouldn't retry or anything.
-                val errorMessage = "[${publication.sessionId()}] Error sending message. $message (${errorCodeName(result)})"
-
-                // either client or server. No other choices. We create an exception, because it's more useful!
-                val exception = newException(errorMessage)
-
-                // +2 because we do not want to see the stack for the abstract `newException`
-                // +2 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-                // where we see who is calling "send()"
-                ListenerManager.cleanStackTrace(exception, 4)
-
-                logger.error("Aeron error!", exception)
-                listenerManager.notifyError(connection, exception)
-                return false
+            // one small problem! What if the message is too big to send all at once?
+            val maxMessageLength = publication.maxMessageLength()
+            if (objectSize >= maxMessageLength) {
+                // we must split up the message! It's too large for Aeron to manage.
+                // this will split up the message, construct the necessary control message and state, then CALL the sendData
+                // method directly for each subsequent message.
+                return streamingManager.send(publication, internalBuffer,
+                                             objectSize, this, connection)
             }
+
+            return sendData(publication, internalBuffer, 0, objectSize, connection)
         } catch (e: Exception) {
             if (message is MethodResponse && message.result is Exception) {
                 val result = message.result as Exception
-                logger.error("[${publication.sessionId()}] Error serializing message $message", result)
+                logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
                 listenerManager.notifyError(connection, result)
+            } else if (message is ClientException || message is ServerException) {
+                logger.error("[${publication.sessionId()}] Error for message '$message'", e)
+                listenerManager.notifyError(connection, e)
             } else {
-                logger.error("[${publication.sessionId()}] Error serializing message $message", e)
+                logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
                 listenerManager.notifyError(connection, e)
             }
         } finally {
@@ -595,6 +597,56 @@ internal constructor(val type: Class<*>,
         }
 
         return false
+    }
+
+    // the actual bits that send data on the network.
+    internal suspend fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
+        var result: Long
+        while (true) {
+            result = publication.offer(internalBuffer, offset, objectSize)
+            if (result >= 0) {
+                // success!
+                return true
+            }
+
+            /**
+             * The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
+             *  val NOT_CONNECTED: Long = -1
+             *
+             * The offer failed due to back pressure from the subscribers preventing further transmission.
+             *  val BACK_PRESSURED: Long = -2
+             *
+             * The offer failed due to an administration action and should be retried.
+             * The action is an operation such as log rotation which is likely to have succeeded by the next retry attempt.
+             *  val ADMIN_ACTION: Long = -3
+             */
+            if (result >= Publication.ADMIN_ACTION) {
+                // we should retry, BUT we want to suspend ANYONE ELSE trying to write at the same time!
+                sendIdleStrategy.idle()
+                continue
+            }
+
+
+            if (result == Publication.CLOSED && connection.isClosedViaAeron()) {
+                // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
+                // done executing. If the connection is *closed* first (because an RMI method closed it), then we will not be able to
+                // send the message.
+                // NOTE: we already know the connection is closed. we closed it (so it doesn't make sense to emit an error about this)
+                return false
+            }
+
+            // more critical error sending the message. we shouldn't retry or anything.
+            val errorMessage = "[${publication.sessionId()}] Error sending message. (${errorCodeName(result)})"
+
+            // either client or server. No other choices. We create an exception, because it's more useful!
+            val exception = newException(errorMessage)
+
+            // +2 because we do not want to see the stack for the abstract `newException`
+            // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+            // where we see who is calling "send()"
+            ListenerManager.cleanStackTrace(exception, 5)
+            return false
+        }
     }
 
     override fun toString(): String {
