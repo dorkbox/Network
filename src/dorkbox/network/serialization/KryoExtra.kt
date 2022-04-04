@@ -26,8 +26,8 @@ import org.agrona.DirectBuffer
  */
 class KryoExtra<CONNECTION: Connection>() : Kryo() {
     // for kryo serialization
-    private val readerBuffer = AeronInput()
-    private val writerBuffer = AeronOutput()
+    internal val readerBuffer = AeronInput()
+    internal val writerBuffer = AeronOutput()
 
     // crypto + compression have to work with native byte arrays, so here we go...
 //    private val reader = Input(ABSOLUTE_MAX_SIZE_OBJECT)
@@ -133,7 +133,7 @@ class KryoExtra<CONNECTION: Connection>() : Kryo() {
      * ++++++++++++++++++++++++++
      */
     @Throws(Exception::class)
-    fun read(buffer: DirectBuffer, offset: Int, length: Int, connection: CONNECTION): Any {
+    fun read(buffer: DirectBuffer, offset: Int, length: Int, connection: CONNECTION): Any? {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 
