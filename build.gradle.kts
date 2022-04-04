@@ -37,7 +37,7 @@ object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 8+"
     const val group = "com.dorkbox"
-    const val version = "5.9.2"
+    const val version = "5.10"
 
     // set as project.ext
     const val name = "Network"
@@ -153,7 +153,7 @@ dependencies {
     api("com.dorkbox:Serializers:2.7")
     api("com.dorkbox:Storage:1.1")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.21")
+    api("com.dorkbox:Utilities:1.22")
 
 
     // https://github.com/real-logic/aeron
@@ -170,10 +170,10 @@ dependencies {
 //    implementation("net.jpountz.lz4:lz4:1.3.0")
 
     // this is NOT the same thing as LMAX disruptor.
-    // This is just a really fast queue (where LMAX is a fast queue + other things w/ a difficult DSL)
+    // This is just a slightly faster queue than LMAX. (LMAX is a fast queue + other things w/ a difficult DSL)
     // https://github.com/conversant/disruptor_benchmark
     // https://www.youtube.com/watch?v=jVMOgQgYzWU
-//    api("com.conversantmedia:disruptor:1.2.19")
+    //api("com.conversantmedia:disruptor:1.2.19")
 
     // https://github.com/jhalterman/typetools
     api("net.jodah:typetools:0.6.3")
