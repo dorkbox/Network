@@ -237,7 +237,7 @@ open class Configuration {
      *
      * Too low and it's wasting CPU cycles, too high and there will be some lag when detecting if a connection has been disconnected.
      */
-    var connectionCheckIntervalInMS = TimeUnit.MILLISECONDS.toNanos(200)
+    var connectionCheckIntervalNanos = TimeUnit.MILLISECONDS.toNanos(200)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -251,7 +251,7 @@ open class Configuration {
      *
      * Too low and it's likely to get false-positives, too high and there will be some lag when detecting if a connection has been disconnected.
      */
-    var connectionExpirationTimoutInMS = TimeUnit.SECONDS.toNanos(2)
+    var connectionExpirationTimoutNanos = TimeUnit.SECONDS.toNanos(2)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
