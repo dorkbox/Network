@@ -27,8 +27,6 @@ import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingControlSerializer
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingDataSerializer
-import dorkbox.network.connection.streaming.StreamingMessage
-import dorkbox.network.connection.streaming.StreamingState
 import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingSerializer
@@ -603,11 +601,16 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
                             }
                         }
 
-                        implClass!!
+                        // NOTE: implClass can still be null!
 
-                        logger.trace("REGISTRATION (RMI-CLIENT) ${clazz.name} -> ${implClass.name}")
+                        logger.trace {
+                            if (implClass != null) {
+                                "REGISTRATION (RMI-CLIENT) ${clazz.name} -> ${implClass.name}"
+                            } else {
+                                "REGISTRATION (RMI-CLIENT) ${clazz.name}"
+                            }
+                        }
 
-                        // implClass MIGHT BE NULL!
                         classesToRegister.add(ClassRegistrationForRmi(clazz, implClass, rmiServerSerializer))
 
                     }
