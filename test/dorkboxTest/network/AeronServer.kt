@@ -25,14 +25,29 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
 import dorkbox.storage.Storage
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
 
 object AeronServer {
-//    private val LOG = LoggerFactory.getLogger(AeronServer::class.java)
-
     init {
+        try {
+            val theUnsafe = Unsafe::class.java.getDeclaredField("theUnsafe")
+            theUnsafe.isAccessible = true
+            val u = theUnsafe.get(null) as Unsafe
+            val cls = Class.forName("jdk.internal.module.IllegalAccessLogger")
+            val logger: Field = cls.getDeclaredField("logger")
+            u.putObjectVolatile(cls, u.staticFieldOffset(logger), null)
+        } catch (e: NoSuchFieldException) {
+            e.printStackTrace()
+        } catch (e: IllegalAccessException) {
+            e.printStackTrace()
+        } catch (e: ClassNotFoundException) {
+            e.printStackTrace()
+        }
+
+
         // assume SLF4J is bound to logback in the current environment
         val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
         val context = rootLogger.loggerContext
@@ -94,7 +109,7 @@ object AeronServer {
             println("disconnect: $this")
         }
 
-        server.onError { throwable ->
+        server.onErrorGlobal { throwable ->
             println("from test: has error")
             throwable.printStackTrace()
         }
@@ -109,22 +124,9 @@ object AeronServer {
         }
 
         server.bind()
-    }
 
-    init {
-        try {
-            val theUnsafe = Unsafe::class.java.getDeclaredField("theUnsafe")
-            theUnsafe.isAccessible = true
-            val u = theUnsafe.get(null) as Unsafe
-            val cls = Class.forName("jdk.internal.module.IllegalAccessLogger")
-            val logger: Field = cls.getDeclaredField("logger")
-            u.putObjectVolatile(cls, u.staticFieldOffset(logger), null)
-        } catch (e: NoSuchFieldException) {
-            e.printStackTrace()
-        } catch (e: IllegalAccessException) {
-            e.printStackTrace()
-        } catch (e: ClassNotFoundException) {
-            e.printStackTrace()
+        runBlocking {
+            server.waitForClose()
         }
     }
 }

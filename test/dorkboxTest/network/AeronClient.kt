@@ -40,6 +40,21 @@ import java.util.*
 object AeronClient {
 
     init {
+        try {
+            val theUnsafe = Unsafe::class.java.getDeclaredField("theUnsafe")
+            theUnsafe.isAccessible = true
+            val u = theUnsafe.get(null) as Unsafe
+            val cls = Class.forName("jdk.internal.module.IllegalAccessLogger")
+            val logger: Field = cls.getDeclaredField("logger")
+            u.putObjectVolatile(cls, u.staticFieldOffset(logger), null)
+        } catch (e: NoSuchFieldException) {
+            e.printStackTrace()
+        } catch (e: IllegalAccessException) {
+            e.printStackTrace()
+        } catch (e: ClassNotFoundException) {
+            e.printStackTrace()
+        }
+
         // assume SLF4J is bound to logback in the current environment
         val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
         val context = rootLogger.loggerContext
@@ -154,22 +169,5 @@ object AeronClient {
         //                  and can specify, if we want, the object created.
         //                  Once created though, as NEW ONE with the same ID cannot be created until the old one is removed!
         client.close()
-    }
-
-    init {
-        try {
-            val theUnsafe = Unsafe::class.java.getDeclaredField("theUnsafe")
-            theUnsafe.isAccessible = true
-            val u = theUnsafe.get(null) as Unsafe
-            val cls = Class.forName("jdk.internal.module.IllegalAccessLogger")
-            val logger: Field = cls.getDeclaredField("logger")
-            u.putObjectVolatile(cls, u.staticFieldOffset(logger), null)
-        } catch (e: NoSuchFieldException) {
-            e.printStackTrace()
-        } catch (e: IllegalAccessException) {
-            e.printStackTrace()
-        } catch (e: ClassNotFoundException) {
-            e.printStackTrace()
-        }
     }
 }
