@@ -80,12 +80,20 @@ abstract class EndPoint<CONNECTION : Connection>
 internal constructor(val type: Class<*>,
                      internal val config: Configuration,
                      @Suppress("UNCHECKED_CAST")
-                     internal val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION)
-                     : AutoCloseable {
+                     internal val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
+                     loggerName: String)
+             : AutoCloseable {
 
     @Suppress("UNCHECKED_CAST")
-    protected constructor(config: Configuration, connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION) : this(Client::class.java, config, connectionFunc)
-    protected constructor(config: ServerConfiguration, connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION) : this(Server::class.java, config, connectionFunc)
+    protected constructor(config: Configuration,
+                          connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
+                          loggerName: String)
+            : this(Client::class.java, config, connectionFunc, loggerName)
+
+    protected constructor(config: ServerConfiguration,
+                          connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
+                          loggerName: String)
+            : this(Server::class.java, config, connectionFunc, loggerName)
 
     companion object {
         /**
@@ -113,7 +121,7 @@ internal constructor(val type: Class<*>,
         }
     }
 
-    val logger: KLogger = KotlinLogging.logger(type.simpleName)
+    val logger: KLogger = KotlinLogging.logger(loggerName)
 
     internal val actionDispatch = config.dispatch
 
