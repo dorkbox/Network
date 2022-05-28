@@ -184,7 +184,7 @@ open class Server<CONNECTION : Connection>(
     internal val listenIPv4Address: InetAddress? =
         if (canUseIPv4) {
             when (config.listenIpAddress) {
-                "loopback", "localhost", "lo" -> IPv4.LOCALHOST
+                "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv4.LOCALHOST
                 "0", "::", "0.0.0.0", "*" -> {
                     // this is the "wildcard" address. Windows has problems with this.
                     IPv4.WILDCARD
@@ -200,7 +200,7 @@ open class Server<CONNECTION : Connection>(
     internal val listenIPv6Address: InetAddress? =
         if (canUseIPv6) {
             when (config.listenIpAddress) {
-                "loopback", "localhost", "lo" -> IPv6.LOCALHOST
+                "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv6.LOCALHOST
                 "0", "::", "0.0.0.0", "*" -> {
                     // this is the "wildcard" address. Windows has problems with this.
                     IPv6.WILDCARD
