@@ -35,7 +35,7 @@ plugins {
 
 object Extras {
     // set for the project
-    const val description = "High-performance, event-driven/reactive network stack for Java 8+"
+    const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
     const val version = "5.11"
 
@@ -55,12 +55,12 @@ object Extras {
 GradleUtils.load("$projectDir/../../gradle.properties", Extras)
 GradleUtils.defaults()
 // because of the api changes for stacktrace stuff, it's best for us to ONLY support 11+
-GradleUtils.compileConfiguration(JavaVersion.VERSION_1_8) {
+GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
     // see: https://kotlinlang.org/docs/reference/using-gradle.html
     // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
     freeCompilerArgs = listOf("-Xinline-classes")
 }
-GradleUtils.jpms(JavaVersion.VERSION_1_9)
+//NOTE: we do not support JPMS yet, as there are some libraries missing support for it still
 
 
 // ratelimiter, "other" package
@@ -140,26 +140,28 @@ tasks.jar.get().apply {
 }
 
 dependencies {
-    api("org.jetbrains.kotlinx:atomicfu:0.17.1")
-    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0")
+    api("org.jetbrains.kotlinx:atomicfu:0.17.2")
+    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
 
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:1.5")
-    api("com.dorkbox:Collections:1.0")
+    api("com.dorkbox:Collections:1.1")
     api("com.dorkbox:MinLog:2.4")
-    api("com.dorkbox:NetworkUtils:2.9.1")
+    api("com.dorkbox:NetworkUtils:2.14")
     api("com.dorkbox:ObjectPool:3.5")
     api("com.dorkbox:OS:1.0")
     api("com.dorkbox:Serializers:2.7")
     api("com.dorkbox:Storage:1.1")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.22")
+    api("com.dorkbox:Utilities:1.25")
 
 
+    // we include ALL of aeron, in case we need to debug aeron behavior
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.37.0"
-    api("io.aeron:aeron-client:$aeronVer")
-    api("io.aeron:aeron-driver:$aeronVer")
+    val aeronVer = "1.38.1"
+    api("io.aeron:aeron-all:$aeronVer")
+//    api("io.aeron:aeron-client:$aeronVer")
+//    api("io.aeron:aeron-driver:$aeronVer")
 
     // https://github.com/EsotericSoftware/kryo
     api("com.esotericsoftware:kryo:5.3.0") {
@@ -178,35 +180,16 @@ dependencies {
     // https://github.com/jhalterman/typetools
     api("net.jodah:typetools:0.6.3")
 
-//    // really fast storage
-//    // https://github.com/lmdbjava/lmdbjava
-//    val lmdbJava = "org.lmdbjava:lmdbjava:0.8.1"
-//    compileOnly(lmdbJava)
-//
-//    // https://github.com/OpenHFT/Chronicle-Map
-//    val chronicleMap = "net.openhft:chronicle-map:3.20.84"
-//    compileOnly(chronicleMap) {
-//        exclude("com.intellij", "annotations") // not even available at runtime
-//        // optional from chronicle-map. These cause JPMS to fail!
-//        exclude("com.thoughtworks.xstream", "xstream")
-//        exclude("org.ops4j.pax.url", "pax-url-aether")
-//        exclude("org.codehaus.jettison", "jettison")
-//    }
-//
-
-    // Jodah Expiring Map (A high performance thread-safe map that expires entries)
+    // Expiring Map (A high performance thread-safe map that expires entries)
     // https://github.com/jhalterman/expiringmap
     api("net.jodah:expiringmap:0.5.10")
 
-
-
     // https://github.com/MicroUtils/kotlin-logging
-    api("io.github.microutils:kotlin-logging:2.1.21")
+    api("io.github.microutils:kotlin-logging:2.1.23")
     api("org.slf4j:slf4j-api:1.8.0-beta4")
 
 
-//    testImplementation(lmdbJava)
-//    testImplementation(chronicleMap)
+
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("ch.qos.logback:logback-classic:1.3.0-alpha4")

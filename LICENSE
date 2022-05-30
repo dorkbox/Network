@@ -1,4 +1,4 @@
- - Network - High-performance, event-driven/reactive network stack for Java 8+
+ - Network - High-performance, event-driven/reactive network stack for Java 11+
    [The Apache Software License, Version 2.0]
    https://git.dorkbox.com/dorkbox/Network
    Copyright 2022
