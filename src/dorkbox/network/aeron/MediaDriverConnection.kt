@@ -26,6 +26,7 @@ abstract class MediaDriverConnection(
                                 val streamId: Int, val sessionId: Int,
                                 val connectionTimeoutSec: Int, val isReliable: Boolean) : AutoCloseable {
 
+    var success: Boolean = false
     lateinit var subscription: Subscription
     lateinit var publication: Publication
 
@@ -33,6 +34,13 @@ abstract class MediaDriverConnection(
     abstract suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
     abstract fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
 
-    abstract fun clientInfo() : String
-    abstract fun serverInfo() : String
+    abstract val clientInfo : String
+    abstract val serverInfo : String
+
+    override fun close() {
+        if (success) {
+            publication.close()
+            subscription.close()
+        }
+    }
 }

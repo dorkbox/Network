@@ -317,7 +317,7 @@ open class Client<CONNECTION : Connection>(
         require(connectionTimeoutSec >= 0) { "connectionTimeoutSec '$connectionTimeoutSec' is invalid. It must be >=0" }
 
         if (isConnected) {
-            logger.error("Unable to connect when already connected!")
+            logger.error { "Unable to connect when already connected!" }
             return
         }
 
@@ -327,11 +327,9 @@ open class Client<CONNECTION : Connection>(
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         try {
-            runBlocking {
-                initEndpointState()
-            }
+            initEndpointState()
         } catch (e: Exception) {
-            logger.error("Unable to initialize the endpoint state", e)
+            logger.error(e) { "Unable to initialize the endpoint state" }
             return
         }
 
@@ -348,7 +346,6 @@ open class Client<CONNECTION : Connection>(
         if (remoteAddress != null && remoteAddress.isAnyLocalAddress) {
             require(false) { "Cannot connect to ${IP.toString(remoteAddress)} It is an invalid address!" }
         }
-
 
         // IPC can be enabled TWO ways!
         // - config.enableIpc
@@ -376,7 +373,7 @@ open class Client<CONNECTION : Connection>(
                         buildUdpHandshake(connectionTimeoutSec = handshakeTimeout, reliable = reliable)
                     }
 
-                    logger.info(handshakeConnection.clientInfo())
+                    logger.info { handshakeConnection.clientInfo }
 
 
                     connect0(handshake, handshakeConnection, handshakeTimeout)
@@ -389,13 +386,13 @@ open class Client<CONNECTION : Connection>(
                     // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
                     delay(500)
                     if (logger.isTraceEnabled) {
-                        logger.trace("Unable to connect, retrying", e)
+                        logger.trace(e) { "Unable to connect, retrying..." }
                     } else {
-                        logger.error("Unable to connect, retrying ${e.message}")
+                        logger.info { "Unable to connect, retrying..." }
                     }
 
                 } catch (e: Exception) {
-                    logger.error("Un-recoverable error during handshake. Aborting.", e)
+                    logger.error(e) { "Un-recoverable error during handshake. Aborting." }
                     listenerManager.notifyError(e)
                     throw e
                 }
@@ -405,13 +402,9 @@ open class Client<CONNECTION : Connection>(
 
     private suspend fun buildIpcHandshake(ipcSubscriptionId: Int, ipcPublicationId: Int, connectionTimeoutSec: Int, reliable: Boolean): MediaDriverConnection {
         if (remoteAddress == null) {
-            logger.info {
-                "IPC enabled."
-            }
+            logger.info { "IPC enabled." }
         } else {
-            logger.info {
-                "IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC"
-            }
+            logger.info { "IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC" }
         }
 
         // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
@@ -487,13 +480,13 @@ open class Client<CONNECTION : Connection>(
         val validateRemoteAddress = if (isUsingIPC) {
             PublicKeyValidationState.VALID
         } else {
-            crypto.validateRemoteAddress(remoteAddress!!, connectionInfo.publicKey)
+            crypto.validateRemoteAddress(remoteAddress!!, remoteAddressString, connectionInfo.publicKey)
         }
 
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
             handshakeConnection.close()
             val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} not allowed! Public key mismatch.")
-            logger.error("Validation error", exception)
+            logger.error(exception) { "Validation error" }
             throw exception
         }
 
@@ -530,7 +523,7 @@ open class Client<CONNECTION : Connection>(
         // does not need to do anything
         //
         // throws a ConnectTimedOutException if the client cannot connect for any reason to the server-assigned client ports
-        logger.info(clientConnection.clientInfo())
+        logger.info { clientConnection.clientInfo }
 
 
         ///////////////
@@ -567,11 +560,11 @@ open class Client<CONNECTION : Connection>(
                 handshakeConnection.close()
                 val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} was not permitted!")
                 ListenerManager.cleanStackTrace(exception)
-                logger.error("Permission error", exception)
+                logger.error(exception) { "Permission error" }
                 throw exception
             }
 
-            logger.info("Adding new signature for ${IP.toString(remoteAddress!!)} : ${connectionInfo.publicKey.toHexString()}")
+            logger.info { "Adding new signature for ${IP.toString(remoteAddress!!)} : ${connectionInfo.publicKey.toHexString()}" }
             storage.addRegisteredServerKey(remoteAddress!!, connectionInfo.publicKey)
         }
 
@@ -584,7 +577,7 @@ open class Client<CONNECTION : Connection>(
 
             // on the client, we want to GUARANTEE that the disconnect happens-before connect.
             if (!lockStepForConnect.compareAndSet(null, SuspendWaiter())) {
-                logger.error("Connection ${newConnection.id}", "close lockStep for disconnect was in the wrong state!")
+                logger.error { "Connection ${newConnection.id} : close lockStep for disconnect was in the wrong state!" }
             }
         }
         newConnection.postCloseAction = {
@@ -603,7 +596,7 @@ open class Client<CONNECTION : Connection>(
         connection0 = newConnection
         addConnection(newConnection)
 
-        logger.error { "Connection created, finishing handshake" }
+        logger.error { "Connection created, finishing handshake: ${handshake.connectKey}" }
 
         // tell the server our connection handshake is done, and the connection can now listen for data.
         // also closes the handshake (will also throw connect timeout exception)
@@ -614,7 +607,7 @@ open class Client<CONNECTION : Connection>(
             canFinishConnecting = try {
                 handshake.done(handshakeConnection, successAttemptTimeout)
             } catch (e: ClientException) {
-                logger.error("Error during handshake", e)
+                logger.error(e) { "Error during handshake" }
                 false
             }
         }
@@ -638,7 +631,7 @@ open class Client<CONNECTION : Connection>(
                 while (!isShutdown()) {
                     if (newConnection.isClosedViaAeron()) {
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                        logger.debug {"[${newConnection.id}] connection expired"}
+                        logger.debug { "[${newConnection.id}] connection expired" }
 
                         // event-loop is required, because we want to run this code AFTER the current coroutine has finished. This prevents
                         // odd race conditions when a client is restarted. Can only be run from inside another co-routine!
@@ -670,7 +663,7 @@ open class Client<CONNECTION : Connection>(
         } else {
             close()
 
-            val exception = ClientRejectedException("Unable to connect with server ${handshakeConnection.clientInfo()}")
+            val exception = ClientRejectedException("Unable to connect with server: ${handshakeConnection.clientInfo}")
             ListenerManager.cleanStackTrace(exception)
             throw exception
         }
@@ -692,7 +685,13 @@ open class Client<CONNECTION : Connection>(
      * the remote address, as a string.
      */
     val remoteAddressString: String
-        get() = remoteAddress0?.hostAddress ?: "ipc"
+        get() {
+            return when (val address = remoteAddress) {
+                is Inet4Address -> IPv4.toString(address)
+                is Inet6Address -> IPv6.toString(address, true)
+                else -> "ipc"
+            }
+        }
 
     /**
      * true if this connection is an IPC connection
@@ -731,7 +730,7 @@ open class Client<CONNECTION : Connection>(
             c.send(message)
         } else {
             val exception = ClientException("Cannot send a message when there is no connection!")
-            logger.error("No connection!", exception)
+            logger.error(exception) { "No connection!" }
             false
         }
     }
@@ -760,7 +759,7 @@ open class Client<CONNECTION : Connection>(
         if (c != null) {
             return pingManager.ping(c, pingTimeoutSeconds, actionDispatch, responseManager, logger, function)
         } else {
-            logger.error("No connection!", ClientException("Cannot send a ping when there is no connection!"))
+            logger.error(ClientException("Cannot send a ping when there is no connection!")) { "No connection!" }
         }
 
         return false

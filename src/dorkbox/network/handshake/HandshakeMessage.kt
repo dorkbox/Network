@@ -24,9 +24,10 @@ internal class HandshakeMessage private constructor() {
     var publicKey: ByteArray? = null
 
 
-    // used to keep track and associate UDP/etc sessions. This is always defined by the server
-    // a sessionId if '0', means we are still figuring it out.
-    var oneTimeKey = 0
+    // used to keep track and associate UDP/IPC handshakes between client/server
+    // The connection info (session ID, etc) necessary to make a connection to the server are encrypted with the clients public key.
+    // so EVEN IF you can guess someone's connectKey, you must also know their private key in order to connect as them.
+    var connectKey = 0L
 
     // -1 means there is an error
     var state = INVALID
@@ -35,9 +36,6 @@ internal class HandshakeMessage private constructor() {
 
     var publicationPort = 0
     var subscriptionPort = 0
-    var sessionId = 0
-    var streamId = 0
-
 
 
     // by default, this will be a reliable connection. When the client connects to the server, the client will specify if the new connection
@@ -45,9 +43,8 @@ internal class HandshakeMessage private constructor() {
     val isReliable = true
 
 
-    // the client sends it's registration data to the server to make sure that the registered classes are the same between the client/server
+    // the client sends its registration data to the server to make sure that the registered classes are the same between the client/server
     var registrationData: ByteArray? = null
-    var registrationRmiIdData: IntArray? = null
 
     companion object {
         const val INVALID = -2
@@ -58,42 +55,39 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 3
         const val DONE_ACK = 4
 
-        fun helloFromClient(oneTimeKey: Int, publicKey: ByteArray): HandshakeMessage {
+        fun helloFromClient(connectKey: Long, publicKey: ByteArray): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
-            hello.oneTimeKey = oneTimeKey
+            hello.connectKey = connectKey // this is 'bounced back' by the server, so the client knows if it's the correct connection message
             hello.publicKey = publicKey
             return hello
         }
 
-        fun helloAckToClient(oneTimeKey: Int, sessionId: Int): HandshakeMessage {
+        fun helloAckToClient(connectKey: Long): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO_ACK
-            hello.oneTimeKey = oneTimeKey // has to be the same as before (the client expects this)
-            hello.sessionId = sessionId
+            hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
             return hello
         }
 
-        fun helloAckIpcToClient(oneTimeKey: Int, sessionId: Int): HandshakeMessage {
+        fun helloAckIpcToClient(connectKey: Long): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO_ACK_IPC
-            hello.oneTimeKey = oneTimeKey // has to be the same as before (the client expects this)
-            hello.sessionId = sessionId
+            hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
             return hello
         }
 
-        fun doneFromClient(oneTimeKey: Int): HandshakeMessage {
+        fun doneFromClient(connectKey: Long): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = DONE
-            hello.oneTimeKey = oneTimeKey
+            hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
             return hello
         }
 
-        fun doneToClient(oneTimeKey: Int, sessionId: Int): HandshakeMessage {
+        fun doneToClient(connectKey: Long): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = DONE_ACK
-            hello.oneTimeKey = oneTimeKey // has to be the same as before (the client expects this)
-            hello.sessionId = sessionId
+            hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
             return hello
         }
 
@@ -134,7 +128,6 @@ internal class HandshakeMessage private constructor() {
             ", Error: $errorMessage"
         }
 
-
-        return "HandshakeMessage($sessionId : oneTimePad=$oneTimeKey $stateStr$errorMsg)"
+        return "HandshakeMessage($stateStr$errorMsg)"
     }
 }

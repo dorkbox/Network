@@ -15,15 +15,12 @@
  */
 package dorkbox.network
 
-import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.netUtil.Inet4
 import dorkbox.netUtil.Inet6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
-import dorkbox.network.aeron.IpcMediaDriverConnection
-import dorkbox.network.aeron.UdpMediaDriverServerConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
@@ -31,16 +28,13 @@ import dorkbox.network.connection.eventLoop
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ServerException
-import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.handshake.ServerHandshake
+import dorkbox.network.handshake.ServerHandshakePollers
 import dorkbox.network.rmi.RmiSupportServer
-import io.aeron.FragmentAssembler
-import io.aeron.Image
-import io.aeron.logbuffer.Header
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.agrona.DirectBuffer
 import java.net.InetAddress
 import java.util.concurrent.*
 
@@ -109,20 +103,6 @@ open class Server<CONNECTION : Connection>(
                    Server::class.java.simpleName)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     companion object {
         /**
          * Gets the version number.
@@ -165,7 +145,7 @@ open class Server<CONNECTION : Connection>(
     /**
      * Used for handshake connections
      */
-    private val handshake = ServerHandshake(logger, config, listenerManager)
+    internal val handshake = ServerHandshake(logger, config, listenerManager)
 
     /**
      * Maintains a thread-safe collection of rules used to define the connection type with this server.
@@ -175,8 +155,8 @@ open class Server<CONNECTION : Connection>(
     /**
      * true if the following network stacks are available for use
      */
-    private val canUseIPv4 = config.enableIPv4 && IPv4.isAvailable
-    private val canUseIPv6 = config.enableIPv6 && IPv6.isAvailable
+    internal val canUseIPv4 = config.enableIPv4 && IPv4.isAvailable
+    internal val canUseIPv6 = config.enableIPv6 && IPv6.isAvailable
 
 
     // localhost/loopback IP might not always be 127.0.0.1 or ::1
@@ -221,337 +201,20 @@ open class Server<CONNECTION : Connection>(
         return ServerException(message, cause)
     }
 
-    private fun getIpcPoller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
-        val poller = if (config.enableIpc) {
-            val driver = IpcMediaDriverConnection(streamIdSubscription = config.ipcSubscriptionId,
-                                                  streamId = config.ipcPublicationId,
-                                                  sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID)
-            driver.buildServer(aeronDriver, logger)
-
-            val publication = driver.publication
-            val subscription = driver.subscription
-
-            object : AeronPoller {
-                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
-
-                    // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
-                    // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
-                    val sessionId = header.sessionId()
-
-                    val message = readHandshakeMessage(buffer, offset, length, header)
-
-                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-                    if (message !is HandshakeMessage) {
-                        logger.error("[$sessionId] Connection from IPC not allowed! Invalid connection request")
-
-                        try {
-                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                        } catch (e: Exception) {
-                            logger.error("Handshake error!", e)
-                        }
-                        return@FragmentAssembler
-                    }
-
-                    handshake.processIpcHandshakeMessageServer(this@Server,
-                                                               rmiConnectionSupport,
-                                                               publication,
-                                                               sessionId,
-                                                               message,
-                                                               aeronDriver,
-                        connectionFunc,
-                                                               logger)
-                }
-
-                override fun poll(): Int { return subscription.poll(handler, 1) }
-                override fun close() { driver.close() }
-                override fun serverInfo(): String { return driver.serverInfo() }
-            }
-        } else {
-            object : AeronPoller {
-                override fun poll(): Int { return 0 }
-                override fun close() {}
-                override fun serverInfo(): String { return "IPC Disabled" }
-            }
-        }
-
-        logger.info(poller.serverInfo())
-        return poller
-    }
-
-    @Suppress("DuplicatedCode")
-    private fun getIpv4Poller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
-        val poller = if (canUseIPv4) {
-            val driver = UdpMediaDriverServerConnection(
-                    listenAddress = listenIPv4Address!!,
-                    publicationPort = config.publicationPort,
-                    subscriptionPort = config.subscriptionPort,
-                    streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                    sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                    connectionTimeoutSec = config.connectionCloseTimeoutInSeconds)
-
-            driver.buildServer(aeronDriver, logger)
-
-            val publication = driver.publication
-            val subscription = driver.subscription
-
-            object : AeronPoller {
-                /**
-                 * Note:
-                 * Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is
-                 * desired, then limiting message sizes to MTU size is a good practice.
-                 *
-                 * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
-                 * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
-                 * properties from failure and streams with mechanical sympathy.
-                 */
-                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
-
-                    // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
-                    // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
-                    val sessionId = header.sessionId()
-
-                    // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
-                    val remoteIpAndPort = (header.context() as Image).sourceIdentity()
-
-                    // split
-                    val splitPoint = remoteIpAndPort.lastIndexOf(':')
-                    val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
-                    // val port = remoteIpAndPort.substring(splitPoint+1)
-
-                    // this should never be null, because we are feeding it a valid IP address from aeron
-                    val clientAddress = IPv4.toAddressUnsafe(clientAddressString)
-
-
-                    val message = readHandshakeMessage(buffer, offset, length, header)
-
-                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-                    if (message !is HandshakeMessage) {
-                        logger.error("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request")
-
-                        try {
-                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                        } catch (e: Exception) {
-                            logger.error("Handshake error!", e)
-                        }
-                        return@FragmentAssembler
-                    }
-
-                    handshake.processUdpHandshakeMessageServer(this@Server,
-                                                               rmiConnectionSupport,
-                                                               publication,
-                                                               sessionId,
-                                                               clientAddressString,
-                                                               clientAddress,
-                                                               message,
-                                                               aeronDriver,
-                                                               false,
-                                                               connectionFunc,
-                                                               logger)
-                }
-
-                override fun poll(): Int { return subscription.poll(handler, 1) }
-                override fun close() { driver.close() }
-                override fun serverInfo(): String { return driver.serverInfo() }
-            }
-        } else {
-            object : AeronPoller {
-                override fun poll(): Int { return 0 }
-                override fun close() {}
-                override fun serverInfo(): String { return "IPv4 Disabled" }
-            }
-        }
-
-        logger.info(poller.serverInfo())
-        return poller
-    }
-
-    @Suppress("DuplicatedCode")
-    private fun getIpv6Poller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
-        val poller = if (canUseIPv6) {
-            val driver = UdpMediaDriverServerConnection(
-                    listenAddress = listenIPv6Address!!,
-                    publicationPort = config.publicationPort,
-                    subscriptionPort = config.subscriptionPort,
-                    streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                    sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                    connectionTimeoutSec = config.connectionCloseTimeoutInSeconds)
-
-            driver.buildServer(aeronDriver, logger)
-
-            val publication = driver.publication
-            val subscription = driver.subscription
-
-            object : AeronPoller {
-                /**
-                 * Note:
-                 * Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is
-                 * desired, then limiting message sizes to MTU size is a good practice.
-                 *
-                 * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
-                 * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
-                 * properties from failure and streams with mechanical sympathy.
-                 */
-                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
-
-                    // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
-                    // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
-                    val sessionId = header.sessionId()
-
-                    // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
-                    val remoteIpAndPort = (header.context() as Image).sourceIdentity()
-
-                    // split
-                    val splitPoint = remoteIpAndPort.lastIndexOf(':')
-                    val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
-                    // val port = remoteIpAndPort.substring(splitPoint+1)
-
-                    // this should never be null, because we are feeding it a valid IP address from aeron
-                    val clientAddress = IPv6.toAddress(clientAddressString)!!
-
-
-                    val message = readHandshakeMessage(buffer, offset, length, header)
-
-                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-                    if (message !is HandshakeMessage) {
-                        logger.error("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request")
-
-                        try {
-                            writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                        } catch (e: Exception) {
-                            logger.error("Handshake error!", e)
-                        }
-                        return@FragmentAssembler
-                    }
-
-                    handshake.processUdpHandshakeMessageServer(this@Server,
-                                                               rmiConnectionSupport,
-                                                               publication,
-                                                               sessionId,
-                                                               clientAddressString,
-                                                               clientAddress,
-                                                               message,
-                                                               aeronDriver,
-                                                               false,
-                                                               connectionFunc,
-                                                               logger)
-                }
-
-                override fun poll(): Int { return subscription.poll(handler, 1) }
-                override fun close() { driver.close() }
-                override fun serverInfo(): String { return driver.serverInfo() }
-            }
-        } else {
-            object : AeronPoller {
-                override fun poll(): Int { return 0 }
-                override fun close() {}
-                override fun serverInfo(): String { return "IPv6 Disabled" }
-            }
-        }
-
-        logger.info(poller.serverInfo())
-        return poller
-    }
-
-    @Suppress("DuplicatedCode")
-    private fun getIpv6WildcardPoller(aeronDriver: AeronDriver, config: ServerConfiguration): AeronPoller {
-        val driver = UdpMediaDriverServerConnection(
-                listenAddress = listenIPv6Address!!,
-                publicationPort = config.publicationPort,
-                subscriptionPort = config.subscriptionPort,
-                streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                connectionTimeoutSec = config.connectionCloseTimeoutInSeconds)
-
-        driver.buildServer(aeronDriver, logger)
-
-        val publication = driver.publication
-        val subscription = driver.subscription
-
-        val poller = object : AeronPoller {
-            /**
-             * Note:
-             * Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is
-             * desired, then limiting message sizes to MTU size is a good practice.
-             *
-             * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
-             * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
-             * properties from failure and streams with mechanical sympathy.
-             */
-            val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
-
-                // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
-                // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
-                val sessionId = header.sessionId()
-
-                // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
-                val remoteIpAndPort = (header.context() as Image).sourceIdentity()
-
-                // split
-                val splitPoint = remoteIpAndPort.lastIndexOf(':')
-                val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
-                // val port = remoteIpAndPort.substring(splitPoint+1)
-
-                // this should never be null, because we are feeding it a valid IP address from aeron
-                // maybe IPv4, maybe IPv6! This is slower than if we ALREADY know what it is.
-                val clientAddress = IP.toAddress(clientAddressString)!!
-
-
-                val message = readHandshakeMessage(buffer, offset, length, header)
-
-                // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-                if (message !is HandshakeMessage) {
-                    logger.error("[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request")
-
-                    try {
-                        writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                    } catch (e: Exception) {
-                        logger.error("Handshake error!", e)
-                    }
-                    return@FragmentAssembler
-                }
-
-                handshake.processUdpHandshakeMessageServer(this@Server,
-                                                           rmiConnectionSupport,
-                                                           publication,
-                                                           sessionId,
-                                                           clientAddressString,
-                                                           clientAddress,
-                                                           message,
-                                                           aeronDriver,
-                                                           true,
-                                                           connectionFunc,
-                                                           logger)
-           }
-
-           override fun poll(): Int { return subscription.poll(handler, 1) }
-           override fun close() { driver.close() }
-           override fun serverInfo(): String { return driver.serverInfo() }
-        }
-
-        logger.info(poller.serverInfo())
-        return poller
-    }
-
     /**
      * Binds the server to AERON configuration
      */
     @Suppress("DuplicatedCode")
     fun bind() {
         if (bindAlreadyCalled) {
-            logger.error("Unable to bind when the server is already running!")
+            logger.error { "Unable to bind when the server is already running!" }
             return
         }
 
         try {
-            runBlocking {
-                initEndpointState()
-            }
+            initEndpointState()
         } catch (e: Exception) {
-            logger.error("Unable to initialize the endpoint state", e)
+            logger.error(e) { "Unable to initialize the endpoint state" }
             return
         }
 
@@ -563,33 +226,30 @@ open class Server<CONNECTION : Connection>(
         // this forces the current thread to WAIT until poll system has started
         val waiter = SuspendWaiter()
 
-        val ipcPoller: AeronPoller = getIpcPoller(aeronDriver, config)
+        val ipcPoller: AeronPoller = ServerHandshakePollers.IPC(aeronDriver, config, this)
 
         // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
-        val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address != IPv6.WILDCARD
+        val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address == IPv6.WILDCARD
         val ipv4Poller: AeronPoller
         val ipv6Poller: AeronPoller
 
         if (isWildcard) {
-            // IPv6 will bind to IPv4 wildcard as well!!
             if (canUseIPv4 && canUseIPv6) {
-                ipv4Poller = object : AeronPoller {
-                    override fun poll(): Int { return 0 }
-                    override fun close() {}
-                    override fun serverInfo(): String { return "IPv4 Disabled" }
-                }
-                ipv6Poller = getIpv6WildcardPoller(aeronDriver, config)
+                // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
+                ipv4Poller = ServerHandshakePollers.disabled("IPv4 Disabled")
+                ipv6Poller = ServerHandshakePollers.ip6Wildcard(aeronDriver, config, this)
             } else {
                 // only 1 will be a real poller
-                ipv4Poller = getIpv4Poller(aeronDriver, config)
-                ipv6Poller = getIpv6Poller(aeronDriver, config)
+                ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, this)
+                ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, this)
             }
         } else {
-            ipv4Poller = getIpv4Poller(aeronDriver, config)
-            ipv6Poller = getIpv6Poller(aeronDriver, config)
+            ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, this)
+            ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, this)
         }
 
-        actionDispatch.launch {
+
+        actionDispatch.launch(start = CoroutineStart.ATOMIC) {
             waiter.doNotify()
 
             val pollIdleStrategy = config.pollIdleStrategy
@@ -608,7 +268,6 @@ open class Server<CONNECTION : Connection>(
 
                     // this checks to see if there are NEW clients via IPC
                     pollCount += ipcPoller.poll()
-
 
                     // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
                     // so we can modify this as we go
@@ -656,7 +315,7 @@ open class Server<CONNECTION : Connection>(
                 connections.clear()
 
                 cons.forEach { connection ->
-                    logger.error("${connection.id} cleanup")
+                    logger.error { "${connection.id} cleanup and close" }
                     // have to free up resources!
                     // NOTE: This can only occur on the polling dispatch thread!!
                     handshake.cleanup(connection)
@@ -680,7 +339,7 @@ open class Server<CONNECTION : Connection>(
                 // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
                 jobs.forEach { it.join() }
             } catch (e: Exception) {
-                logger.error("Unexpected error during server message polling!", e)
+                logger.error(e) { "Unexpected error during server message polling!" }
             } finally {
                 ipv4Poller.close()
                 ipv6Poller.close()
@@ -742,7 +401,6 @@ open class Server<CONNECTION : Connection>(
                 shutdownEventWaiter.doWait()
             }
         }
-
     }
 
 

@@ -17,7 +17,6 @@ package dorkbox.network.connection
 
 import dorkbox.bytes.Hash
 import dorkbox.bytes.toHexString
-import dorkbox.netUtil.IP
 import dorkbox.network.handshake.ClientConnectionInfo
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
@@ -137,9 +136,9 @@ internal class CryptoManagement(val logger: KLogger,
      * @return true if all is OK (the remote address public key matches the one saved or we disabled remote key validation.)
      *         false if we should abort
      */
-    internal fun validateRemoteAddress(remoteAddress: InetAddress, publicKey: ByteArray?): PublicKeyValidationState {
+    internal fun validateRemoteAddress(remoteAddress: InetAddress, remoteAddressString: String, publicKey: ByteArray?): PublicKeyValidationState {
         if (publicKey == null) {
-            logger.error("Error validating public key for ${IP.toString(remoteAddress)}! It was null (and should not have been)")
+            logger.error("Error validating public key for ${remoteAddressString}! It was null (and should not have been)")
             return PublicKeyValidationState.INVALID
         }
 
@@ -150,18 +149,18 @@ internal class CryptoManagement(val logger: KLogger,
                 if (!publicKey.contentEquals(savedPublicKey)) {
                     return if (enableRemoteSignatureValidation) {
                         // keys do not match, abort!
-                        logger.error("The public key for remote connection ${IP.toString(remoteAddress)} does not match. Denying connection attempt")
+                        logger.error("The public key for remote connection $remoteAddressString does not match. Denying connection attempt")
                         PublicKeyValidationState.INVALID
                     }
                     else {
-                        logger.warn("The public key for remote connection ${IP.toString(remoteAddress)} does not match. Permitting connection attempt.")
+                        logger.warn("The public key for remote connection $remoteAddressString does not match. Permitting connection attempt.")
                         PublicKeyValidationState.TAMPERED
                     }
                 }
             }
         } catch (e: SecurityException) {
             // keys do not match, abort!
-            logger.error("Error validating public key for ${IP.toString(remoteAddress)}!", e)
+            logger.error("Error validating public key for $remoteAddressString!", e)
             return PublicKeyValidationState.INVALID
         }
 

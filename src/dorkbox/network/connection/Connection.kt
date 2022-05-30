@@ -346,7 +346,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (isClosed.compareAndSet(expect = false, update = true)) {
-            logger.info {"[$id] connection closed"}
+            logger.debug {"[$id] connection closing"}
 
             subscription.close()
 
@@ -393,6 +393,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other
             postCloseAction()
+            logger.debug {"[$id] connection closed"}
         }
     }
 

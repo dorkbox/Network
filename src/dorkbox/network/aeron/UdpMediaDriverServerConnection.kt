@@ -38,8 +38,6 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
                                                    isReliable: Boolean = true) :
     UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
-    var success: Boolean = false
-
     private fun aeronConnectionString(ipAddress: InetAddress): String {
         return if (ipAddress is Inet4Address) {
             ipAddress.hostAddress
@@ -54,7 +52,7 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
         }
     }
 
-    protected fun uri(): ChannelUriStringBuilder {
+    private fun uri(): ChannelUriStringBuilder {
         val builder = ChannelUriStringBuilder().reliable(isReliable).media("udp")
         if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             builder.sessionId(sessionId)
@@ -99,15 +97,17 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
         // If we start/stop too quickly, we might have the address already in use! Retry a few times.
-        publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        success = true
         subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
+        publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
     }
 
-    override fun clientInfo(): String {
-        throw ServerException("Client info not implemented in Server MDC")
-    }
+    override val clientInfo: String
+        get() {
+            throw ServerException("Client info not implemented in Server MDC")
+        }
 
-    override fun serverInfo(): String {
+    override val serverInfo: String by lazy {
         val address = if (listenAddress == IPv4.WILDCARD || listenAddress == IPv6.WILDCARD) {
             if (listenAddress == IPv4.WILDCARD) {
                 listenAddress.hostAddress
@@ -118,21 +118,14 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
             IP.toString(listenAddress)
         }
 
-        return if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
+        if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             "Listening on $address [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
             "Listening handshake on $address [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
         }
     }
 
-    override fun close() {
-        if (success) {
-            subscription.close()
-            publication.close()
-        }
-    }
-
     override fun toString(): String {
-        return "$IP.toString(listenAddress) [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
+        return serverInfo
     }
 }

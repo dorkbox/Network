@@ -11,8 +11,6 @@ import io.aeron.Subscription
 import io.aeron.driver.MediaDriver
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.concurrent.BackoffIdleStrategy
@@ -20,6 +18,8 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.lang.Thread.sleep
 import java.net.BindException
+import java.util.concurrent.locks.*
+import kotlin.concurrent.write
 
 /**
  * Class for managing the Aeron+Media drivers
@@ -57,7 +57,7 @@ class AeronDriver(
         private const val AERON_PUBLICATION_LINGER_TIMEOUT = 5_000L  // in MS
 
         // prevents multiple instances, within the same JVM, from starting at the exact same time.
-        private val startMutex = Mutex()
+        private val lock = ReentrantReadWriteLock()
 
         private fun setConfigDefaults(config: Configuration, logger: KLogger) {
             // explicitly don't set defaults if we already have the context defined!
@@ -322,8 +322,9 @@ class AeronDriver(
      *
      * @throws Exception if there is a problem starting the media driver
      */
-    suspend fun start() {
-        startMutex.withLock {
+    fun start() {
+        // Note: A mutex doesn't work so well.
+        lock.write {
             if (closeRequested.value) {
                 logger.debug("Resetting media driver context")
 

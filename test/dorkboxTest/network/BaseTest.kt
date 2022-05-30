@@ -36,10 +36,7 @@ package dorkboxTest.network
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
@@ -55,20 +52,58 @@ import org.junit.After
 import org.junit.Assert
 import org.junit.Before
 import org.slf4j.LoggerFactory
+import java.io.File
 import java.lang.Thread.sleep
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.concurrent.*
 
 abstract class BaseTest {
-    @Volatile
-    private var latch = CountDownLatch(1)
-
-    @Volatile
-    private var autoFailThread: Thread? = null
-
     companion object {
         const val LOCALHOST = "localhost"
+
+        // wait minimum of 2 minutes before we automatically fail the unit test.
+        var AUTO_FAIL_TIMEOUT: Long = 120L
+
+        init {
+            if (OS.javaVersion >= 9) {
+                // disableAccessWarnings
+                try {
+                    val unsafeClass = Class.forName("sun.misc.Unsafe")
+                    val field: Field = unsafeClass.getDeclaredField("theUnsafe")
+                    field.isAccessible = true
+                    val unsafe: Any = field.get(null)
+                    val putObjectVolatile: Method = unsafeClass.getDeclaredMethod("putObjectVolatile", Any::class.java, Long::class.javaPrimitiveType, Any::class.java)
+                    val staticFieldOffset: Method = unsafeClass.getDeclaredMethod("staticFieldOffset", Field::class.java)
+                    val loggerClass = Class.forName("jdk.internal.module.IllegalAccessLogger")
+                    val loggerField: Field = loggerClass.getDeclaredField("logger")
+                    val offset = staticFieldOffset.invoke(unsafe, loggerField) as Long
+                    putObjectVolatile.invoke(unsafe, loggerClass, offset, null)
+                } catch (ignored: Exception) {
+                }
+            }
+
+//            if (System.getProperty("logback.configurationFile") == null) {
+//                val file = File("logback.xml")
+//                if (file.canRead()) {
+//                    System.setProperty("logback.configurationFile", file.toPath().toRealPath().toFile().toString())
+//                } else {
+//                    System.setProperty("logback.configurationFile", "logback.xml")
+//                }
+//            }
+
+//            setLogLevel(Level.TRACE)
+//            setLogLevel(Level.ERROR)
+            setLogLevel(Level.DEBUG)
+
+            // we want our entropy generation to be simple (ie, no user interaction to generate)
+            try {
+                Entropy.init(SimpleEntropy::class.java)
+            } catch (e: InitializationException) {
+                e.printStackTrace()
+            }
+        }
+
         fun clientConfig(block: Configuration.() -> Unit = {}): Configuration {
 
             val configuration = Configuration()
@@ -102,65 +137,42 @@ abstract class BaseTest {
 
             // assume SLF4J is bound to logback in the current environment
             val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
+            rootLogger.detachAndStopAllAppenders()
             rootLogger.level = level
 
             val context = rootLogger.loggerContext
-            val jc = JoranConfigurator()
             context.reset() // override default configuration
 
+            val jc = JoranConfigurator()
             jc.context = context
-
-
-            context.getLogger(Server::class.simpleName).level = level
-            context.getLogger(Client::class.simpleName).level = level
+            jc.doConfigure(File("logback.xml").absoluteFile)
 
             // we only want error messages
             val kryoLogger = LoggerFactory.getLogger("com.esotericsoftware") as Logger
             kryoLogger.level = Level.ERROR
 
-            val encoder = PatternLayoutEncoder()
-            encoder.context = context
-            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
-            encoder.start()
-            val consoleAppender = ConsoleAppender<ILoggingEvent>()
-            consoleAppender.context = context
-            consoleAppender.encoder = encoder
-            consoleAppender.start()
-            rootLogger.addAppender(consoleAppender)
+//            val encoder = PatternLayoutEncoder()
+//            encoder.context = context
+//            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
+//            encoder.start()
+//
+//            val consoleAppender = ConsoleAppender<ILoggingEvent>()
+//            consoleAppender.context = context
+//            consoleAppender.encoder = encoder
+//            consoleAppender.start()
+//
+//            rootLogger.addAppender(consoleAppender)
 
 //            context.getLogger(Server::class.simpleName).trace("TESTING")
 //            context.getLogger(Client::class.simpleName).trace("TESTING")
         }
-
-        // wait minimum of 2 minutes before we automatically fail the unit test.
-        var AUTO_FAIL_TIMEOUT: Long = 120L
-
-        init {
-            if (OS.javaVersion >= 9) {
-                // disableAccessWarnings
-                try {
-                    val unsafeClass = Class.forName("sun.misc.Unsafe")
-                    val field: Field = unsafeClass.getDeclaredField("theUnsafe")
-                    field.isAccessible = true
-                    val unsafe: Any = field.get(null)
-                    val putObjectVolatile: Method = unsafeClass.getDeclaredMethod("putObjectVolatile", Any::class.java, Long::class.javaPrimitiveType, Any::class.java)
-                    val staticFieldOffset: Method = unsafeClass.getDeclaredMethod("staticFieldOffset", Field::class.java)
-                    val loggerClass = Class.forName("jdk.internal.module.IllegalAccessLogger")
-                    val loggerField: Field = loggerClass.getDeclaredField("logger")
-                    val offset = staticFieldOffset.invoke(unsafe, loggerField) as Long
-                    putObjectVolatile.invoke(unsafe, loggerClass, offset, null)
-                } catch (ignored: Exception) {
-                }
-            }
-
-            // we want our entropy generation to be simple (ie, no user interaction to generate)
-            try {
-                Entropy.init(SimpleEntropy::class.java)
-            } catch (e: InitializationException) {
-                e.printStackTrace()
-            }
-        }
     }
+
+    @Volatile
+    private var latch = CountDownLatch(1)
+
+    @Volatile
+    private var autoFailThread: Thread? = null
 
     private val endPointConnections: MutableList<EndPoint<*>> = CopyOnWriteArrayList()
 
@@ -169,10 +181,6 @@ abstract class BaseTest {
 
     init {
         println("---- " + this.javaClass.simpleName)
-
-        setLogLevel(Level.TRACE)
-        //            setLogLevel(Level.ERROR)
-        //            setLogLevel(Level.DEBUG)
 
         // we must always make sure that aeron is shut-down before starting again.
         while (Server.isRunning(serverConfig())) {
@@ -211,7 +219,7 @@ abstract class BaseTest {
             if (endPoint is Client) {
                 endPoint.close()
                 latch.countDown()
-                println("Done with ${endPoint.type.simpleName}")
+                println("Done closing: ${endPoint.type.simpleName}")
             } else {
                 remainingConnections.add(endPoint)
             }

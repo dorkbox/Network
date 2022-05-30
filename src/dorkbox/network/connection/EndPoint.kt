@@ -215,7 +215,7 @@ internal constructor(val type: Class<*>,
     /**
      * @throws Exception if there is a problem starting the media driver
      */
-    internal suspend fun initEndpointState() {
+    internal fun initEndpointState() {
         shutdown.getAndSet(false)
         shutdownWaiter = SuspendWaiter()
 
@@ -363,9 +363,7 @@ internal constructor(val type: Class<*>,
     @Suppress("DuplicatedCode")
     internal fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage) {
         // The handshake sessionId IS NOT globally unique
-        logger.trace {
-            "[${publication.sessionId()}] send HS: $message"
-        }
+        logger.trace { "[${message.connectKey}] send HS: $message" }
 
         try {
             // we are not thread-safe!
@@ -431,11 +429,9 @@ internal constructor(val type: Class<*>,
     internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
         return try {
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
-            val message = handshakeKryo.read(buffer, offset, length)
+            val message = handshakeKryo.read(buffer, offset, length) as HandshakeMessage
 
-            logger.trace {
-                "[${header.sessionId()}] received HS: $message"
-            }
+            logger.trace { "[${message.connectKey}] received HS: $message" }
 
             message
         } catch (e: Exception) {
@@ -723,6 +719,7 @@ internal constructor(val type: Class<*>,
 
             runBlocking {
                 connections.forEach {
+                    logger.info { "Closing connection: ${it.id}" }
                     it.close()
                 }
 
@@ -739,6 +736,8 @@ internal constructor(val type: Class<*>,
 
             // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
             shutdownWaiter.cancel()
+
+            logger.info { "Done shutting down..." }
         }
     }
 

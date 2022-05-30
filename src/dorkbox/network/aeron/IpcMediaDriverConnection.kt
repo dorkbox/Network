@@ -33,8 +33,6 @@ internal open class IpcMediaDriverConnection(streamId: Int,
                                         ) :
         MediaDriverConnection(0, 0, streamId, sessionId, 10, true) {
 
-    var success: Boolean = false
-
     private fun uri(): ChannelUriStringBuilder {
         val builder = ChannelUriStringBuilder().media("ipc")
         if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
@@ -87,6 +85,7 @@ internal open class IpcMediaDriverConnection(streamId: Int,
 
         if (!success) {
             subscription.close()
+
             val clientTimedOutException = ClientTimedOutException("Creating subscription connection to aeron")
             ListenerManager.cleanStackTraceInternal(clientTimedOutException)
             throw clientTimedOutException
@@ -116,8 +115,8 @@ internal open class IpcMediaDriverConnection(streamId: Int,
         }
 
         this.success = true
-        this.publication = publication
         this.subscription = subscription
+        this.publication = publication
     }
 
     /**
@@ -146,34 +145,28 @@ internal open class IpcMediaDriverConnection(streamId: Int,
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
         // If we start/stop too quickly, we might have the aeron connectivity issues! Retry a few times.
-        publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        success = true
         subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamIdSubscription)
+        publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
     }
 
-    override fun clientInfo() : String {
-        return if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
+    override val clientInfo : String by lazy {
+        if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             "[$sessionId] IPC connection established to [$streamIdSubscription|$streamId]"
         } else {
             "Connecting handshake to IPC [$streamIdSubscription|$streamId]"
         }
     }
 
-    override fun serverInfo() : String {
-        return if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
-            "[$sessionId] IPC listening on [$streamIdSubscription|$streamId] "
+    override val serverInfo : String by lazy {
+        if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
+            "[$sessionId] IPC listening on [$streamIdSubscription|$streamId] [$sessionId]"
         } else {
-            "Listening handshake on IPC [$streamIdSubscription|$streamId]"
-        }
-    }
-
-    override fun close() {
-        if (success) {
-            subscription.close()
-            publication.close()
+            "Listening handshake on IPC [$streamIdSubscription|$streamId] [$sessionId]"
         }
     }
 
     override fun toString(): String {
-        return "[$streamIdSubscription|$streamId] [$sessionId]"
+        return serverInfo
     }
 }

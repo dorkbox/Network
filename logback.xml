@@ -18,7 +18,7 @@
     <logger name="ch.qos.logback" level="ERROR"/>
 
 
-    <root level="INFO"> <!-- Release: ERROR -->
+    <root level="TRACE"> <!-- Release: ERROR -->
         <appender-ref ref="STDOUT"/>
     </root>
 </configuration>

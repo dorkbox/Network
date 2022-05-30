@@ -40,22 +40,6 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                                               isReliable: Boolean = true) :
     UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
-    var success: Boolean = false
-
-    private fun aeronConnectionString(ipAddress: InetAddress): String {
-        return if (ipAddress is Inet4Address) {
-            ipAddress.hostAddress
-        } else {
-            // IPv6 requires the address to be bracketed by [...]
-            val host = ipAddress.hostAddress
-            if (host[0] == '[') {
-                host
-            } else {
-                "[${ipAddress.hostAddress}]"
-            }
-        }
-    }
-
     val addressString: String by lazy {
         IP.toString(address)
     }
@@ -80,7 +64,18 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
 
     @Suppress("DuplicatedCode")
     override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
-        val aeronAddressString = aeronConnectionString(address)
+        val aeronAddressString = if (address is Inet4Address) {
+            address.hostAddress
+        } else {
+            // IPv6 requires the address to be bracketed by [...]
+            val host = address.hostAddress
+            if (host[0] == '[') {
+                host
+            } else {
+                "[${address.hostAddress}]"
+            }
+        }
+
 
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
@@ -123,6 +118,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
 
         if (!success) {
             subscription.close()
+
             val ex = ClientTimedOutException("Cannot create subscription: $ip ${subscriptionUri.build()} in ${timoutInNanos}ms")
             ListenerManager.cleanStackTraceInternal(ex)
             throw ex
@@ -145,18 +141,19 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         if (!success) {
             subscription.close()
             publication.close()
+
             val ex = ClientTimedOutException("Cannot create publication: $ip ${publicationUri.build()} in ${timoutInNanos}ms")
             ListenerManager.cleanStackTrace(ex)
             throw ex
         }
 
         this.success = true
-        this.publication = publication
         this.subscription = subscription
+        this.publication = publication
     }
 
-    override fun clientInfo(): String {
-        return if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
+    override val clientInfo: String by lazy {
+        if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             "Connecting to $addressString [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
             "Connecting handshake to $addressString [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
@@ -166,18 +163,12 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
     override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         throw ClientException("Server info not implemented in Client MDC")
     }
-    override fun serverInfo(): String {
+    override val serverInfo: String
+    get() {
         throw ClientException("Server info not implemented in Client MDC")
     }
 
-    override fun close() {
-        if (success) {
-            subscription.close()
-            publication.close()
-        }
-    }
-
     override fun toString(): String {
-        return "$addressString [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
+        return clientInfo
     }
 }
