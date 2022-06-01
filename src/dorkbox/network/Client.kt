@@ -386,9 +386,9 @@ open class Client<CONNECTION : Connection>(
                     // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
                     delay(500)
                     if (logger.isTraceEnabled) {
-                        logger.trace(e) { "Unable to connect, retrying..." }
+                        logger.trace(e) { "Unable to connect to ${IP.toString(remoteAddress!!)}, retrying..." }
                     } else {
-                        logger.info { "Unable to connect, retrying..." }
+                        logger.info { "Unable to connect to ${IP.toString(remoteAddress!!)}, retrying..." }
                     }
 
                 } catch (e: Exception) {
