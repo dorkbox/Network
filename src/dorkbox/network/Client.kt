@@ -16,11 +16,13 @@
 package dorkbox.network
 
 import dorkbox.bytes.toHexString
+import dorkbox.dns.DnsClient
 import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.netUtil.Inet4
 import dorkbox.netUtil.Inet6
+import dorkbox.netUtil.dnsUtils.ResolvedAddressTypes
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.MediaDriverConnection
@@ -112,7 +114,7 @@ open class Client<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "5.12"
+        const val version = "5.13"
 
         /**
          * Checks to see if a client (using the specified configuration) is running.
@@ -194,13 +196,43 @@ open class Client<CONNECTION : Connection>(
             }
 
             IPv4.isPreferred -> {
-                connect(remoteAddress = Inet4.toAddress(remoteAddress),
+                // we have to check first if it's a valid IPv4 address. If not, maybe it's a DNS lookup
+                val inet4Address = if (IPv4.isValid(remoteAddress)) {
+                    Inet4.toAddress(remoteAddress)
+                } else {
+                    val client = DnsClient()
+                    client.resolvedAddressTypes(ResolvedAddressTypes.IPV4_ONLY)
+                    val records = client.resolve(remoteAddress)
+                    client.stop()
+                    records[0]
+                }
+
+                if (inet4Address == null) {
+                    throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
+                }
+
+                connect(remoteAddress = inet4Address,
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable
                 )
             }
 
             IPv6.isPreferred -> {
+                // we have to check first if it's a valid IPv6 address. If not, maybe it's a DNS lookup
+                val inet6Address = if (IPv6.isValid(remoteAddress)) {
+                    Inet6.toAddress(remoteAddress)
+                } else {
+                    val client = DnsClient()
+                    client.resolvedAddressTypes(ResolvedAddressTypes.IPV6_ONLY)
+                    val records = client.resolve(remoteAddress)
+                    client.stop()
+                    records[0]
+                }
+
+                if (inet6Address == null) {
+                    throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
+                }
+
                 connect(remoteAddress = Inet6.toAddress(remoteAddress),
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable
@@ -209,7 +241,22 @@ open class Client<CONNECTION : Connection>(
 
             // if there is no preference, then try to connect via IPv4
             else -> {
-                connect(remoteAddress = Inet4.toAddress(remoteAddress),
+                // we have to check first if it's a valid IPv4 address. If not, maybe it's a DNS lookup
+                val inetAddress = if (IP.isValid(remoteAddress)) {
+                    IP.toAddress(remoteAddress)
+                } else {
+                    val client = DnsClient()
+                    client.resolvedAddressTypes(ResolvedAddressTypes.IPV4_PREFERRED)
+                    val records = client.resolve(remoteAddress)
+                    client.stop()
+                    records[0]
+                }
+
+                if (inetAddress == null) {
+                    throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
+                }
+
+                connect(remoteAddress = inetAddress,
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable
                 )
@@ -492,7 +539,7 @@ open class Client<CONNECTION : Connection>(
 
 
         // VALIDATE:: If the serialization DOES NOT match between the client/server, then the server will emit a log, and the
-        // client will timeout. SPECIFICALLY.... we do not give class serialization/registration info to the client (in case the client
+        // client will timeout. SPECIFICALLY.... we do not give class serialization/registration info to the client - in case the client
         // is rogue, we do not want to carelessly provide info.
 
 
