@@ -55,8 +55,9 @@ class ListenerTest : BaseTest() {
 
     var overrideCheck = atomic(false)
     var serverOnMessage = atomic(false)
-    var serverConnectionOnMessage = atomic(false)
-    var serverDisconnectMessage = atomic(false)
+
+    var serverConnectionOnMessage = atomic(0)
+    var serverDisconnectMessage = atomic(0)
     var serverConnect = atomic(false)
     var serverDisconnect = atomic(false)
     var clientConnect = atomic(false)
@@ -95,11 +96,11 @@ class ListenerTest : BaseTest() {
             serverConnect.value = true
 
             onMessage<Any> {
-                serverConnectionOnMessage.value = true
+                serverConnectionOnMessage.getAndIncrement()
             }
 
             onDisconnect {
-                serverDisconnectMessage.value = true
+                serverDisconnectMessage.getAndIncrement()
             }
         }
 
@@ -155,12 +156,15 @@ class ListenerTest : BaseTest() {
 
         waitForThreads()
 
-        // -1 BECAUSE we are `getAndIncrement` for each check earlier
-        Assert.assertEquals(limit, count.value - 1)
+        // +1 BECAUSE we are `getAndIncrement` for each check earlier
+        val limitCheck = limit+1
+
+        Assert.assertEquals(limitCheck, count.value)
+
         Assert.assertTrue(overrideCheck.value)
         Assert.assertTrue(serverOnMessage.value)
-        Assert.assertTrue(serverConnectionOnMessage.value)
-        Assert.assertTrue(serverDisconnectMessage.value)
+        Assert.assertEquals(serverConnectionOnMessage.value, limitCheck)
+        Assert.assertEquals(serverDisconnectMessage.value, 1)
         Assert.assertTrue(serverConnect.value)
         Assert.assertTrue(serverDisconnect.value)
         Assert.assertTrue(clientConnect.value)
