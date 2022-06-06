@@ -114,7 +114,7 @@ open class Client<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "5.13"
+        const val version = "5.14"
 
         /**
          * Checks to see if a client (using the specified configuration) is running.
@@ -619,15 +619,14 @@ open class Client<CONNECTION : Connection>(
         //////////////
         ///  Extra Close action
         //////////////
-        newConnection.preCloseAction = {
+        newConnection.closeAction = {
             // this is called whenever connection.close() is called by the framework or via client.close()
 
             // on the client, we want to GUARANTEE that the disconnect happens-before connect.
             if (!lockStepForConnect.compareAndSet(null, SuspendWaiter())) {
                 logger.error { "Connection ${newConnection.id} : close lockStep for disconnect was in the wrong state!" }
             }
-        }
-        newConnection.postCloseAction = {
+
             isConnected = false
             // this is called whenever connection.close() is called by the framework or via client.close()
 
