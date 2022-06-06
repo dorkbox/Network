@@ -109,15 +109,10 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             } else {
                 logger.trace { "[${message.connectKey}] Connection (${pendingConnection.id}) from $connectionString done with handshake." }
 
-                pendingConnection.postCloseAction = {
+                pendingConnection.closeAction = {
                     // called on connection.close()
-
-                    // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    actionDispatch.launch {
-                        listenerManager.notifyDisconnect(pendingConnection)
-                    }
+                    pendingConnection.doNotifyDisconnect()
                 }
-
 
                 // this enables the connection to start polling for messages
                 server.addConnection(pendingConnection)

@@ -91,8 +91,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     private val isClosed = atomic(false)
 
-    internal var preCloseAction: suspend () -> Unit = {}
-    internal var postCloseAction: suspend () -> Unit = {}
+    internal var closeAction: suspend () -> Unit = {}
 
     // only accessed on a single thread!
     private var connectionLastCheckTimeNanos = 0L
@@ -338,6 +337,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * Closes the connection, and removes all connection specific listeners
      */
     suspend fun close() {
+        close(true)
+    }
+
+    /**
+     * Closes the connection, and removes all connection specific listeners
+     */
+    internal suspend fun close(enableRemove: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
@@ -377,28 +383,31 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                 logger.error("Connection $id: Unable to delete aeron publication log on close: $logFile")
             }
 
-            endPoint.removeConnection(this)
-
-
-            // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
-            // lock-stop ordering for how disconnect and connect work with each-other
-            preCloseAction()
-
-            val connectionSpecificListenerManager = listenerManager.value
-            if (connectionSpecificListenerManager != null) {
-                // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                endPoint.actionDispatch.eventLoop {
-                    // a connection might have also registered for disconnect events (THIS IS NOT THE "CLIENT/SERVER" listenerManager!)
-                    connectionSpecificListenerManager.notifyDisconnect(this@Connection)
-                }
+            if (enableRemove) {
+                endPoint.removeConnection(this)
             }
+
+            // NOTE: notifyDisconnect() is called in postCloseAction()!!
 
             // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other
-            postCloseAction()
+            closeAction()
             logger.debug {"[$id] connection closed"}
         }
     }
+
+    // called in postCloseAction(), so we don't expose our internal listenerManager
+    internal suspend fun doNotifyDisconnect() {
+        val connectionSpecificListenerManager = listenerManager.value
+        if (connectionSpecificListenerManager != null) {
+            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+            endPoint.actionDispatch.eventLoop {
+                // a connection might have also registered for disconnect events (THIS IS NOT THE "CLIENT/SERVER" listenerManager!)
+                connectionSpecificListenerManager.notifyDisconnect(this@Connection)
+            }
+        }
+    }
+
 
     //
     //

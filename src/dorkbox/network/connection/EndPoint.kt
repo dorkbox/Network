@@ -718,9 +718,12 @@ internal constructor(val type: Class<*>,
             aeronDriver.close()
 
             runBlocking {
+                // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
+                // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
+                val enableRemove = type == Client::class.java
                 connections.forEach {
                     logger.info { "Closing connection: ${it.id}" }
-                    it.close()
+                    it.close(enableRemove)
                 }
 
                 // Connections are closed first, because we want to make sure that no RMI messages can be received
