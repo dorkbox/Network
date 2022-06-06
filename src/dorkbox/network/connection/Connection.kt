@@ -384,10 +384,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             // lock-stop ordering for how disconnect and connect work with each-other
             preCloseAction()
 
-            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            endPoint.actionDispatch.eventLoop {
-                // a connection might have also registered for disconnect events (THIS IS NOT THE "CLIENT/SERVER" listenerManager!)
-                listenerManager.value?.notifyDisconnect(this@Connection)
+            val connectionSpecificListenerManager = listenerManager.value
+            if (connectionSpecificListenerManager != null) {
+                // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                endPoint.actionDispatch.eventLoop {
+                    // a connection might have also registered for disconnect events (THIS IS NOT THE "CLIENT/SERVER" listenerManager!)
+                    connectionSpecificListenerManager.notifyDisconnect(this@Connection)
+                }
             }
 
             // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
