@@ -510,7 +510,7 @@ internal constructor(val type: Class<*>,
                     // NOTE: This MUST be on a new co-routine
                     actionDispatch.launch {
                         try {
-                            streamingManager.processDataMessage(message, this@EndPoint, connection)
+                            streamingManager.processDataMessage(message, this@EndPoint)
                         } catch (e: Exception) {
                             logger.error("Error processing StreamingMessage", e)
                             listenerManager.notifyError(connection, e)
