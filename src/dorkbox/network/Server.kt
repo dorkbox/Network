@@ -31,7 +31,6 @@ import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
 import dorkbox.network.rmi.RmiSupportServer
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -249,7 +248,7 @@ open class Server<CONNECTION : Connection>(
         }
 
 
-        actionDispatch.launch(start = CoroutineStart.ATOMIC) {
+        actionDispatch.launch {
             waiter.doNotify()
 
             val pollIdleStrategy = config.pollIdleStrategy
