@@ -204,7 +204,7 @@ open class Client<CONNECTION : Connection>(
                     client.resolvedAddressTypes(ResolvedAddressTypes.IPV4_ONLY)
                     val records = client.resolve(remoteAddress)
                     client.stop()
-                    records[0]
+                    records?.get(0)
                 }
 
                 if (inet4Address == null) {
@@ -226,7 +226,7 @@ open class Client<CONNECTION : Connection>(
                     client.resolvedAddressTypes(ResolvedAddressTypes.IPV6_ONLY)
                     val records = client.resolve(remoteAddress)
                     client.stop()
-                    records[0]
+                    records?.get(0)
                 }
 
                 if (inet6Address == null) {
@@ -249,7 +249,7 @@ open class Client<CONNECTION : Connection>(
                     client.resolvedAddressTypes(ResolvedAddressTypes.IPV4_PREFERRED)
                     val records = client.resolve(remoteAddress)
                     client.stop()
-                    records[0]
+                    records?.get(0)
                 }
 
                 if (inetAddress == null) {
