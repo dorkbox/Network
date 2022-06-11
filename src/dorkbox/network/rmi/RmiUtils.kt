@@ -449,6 +449,7 @@ object RmiUtils {
 
     @Suppress("EXPERIMENTAL_API_USAGE")
     fun unpackUnsignedRight(packedInt: Int): Int {
+        // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
         return packedInt.toUShort().toInt()
     }
 
