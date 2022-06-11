@@ -534,8 +534,10 @@ object RmiUtils {
         }
 
         if (remoteException == null) {
-            // no remote exception, just cleanup our own callstack
-            localException.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
+            // no remote exception, just cleanup our own callstack. We don't ALWAYS have a new stack.
+            if (newEndIndex > newStartIndex) {
+                localException.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
+            }
         } else {
             // merge this info into the remote exception, so we can get the correct call stack info
             val newStack = Array<StackTraceElement>(remoteException.stackTrace.size + (newEndIndex - newStartIndex)) { stackTrace[0] }
