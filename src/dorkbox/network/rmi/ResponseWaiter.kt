@@ -27,10 +27,14 @@ data class ResponseWaiter(val id: Int) {
     // "send" suspends until another coroutine invokes "receive".
     //
     // these are wrapped in a try/catch, because cancel will cause exceptions to be thrown (which we DO NOT want)
+    @Volatile
     var channel: Channel<Unit> = Channel(Channel.RENDEZVOUS)
+
+    @Volatile
     var isCancelled = false
 
     // holds the RMI result or callback. This is ALWAYS accessed from within a lock (so no synchronize/volatile/etc necessary)!
+    @Volatile
     var result: Any? = null
 
     /**
