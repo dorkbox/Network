@@ -281,10 +281,9 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
 
         // payload size is for a PRODUCER, and not SUBSCRIBER, so we have to include this amount every time.
         // MINOR fragmentation by aeron is OK, since that will greatly speed up data transfer rates!
-        var maxPayloadLength = publication.maxPayloadLength()
-        if ((maxPayloadLength * 8) < publication.maxMessageLength()) {
-            maxPayloadLength *= 8
-        }
+
+        // the maxPayloadLength MUST ABSOLUTELY be less that the max size + header!
+        var maxPayloadLength = publication.maxMessageLength() - 200
 
         val header: ByteArray
         val headerSize: Int
