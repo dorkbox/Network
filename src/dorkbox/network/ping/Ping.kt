@@ -20,7 +20,7 @@ import dorkbox.network.rmi.RmiUtils
 class Ping {
     var packedId = 0
 
-    // ping/pong times are the LOWER 8 bytes of a long, which gives us 65 seconds. This is the same as the max value timeout (a short) so this is acceptible
+    // ping/pong times are the LOWER 8 bytes of a long, which gives us 65 seconds. This is the same as the max value timeout (a short) so this is acceptable
 
     var pingTime = 0L
     var pongTime = 0L
