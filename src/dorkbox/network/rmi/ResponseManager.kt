@@ -22,7 +22,7 @@ import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import mu.KLogger
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.concurrent.locks.*
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
@@ -172,11 +172,9 @@ internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) 
         // assign the callback that will be notified when the return message is received
         responseRmi.result = function
 
-        // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
         val rmiId = RmiUtils.unpackUnsignedRight(responseRmi.id)
 
         pendingLock.write {
-            // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
             pending[rmiId] = responseRmi
         }
 
@@ -212,7 +210,7 @@ internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) 
      * @return the result (can be null) or timeout exception
      */
     suspend fun waitForReply(actionDispatch: CoroutineScope, responseWaiter: ResponseWaiter, timeoutMillis: Long, logger: KLogger): Any? {
-        val rmiId = RmiUtils.unpackUnsignedRight(responseWaiter.id)  // this just does a .toUShort().toInt() conversion. This is cleaner than doing it manually
+        val rmiId = RmiUtils.unpackUnsignedRight(responseWaiter.id)
 
         logger.trace {
             "RMI waiting: $rmiId"
