@@ -4,9 +4,14 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
+import org.agrona.ExpandableDirectByteBuffer
+import org.junit.Assert
 import org.junit.Test
+import java.security.SecureRandom
 
 class StreamingTest : BaseTest() {
+
+    val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 8
 
     @Test
     fun sendStreamingObject() {
@@ -19,6 +24,7 @@ class StreamingTest : BaseTest() {
 
             server.onMessage<ByteArray> {
                 println("received data, shutting down!")
+                Assert.assertEquals(sizeToTest, it.size)
                 stopEndPoints()
             }
         }
@@ -36,7 +42,9 @@ class StreamingTest : BaseTest() {
             client.onConnect {
                 val params = connectionParams ?: throw Exception("We should not have null connectionParams!")
                 val publication = params.mediaDriverConnection.publication
-                val hugeData = ByteArray(publication.maxMessageLength() + 10)
+
+                val hugeData = ByteArray(sizeToTest)
+                SecureRandom().nextBytes(hugeData)
 
                 this.endPoint.send(hugeData, publication, this)
             }
