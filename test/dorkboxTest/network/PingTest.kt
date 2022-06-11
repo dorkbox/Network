@@ -11,6 +11,7 @@ import org.junit.Assert
 import org.junit.Test
 
 class PingTest : BaseTest() {
+    val counter = atomic(0)
     @Test
     fun RmiPing() {
         setLogLevel(Level.TRACE)
@@ -35,9 +36,10 @@ class PingTest : BaseTest() {
                 repeat(100) {
                     ping {
                         // a ping object is returned, once the round-trip is complete
-                        println(it)
+                        val count = counter.getAndIncrement()
+                        println(count)
 
-                        if (it == 99) {
+                        if (count == 99) {
                             clientSuccess.value = true
 
                             logger.error("out-bound: $outbound")
@@ -53,7 +55,7 @@ class PingTest : BaseTest() {
             client.connect(LOCALHOST)
         }
 
-        waitForThreads()
+        waitForThreads(500)
 
         Assert.assertTrue(clientSuccess.value)
     }
