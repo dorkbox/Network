@@ -41,7 +41,7 @@ import java.util.concurrent.*
  * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
  * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
  *
- * To put it bluntly, ONLY have the server do work inside of a listener!
+ * To put it bluntly, ONLY have the server do work inside a listener!
  *
  * @param config these are the specific connection options
  * @param connectionFunc allows for custom connection implementations defined as a unit function
@@ -52,6 +52,22 @@ open class Server<CONNECTION : Connection>(
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         loggerName: String = Server::class.java.simpleName)
     : EndPoint<CONNECTION>(config, connectionFunc, loggerName) {
+
+    /**
+     * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
+     * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
+     *
+     * To put it bluntly, ONLY have the server do work inside a listener!
+     *
+     * @param config these are the specific connection options
+     * @param loggerName allows for a custom logger name for this endpoint (for when there are multiple endpoints)
+     * @param connectionFunc allows for custom connection implementations defined as a unit function
+     */
+    constructor(config: ServerConfiguration,
+                loggerName: String,
+                connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION)
+            : this(config, connectionFunc, loggerName)
+
 
     /**
      * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the

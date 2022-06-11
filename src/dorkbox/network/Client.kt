@@ -70,6 +70,20 @@ open class Client<CONNECTION : Connection>(
      * ASYNC.
      *
      * @param config these are the specific connection options
+     * @param loggerName allows for a custom logger name for this endpoint (for when there are multiple endpoints)
+     * @param connectionFunc allows for custom connection implementations defined as a unit function
+     */
+    constructor(config: Configuration,
+                loggerName: String,
+                connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION)
+            : this(config, connectionFunc, loggerName)
+
+
+    /**
+     * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
+     * ASYNC.
+     *
+     * @param config these are the specific connection options
      * @param connectionFunc allows for custom connection implementations defined as a unit function
      */
     constructor(config: Configuration,
