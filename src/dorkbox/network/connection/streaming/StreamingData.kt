@@ -27,6 +27,6 @@ class StreamingData(var streamId: Long) : StreamingMessage {
     }
 
     override fun toString(): String {
-        return "StreamingData(streamId=$streamId, payloadSize=${payload?.size})"
+        return "StreamingData(streamId=$streamId)"
     }
 }
