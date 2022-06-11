@@ -164,7 +164,7 @@ internal constructor(val type: Class<*>,
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
-    internal val streamingManager = StreamingManager<CONNECTION>(logger, actionDispatch)
+    private val streamingManager = StreamingManager<CONNECTION>(logger, actionDispatch)
 
     internal val pingManager = PingManager<CONNECTION>()
 
@@ -459,7 +459,7 @@ internal constructor(val type: Class<*>,
         try {
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = serialization.readMessage(buffer, offset, length, connection)
-            logger.trace { "[${header.sessionId()}] received: $message" }
+            logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
 
             // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept date BEFORE it goes to a coroutine
 
@@ -559,7 +559,7 @@ internal constructor(val type: Class<*>,
     internal suspend fun send(message: Any, publication: Publication, connection: Connection): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace {
-            "[${publication.sessionId()}] send: $message"
+            "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message"
         }
 
         connection as CONNECTION
@@ -567,6 +567,8 @@ internal constructor(val type: Class<*>,
         // since ANY thread can call 'send', we have to take kryo instances in a safe way
         val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
         try {
+            // the maximum size that this buffer can be is:
+            //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
             val buffer = kryo.write(connection, message)
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
