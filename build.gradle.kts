@@ -140,14 +140,14 @@ tasks.jar.get().apply {
 }
 
 dependencies {
-    api("org.jetbrains.kotlinx:atomicfu:0.17.2")
+    api("org.jetbrains.kotlinx:atomicfu:0.17.3")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
 
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:1.5")
     api("com.dorkbox:Collections:1.1")
     api("com.dorkbox:MinLog:2.4")
-    api("com.dorkbox:NetworkDNS:2.3")
+    api("com.dorkbox:NetworkDNS:2.4")
     api("com.dorkbox:NetworkUtils:2.14")
     api("com.dorkbox:ObjectPool:3.5")
     api("com.dorkbox:OS:1.0")
