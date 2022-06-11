@@ -45,7 +45,7 @@ internal class PingManager<CONNECTION : Connection> {
 
             // process the ping message so that our ping callback does something
 
-            // this will be null if the ping took longer than 30 seconds and was cancelled
+            // this will be null if the ping took longer than XXX seconds and was cancelled
             val result = responseManager.getWaiterCallback(rmiId, logger) as (suspend Ping.() -> Unit)?
             if (result != null) {
                 result(ping)
@@ -72,14 +72,7 @@ internal class PingManager<CONNECTION : Connection> {
         ping.packedId = id
         ping.pingTime = System.currentTimeMillis()
 
-        // NOTE: the timout MUST NOT be more than the max SHORT value!
-
-        if (pingTimeoutSeconds > 60) {
-            // just over 1 minute timeout.
-            throw IllegalArgumentException("Ping timeout parameter `pingTimeoutSeconds` cannot exceed 60 seconds")
-        }
-
-        // ALWAYS cancel the ping after 30 seconds
+        // ALWAYS cancel the ping after XXX seconds
         responseManager.cancelRequest(actionDispatch, TimeUnit.SECONDS.toMillis(pingTimeoutSeconds.toLong()), id, logger) {
             // kill the callback, since we are now "cancelled". If there is a race here (and the response comes at the exact same time)
             // we don't care since either it will be null or it won't (if it's not null, it will run the callback)
