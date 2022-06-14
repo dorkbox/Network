@@ -37,6 +37,7 @@ import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientRetryException
+import dorkbox.network.exceptions.ClientShutdownException
 import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
@@ -342,6 +343,7 @@ open class Client<CONNECTION : Connection>(
 
     /**
      * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
+     * If unable to connect within the specified timeout an exception will be thrown
      *
      * Default connection is to localhost
      *
@@ -366,6 +368,7 @@ open class Client<CONNECTION : Connection>(
      * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
+     * @throws ClientShutdownException if the client connection is shutdown while trying to connect
      * @throws ClientException if there are misc errors
      */
     @Suppress("DuplicatedCode")
@@ -421,7 +424,16 @@ open class Client<CONNECTION : Connection>(
             val handshakeTimeout = 5
             val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
             val startTime = System.nanoTime()
-            while (!isShutdown() && (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos)) {
+            var success = false
+            while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
+                if (isShutdown()) {
+                    // If we are connecting indefinitely, we have to make sure to end the connection process
+                    val exception = ClientShutdownException("Unable to connect while shutting down")
+                    logger.error(exception) { "Aborting connection retry attempt to server." }
+                    listenerManager.notifyError(exception)
+                    throw exception
+                }
+
                 try {
                     val handshakeConnection = if (autoChangeToIpc) {
                         buildIpcHandshake(
@@ -438,6 +450,7 @@ open class Client<CONNECTION : Connection>(
 
 
                     connect0(handshake, handshakeConnection, handshakeTimeout)
+                    success = true
 
                     // once we're done with the connection process, stop trying
                     break
@@ -457,6 +470,22 @@ open class Client<CONNECTION : Connection>(
                     listenerManager.notifyError(e)
                     throw e
                 }
+            }
+
+            if (!success) {
+                if (System.nanoTime() - startTime < timoutInNanos) {
+                    // we timed out. Throw the appropriate exception
+                    val exception = ClientTimedOutException("Unable to connect to the server in $connectionTimeoutSec seconds")
+                    logger.error(exception) { "Aborting connection attempt to server." }
+                    listenerManager.notifyError(exception)
+                    throw exception
+                }
+
+                // If we did not connect - throw an error. When `client.connect()` is called, either it connects or throws an error
+                val exception = ClientRejectedException("The server did not respond or permit the connection attempt")
+                logger.error(exception) { "Aborting connection retry attempt to server." }
+                listenerManager.notifyError(exception)
+                throw exception
             }
         }
     }
