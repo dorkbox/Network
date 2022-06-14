@@ -421,7 +421,7 @@ open class Client<CONNECTION : Connection>(
             val handshakeTimeout = 5
             val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
             val startTime = System.nanoTime()
-            while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
+            while (!isShutdown() && (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos)) {
                 try {
                     val handshakeConnection = if (autoChangeToIpc) {
                         buildIpcHandshake(
