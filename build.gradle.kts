@@ -25,9 +25,9 @@ import java.time.Instant
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "2.16"
+    id("com.dorkbox.GradleUtils") version "2.17"
     id("com.dorkbox.Licensing") version "2.12"
-    id("com.dorkbox.VersionUpdate") version "2.4"
+    id("com.dorkbox.VersionUpdate") version "2.5"
     id("com.dorkbox.GradlePublish") version "1.12"
 
     kotlin("jvm") version "1.6.10"
@@ -37,7 +37,7 @@ object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.16"
+    const val version = "5.17"
 
     // set as project.ext
     const val name = "Network"
@@ -147,14 +147,14 @@ dependencies {
     api("com.dorkbox:ByteUtilities:1.5")
     api("com.dorkbox:Collections:1.1")
     api("com.dorkbox:MinLog:2.4")
-    api("com.dorkbox:NetworkDNS:2.4")
-    api("com.dorkbox:NetworkUtils:2.14")
+    api("com.dorkbox:NetworkDNS:2.5")
+    api("com.dorkbox:NetworkUtils:2.17")
     api("com.dorkbox:ObjectPool:3.5")
     api("com.dorkbox:OS:1.0")
     api("com.dorkbox:Serializers:2.7")
     api("com.dorkbox:Storage:1.1")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.27")
+    api("com.dorkbox:Utilities:1.28")
 
 
     // we include ALL of aeron, in case we need to debug aeron behavior
