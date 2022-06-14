@@ -90,12 +90,6 @@ object AeronClient {
         rootLogger.addAppender(consoleAppender)
     }
 
-    private val LOG = LoggerFactory.getLogger(AeronClient::class.java)
-
-    // TODO: move ClassUtils to utilities project (also for messagebus!)
-    // move NetUtil + NetworkUtil to utilities project (also for netref!)
-    // move NtpClient to utilities project
-
     fun convertLongToTime(time: Long): String {
         val date = Date(time)
         val format = SimpleDateFormat("yyyy.MM.dd HH:mm:ss")
