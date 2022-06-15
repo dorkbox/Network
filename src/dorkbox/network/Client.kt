@@ -33,7 +33,6 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.connection.eventLoop
-import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientRetryException
@@ -46,6 +45,8 @@ import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -168,7 +169,7 @@ open class Client<CONNECTION : Connection>(
     // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
     // lock-stop ordering for how disconnect and connect work with each-other
     // GUARANTEE that the callbacks for 'onDisconnect' happens-before the 'onConnect'.
-    private val lockStepForConnect = atomic<SuspendWaiter?>(null)
+    private val lockStepForConnect = atomic<Mutex?>(null)
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ClientException(message, cause)
@@ -666,7 +667,7 @@ open class Client<CONNECTION : Connection>(
             // this is called whenever connection.close() is called by the framework or via client.close()
 
             // on the client, we want to GUARANTEE that the disconnect happens-before connect.
-            if (!lockStepForConnect.compareAndSet(null, SuspendWaiter())) {
+            if (!lockStepForConnect.compareAndSet(null, Mutex(locked = true))) {
                 logger.error { "Connection ${newConnection.id} : close lockStep for disconnect was in the wrong state!" }
             }
 
@@ -678,7 +679,7 @@ open class Client<CONNECTION : Connection>(
             // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
             actionDispatch.eventLoop {
                 listenerManager.notifyDisconnect(connection)
-                lockStepForConnect.getAndSet(null)?.cancel()
+                lockStepForConnect.getAndSet(null)?.unlock()
             }
         }
 
@@ -705,7 +706,7 @@ open class Client<CONNECTION : Connection>(
             isConnected = true
 
             // this forces the current thread to WAIT until poll system has started
-            val waiter = SuspendWaiter()
+            val mutex = Mutex(locked = true)
 
             // have to make a new thread to listen for incoming data!
             // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
@@ -713,7 +714,9 @@ open class Client<CONNECTION : Connection>(
             // these have to be in two SEPARATE actionDispatch.launch commands.... otherwise...
             // if something inside-of notifyConnect is blocking or suspends, then polling will never happen!
             actionDispatch.launch {
-                waiter.doNotify()
+                try {
+                    mutex.unlock()
+                } catch (ignored: Exception) {}
 
                 val pollIdleStrategy = config.pollIdleStrategy
 
@@ -741,9 +744,9 @@ open class Client<CONNECTION : Connection>(
             }
 
             actionDispatch.eventLoop {
-                waiter.doWait()
+                mutex.withLock {  }
 
-                lockStepForConnect.value?.doWait()
+                lockStepForConnect.value?.withLock {  }
 
                 listenerManager.notifyConnect(newConnection)
 

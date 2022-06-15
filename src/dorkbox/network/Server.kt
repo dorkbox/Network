@@ -26,7 +26,6 @@ import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.eventLoop
 import dorkbox.network.connectionType.ConnectionRule
-import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
@@ -34,6 +33,8 @@ import dorkbox.network.rmi.RmiSupportServer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.net.InetAddress
 import java.util.concurrent.*
 
@@ -153,8 +154,8 @@ open class Server<CONNECTION : Connection>(
     /**
      * These are run in lock-step to shutdown/close the server. Afterwards, bind() can be called again
      */
-    private val shutdownPollWaiter = SuspendWaiter()
-    private val shutdownEventWaiter = SuspendWaiter()
+    private val shutdownPollMutex = Mutex(locked = true)
+    private val shutdownEventMutex = Mutex(locked = true)
 
 
     /**
@@ -239,7 +240,7 @@ open class Server<CONNECTION : Connection>(
         bindAlreadyCalled = true
 
         // this forces the current thread to WAIT until poll system has started
-        val waiter = SuspendWaiter()
+        val mutex = Mutex(locked = true)
 
         val ipcPoller: AeronPoller = ServerHandshakePollers.IPC(aeronDriver, config, this)
 
@@ -265,7 +266,9 @@ open class Server<CONNECTION : Connection>(
 
 
         actionDispatch.launch {
-            waiter.doNotify()
+            try {
+                mutex.unlock()
+            } catch (ignored: Exception) {}
 
             val pollIdleStrategy = config.pollIdleStrategy
             try {
@@ -319,7 +322,7 @@ open class Server<CONNECTION : Connection>(
                 }
 
                 // we want to process **actual** close cleanup events on this thread as well, otherwise we will have threading problems
-                shutdownPollWaiter.doWait()
+                shutdownPollMutex.withLock {  }
 
                 // we have to manually cleanup the connections and call server-notifyDisconnect because otherwise this will never get called
                 val jobs = mutableListOf<Job>()
@@ -364,12 +367,14 @@ open class Server<CONNECTION : Connection>(
                 handshake.clear()
 
                 // finish closing -- this lets us make sure that we don't run into race conditions on the thread that calls close()
-                shutdownEventWaiter.doNotify()
+                try {
+                    shutdownEventMutex.unlock()
+                } catch (ignored: Exception) {}
             }
         }
 
         runBlocking {
-            waiter.doWait()
+            mutex.withLock {  }
         }
     }
 
@@ -412,8 +417,11 @@ open class Server<CONNECTION : Connection>(
 
             runBlocking {
                 // These are run in lock-step
-                shutdownPollWaiter.doNotify()
-                shutdownEventWaiter.doWait()
+                try {
+                    shutdownPollMutex.unlock()
+                } catch (ignored: Exception) {}
+
+                shutdownEventMutex.withLock {  }
             }
         }
     }

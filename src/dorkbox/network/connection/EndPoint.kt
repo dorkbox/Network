@@ -24,7 +24,6 @@ import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
-import dorkbox.network.coroutines.SuspendWaiter
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.HandshakeMessage
@@ -48,6 +47,8 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
@@ -151,7 +152,7 @@ internal constructor(val type: Class<*>,
     private val shutdown = atomic(false)
 
     @Volatile
-    private var shutdownWaiter: SuspendWaiter = SuspendWaiter()
+    private var shutdownMutex = Mutex(locked = true)
 
     /**
      * Returns the storage used by this endpoint. This is the backing data structure for key/value pairs, and can be a database, file, etc
@@ -217,7 +218,7 @@ internal constructor(val type: Class<*>,
      */
     internal fun initEndpointState() {
         shutdown.getAndSet(false)
-        shutdownWaiter = SuspendWaiter()
+        shutdownMutex = Mutex(locked = true)
 
         // Only starts the media driver if we are NOT already running!
         aeronDriver.start()
@@ -692,7 +693,7 @@ internal constructor(val type: Class<*>,
      * Waits for this endpoint to be closed
      */
     suspend fun waitForClose() {
-        shutdownWaiter.doWait()
+        shutdownMutex.withLock {  }
     }
 
     /**
@@ -740,7 +741,9 @@ internal constructor(val type: Class<*>,
             close0()
 
             // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
-            shutdownWaiter.cancel()
+            try {
+                shutdownMutex.unlock()
+            } catch (ignored: Exception) {}
 
             logger.info { "Done shutting down..." }
         }
