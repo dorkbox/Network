@@ -83,7 +83,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
 
                         try {
                             val input = AeronInput(output.internalBuffer)
-                            val streamedMessage = kryo.readClassAndObject(input)
+                            val streamedMessage = kryo.read(input)
 
                             // NOTE: This MUST be on a new co-routine
                             actionDispatch.launch {
