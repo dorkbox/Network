@@ -26,7 +26,6 @@ import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.AllocationException
-import dorkbox.network.rmi.RmiManagerConnections
 import io.aeron.Publication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -114,12 +113,18 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                     pendingConnection.doNotifyDisconnect()
                 }
 
+                // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
+                runBlocking {
+                    listenerManager.notifyInit(pendingConnection)
+                }
+
                 // this enables the connection to start polling for messages
                 server.addConnection(pendingConnection)
 
                 // now tell the client we are done
                 try {
                     server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(message.connectKey))
+
                     // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
                     actionDispatch.launch {
                         listenerManager.notifyConnect(pendingConnection)
@@ -194,7 +199,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     fun processIpcHandshakeMessageServer(
         server: Server<CONNECTION>,
-        rmiConnectionSupport: RmiManagerConnections<CONNECTION>,
         handshakePublication: Publication,
         message: HandshakeMessage,
         aeronDriver: AeronDriver,
@@ -280,7 +284,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
             logger.info { "[${clientConnection.sessionId}] IPC connection established to [${clientConnection.streamIdSubscription}|${clientConnection.streamId}]" }
 
-            val connection = connectionFunc(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID, rmiConnectionSupport))
+            val connection = connectionFunc(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
@@ -330,7 +334,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
-        rmiConnectionSupport: RmiManagerConnections<CONNECTION>,
         handshakePublication: Publication,
         remoteIpAndPort: String,
         message: HandshakeMessage,
@@ -457,7 +460,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
             logger.info { "Creating new connection from $clientConnection" }
 
-            val connection = connectionFunc(ConnectionParams(server, clientConnection, validateRemoteAddress, rmiConnectionSupport))
+            val connection = connectionFunc(ConnectionParams(server, clientConnection, validateRemoteAddress))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)

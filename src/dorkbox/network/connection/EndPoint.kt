@@ -228,10 +228,12 @@ internal constructor(val type: Class<*>,
 
     // used internally to remove a connection. Will also remove all proxy objects
     internal fun removeConnection(connection: Connection) {
-        rmiConnectionSupport.close()
+        connection as CONNECTION
+
+        rmiConnectionSupport.close(connection)
 
         @Suppress("UNCHECKED_CAST")
-        removeConnection(connection as CONNECTION)
+        removeConnection(connection)
     }
 
     /**
@@ -294,7 +296,22 @@ internal constructor(val type: Class<*>,
     }
 
     /**
-     * Adds a function that will be called when a client/server "connects" with each other
+     * Adds a function that will be called when a client/server connection is FIRST initialized, but before it's
+     * connected to the remote endpoint.
+     *
+     * NOTE: This callback is executed IN-LINE with network IO, so one must be very careful about what is executed.
+     *
+     * For a server, this function will be called for ALL client connections.
+     */
+    fun onInit(function: suspend CONNECTION.() -> Unit) {
+        actionDispatch.launch {
+            listenerManager.onInit(function)
+        }
+    }
+
+    /**
+     * Adds a function that will be called when a client/server connection first establishes a connection with the remote end.
+     * 'onInit()' callbacks will execute for both the client and server before `onConnect()` will execute will "connects" with each other
      */
     fun onConnect(function: suspend CONNECTION.() -> Unit) {
         actionDispatch.launch {

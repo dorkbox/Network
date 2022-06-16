@@ -640,9 +640,9 @@ open class Client<CONNECTION : Connection>(
 
         val newConnection: CONNECTION
         if (isUsingIPC) {
-            newConnection = connectionFunc(ConnectionParams(this, clientConnection, PublicKeyValidationState.VALID, rmiConnectionSupport))
+            newConnection = connectionFunc(ConnectionParams(this, clientConnection, PublicKeyValidationState.VALID))
         } else {
-            newConnection = connectionFunc(ConnectionParams(this, clientConnection, validateRemoteAddress, rmiConnectionSupport))
+            newConnection = connectionFunc(ConnectionParams(this, clientConnection, validateRemoteAddress))
             remoteAddress!!
 
             // VALIDATE are we allowed to connect to this server (now that we have the initial server information)
@@ -683,6 +683,9 @@ open class Client<CONNECTION : Connection>(
             }
         }
 
+        // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
+        listenerManager.notifyInit(newConnection)
+
         connection0 = newConnection
         addConnection(newConnection)
 
@@ -704,6 +707,8 @@ open class Client<CONNECTION : Connection>(
 
         if (canFinishConnecting) {
             isConnected = true
+
+
 
             // this forces the current thread to WAIT until poll system has started
             val mutex = Mutex(locked = true)

@@ -40,7 +40,7 @@ import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObjectStorage
-import dorkbox.network.rmi.RmiManagerConnections
+import dorkbox.network.rmi.RmiSupportConnection
 import dorkbox.network.serialization.KryoExtra
 
 /**
@@ -78,15 +78,14 @@ class RmiServerSerializer<CONNECTION: Connection> : Serializer<Any>(false) {
     override fun write(kryo: Kryo, output: Output, `object`: Any) {
         val kryoExtra = kryo as KryoExtra<CONNECTION>
         val connection = kryoExtra.connection
-        val rmiConnectionSupport = connection.endPoint.rmiConnectionSupport
-
+        val rmi = connection.rmi
         // have to write what the rmi ID is ONLY. A remote object sent via a connection IS ONLY a connection-scope object!
 
         // check if we have saved it already
-        var rmiId = rmiConnectionSupport.getId(`object`)
+        var rmiId = connection.rmi.getId(`object`)
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
             // this means we have to save it. This object is cached so we can have an association between rmiID <-> object
-            rmiId = rmiConnectionSupport.saveImplObject(`object`)
+            rmiId = rmi.saveImplObject(`object`)
 
             if (rmiId == RemoteObjectStorage.INVALID_RMI) {
                 connection.logger.error("Unable to save $`object` for use as RMI!")
@@ -110,14 +109,14 @@ class RmiServerSerializer<CONNECTION: Connection> : Serializer<Any>(false) {
 
         // the rmi-server will have iface+impl id's
         // the rmi-client will have iface id's
+        val rmi = connection.rmi as RmiSupportConnection<CONNECTION>
 
-        val rmiConnectionSupport = endPoint.rmiConnectionSupport as RmiManagerConnections<CONNECTION>
         return if (interfaceClass.isInterface) {
             // normal case. RMI only on 1 side
             val kryoId = serialization.rmiHolder.ifaceToId[interfaceClass]
             require(kryoId != null) { "Registration for $interfaceClass is invalid!!" }
 
-            rmiConnectionSupport.getProxyObject(false, connection, kryoId, rmiId, interfaceClass)
+            rmi.getProxyObject(false, connection, kryoId, rmiId, interfaceClass)
         } else {
             // BI-DIRECTIONAL RMI -- THIS IS NOT NORMAL!
             // this won't be an interface. It will be an impl (because of how RMI is setup)
@@ -125,7 +124,7 @@ class RmiServerSerializer<CONNECTION: Connection> : Serializer<Any>(false) {
             require(kryoId != null) { "Registration for $interfaceClass is invalid!!" }
             val iface = serialization.rmiHolder.idToIface[kryoId]
 
-            rmiConnectionSupport.getProxyObject(false, connection, kryoId, rmiId, iface)
+            rmi.getProxyObject(false, connection, kryoId, rmiId, iface)
         }
     }
 }

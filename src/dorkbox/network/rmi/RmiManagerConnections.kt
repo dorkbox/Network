@@ -15,7 +15,6 @@
  */
 package dorkbox.network.rmi
 
-import dorkbox.collections.LockFreeIntMap
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
@@ -32,108 +31,7 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
     private val listenerManager: ListenerManager<CONNECTION>,
     private val serialization: Serialization<CONNECTION>,
     private val getGlobalAction: (connection: CONNECTION, objectId: Int, interfaceClass: Class<*>) -> Any
-) : RmiObjectCache(logger) {
-
-    // It is critical that all of the RMI proxy objects are unique, and are saved/cached PER CONNECTION. These cannot be shared between connections!
-    private val proxyObjects = LockFreeIntMap<RemoteObject>()
-
-    // callbacks for when a REMOTE object has been created
-    private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
-
-    /**
-     * Removes a proxy object from the system
-     *
-     * @return true if it successfully removed the object
-     */
-    fun removeProxyObject(rmiId: Int): Boolean {
-        return proxyObjects.remove(rmiId) != null
-    }
-
-    private fun getProxyObject(rmiId: Int): RemoteObject? {
-        return proxyObjects[rmiId]
-    }
-
-    private fun saveProxyObject(rmiId: Int, remoteObject: RemoteObject) {
-        proxyObjects.put(rmiId, remoteObject)
-    }
-
-    internal fun <Iface> registerCallback(callback: suspend Iface.() -> Unit): Int {
-        return remoteObjectCreationCallbacks.register(callback)
-    }
-
-    private fun removeCallback(callbackId: Int): suspend Any.() -> Unit {
-        // callback's area always correct, because we track them ourselves.
-        return remoteObjectCreationCallbacks.remove(callbackId)!!
-    }
-
-
-
-    /**
-     * on the connection+client to get a connection-specific remote object (that exists on the server/client)
-     */
-    fun <Iface> getProxyObject(isGlobal: Boolean, connection: CONNECTION, rmiId: Int, interfaceClass: Class<Iface>): Iface {
-        require(interfaceClass.isInterface) { "iface must be an interface." }
-
-        // so we can just instantly create the proxy object (or get the cached one)
-        var proxyObject = getProxyObject(rmiId)
-        if (proxyObject == null) {
-            val kryoId = connection.endPoint.serialization.getKryoIdForRmiClient(interfaceClass)
-
-            proxyObject = RmiManagerGlobal.createProxyObject(isGlobal,
-                                                             connection,
-                                                             serialization,
-                                                             responseManager,
-                                                             kryoId,
-                                                             rmiId,
-                                                             interfaceClass)
-            saveProxyObject(rmiId, proxyObject)
-        }
-
-        // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
-        @Suppress("UNCHECKED_CAST")
-        return proxyObject as Iface
-    }
-
-    /**
-     * on the connection+client to get a connection-specific remote object (that exists on the server/client)
-     */
-    fun <Iface> getProxyObject(isGlobal: Boolean, connection: CONNECTION, kryoId: Int, rmiId: Int, interfaceClass: Class<Iface>): Iface {
-        require(interfaceClass.isInterface) { "iface must be an interface." }
-
-        // so we can just instantly create the proxy object (or get the cached one)
-        var proxyObject = getProxyObject(rmiId)
-        if (proxyObject == null) {
-            proxyObject = RmiManagerGlobal.createProxyObject(isGlobal,
-                                                             connection,
-                                                             serialization,
-                                                             responseManager,
-                                                             kryoId,
-                                                             rmiId,
-                                                             interfaceClass)
-            saveProxyObject(rmiId, proxyObject)
-        }
-
-        // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
-        @Suppress("UNCHECKED_CAST")
-        return proxyObject as Iface
-    }
-
-
-    /**
-     * on the "client" to create a connection-specific remote object (that exists on the server)
-     */
-    suspend fun <Iface> createRemoteObject(connection: CONNECTION, kryoId: Int, objectParameters: Array<Any?>?, callback: suspend Iface.() -> Unit) {
-        val callbackId = registerCallback(callback)
-
-        // There is no rmiID yet, because we haven't created it!
-        val message = ConnectionObjectCreateRequest(RmiUtils.packShorts(callbackId, kryoId), objectParameters)
-
-        // We use a callback to notify us when the object is ready. We can't "create this on the fly" because we
-        // have to wait for the object to be created + ID to be assigned on the remote system BEFORE we can create the proxy instance here.
-
-        // this means we are creating a NEW object on the server
-        connection.send(message)
-    }
+) {
 
     /**
      * called on "server"
@@ -146,6 +44,7 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
         // We have to lookup the iface, since the proxy object requires it
         val implObject = serialization.createRmiObject(kryoId, objectParameters)
 
+
         val response = if (implObject is Exception) {
             // whoops!
             ListenerManager.cleanStackTrace(implObject)
@@ -153,7 +52,7 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
             listenerManager.notifyError(connection, implObject)
             ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, RemoteObjectStorage.INVALID_RMI))
         } else {
-            val rmiId = saveImplObject(implObject)
+            val rmiId =  connection.rmi.saveImplObject(implObject)
             if (rmiId == RemoteObjectStorage.INVALID_RMI) {
                 val exception = NullPointerException("Trying to create an RMI object with the INVALID_RMI id!!")
                 ListenerManager.cleanStackTrace(exception)
@@ -184,11 +83,14 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
             return
         }
 
-        val callback = removeCallback(callbackId)
+        @Suppress("UNCHECKED_CAST")
+        val rmi = connection.rmi as RmiSupportConnection<CONNECTION>
+
+        val callback = rmi.removeCallback(callbackId)
         val interfaceClass = ClassHelper.getGenericParameterAsClassForSuperClass(RemoteObjectCallback::class.java, callback.javaClass, 0)
 
         // create the client-side proxy object, if possible.  This MUST be an object that is saved for the connection
-        val proxyObject = getProxyObject(false, connection, rmiId, interfaceClass)
+        val proxyObject = rmi.getProxyObject(false, connection, rmiId, interfaceClass)
 
         // this should be executed on a NEW coroutine!
         try {
@@ -216,8 +118,8 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
         }
 
         // it DOESN'T matter which "side" we are, just delete both (RMI id's must always represent the same object on both sides)
-        removeProxyObject(rmiId)
-        removeImplObject<Any?>(rmiId)
+        connection.rmi.removeProxyObject(rmiId)
+        connection.rmi.removeImplObject<Any?>(rmiId)
 
         // tell the "other side" to delete the proxy/impl object
         connection.send(ConnectionObjectDeleteResponse(rmiId))
@@ -240,14 +142,13 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
         }
 
         // it DOESN'T matter which "side" we are, just delete both (RMI id's must always represent the same object on both sides)
-        removeProxyObject(rmiId)
-        removeImplObject<Any?>(rmiId)
+        connection.rmi.removeProxyObject(rmiId)
+        connection.rmi.removeImplObject<Any?>(rmiId)
     }
 
 
-    fun close() {
-        proxyObjects.clear()
-        remoteObjectCreationCallbacks.close()
+    fun close(connection: CONNECTION) {
+        connection.rmi.clear()
     }
 
     /**
@@ -255,6 +156,6 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
      */
     fun getNewRmiSupport(connection: Connection): RmiSupportConnection<CONNECTION> {
         @Suppress("LeakingThis", "UNCHECKED_CAST")
-        return RmiSupportConnection(logger, connection as CONNECTION, this, serialization, getGlobalAction)
+        return RmiSupportConnection(logger, connection as CONNECTION, responseManager, serialization, getGlobalAction)
     }
 }

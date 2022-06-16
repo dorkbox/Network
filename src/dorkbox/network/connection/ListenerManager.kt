@@ -129,6 +129,9 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     private val onConnectFilterList = atomic(Array<(CONNECTION.() -> Boolean)>(0) { { true } })
     private val onConnectFilterMutex = Mutex()
 
+    private val onInitList = atomic(Array<suspend (CONNECTION.() -> Unit)>(0) { { } })
+    private val onInitMutex = Mutex()
+
     private val onConnectList = atomic(Array<suspend (CONNECTION.() -> Unit)>(0) { { } })
     private val onConnectMutex = Mutex()
 
@@ -192,9 +195,21 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     }
 
     /**
-     * Adds a function that will be called when a client/server "connects" with each other
+     * Adds a function that will be called when a client/server connection is FIRST initialized, but before it's
+     * connected to the remote endpoint
      *
-     * For a server, this function will be called for ALL clients.
+     * For a server, this function will be called for ALL client connections.
+     */
+    suspend fun onInit(function: suspend CONNECTION.() -> Unit) {
+        onInitMutex.withLock {
+            // we have to follow the single-writer principle!
+            onInitList.lazySet(add(function, onInitList.value))
+        }
+    }
+
+    /**
+     * Adds a function that will be called when a client/server connection first establishes a connection with the remote end.
+     * 'onInit()' callbacks will execute for both the client and server before `onConnect()` will execute will "connects" with each other
      */
     suspend fun onConnect(function: suspend CONNECTION.() -> Unit) {
         onConnectMutex.withLock {
@@ -323,6 +338,21 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         // NO RULES ADDED -> ACCEPT
         //    RULES ADDED -> DENY
         return arrayOfIpFilterRules.isEmpty()
+    }
+
+    /**
+     * Invoked when a connection is first initialized, but BEFORE it's connected to the remote address.
+     */
+    suspend fun notifyInit(connection: CONNECTION) {
+        onInitList.value.forEach {
+            try {
+                it(connection)
+            } catch (t: Throwable) {
+                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                cleanStackTrace(t)
+                logger.error("Connection ${connection.id} error", t)
+            }
+        }
     }
 
     /**

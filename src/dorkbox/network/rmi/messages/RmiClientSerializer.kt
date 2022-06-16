@@ -22,6 +22,7 @@ import com.esotericsoftware.kryo.io.Output
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.RmiClient
+import dorkbox.network.rmi.RmiSupportConnection
 import dorkbox.network.serialization.KryoExtra
 import java.lang.reflect.Proxy
 
@@ -72,7 +73,8 @@ class RmiClientSerializer<CONNECTION: Connection>: Serializer<Any>() {
         return if (isGlobal) {
             endPoint.rmiGlobalSupport.getImplObject(objectId)
         } else {
-            endPoint.rmiConnectionSupport.getImplObject(objectId)
+            val rmi = kryo.connection.rmi as RmiSupportConnection<CONNECTION>
+            rmi.getImplObject(objectId)
         }
     }
 }

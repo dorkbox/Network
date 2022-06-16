@@ -25,7 +25,6 @@ internal object ServerHandshakePollers {
 
     fun <CONNECTION : Connection> IPC(aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>): AeronPoller {
         val logger = server.logger
-        val rmiConnectionSupport = server.rmiConnectionSupport
         val connectionFunc = server.connectionFunc
         val handshake = server.handshake
 
@@ -63,7 +62,7 @@ internal object ServerHandshakePollers {
                     }
 
                     handshake.processIpcHandshakeMessageServer(
-                        server, rmiConnectionSupport, publication, message, aeronDriver, connectionFunc, logger
+                        server, publication, message, aeronDriver, connectionFunc, logger
                     )
                 }
 
@@ -89,7 +88,6 @@ internal object ServerHandshakePollers {
 
     fun <CONNECTION : Connection> ip4(aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>): AeronPoller {
         val logger = server.logger
-        val rmiConnectionSupport = server.rmiConnectionSupport
         val connectionFunc = server.connectionFunc
         val handshake = server.handshake
 
@@ -149,7 +147,7 @@ internal object ServerHandshakePollers {
                     }
 
                     handshake.processUdpHandshakeMessageServer(
-                        server, rmiConnectionSupport, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
+                        server, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
                     )
                 }
 
@@ -173,7 +171,6 @@ internal object ServerHandshakePollers {
 
     fun <CONNECTION : Connection> ip6(aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>): AeronPoller {
         val logger = server.logger
-        val rmiConnectionSupport = server.rmiConnectionSupport
         val connectionFunc = server.connectionFunc
         val handshake = server.handshake
 
@@ -231,7 +228,7 @@ internal object ServerHandshakePollers {
                     }
 
                     handshake.processUdpHandshakeMessageServer(
-                        server, rmiConnectionSupport, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
+                        server, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
                     )
                 }
 
@@ -259,7 +256,6 @@ internal object ServerHandshakePollers {
         server: Server<CONNECTION>
     ): AeronPoller {
         val logger = server.logger
-        val rmiConnectionSupport = server.rmiConnectionSupport
         val connectionFunc = server.connectionFunc
         val handshake = server.handshake
 
@@ -317,7 +313,7 @@ internal object ServerHandshakePollers {
                 }
 
                 handshake.processUdpHandshakeMessageServer(
-                    server, rmiConnectionSupport, publication, remoteIpAndPort, message, aeronDriver, true, connectionFunc, logger
+                    server, publication, remoteIpAndPort, message, aeronDriver, true, connectionFunc, logger
                 )
             }
 

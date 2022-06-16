@@ -170,7 +170,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         @Suppress("LeakingThis")
-        rmi = connectionParameters.rmiConnectionSupport.getNewRmiSupport(this)
+        rmi = connectionParameters.endPoint.rmiConnectionSupport.getNewRmiSupport(this)
     }
 
     /**

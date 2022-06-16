@@ -16,9 +16,13 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.rmi.messages.*
+import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
+import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
+import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
+import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
+import dorkbox.network.rmi.messages.MethodRequest
+import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.serialization.Serialization
-import kotlinx.coroutines.launch
 import mu.KLogger
 import java.lang.reflect.Proxy
 import java.util.*
@@ -78,11 +82,10 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
         // this immediately returns BECAUSE the object must have already been created on the server (this is why we specify the rmiId)!
         require(interfaceClass.isInterface) { "generic parameter must be an interface!" }
 
-        @Suppress("UNCHECKED_CAST")
-        val rmiConnectionSupport = connection.endPoint.rmiConnectionSupport as RmiManagerConnections<CONNECTION>
-
         // so we can just instantly create the proxy object (or get the cached one). This MUST be an object that is saved for the connection
-        return rmiConnectionSupport.getProxyObject(true, connection, objectId, interfaceClass)
+        @Suppress("UNCHECKED_CAST")
+        val rmi = connection.rmi as RmiSupportConnection<CONNECTION>
+        return rmi.getProxyObject(true, connection, objectId, interfaceClass)
     }
 
     /**
@@ -143,7 +146,7 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
                 val implObject: Any? = if (isGlobal) {
                     getImplObject(rmiObjectId)
                 } else {
-                    rmiConnectionSupport.getImplObject(rmiObjectId)
+                    connection.rmi.getImplObject(rmiObjectId)
                 }
 
                 if (implObject == null) {

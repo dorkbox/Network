@@ -30,21 +30,21 @@ open class RmiObjectCache(logger: KLogger) {
     /**
      * @return the newly registered RMI ID for this object. [RemoteObjectStorage.INVALID_RMI] means it was invalid (an error log will be emitted)
      */
-    fun saveImplObject(rmiObject: Any): Int {
+    internal fun saveImplObject(rmiObject: Any): Int {
         return implObjects.register(rmiObject)
     }
 
     /**
      * @return the true if it was a success saving this object. False means it was invalid (an error log will be emitted)
      */
-    fun saveImplObject(rmiObject: Any, objectId: Int): Boolean {
+    internal fun saveImplObject(rmiObject: Any, objectId: Int): Boolean {
         return implObjects.register(rmiObject, objectId)
     }
 
     /**
      * @return the implementation object from the specified ID
      */
-    fun <T> getImplObject(rmiId: Int): T? {
+    internal fun <T> getImplObject(rmiId: Int): T? {
         @Suppress("UNCHECKED_CAST")
         return implObjects[rmiId] as T?
     }
@@ -54,14 +54,14 @@ open class RmiObjectCache(logger: KLogger) {
      *
      * @return the object or null if not found
      */
-    fun <T> removeImplObject(rmiId: Int): T? {
+    internal fun <T> removeImplObject(rmiId: Int): T? {
         return implObjects.remove(rmiId) as T?
     }
 
     /**
      * @return the ID registered for the specified object, or INVALID_RMI if not found.
      */
-    fun <T> getId(implObject: T): Int {
+    internal fun <T> getId(implObject: T): Int {
         return implObjects.getId(implObject)
     }
 }
