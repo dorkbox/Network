@@ -36,7 +36,7 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
                                                    sessionId: Int,
                                                    connectionTimeoutSec: Int,
                                                    isReliable: Boolean = true) :
-    UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
+    MediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
     private fun aeronConnectionString(ipAddress: InetAddress): String {
         return if (ipAddress is Inet4Address) {
@@ -63,7 +63,7 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
 
     @Suppress("DuplicatedCode")
     override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
-        throw ServerException("Client info not implemented in Server MDC")
+        throw ServerException("Client info not implemented in Server MediaDriver Connection")
     }
 
     override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
@@ -104,7 +104,7 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
 
     override val clientInfo: String
         get() {
-            throw ServerException("Client info not implemented in Server MDC")
+            throw ServerException("Client info not implemented in Server MediaDriver Connection")
         }
 
     override val serverInfo: String by lazy {

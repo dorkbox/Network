@@ -21,6 +21,8 @@ import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
+import io.aeron.Publication
+import io.aeron.Subscription
 import kotlinx.coroutines.delay
 import mu.KLogger
 import java.net.Inet4Address
@@ -38,7 +40,13 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                                               sessionId: Int,
                                               connectionTimeoutSec: Int = 0,
                                               isReliable: Boolean = true) :
-    UdpMediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
+    MediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
+
+    @Volatile
+    private var tempSubscription: Subscription? = null
+
+    @Volatile
+    private var tempPublication: Publication? = null
 
     val addressString: String by lazy {
         IP.toString(address)
@@ -62,6 +70,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
     }
 
 
+
     @Suppress("DuplicatedCode")
     override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         val aeronAddressString = if (address is Inet4Address) {
@@ -76,32 +85,37 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
             }
         }
 
-
-        // Create a publication at the given address and port, using the given stream ID.
-        // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-        val publicationUri = uri()
-                .endpoint("$aeronAddressString:$publicationPort")
-
-        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
-        val subscriptionUri = uri()
-                .controlEndpoint("$aeronAddressString:$subscriptionPort")
-                .controlMode("dynamic")
-
-
-
-        if (logger.isTraceEnabled) {
-            logger.trace("client pub URI: $ip ${publicationUri.build()}")
-            logger.trace("client sub URI: $ip ${subscriptionUri.build()}")
-        }
-
         var success = false
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-        val publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
-        val subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
+
+        if (tempPublication == null) {
+            // Create a publication at the given address and port, using the given stream ID.
+            // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
+            val publicationUri = uri()
+                .endpoint("$aeronAddressString:$publicationPort")
+
+            logger.trace("client pub URI: $ip ${publicationUri.build()}")
+
+            tempPublication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        }
+
+        if (tempSubscription == null) {
+            // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
+            val subscriptionUri = uri()
+                .controlEndpoint("$aeronAddressString:$subscriptionPort")
+                .controlMode("dynamic")
+
+                logger.trace("client sub URI: $ip ${subscriptionUri.build()}")
+
+            tempSubscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
+        }
+
+        val publication = tempPublication!!
+        val subscription = tempSubscription!!
 
 
         // this will wait for the server to acknowledge the connection (all via aeron)
@@ -119,8 +133,8 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         if (!success) {
             subscription.close()
 
-            val ex = ClientTimedOutException("Cannot create subscription: $ip ${subscriptionUri.build()} in ${timoutInNanos}ms")
-            ListenerManager.cleanStackTraceInternal(ex)
+            val ex = ClientTimedOutException("Cannot create subscription to $ip in $connectionTimeoutSec seconds")
+            ListenerManager.cleanAllStackTrace(ex)
             throw ex
         }
 
@@ -142,14 +156,17 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
             subscription.close()
             publication.close()
 
-            val ex = ClientTimedOutException("Cannot create publication: $ip ${publicationUri.build()} in ${timoutInNanos}ms")
-            ListenerManager.cleanStackTrace(ex)
+            val ex = ClientTimedOutException("Cannot create publication to $ip in $connectionTimeoutSec seconds")
+            ListenerManager.cleanAllStackTrace(ex)
             throw ex
         }
 
         this.success = true
-        this.subscription = subscription
         this.publication = publication
+        this.subscription = subscription
+
+        this.tempPublication = null
+        this.tempSubscription = null
     }
 
     override val clientInfo: String by lazy {
@@ -161,11 +178,11 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
     }
 
     override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
-        throw ClientException("Server info not implemented in Client MDC")
+        throw ClientException("Server info not implemented in Client MediaDriver Connection")
     }
     override val serverInfo: String
     get() {
-        throw ClientException("Server info not implemented in Client MDC")
+        throw ClientException("Server info not implemented in Client MediaDriver Connection")
     }
 
     override fun toString(): String {

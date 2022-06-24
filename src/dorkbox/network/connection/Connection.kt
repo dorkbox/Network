@@ -17,7 +17,6 @@ package dorkbox.network.connection
 
 import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverClientConnection
-import dorkbox.network.aeron.UdpMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverPairedConnection
 import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.handshake.RandomIdAllocator
@@ -78,7 +77,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * @return true if this connection is a network connection
      */
-    val isNetwork = connectionParameters.mediaDriverConnection is UdpMediaDriverConnection
+    val isNetwork = !isIpc
 
     /**
      * the endpoint associated with this connection
