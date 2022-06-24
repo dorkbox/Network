@@ -112,7 +112,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             // we want to ONLY filter stuff that is past the highest dorkbox index AND is a coroutine.
             val firstDorkboxIndex = stackTrace.indexOfFirst { it.className.startsWith("dorkbox.network.") }
             val lastDorkboxIndex = stackTrace.indexOfLast { it.className.startsWith("dorkbox.network.") }
-                throwable.stackTrace = stackTrace.filterIndexed { index, element ->
+
+            throwable.stackTrace = stackTrace.filterIndexed { index, element ->
                 val stackName = element.className
                 if (index <= firstDorkboxIndex && index >= lastDorkboxIndex) {
                     false
@@ -122,6 +123,23 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                     isCoroutine && element.methodName != "invokeSuspend"
                 }
             }.toTypedArray()
+        }
+
+        /**
+         * Remove everything from the stacktrace.
+         *
+         * We only want the error message, because we do something based on it (and the full stack trace is meaningless)
+         */
+        fun cleanAllStackTrace(throwable: Throwable) {
+            val stackTrace = throwable.stackTrace
+            val size = stackTrace.size
+
+            if (size == 0) {
+                return
+            }
+
+            // throw everything out
+            throwable.stackTrace = stackTrace.copyOfRange(0, 1)
         }
     }
 
