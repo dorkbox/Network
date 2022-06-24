@@ -39,7 +39,6 @@ import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
 import dorkbox.network.serialization.SettingsStore
 import io.aeron.Publication
-import io.aeron.driver.MediaDriver
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
@@ -673,30 +672,35 @@ internal constructor(val type: Class<*>,
         }
     }
 
-    override fun toString(): String {
-        return "EndPoint [${type.simpleName}]"
+    /**
+     * Checks to see if an endpoint is running.
+     *
+     * @return true if the media driver is active and running
+     */
+    fun isRunning(): Boolean {
+        return aeronDriver.isRunning()
     }
 
-    override fun hashCode(): Int {
-        val prime = 31
-        var result = 1
-        result = prime * result + (crypto.hashCode())
-        return result
+    /**
+     * @param counterFunction callback for each of the internal counters of the Aeron driver in the current aeron directory
+     */
+    fun driverCounters(counterFunction: (counterId: Int, counterValue: Long, typeId: Int, keyBuffer: DirectBuffer?, label: String?) -> Unit) {
+        aeronDriver.driverCounters(counterFunction)
     }
 
-    override fun equals(other: Any?): Boolean {
-        if (this === other) {
-            return true
-        }
-        if (other == null) {
-            return false
-        }
-        if (javaClass != other.javaClass) {
-            return false
-        }
 
-        other as EndPoint<*>
-        return crypto == other.crypto
+    /**
+     * @return the internal heartbeat of the Aeron driver in the current aeron directory
+     */
+    fun driverHeartbeatMs(): Long {
+        return aeronDriver.driverHeartbeatMs()
+    }
+
+    /**
+     * @return the internal version of the Aeron driver in the current aeron directory
+     */
+    fun driverVersion(): String {
+        return aeronDriver.driverVersion()
     }
 
     /**
@@ -711,25 +715,6 @@ internal constructor(val type: Class<*>,
      */
     suspend fun waitForClose() {
         shutdownMutex.withLock {  }
-    }
-
-    /**
-     * Checks to see if an endpoint (using the current configuration) is running.
-     *
-     * @return true if the media driver is active and running
-     */
-    fun isRunning(): Boolean {
-        return aeronDriver.isRunning()
-    }
-
-    /**
-     * Checks to see if an endpoint (using the specified configuration) is running.
-     *
-     * @return true if the media driver is active and running
-     */
-    fun isRunning(context: MediaDriver.Context): Boolean {
-        // if the media driver is running, it will be a quick connection. Usually 100ms or so
-        return context.isDriverActive(1_000) { }
     }
 
     final override fun close() {
@@ -767,4 +752,32 @@ internal constructor(val type: Class<*>,
     }
 
     internal open fun close0() {}
+
+
+    override fun toString(): String {
+        return "EndPoint [${type.simpleName}]"
+    }
+
+    override fun hashCode(): Int {
+        val prime = 31
+        var result = 1
+        result = prime * result + (crypto.hashCode())
+        return result
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) {
+            return true
+        }
+        if (other == null) {
+            return false
+        }
+        if (javaClass != other.javaClass) {
+            return false
+        }
+
+        other as EndPoint<*>
+        return crypto == other.crypto
+    }
+
 }
