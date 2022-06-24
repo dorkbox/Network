@@ -7,10 +7,10 @@ import dorkbox.network.connection.Connection
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
-import java.lang.Thread.sleep
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MultiClientTest : BaseTest() {
     private val totalCount = 8 // this number is dependent on the number of CPU cores on the box!
@@ -46,27 +46,34 @@ class MultiClientTest : BaseTest() {
             }
         }
 
-        runBlocking {
-            sleep(5000L)
-            println("Starting server...")
-            val configuration = serverConfig()
 
-            val server: Server<Connection> = Server(configuration)
-            addEndPoint(server)
-            server.onConnect {
-                val count = serverConnectCount.incrementAndGet()
+        val configuration = serverConfig()
 
-                logger.error("${this.id} - Connecting $count ....")
-                close()
+        val server: Server<Connection> = Server(configuration)
+        addEndPoint(server)
+        server.onConnect {
+            val count = serverConnectCount.incrementAndGet()
 
-                if (count == totalCount) {
-                    logger.error { "Stopping endpoints!" }
-                    stopEndPoints(10000L)
+            logger.error("${this.id} - Connecting $count ....")
+            close()
+
+            if (count == totalCount) {
+                logger.error { "Stopping endpoints!" }
+
+
+                val dateFormat = SimpleDateFormat("HH:mm:ss")
+                print(dateFormat.format(Date()))
+                println("======================================================================")
+                server.driverCounters { counterId, counterValue, typeId, keyBuffer, label ->
+                    //if (counterFilter.filter(typeId, keyBuffer)) {
+                    System.out.format("%3d: %,20d - %s%n", counterId, counterValue, label)
+                    //}
                 }
+                stopEndPoints(10000L)
             }
-
-            server.bind()
         }
+
+        server.bind()
 
         waitForThreads()
 
