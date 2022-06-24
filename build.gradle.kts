@@ -37,7 +37,7 @@ object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.22"
+    const val version = "5.22.1"
 
     // set as project.ext
     const val name = "Network"
@@ -148,7 +148,7 @@ dependencies {
     api("com.dorkbox:Collections:1.1")
     api("com.dorkbox:MinLog:2.4")
     api("com.dorkbox:NetworkDNS:2.6")
-    api("com.dorkbox:NetworkUtils:2.17")
+    api("com.dorkbox:NetworkUtils:2.18")
     api("com.dorkbox:ObjectPool:3.5")
     api("com.dorkbox:OS:1.0")
     api("com.dorkbox:Serializers:2.7")
