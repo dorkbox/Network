@@ -147,7 +147,7 @@ dependencies {
     api("com.dorkbox:ByteUtilities:1.5")
     api("com.dorkbox:Collections:1.1")
     api("com.dorkbox:MinLog:2.4")
-    api("com.dorkbox:NetworkDNS:2.5")
+    api("com.dorkbox:NetworkDNS:2.6")
     api("com.dorkbox:NetworkUtils:2.17")
     api("com.dorkbox:ObjectPool:3.5")
     api("com.dorkbox:OS:1.0")
