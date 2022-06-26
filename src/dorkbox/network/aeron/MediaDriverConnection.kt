@@ -21,10 +21,9 @@ import io.aeron.Publication
 import io.aeron.Subscription
 import mu.KLogger
 
-abstract class MediaDriverConnection(
-                                val publicationPort: Int, val subscriptionPort: Int,
-                                val streamId: Int, val sessionId: Int,
-                                val connectionTimeoutSec: Int, val isReliable: Boolean) : AutoCloseable {
+abstract class MediaDriverConnection(val publicationPort: Int, val subscriptionPort: Int,
+                                     val streamId: Int, val sessionId: Int,
+                                     val connectionTimeoutSec: Int, val isReliable: Boolean) : AutoCloseable {
 
     var success: Boolean = false
     lateinit var subscription: Subscription
