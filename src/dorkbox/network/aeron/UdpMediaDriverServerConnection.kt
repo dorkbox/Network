@@ -97,9 +97,9 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
         // If we start/stop too quickly, we might have the address already in use! Retry a few times.
-        success = true
-        subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
-        publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        this.success = true
+        this.publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        this.subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
     }
 
     override val clientInfo: String
