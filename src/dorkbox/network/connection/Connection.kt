@@ -339,6 +339,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         close(true)
     }
 
+    internal fun closeBlocking() {
+        runBlocking {
+            close()
+        }
+    }
+
+
     /**
      * Closes the connection, and removes all connection specific listeners
      */

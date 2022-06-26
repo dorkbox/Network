@@ -55,9 +55,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         .expirationListener<Long, CONNECTION> { clientConnectKey, connection ->
             // this blocks until it fully runs (which is ok. this is fast)
             logger.error { "[${clientConnectKey} Connection (${connection.id}) Timed out waiting for registration response from client" }
-            runBlocking {
-                connection.close()
-            }
+            connection.closeBlocking()
         }
         .build<Long, CONNECTION>()
 
@@ -435,6 +433,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
 
         // create a new connection. The session ID is encrypted.
+        var connection: CONNECTION? = null
         try {
             // connection timeout of 0 doesn't matter. it is not used by the server
             // the client address WILL BE either IPv4 or IPv6
@@ -460,7 +459,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
             logger.info { "Creating new connection from $clientConnection" }
 
-            val connection = connectionFunc(ConnectionParams(server, clientConnection, validateRemoteAddress))
+            connection = connectionFunc(ConnectionParams(server, clientConnection, validateRemoteAddress))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)
@@ -469,6 +468,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 connectionsPerIpCounts.decrementSlow(clientAddress)
                 sessionIdAllocator.free(connectionSessionId)
                 streamIdAllocator.free(connectionStreamId)
+                connection.closeBlocking()
 
                 logger.error { "Connection $clientAddressString was not permitted!" }
 
