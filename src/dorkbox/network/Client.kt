@@ -628,9 +628,9 @@ open class Client<CONNECTION : Connection>(
             // because we are getting the class registration details from the SERVER, this should never be the case.
             // It is still and edge case where the reconstruction of the registration details fails (maybe because of custom serializers)
             val exception = if (isUsingIPC) {
-                ClientRejectedException("Connection to IPC has incorrect class registration details!!")
+                ClientRejectedException("[${handshake.connectKey}] Connection to IPC has incorrect class registration details!!")
             } else {
-                ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} has incorrect class registration details!!")
+                ClientRejectedException("[${handshake.connectKey}] Connection to $remoteAddressString has incorrect class registration details!!")
             }
             ListenerManager.cleanStackTraceInternal(exception)
             throw exception
@@ -649,13 +649,13 @@ open class Client<CONNECTION : Connection>(
             val permitConnection = listenerManager.notifyFilter(newConnection)
             if (!permitConnection) {
                 handshakeConnection.close()
-                val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} was not permitted!")
+                val exception = ClientRejectedException("[${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString was not permitted!")
                 ListenerManager.cleanStackTrace(exception)
                 logger.error(exception) { "Permission error" }
                 throw exception
             }
 
-            logger.info { "Adding new signature for ${IP.toString(remoteAddress!!)} : ${connectionInfo.publicKey.toHexString()}" }
+            logger.info { "[${handshake.connectKey}] Connection (${newConnection.id}) : Adding new signature for ${IP.toString(remoteAddress!!)} : ${connectionInfo.publicKey.toHexString()}" }
             storage.addRegisteredServerKey(remoteAddress!!, connectionInfo.publicKey)
         }
 
@@ -668,7 +668,7 @@ open class Client<CONNECTION : Connection>(
 
             // on the client, we want to GUARANTEE that the disconnect happens-before connect.
             if (!lockStepForConnect.compareAndSet(null, Mutex(locked = true))) {
-                logger.error { "Connection ${newConnection.id} : close lockStep for disconnect was in the wrong state!" }
+                logger.error { "[${handshake.connectKey}] Connection ${newConnection.id} : close lockStep for disconnect was in the wrong state!" }
             }
 
             isConnected = false
@@ -689,8 +689,6 @@ open class Client<CONNECTION : Connection>(
         connection0 = newConnection
         addConnection(newConnection)
 
-        logger.error { "Connection created, finishing handshake: ${handshake.connectKey}" }
-
         // tell the server our connection handshake is done, and the connection can now listen for data.
         // also closes the handshake (will also throw connect timeout exception)
         val canFinishConnecting: Boolean
@@ -708,7 +706,7 @@ open class Client<CONNECTION : Connection>(
         if (canFinishConnecting) {
             isConnected = true
 
-
+            logger.debug { "[${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString done with handshake." }
 
             // this forces the current thread to WAIT until poll system has started
             val mutex = Mutex(locked = true)

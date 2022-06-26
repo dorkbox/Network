@@ -278,8 +278,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
             throw exception
         }
 
-        logger.error{"[${subscription.streamId()}] handshake done"}
-
         return connectionDone
     }
 

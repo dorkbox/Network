@@ -104,7 +104,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             if (pendingConnection == null) {
                 logger.error { "[${message.connectKey}] Error! Pending connection from client $connectionString was null, and cannot complete handshake!" }
             } else {
-                logger.trace { "[${message.connectKey}] Connection (${pendingConnection.id}) from $connectionString done with handshake." }
+                logger.debug { "[${message.connectKey}] Connection (${pendingConnection.id}) from $connectionString done with handshake." }
 
                 pendingConnection.closeAction = {
                     // called on connection.close()
@@ -356,9 +356,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
 
         // Manage the Handshake state
-        if (!validateMessageTypeAndDoPending(
-                server, server.actionDispatch, handshakePublication, message, clientAddressString, logger
-            )) {
+        if (!validateMessageTypeAndDoPending(server, server.actionDispatch, handshakePublication, message, clientAddressString, logger)) {
             return
         }
 
@@ -505,6 +503,8 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = connection
 
+            logger.debug { "[${message.connectKey}] Connection (${connection.id}) responding to handshake hello." }
+
             // this tells the client all the info to connect.
             server.writeHandshakeMessage(handshakePublication, successMessage) // exception is already caught
         } catch (e: Exception) {
@@ -513,7 +513,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             sessionIdAllocator.free(connectionSessionId)
             streamIdAllocator.free(connectionStreamId)
 
-            logger.error(e) { "Connection handshake from $clientAddressString crashed! Message $message" }
+            logger.error(e) { "[${message.connectKey}] Connection (${connection?.id}) handshake from $clientAddressString crashed! Message $message" }
         }
     }
 

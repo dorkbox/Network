@@ -70,11 +70,16 @@ internal open class IpcMediaDriverConnection(streamId: Int,
         val publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
         val subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamIdSubscription)
 
-        // this will wait for the server to acknowledge the connection (all via aeron)
+
+        // We must add the subscription first, because we must be available to listen when the server responds.
+
+
         val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
         var startTime = System.nanoTime()
+
+        // this will wait for the server to acknowledge the connection (all via aeron)
         while (System.nanoTime() - startTime < timoutInNanos) {
-            if (subscription.isConnected && subscription.imageCount() > 0) {
+            if (subscription.isConnected) {
                 success = true
                 break
             }
@@ -82,20 +87,20 @@ internal open class IpcMediaDriverConnection(streamId: Int,
             delay(500L)
         }
 
-
         if (!success) {
             subscription.close()
 
-            val clientTimedOutException = ClientTimedOutException("Creating subscription connection to aeron")
-            ListenerManager.cleanStackTraceInternal(clientTimedOutException)
+            val clientTimedOutException = ClientTimedOutException("Cannot create subscription IPC connection to server")
+            ListenerManager.cleanAllStackTrace(clientTimedOutException)
             throw clientTimedOutException
         }
 
 
-        success = false
 
-        // this will wait for the server to acknowledge the connection (all via aeron)
+
+        success = false
         startTime = System.nanoTime()
+
         while (System.nanoTime() - startTime < timoutInNanos) {
             if (publication.isConnected) {
                 success = true
@@ -109,8 +114,8 @@ internal open class IpcMediaDriverConnection(streamId: Int,
             subscription.close()
             publication.close()
 
-            val clientTimedOutException = ClientTimedOutException("Creating publication connection to aeron")
-            ListenerManager.cleanStackTraceInternal(clientTimedOutException)
+            val clientTimedOutException = ClientTimedOutException("Cannot create publication IPC connection to server")
+            ListenerManager.cleanAllStackTrace(clientTimedOutException)
             throw clientTimedOutException
         }
 

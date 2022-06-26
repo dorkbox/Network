@@ -21,8 +21,6 @@ import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
-import io.aeron.Publication
-import io.aeron.Subscription
 import kotlinx.coroutines.delay
 import mu.KLogger
 import java.net.Inet4Address
@@ -42,12 +40,6 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                                               isReliable: Boolean = true) :
     MediaDriverConnection(publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
-    @Volatile
-    private var tempSubscription: Subscription? = null
-
-    @Volatile
-    private var tempPublication: Publication? = null
-
     val addressString: String by lazy {
         IP.toString(address)
     }
@@ -61,7 +53,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         return builder
     }
 
-    val ip: String by lazy {
+    val ipType: String by lazy {
         if (address is Inet4Address) {
             "IPv4"
         } else {
@@ -92,35 +84,31 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
-        if (tempPublication == null) {
-            // Create a publication at the given address and port, using the given stream ID.
-            // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-            val publicationUri = uri()
-                .endpoint("$aeronAddressString:$publicationPort")
+        // Create a publication at the given address and port, using the given stream ID.
+        // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
+        val publicationUri = uri()
+            .endpoint("$aeronAddressString:$publicationPort")
 
-            logger.trace("client pub URI: $ip ${publicationUri.build()}")
-
-            tempPublication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
-        }
-
-        if (tempSubscription == null) {
-            // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
-            val subscriptionUri = uri()
-                .controlEndpoint("$aeronAddressString:$subscriptionPort")
-                .controlMode("dynamic")
-
-                logger.trace("client sub URI: $ip ${subscriptionUri.build()}")
-
-            tempSubscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
-        }
-
-        val publication = tempPublication!!
-        val subscription = tempSubscription!!
+        logger.trace("client pub URI: $ipType ${publicationUri.build()}")
+        val publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
 
 
-        // this will wait for the server to acknowledge the connection (all via aeron)
+        // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
+        val subscriptionUri = uri()
+            .controlEndpoint("$aeronAddressString:$subscriptionPort")
+            .controlMode("dynamic")
+
+        logger.trace("client sub URI: $ipType ${subscriptionUri.build()}")
+        val subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
+
+
+        // We must add the subscription first, because we must be available to listen when the server responds.
+
+
         val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
         var startTime = System.nanoTime()
+
+        // this will wait for the server to acknowledge the connection (all via aeron)
         while (System.nanoTime() - startTime < timoutInNanos) {
             if (subscription.isConnected) {
                 success = true
@@ -133,16 +121,16 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         if (!success) {
             subscription.close()
 
-            val ex = ClientTimedOutException("Cannot create subscription to $ip in $connectionTimeoutSec seconds")
+            val ex = ClientTimedOutException("Cannot create subscription to $ipType $addressString in $connectionTimeoutSec seconds")
             ListenerManager.cleanAllStackTrace(ex)
             throw ex
         }
 
 
-        success = false
 
-        // this will wait for the server to acknowledge the connection (all via aeron)
+        success = false
         startTime = System.nanoTime()
+
         while (System.nanoTime() - startTime < timoutInNanos) {
             if (publication.isConnected) {
                 success = true
@@ -156,17 +144,17 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
             subscription.close()
             publication.close()
 
-            val ex = ClientTimedOutException("Cannot create publication to $ip in $connectionTimeoutSec seconds")
+            val ex = ClientTimedOutException("Cannot create publication to $ipType $addressString in $connectionTimeoutSec seconds")
             ListenerManager.cleanAllStackTrace(ex)
             throw ex
+
         }
+
+
 
         this.success = true
         this.publication = publication
         this.subscription = subscription
-
-        this.tempPublication = null
-        this.tempSubscription = null
     }
 
     override val clientInfo: String by lazy {

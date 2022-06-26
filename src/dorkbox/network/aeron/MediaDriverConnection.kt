@@ -38,8 +38,8 @@ abstract class MediaDriverConnection(val publicationPort: Int, val subscriptionP
 
     override fun close() {
         if (success) {
-            publication.close()
             subscription.close()
+            publication.close()
         }
     }
 }
