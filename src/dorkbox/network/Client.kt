@@ -467,7 +467,9 @@ open class Client<CONNECTION : Connection>(
                     }
 
                 } catch (e: Exception) {
-                    logger.error(e) { "Un-recoverable error during handshake. Aborting." }
+                    logger.error(e) { "[${handshake.connectKey}] : Un-recoverable error during handshake. Aborting." }
+                    handshake.reset()
+
                     listenerManager.notifyError(e)
                     throw e
                 }
