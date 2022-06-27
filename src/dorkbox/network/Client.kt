@@ -157,7 +157,17 @@ open class Client<CONNECTION : Connection>(
      * For the IPC (Inter-Process-Communication) address. it must be:
      * - the IPC integer ID, "0x1337c0de", "0x12312312", etc.
      */
-    private var remoteAddress0: InetAddress? = IPv4.LOCALHOST
+    @Volatile
+    var remoteAddress: InetAddress? = IPv4.LOCALHOST
+        private set
+
+    /**
+     * the remote address, as a string.
+     */
+    @Volatile
+    var remoteAddressString: String = "UNKNOWN"
+        private set
+
 
     @Volatile
     private var isConnected = false
@@ -173,6 +183,75 @@ open class Client<CONNECTION : Connection>(
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ClientException(message, cause)
+    }
+
+    /**
+     * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
+     *
+     * Default connection is to localhost
+     *
+     * ### For a network address, it can be:
+     *  - a network name ("localhost", "bob.example.org")
+     *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
+     *  - an InetAddress address
+     *
+     * ### For the IPC (Inter-Process-Communication) it must be:
+     *  - `connect()`
+     *  - `connect("")`
+     *  - `connectIpc()`
+     *
+     * ### Case does not matter, and "localhost" is the default.
+     *
+     * @param remoteAddress The network or if localhost, IPC address for the client to connect to
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
+     * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
+     *
+     * @throws IllegalArgumentException if the remote address is invalid
+     * @throws ClientTimedOutException if the client is unable to connect in x amount of time
+     * @throws ClientRejectedException if the client connection is rejected
+     */
+    fun connect(remoteAddress: InetAddress,
+                connectionTimeoutSec: Int = 30,
+                reliable: Boolean = true) {
+
+        val remoteAddressString = when (remoteAddress) {
+            is Inet4Address -> IPv4.toString(remoteAddress)
+            is Inet6Address -> IPv6.toString(remoteAddress, true)
+            else ->  throw IllegalArgumentException("Cannot connect to $remoteAddress It is an invalid address!")
+        }
+
+
+        // Default IPC ports are flipped because they are in the perspective of the SERVER
+        connect(remoteAddress = remoteAddress,
+                remoteAddressString = remoteAddressString,
+                connectionTimeoutSec = connectionTimeoutSec,
+                reliable = reliable)
+    }
+
+    /**
+     * Will attempt to connect to the server via IPC, with a default 30 second connection timeout and will block until completed.
+     *
+     * @param ipcPublicationId The IPC publication address for the client to connect to
+     * @param ipcSubscriptionId The IPC subscription address for the client to connect to
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
+     *
+     * @throws IllegalArgumentException if the remote address is invalid
+     * @throws ClientTimedOutException if the client is unable to connect in x amount of time
+     * @throws ClientRejectedException if the client connection is rejected
+     */
+    @Suppress("DuplicatedCode")
+    fun connectIpc(ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
+                   ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
+                   connectionTimeoutSec: Int = 30) {
+        // Default IPC ports are flipped because they are in the perspective of the SERVER
+
+        require(ipcPublicationId != ipcSubscriptionId) { "IPC publication and subscription ports cannot be the same! The must match the server's configuration." }
+
+        connect(remoteAddress = null, // required!
+                remoteAddressString = "IPC",
+                ipcPublicationId = ipcPublicationId,
+                ipcSubscriptionId = ipcSubscriptionId,
+                connectionTimeoutSec = connectionTimeoutSec)
     }
 
     /**
@@ -205,6 +284,7 @@ open class Client<CONNECTION : Connection>(
     fun connect(remoteAddress: String = "",
                 connectionTimeoutSec: Int = 30,
                 reliable: Boolean = true) {
+
         when {
             // this is default IPC settings
             remoteAddress.isEmpty() && config.enableIpc -> {
@@ -228,9 +308,9 @@ open class Client<CONNECTION : Connection>(
                 }
 
                 connect(remoteAddress = inet4Address,
+                        remoteAddressString = remoteAddress,
                         connectionTimeoutSec = connectionTimeoutSec,
-                        reliable = reliable
-                )
+                        reliable = reliable)
             }
 
             IPv6.isPreferred -> {
@@ -249,10 +329,10 @@ open class Client<CONNECTION : Connection>(
                     throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
                 }
 
-                connect(remoteAddress = Inet6.toAddress(remoteAddress),
+                connect(remoteAddress = inet6Address,
+                        remoteAddressString = remoteAddress,
                         connectionTimeoutSec = connectionTimeoutSec,
-                        reliable = reliable
-                )
+                        reliable = reliable)
             }
 
             // if there is no preference, then try to connect via IPv4
@@ -273,73 +353,12 @@ open class Client<CONNECTION : Connection>(
                 }
 
                 connect(remoteAddress = inetAddress,
+                        remoteAddressString = remoteAddress,
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable
                 )
             }
         }
-    }
-
-    /**
-     * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
-     *
-     * Default connection is to localhost
-     *
-     * ### For a network address, it can be:
-     *  - a network name ("localhost", "bob.example.org")
-     *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
-     *  - an InetAddress address
-     *
-     * ### For the IPC (Inter-Process-Communication) it must be:
-     *  - `connect()`
-     *  - `connect("")`
-     *  - `connectIpc()`
-     *
-     * ### Case does not matter, and "localhost" is the default.
-     *
-     * @param remoteAddress The network or if localhost, IPC address for the client to connect to
-     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
-     * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
-     *
-     * @throws IllegalArgumentException if the remote address is invalid
-     * @throws ClientTimedOutException if the client is unable to connect in x amount of time
-     * @throws ClientRejectedException if the client connection is rejected
-     */
-    fun connect(remoteAddress: InetAddress,
-                connectionTimeoutSec: Int = 30,
-                reliable: Boolean = true) {
-
-        // Default IPC ports are flipped because they are in the perspective of the SERVER
-        connect(remoteAddress = remoteAddress,
-                ipcPublicationId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
-                ipcSubscriptionId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
-                connectionTimeoutSec = connectionTimeoutSec,
-                reliable = reliable)
-    }
-
-    /**
-     * Will attempt to connect to the server via IPC, with a default 30 second connection timeout and will block until completed.
-     *
-     * @param ipcPublicationId The IPC publication address for the client to connect to
-     * @param ipcSubscriptionId The IPC subscription address for the client to connect to
-     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
-     *
-     * @throws IllegalArgumentException if the remote address is invalid
-     * @throws ClientTimedOutException if the client is unable to connect in x amount of time
-     * @throws ClientRejectedException if the client connection is rejected
-     */
-    @Suppress("DuplicatedCode")
-    fun connectIpc(ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
-                   ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
-                   connectionTimeoutSec: Int = 30) {
-        // Default IPC ports are flipped because they are in the perspective of the SERVER
-
-        require(ipcPublicationId != ipcSubscriptionId) { "IPC publication and subscription ports cannot be the same! The must match the server's configuration." }
-
-        connect(remoteAddress = null, // required!
-                ipcPublicationId = ipcPublicationId,
-                ipcSubscriptionId = ipcSubscriptionId,
-                connectionTimeoutSec = connectionTimeoutSec)
     }
 
     /**
@@ -374,6 +393,7 @@ open class Client<CONNECTION : Connection>(
      */
     @Suppress("DuplicatedCode")
     private fun connect(remoteAddress: InetAddress? = null,
+                        remoteAddressString: String,
                         // Default IPC ports are flipped because they are in the perspective of the SERVER
                         ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
                         ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
@@ -386,9 +406,11 @@ open class Client<CONNECTION : Connection>(
             return
         }
 
-        // localhost/loopback IP might not always be 127.0.0.1 or ::1
-        this.remoteAddress0 = remoteAddress
         connection0 = null
+
+        // localhost/loopback IP might not always be 127.0.0.1 or ::1
+        this.remoteAddress = remoteAddress
+        this.remoteAddressString = remoteAddressString
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         try {
@@ -400,16 +422,16 @@ open class Client<CONNECTION : Connection>(
 
         // only try to connect via IPv4 if we have a network interface that supports it!
         if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
-            require(false) { "Unable to connect to the IPv4 address ${IPv4.toString(remoteAddress)}, there are no IPv4 interfaces available!" }
+            require(false) { "Unable to connect to the IPv4 address $remoteAddressString, there are no IPv4 interfaces available!" }
         }
 
         // only try to connect via IPv6 if we have a network interface that supports it!
         if (remoteAddress is Inet6Address && !IPv6.isAvailable) {
-            require(false) { "Unable to connect to the IPv6 address ${IPv6.toString(remoteAddress)}, there are no IPv6 interfaces available!" }
+            require(false) { "Unable to connect to the IPv6 address $remoteAddressString, there are no IPv6 interfaces available!" }
         }
 
         if (remoteAddress != null && remoteAddress.isAnyLocalAddress) {
-            require(false) { "Cannot connect to ${IP.toString(remoteAddress)} It is an invalid address!" }
+            require(false) { "Cannot connect to $remoteAddressString It is an invalid address!" }
         }
 
         // IPC can be enabled TWO ways!
@@ -461,9 +483,9 @@ open class Client<CONNECTION : Connection>(
                     // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
                     delay(500)
                     if (logger.isTraceEnabled) {
-                        logger.trace(e) { "Unable to connect to ${IP.toString(remoteAddress!!)}, retrying..." }
+                        logger.trace(e) { "Unable to connect to $remoteAddressString, retrying..." }
                     } else {
-                        logger.info { "Unable to connect to ${IP.toString(remoteAddress!!)}, retrying..." }
+                        logger.info { "Unable to connect to $remoteAddressString, retrying..." }
                     }
 
                 } catch (e: Exception) {
@@ -497,7 +519,7 @@ open class Client<CONNECTION : Connection>(
         if (remoteAddress == null) {
             logger.info { "IPC enabled." }
         } else {
-            logger.info { "IPC for loopback enabled and aeron is already running. Auto-changing network connection from ${IP.toString(remoteAddress!!)} -> IPC" }
+            logger.info { "IPC for loopback enabled and aeron is already running. Auto-changing network connection from $remoteAddressString -> IPC" }
         }
 
         // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
@@ -526,7 +548,7 @@ open class Client<CONNECTION : Connection>(
             throw clientException
         }
 
-        logger.info { "IPC for loopback enabled, but unable to connect. Retrying with address ${IP.toString(remoteAddress!!)}" }
+        logger.info { "IPC for loopback enabled, but unable to connect. Retrying with address $remoteAddressString" }
 
         // try a UDP connection instead
         val udpConnection = UdpMediaDriverClientConnection(
@@ -578,7 +600,7 @@ open class Client<CONNECTION : Connection>(
 
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
             handshakeConnection.close()
-            val exception = ClientRejectedException("Connection to ${IP.toString(remoteAddress!!)} not allowed! Public key mismatch.")
+            val exception = ClientRejectedException("Connection to $remoteAddressString not allowed! Public key mismatch.")
             logger.error(exception) { "Validation error" }
             throw exception
         }
@@ -657,7 +679,7 @@ open class Client<CONNECTION : Connection>(
                 throw exception
             }
 
-            logger.info { "[${handshake.connectKey}] Connection (${newConnection.id}) : Adding new signature for ${IP.toString(remoteAddress!!)} : ${connectionInfo.publicKey.toHexString()}" }
+            logger.info { "[${handshake.connectKey}] Connection (${newConnection.id}) adding new signature for $remoteAddressString : ${connectionInfo.publicKey.toHexString()}" }
             storage.addRegisteredServerKey(remoteAddress!!, connectionInfo.publicKey)
         }
 
@@ -693,76 +715,63 @@ open class Client<CONNECTION : Connection>(
 
         // tell the server our connection handshake is done, and the connection can now listen for data.
         // also closes the handshake (will also throw connect timeout exception)
-        val canFinishConnecting: Boolean
-        runBlocking {
-            // this value matches the server, and allows for a more robust connection attempt
-            val successAttemptTimeout = config.connectionCloseTimeoutInSeconds * 2
-            canFinishConnecting = try {
-                handshake.done(handshakeConnection, successAttemptTimeout)
-            } catch (e: ClientException) {
-                logger.error(e) { "Error during handshake" }
-                false
+
+        // this value matches the server, and allows for a more robust connection attempt
+        val successAttemptTimeout = config.connectionCloseTimeoutInSeconds * 2
+        try {
+            handshake.done(handshakeConnection, successAttemptTimeout)
+        } catch (e: Exception) {
+            logger.error(e) { "[${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString error during handshake" }
+            throw e
+        }
+
+        isConnected = true
+
+        logger.debug { "[${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString done with handshake." }
+
+        // this forces the current thread to WAIT until poll system has started
+        val mutex = Mutex(locked = true)
+
+        // have to make a new thread to listen for incoming data!
+        // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
+
+        // these have to be in two SEPARATE actionDispatch.launch commands.... otherwise...
+        // if something inside-of notifyConnect is blocking or suspends, then polling will never happen!
+        actionDispatch.launch {
+            try {
+                mutex.unlock()
+            } catch (ignored: Exception) {}
+
+            val pollIdleStrategy = config.pollIdleStrategy
+
+            while (!isShutdown()) {
+                if (newConnection.isClosedViaAeron()) {
+                    // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
+                    logger.debug { "[${newConnection.id}] connection expired" }
+
+                    // event-loop is required, because we want to run this code AFTER the current coroutine has finished. This prevents
+                    // odd race conditions when a client is restarted. Can only be run from inside another co-routine!
+                    actionDispatch.eventLoop {
+                        // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
+                        newConnection.close()
+                    }
+                    return@launch
+                }
+                else {
+                    //  Polls the AERON media driver subscription channel for incoming messages
+                    val pollCount = newConnection.pollSubscriptions()
+
+                    // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
+                    pollIdleStrategy.idle(pollCount)
+                }
             }
         }
 
-        if (canFinishConnecting) {
-            isConnected = true
+        actionDispatch.eventLoop {
+            mutex.withLock {  }
 
-            logger.debug { "[${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString done with handshake." }
-
-            // this forces the current thread to WAIT until poll system has started
-            val mutex = Mutex(locked = true)
-
-            // have to make a new thread to listen for incoming data!
-            // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
-
-            // these have to be in two SEPARATE actionDispatch.launch commands.... otherwise...
-            // if something inside-of notifyConnect is blocking or suspends, then polling will never happen!
-            actionDispatch.launch {
-                try {
-                    mutex.unlock()
-                } catch (ignored: Exception) {}
-
-                val pollIdleStrategy = config.pollIdleStrategy
-
-                while (!isShutdown()) {
-                    if (newConnection.isClosedViaAeron()) {
-                        // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                        logger.debug { "[${newConnection.id}] connection expired" }
-
-                        // event-loop is required, because we want to run this code AFTER the current coroutine has finished. This prevents
-                        // odd race conditions when a client is restarted. Can only be run from inside another co-routine!
-                        actionDispatch.eventLoop {
-                            // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
-                            newConnection.close()
-                        }
-                        return@launch
-                    }
-                    else {
-                        //  Polls the AERON media driver subscription channel for incoming messages
-                        val pollCount = newConnection.pollSubscriptions()
-
-                        // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
-                        pollIdleStrategy.idle(pollCount)
-                    }
-                }
-            }
-
-            actionDispatch.eventLoop {
-                mutex.withLock {  }
-
-                lockStepForConnect.value?.withLock {  }
-
-                listenerManager.notifyConnect(newConnection)
-
-                lockStepForConnect.lazySet(null)
-            }
-        } else {
-            close()
-
-            val exception = ClientRejectedException("Unable to connect with server: ${handshakeConnection.clientInfo}")
-            ListenerManager.cleanStackTrace(exception)
-            throw exception
+            lockStepForConnect.getAndSet(null)?.withLock {  }
+            listenerManager.notifyConnect(newConnection)
         }
     }
 
@@ -771,24 +780,6 @@ open class Client<CONNECTION : Connection>(
      */
     val remoteKeyHasChanged: Boolean
         get() = connection.hasRemoteKeyChanged()
-
-    /**
-     * the remote address
-     */
-    val remoteAddress: InetAddress?
-        get() = remoteAddress0
-
-    /**
-     * the remote address, as a string.
-     */
-    val remoteAddressString: String
-        get() {
-            return when (val address = remoteAddress) {
-                is Inet4Address -> IPv4.toString(address)
-                is Inet6Address -> IPv6.toString(address, true)
-                else -> "ipc"
-            }
-        }
 
     /**
      * true if this connection is an IPC connection

@@ -221,7 +221,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
-    suspend fun done(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int): Boolean {
+    suspend fun done(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) {
         val registrationMessage = HandshakeMessage.doneFromClient(connectKey)
 
         // Send the done message to the server.
@@ -229,8 +229,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             endPoint.writeHandshakeMessage(handshakeConnection.publication, registrationMessage)
         } catch (e: Exception) {
             handshakeConnection.close()
-
-            return false
+            throw e
         }
 
         // block until we receive the connection information from the server
@@ -277,8 +276,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
             ListenerManager.cleanStackTraceInternal(exception)
             throw exception
         }
-
-        return connectionDone
     }
 
     fun reset() {
