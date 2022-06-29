@@ -15,12 +15,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
 import org.agrona.MutableDirectBuffer
+import java.security.SecureRandom
 
 internal class StreamingManager<CONNECTION : Connection>(private val logger: KLogger, private val actionDispatch: CoroutineScope) {
     private val streamingDataTarget = LockFreeHashMap<Long, StreamingControl>()
     private val streamingDataInMemory = LockFreeHashMap<Long, AeronOutput>()
 
     companion object {
+        val random = SecureRandom()
+
         @Suppress("UNUSED_CHANGED_VALUE")
         private fun writeVarInt(internalBuffer: MutableDirectBuffer, position: Int, value: Int, optimizePositive: Boolean): Int {
             var p = position
@@ -137,9 +140,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                 } else {
                     // we are a file, so process accordingly
 
-
                 }
-                println(message)
             }
             StreamingState.FAILED -> {
                 // clear all state
@@ -253,7 +254,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
         var remainingPayload = objectSize
         var payloadSent = 0
 
-        val streamSessionId = endPoint.crypto.secureRandom.nextLong()
+        val streamSessionId = random.nextLong()
 
         // tell the other side how much data we are sending
         val startMessage = StreamingControl(StreamingState.START, streamSessionId, objectSize.toLong())
