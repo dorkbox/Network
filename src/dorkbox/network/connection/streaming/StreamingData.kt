@@ -1,6 +1,6 @@
 package dorkbox.network.connection.streaming
 
-class StreamingData(var streamId: Long) : StreamingMessage {
+class StreamingData(val streamId: Long) : StreamingMessage {
 
     // These are set just after we receive the message, and before we process it
     @Transient var payload: ByteArray? = null

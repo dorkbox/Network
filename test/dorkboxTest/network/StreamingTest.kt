@@ -11,10 +11,13 @@ import java.security.SecureRandom
 
 class StreamingTest : BaseTest() {
 
-    val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 8
-
     @Test
     fun sendStreamingObject() {
+        val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 8
+        val hugeData = ByteArray(sizeToTest)
+        SecureRandom().nextBytes(hugeData)
+
+
         run {
             val configuration = serverConfig()
 
@@ -25,6 +28,7 @@ class StreamingTest : BaseTest() {
             server.onMessage<ByteArray> {
                 println("received data, shutting down!")
                 Assert.assertEquals(sizeToTest, it.size)
+                Assert.assertArrayEquals(hugeData, it)
                 stopEndPoints()
             }
         }
@@ -42,22 +46,12 @@ class StreamingTest : BaseTest() {
             client.onConnect {
                 val params = connectionParams ?: throw Exception("We should not have null connectionParams!")
                 val publication = params.mediaDriverConnection.publication
-
-                val hugeData = ByteArray(sizeToTest)
-                SecureRandom().nextBytes(hugeData)
-
                 this.endPoint.send(hugeData, publication, this)
             }
 
             client.connect(LOCALHOST)
         }
 
-
         waitForThreads(0)
-
-//        System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
-//        Assert.assertEquals(4, reconnectCount.value)
     }
-
-
 }
