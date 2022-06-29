@@ -524,14 +524,12 @@ internal constructor(val type: Class<*>,
                     message.payload = rawInput.readBytes(dataLength)
 
 
-                    // NOTE: This MUST be on a new co-routine
-                    actionDispatch.launch {
-                        try {
-                            streamingManager.processDataMessage(message, this@EndPoint)
-                        } catch (e: Exception) {
-                            logger.error("Error processing StreamingMessage", e)
-                            listenerManager.notifyError(connection, e)
-                        }
+                    // NOTE: This MUST NOT be on a new co-routine. It must be on the same thread!
+                    try {
+                        streamingManager.processDataMessage(message, this@EndPoint)
+                    } catch (e: Exception) {
+                        logger.error("Error processing StreamingMessage", e)
+                        listenerManager.notifyError(connection, e)
                     }
                 }
 

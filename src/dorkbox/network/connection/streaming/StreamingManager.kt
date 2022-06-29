@@ -110,7 +110,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                             val errorMessage = "Error serializing message from received streaming content, stream $streamId"
 
                             // either client or server. No other choices. We create an exception, because it's more useful!
-                            val exception = endPoint.newException(errorMessage)
+                            val exception = endPoint.newException(errorMessage, e)
 
                             // +2 because we do not want to see the stack for the abstract `newException`
                             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
@@ -174,10 +174,12 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
     }
 
     /**
-    * Reassemble/figure out the internal message pieces
-    *
-    * NOTE sending a huge file can prevent other other network traffic from arriving until it's done!
-    */
+     * NOTE: MUST BE ON THE AERON THREAD!
+     *
+     * Reassemble/figure out the internal message pieces
+     *
+     * NOTE sending a huge file can prevent other other network traffic from arriving until it's done!
+     */
     fun processDataMessage(message: StreamingData, endPoint: EndPoint<CONNECTION>) {
         // the receiving data will ALWAYS come sequentially, but there might be OTHER streaming data received meanwhile.
         val streamId = message.streamId
