@@ -19,7 +19,7 @@ import dorkbox.network.aeron.IpcMediaDriverConnection
 import dorkbox.network.aeron.UdpMediaDriverClientConnection
 import dorkbox.network.aeron.UdpMediaDriverPairedConnection
 import dorkbox.network.handshake.ConnectionCounts
-import dorkbox.network.handshake.RandomIdAllocator
+import dorkbox.network.handshake.RandomId65kAllocator
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.RmiSupportConnection
@@ -444,7 +444,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     // cleans up the connection information
-    internal fun cleanup(connectionsPerIpCounts: ConnectionCounts, sessionIdAllocator: RandomIdAllocator, streamIdAllocator: RandomIdAllocator) {
+    internal fun cleanup(connectionsPerIpCounts: ConnectionCounts, sessionIdAllocator: RandomId65kAllocator, streamIdAllocator: RandomId65kAllocator) {
         // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
         if (isIpc) {
             sessionIdAllocator.free(subscriptionPort)

@@ -63,8 +63,8 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     private val connectionsPerIpCounts = ConnectionCounts()
 
     // guarantee that session/stream ID's will ALWAYS be unique! (there can NEVER be a collision!)
-    private val sessionIdAllocator = RandomIdAllocator(AeronDriver.RESERVED_SESSION_ID_LOW, AeronDriver.RESERVED_SESSION_ID_HIGH)
-    private val streamIdAllocator = RandomIdAllocator(1, Integer.MAX_VALUE)
+    private val sessionIdAllocator = RandomId65kAllocator(AeronDriver.RESERVED_SESSION_ID_LOW, AeronDriver.RESERVED_SESSION_ID_HIGH)
+    private val streamIdAllocator = RandomId65kAllocator(1, Integer.MAX_VALUE)
 
     /**
      * @return true if we should continue parsing the incoming message, false if we should abort
@@ -530,9 +530,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
      */
     fun clear() {
         // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-        sessionIdAllocator.clear()
-        streamIdAllocator.clear()
-
         pendingConnections.clear()
     }
 }

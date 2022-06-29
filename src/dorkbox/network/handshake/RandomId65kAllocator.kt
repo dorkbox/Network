@@ -16,29 +16,28 @@
 package dorkbox.network.handshake
 
 import dorkbox.network.exceptions.AllocationException
-import org.agrona.collections.IntHashSet
+import dorkbox.objectPool.ObjectPool
+import dorkbox.objectPool.Pool
+import kotlinx.atomicfu.atomic
 import java.security.SecureRandom
 
 /**
- * An allocator for random IDs.
+ * An allocator for random IDs, the maximum number of IDs is an unsigned short (65535).
  *
  * The allocator randomly selects values from the given range `[min, max]` and will not return a previously-returned value `x`
  * until `x` has been freed with [free].
  *
- * This implementation uses storage proportional to the number of currently-allocated
- * values. Allocation time is bounded by { max - min}, will be { O(1)}
- * with no allocated values, and will increase to { O(n)} as the number
- * of allocated values approached { max - min}.
- *
- * NOTE: THIS IS NOT THREAD SAFE!
+ * This implementation uses storage of {max-min}, with a maximum amount of 65534.
  *
  * @param min The minimum ID (inclusive)
  * @param max The maximum ID (exclusive)
  */
-class RandomIdAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = Integer.MAX_VALUE) {
-    private val used = IntHashSet()
-    private val random = SecureRandom()
+class RandomId65kAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = Integer.MAX_VALUE) {
+
+    private val cache: Pool<Int>
     private val maxAssignments: Int
+    private val assigned = atomic(0)
+
 
     init {
         // IllegalArgumentException
@@ -46,7 +45,18 @@ class RandomIdAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = Int
             "Maximum value $max must be >= minimum value $min"
         }
 
-        maxAssignments = (max - min).coerceAtLeast(1)
+        maxAssignments = (max - min).coerceIn(1, Short.MAX_VALUE * 2)
+
+        // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
+        val ids = ArrayList<Int>(maxAssignments)
+        for (id in min..(min + maxAssignments - 1)) {
+            ids.add(id)
+        }
+
+        ids.shuffle(SecureRandom())
+
+        // populate the array of randomly assigned ID's.
+        cache = ObjectPool.blocking(ids)
     }
 
     /**
@@ -57,35 +67,24 @@ class RandomIdAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = Int
      * @throws AllocationException If there are no non-allocated IDs left
      */
     fun allocate(): Int {
-        if (used.size == maxAssignments) {
+        if (assigned.value == maxAssignments) {
             throw AllocationException("No IDs left to allocate")
         }
 
-        for (index in 0 until maxAssignments) {
-            val session = random.nextInt(maxAssignments) + min
-            if (!used.contains(session)) {
-                used.add(session)
-                return session
-            }
-        }
-
-        throw AllocationException("Unable to allocate a ID after $maxAssignments attempts (${used.size} values in use")
+        assigned.getAndIncrement()
+        return cache.take()
     }
 
     /**
-     * Free an ID for use later. After this method returns, the ID becomes eligible for allocation by future calls to [allocate].
+     * Free an ID for use later. The id is returned to the cache for usage later
      *
      * @param id The ID to free
      */
     fun free(id: Int) {
-        used.remove(id)
-    }
-
-
-    /**
-     * Removes all used IDs from the internal data structures
-     */
-    fun clear() {
-        used.clear()
+        val assigned = assigned.decrementAndGet()
+        if (assigned < 0) {
+            throw AllocationException("Unequal allocate/free method calls.")
+        }
+        cache.put(id)
     }
 }
