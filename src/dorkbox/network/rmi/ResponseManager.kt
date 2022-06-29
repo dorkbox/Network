@@ -72,7 +72,7 @@ internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) 
         actionDispatch.launch {
             try {
                 for (it in ids) {
-                    waiterCache.trySend(ResponseWaiter(it))
+                    waiterCache.send(ResponseWaiter(it))
                 }
             } catch (e: ClosedSendChannelException) {
                 // this can happen if we are starting/stopping an endpoint (and thus a response-manager) VERY quickly, and can be ignored
