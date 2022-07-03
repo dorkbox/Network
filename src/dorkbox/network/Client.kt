@@ -745,7 +745,13 @@ open class Client<CONNECTION : Connection>(
             val pollIdleStrategy = config.pollIdleStrategy
 
             while (!isShutdown()) {
-                if (newConnection.isClosedViaAeron()) {
+                if (!newConnection.isClosedViaAeron()) {
+                    //  Polls the AERON media driver subscription channel for incoming messages
+                    val pollCount = newConnection.pollSubscriptions()
+
+                    // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
+                    pollIdleStrategy.idle(pollCount)
+                } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                     logger.debug { "[${newConnection.id}] connection expired" }
 
@@ -756,13 +762,6 @@ open class Client<CONNECTION : Connection>(
                         newConnection.close()
                     }
                     return@launch
-                }
-                else {
-                    //  Polls the AERON media driver subscription channel for incoming messages
-                    val pollCount = newConnection.pollSubscriptions()
-
-                    // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
-                    pollIdleStrategy.idle(pollCount)
                 }
             }
         }

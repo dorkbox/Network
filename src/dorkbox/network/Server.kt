@@ -290,7 +290,10 @@ open class Server<CONNECTION : Connection>(
                     // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
                     // so we can modify this as we go
                     connections.forEach { connection ->
-                        if (connection.isClosedViaAeron()) {
+                        if (!connection.isClosedViaAeron()) {
+                            // Otherwise, poll the connection for messages
+                            pollCount += connection.pollSubscriptions()
+                        } else {
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                             logger.debug { "[${connection.id}] connection expired" }
 
@@ -310,10 +313,6 @@ open class Server<CONNECTION : Connection>(
                             actionDispatch.eventLoop {
                                 listenerManager.notifyDisconnect(connection)
                             }
-                        }
-                        else {
-                            // Otherwise, poll the connection for messages
-                            pollCount += connection.pollSubscriptions()
                         }
                     }
 
