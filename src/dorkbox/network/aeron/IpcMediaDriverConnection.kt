@@ -17,6 +17,7 @@
 package dorkbox.network.aeron
 
 import dorkbox.network.connection.ListenerManager
+import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
 import kotlinx.coroutines.delay
@@ -45,6 +46,7 @@ internal open class IpcMediaDriverConnection(streamId: Int,
     /**
      * Set up the subscription + publication channels to the server
      *
+     * @throws ClientRetryException if we need to retry to connect
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
     override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
@@ -66,9 +68,8 @@ internal open class IpcMediaDriverConnection(streamId: Int,
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
         //  publication of any state to other threads and not be long running or re-entrant with the client.
 
-        // If we start/stop too quickly, we might have the aeron connectivity issues! Retry a few times.
-        val publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
-        val subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamIdSubscription)
+        val publication = aeronDriver.addPublication(publicationUri, streamId)
+        val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSubscription)
 
 
         // We must add the subscription first, because we must be available to listen when the server responds.
@@ -151,8 +152,8 @@ internal open class IpcMediaDriverConnection(streamId: Int,
 
         // If we start/stop too quickly, we might have the aeron connectivity issues! Retry a few times.
         success = true
-        subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamIdSubscription)
-        publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
+        subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSubscription)
+        publication = aeronDriver.addPublication(publicationUri, streamId)
     }
 
     override val clientInfo : String by lazy {

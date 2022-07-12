@@ -193,22 +193,34 @@ class AeronDriver(
             return mediaDriverContext
         }
 
+        private fun aeronCounters(aeronLocation: File): CountersReader {
+            val cncByteBuffer = SamplesUtil.mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
+            val cncMetaDataBuffer: DirectBuffer = CncFileDescriptor.createMetaDataBuffer(cncByteBuffer)
+
+           return CountersReader(
+                CncFileDescriptor.createCountersMetaDataBuffer(cncByteBuffer, cncMetaDataBuffer),
+                CncFileDescriptor.createCountersValuesBuffer(cncByteBuffer, cncMetaDataBuffer)
+            )
+        }
 
         /**
          * @return the internal counters of the Aeron driver in the specified aeron directory
          */
         fun driverCounters(aeronLocation: File, counterFunction: (counterId: Int, counterValue: Long, typeId: Int, keyBuffer: DirectBuffer?, label: String?) -> Unit) {
-            val cncByteBuffer = SamplesUtil.mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
-            val cncMetaDataBuffer: DirectBuffer = CncFileDescriptor.createMetaDataBuffer(cncByteBuffer)
-
-            val countersReader = CountersReader(
-                CncFileDescriptor.createCountersMetaDataBuffer(cncByteBuffer, cncMetaDataBuffer),
-                CncFileDescriptor.createCountersValuesBuffer(cncByteBuffer, cncMetaDataBuffer)
-            )
+            val countersReader = aeronCounters(aeronLocation)
             countersReader.forEach { counterId: Int, typeId: Int, keyBuffer: DirectBuffer?, label: String? ->
                 val counterValue = countersReader.getCounterValue(counterId)
                 counterFunction(counterId, counterValue, typeId, keyBuffer, label)
             }
+        }
+
+        /**
+         * @return the backlog statistics for the Aeron driver
+         */
+        fun driverBacklog(aeronLocation: File): BacklogStat {
+            val countersReader = aeronCounters(aeronLocation)
+
+            return BacklogStat(countersReader)
         }
 
         /**
@@ -487,85 +499,77 @@ class AeronDriver(
     }
 
     @Synchronized
-    fun addPublicationWithRetry(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
+    fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
         val uri = publicationUri.build()
 
-        // If we start/stop too quickly, we might have the address already in use! Retry a few times.
-        var count = 10
-        var exception: Exception? = null
-        while (count-- > 0) {
-            try {
-                // if aeron is null, an exception is thrown
-                return aeron!!.addPublication(uri, streamId)
-            } catch (e: Exception) {
-                // NOTE: this error will be logged in the `aeronDriverContext` logger
-                exception = e
-                logger.warn { "Unable to add a publication to Aeron. Retrying $count more times..." }
+        // reasons we cannot add a pub/sub to aeron
+        // 1) the driver was closed
+        // 2) aeron was unable to connect to the driver
+        // 3) the address already in use
 
-                // if exceptions are added here, make sure to ALSO suppress them in the context error handler
-                if (e is DriverTimeoutException) {
-                    sleep(driverTimeout)
-                }
+        // configuring pub/sub to aeron is LINEAR -- and it happens in 2 places.
+        // 1) starting up the client/server
+        // 2) creating a new client-server connection pair (the media driver won't be "dead" at this point)
 
-                if (e.cause is BindException) {
-                    // was starting too fast!
-                    sleep(driverTimeout)
-                }
+        // in the client, if we are unable to connect to the server, we will attempt to start the media driver + connect to aeron
 
-                // reasons we cannot add a pub/sub to aeron
-                // 1) the driver was closed
-                // 2) aeron was unable to connect to the driver
-                // 3) the address already in use
-
-                // configuring pub/sub to aeron is LINEAR -- and it happens in 2 places.
-                // 1) starting up the client/server
-                // 2) creating a new client-server connection pair (the media driver won't be "dead" at this point)
+        lock.read {
+            val aeron1 = aeron
+            if (aeron1 == null || aeron1.isClosed) {
+                // there was an error connecting to the aeron client or media driver.
+                val ex = ClientRetryException("Error adding a publication to aeron")
+                ListenerManager.cleanAllStackTrace(ex)
+                throw ex
             }
-        }
 
-        throw exception!!
+            val publication = aeron1.addPublication(uri, streamId)
+            if (publication == null) {
+                // there was an error connecting to the aeron client or media driver.
+                val ex = ClientRetryException("Error adding a publication to the remote endpoint")
+                ListenerManager.cleanAllStackTrace(ex)
+                throw ex
+            }
+
+            return publication
+        }
     }
 
     @Synchronized
-    fun addSubscriptionWithRetry(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
+    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
         val uri = subscriptionUri.build()
 
-        // If we start/stop too quickly, we might have the address already in use! Retry a few times.
-        var count = 10
-        var exception: Exception? = null
-        while (count-- > 0) {
-            try {
-                val aeron = aeron
-                if (aeron != null) {
-                    return aeron.addSubscription(uri, streamId)
-                }
-            } catch (e: Exception) {
-                // NOTE: this error will be logged in the `aeronDriverContext` logger
-                exception = e
-                logger.warn { "Unable to add a subscription to Aeron. Retrying $count more times..." }
+        // reasons we cannot add a pub/sub to aeron
+        // 1) the driver was closed
+        // 2) aeron was unable to connect to the driver
+        // 3) the address already in use
 
-                // if exceptions are added here, make sure to ALSO suppress them in the context error handler
-                if (e is DriverTimeoutException) {
-                    sleep(driverTimeout)
-                }
+        // configuring pub/sub to aeron is LINEAR -- and it happens in 2 places.
+        // 1) starting up the client/server
+        // 2) creating a new client-server connection pair (the media driver won't be "dead" at this point)
 
-                if (e.cause is BindException) {
-                    // was starting too fast!
-                    sleep(driverTimeout)
-                }
+        // in the client, if we are unable to connect to the server, we will attempt to start the media driver + connect to aeron
 
-                // reasons we cannot add a pub/sub to aeron
-                // 1) the driver was closed
-                // 2) aeron was unable to connect to the driver
-                // 3) the address already in use
 
-                // configuring pub/sub to aeron is LINEAR -- and it happens in 2 places.
-                // 1) starting up the client/server
-                // 2) creating a new client-server connection pair (the media driver won't be "dead" at this point)
+        // subscriptions do not depend on a response from the remote endpoint, and should always succeed if aeron is available
+
+        return lock.read {
+            val aeron1 = aeron
+            if (aeron1 == null || aeron1.isClosed) {
+                // there was an error connecting to the aeron client or media driver.
+                val ex = ClientRetryException("Error adding a subscription to aeron")
+                ListenerManager.cleanAllStackTrace(ex)
+                throw ex
             }
-        }
 
-        throw exception!!
+            val subscription = aeron1.addSubscription(uri, streamId)
+            if (subscription == null) {
+                // there was an error connecting to the aeron client or media driver.
+                val ex = ClientRetryException("Error adding a subscript to the remote endpoint")
+                ListenerManager.cleanAllStackTrace(ex)
+                throw ex
+            }
+            subscription
+        }
     }
 
     /**
@@ -661,6 +665,13 @@ class AeronDriver(
     }
 
     /**
+     * @return the backlog statistics for the Aeron driver
+     */
+    fun driverBacklog(): BacklogStat {
+        return driverBacklog(context!!.aeronDirectory())
+    }
+
+    /**
      * @return the internal heartbeat of the Aeron driver in the current aeron directory
      */
     fun driverHeartbeatMs(): Long {
@@ -672,5 +683,12 @@ class AeronDriver(
      */
     fun driverVersion(): String {
         return driverVersion(context!!.aeronDirectory())
+    }
+
+    /**
+     * @return the current aeron context info, if any
+     */
+    fun contextInfo(): String? {
+        return context?.toString()
     }
 }

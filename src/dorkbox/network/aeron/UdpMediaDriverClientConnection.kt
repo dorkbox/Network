@@ -19,6 +19,7 @@ package dorkbox.network.aeron
 import dorkbox.netUtil.IP
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientException
+import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
 import kotlinx.coroutines.delay
@@ -62,7 +63,10 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
     }
 
 
-
+    /**
+     * @throws ClientRetryException if we need to retry to connect
+     * @throws ClientTimedOutException if we cannot connect to the server in the designated time
+     */
     @Suppress("DuplicatedCode")
     override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         val aeronAddressString = if (address is Inet4Address) {
@@ -89,20 +93,19 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         val publicationUri = uri()
             .endpoint("$aeronAddressString:$publicationPort")
 
-        logger.trace("client pub URI: $ipType ${publicationUri.build()}")
-        val publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
-
-
         // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         val subscriptionUri = uri()
             .controlEndpoint("$aeronAddressString:$subscriptionPort")
             .controlMode("dynamic")
 
-        logger.trace("client sub URI: $ipType ${subscriptionUri.build()}")
-        val subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
+        if (logger.isTraceEnabled) {
+            logger.trace("client sub URI: $ipType ${subscriptionUri.build()}")
+            logger.trace("client pub URI: $ipType ${publicationUri.build()}")
+        }
 
 
-        // We must add the subscription first, because we must be available to listen when the server responds.
+        val publication = aeronDriver.addPublication(publicationUri, streamId)
+        val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
 
 
         val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())

@@ -20,6 +20,7 @@ import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.BacklogStat
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
@@ -686,6 +687,13 @@ internal constructor(val type: Class<*>,
         aeronDriver.driverCounters(counterFunction)
     }
 
+    /**
+     * @return the backlog statistics for the Aeron driver
+     */
+    fun driverBacklog(): BacklogStat {
+        return aeronDriver.driverBacklog()
+    }
+
 
     /**
      * @return the internal heartbeat of the Aeron driver in the current aeron directory
@@ -699,6 +707,13 @@ internal constructor(val type: Class<*>,
      */
     fun driverVersion(): String {
         return aeronDriver.driverVersion()
+    }
+
+    /**
+     * @return the current aeron context info, if any
+     */
+    fun contextInfo(): String? {
+        return aeronDriver.contextInfo()
     }
 
     /**

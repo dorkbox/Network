@@ -98,8 +98,8 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
 
         // If we start/stop too quickly, we might have the address already in use! Retry a few times.
         this.success = true
-        this.publication = aeronDriver.addPublicationWithRetry(publicationUri, streamId)
-        this.subscription = aeronDriver.addSubscriptionWithRetry(subscriptionUri, streamId)
+        this.publication = aeronDriver.addPublication(publicationUri, streamId)
+        this.subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
     }
 
     override val clientInfo: String
