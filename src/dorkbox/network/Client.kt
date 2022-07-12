@@ -480,6 +480,9 @@ open class Client<CONNECTION : Connection>(
                 } catch (e: ClientRetryException) {
                     handshake.reset()
 
+                    // maybe the aeron driver isn't running?
+                    aeronDriver.start()
+
                     // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
                     delay(500)
                     if (logger.isTraceEnabled) {
@@ -523,9 +526,10 @@ open class Client<CONNECTION : Connection>(
         }
 
         // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
-        val ipcConnection = IpcMediaDriverConnection(streamIdSubscription = ipcSubscriptionId,
-                                                     streamId = ipcPublicationId,
-                                                     sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID
+        val ipcConnection = IpcMediaDriverConnection(
+            streamIdSubscription = ipcSubscriptionId,
+            streamId = ipcPublicationId,
+            sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
         )
 
         // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
