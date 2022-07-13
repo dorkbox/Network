@@ -227,12 +227,11 @@ internal constructor(val type: Class<*>,
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
 
     // used internally to remove a connection. Will also remove all proxy objects
+    @Suppress("UNCHECKED_CAST")
     internal fun removeConnection(connection: Connection) {
         connection as CONNECTION
 
         rmiConnectionSupport.close(connection)
-
-        @Suppress("UNCHECKED_CAST")
         removeConnection(connection)
     }
 
@@ -712,7 +711,7 @@ internal constructor(val type: Class<*>,
     /**
      * @return the current aeron context info, if any
      */
-    fun contextInfo(): String? {
+    fun contextInfo(): String {
         return aeronDriver.contextInfo()
     }
 
