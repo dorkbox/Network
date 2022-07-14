@@ -486,9 +486,9 @@ open class Client<CONNECTION : Connection>(
                     // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
                     delay(500)
                     if (logger.isTraceEnabled) {
-                        logger.trace(e) { "Unable to connect to $remoteAddressString, retrying..." }
+                        logger.trace(e) { "Unable to connect to '$remoteAddressString', retrying..." }
                     } else {
-                        logger.info { "Unable to connect to $remoteAddressString, retrying..." }
+                        logger.info { "Unable to connect to '$remoteAddressString', retrying..." }
                     }
 
                 } catch (e: Exception) {
@@ -511,6 +511,8 @@ open class Client<CONNECTION : Connection>(
 
                 // If we did not connect - throw an error. When `client.connect()` is called, either it connects or throws an error
                 val exception = ClientRejectedException("The server did not respond or permit the connection attempt")
+                ListenerManager.cleanStackTrace(exception)
+
                 logger.error(exception) { "Aborting connection retry attempt to server." }
                 listenerManager.notifyError(exception)
                 throw exception
@@ -520,9 +522,9 @@ open class Client<CONNECTION : Connection>(
 
     private suspend fun buildIpcHandshake(ipcSubscriptionId: Int, ipcPublicationId: Int, connectionTimeoutSec: Int, reliable: Boolean): MediaDriverConnection {
         if (remoteAddress == null) {
-            logger.info { "IPC enabled." }
+            logger.info { "IPC enabled" }
         } else {
-            logger.info { "IPC for loopback enabled and aeron is already running. Auto-changing network connection from $remoteAddressString -> IPC" }
+            logger.info { "IPC for loopback enabled and aeron is already running. Auto-changing network connection from '$remoteAddressString' -> IPC" }
         }
 
         // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
@@ -705,7 +707,7 @@ open class Client<CONNECTION : Connection>(
             // make sure to call our client.notifyDisconnect() callbacks
 
             // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            actionDispatch.eventLoop {
+            actionDispatch.launch {
                 listenerManager.notifyDisconnect(connection)
                 lockStepForConnect.getAndSet(null)?.unlock()
             }
@@ -770,7 +772,7 @@ open class Client<CONNECTION : Connection>(
             }
         }
 
-        actionDispatch.eventLoop {
+        actionDispatch.launch {
             mutex.withLock {  }
 
             lockStepForConnect.getAndSet(null)?.withLock {  }
