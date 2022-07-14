@@ -24,12 +24,13 @@ import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.eventLoop
 import dorkbox.network.connectionType.ConnectionRule
+import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
 import dorkbox.network.rmi.RmiSupportServer
+import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -148,8 +149,7 @@ open class Server<CONNECTION : Connection>(
     /**
      * @return true if this server has successfully bound to an IP address and is running
      */
-    @Volatile
-    private var bindAlreadyCalled = false
+    private var bindAlreadyCalled = atomic(false)
 
     /**
      * These are run in lock-step to shutdown/close the server. Afterwards, bind() can be called again
@@ -222,7 +222,7 @@ open class Server<CONNECTION : Connection>(
      */
     @Suppress("DuplicatedCode")
     fun bind() {
-        if (bindAlreadyCalled) {
+        if (bindAlreadyCalled.getAndSet(true)) {
             logger.error { "Unable to bind when the server is already running!" }
             return
         }
@@ -237,7 +237,6 @@ open class Server<CONNECTION : Connection>(
         config as ServerConfiguration
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
-        bindAlreadyCalled = true
 
         // this forces the current thread to WAIT until poll system has started
         val mutex = Mutex(locked = true)
@@ -270,6 +269,7 @@ open class Server<CONNECTION : Connection>(
                 mutex.unlock()
             } catch (ignored: Exception) {}
 
+
             val pollIdleStrategy = config.pollIdleStrategy
             try {
                 var pollCount: Int
@@ -297,20 +297,20 @@ open class Server<CONNECTION : Connection>(
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                             logger.debug { "[${connection.id}] connection expired" }
 
-                            // have to free up resources!
-                            handshake.cleanup(connection)
-
                             removeConnection(connection)
 
                             // this will call removeConnection again, but that is ok
                             connection.close()
+
+                            // have to free up resources!
+                            handshake.freeResources(connection)
 
                             // have to manually notify the server-listenerManager that this connection was closed
                             // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
                             // instantly notified and on cleanup, the server-listenermanager is called
 
                             // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                            actionDispatch.eventLoop {
+                            actionDispatch.launch {
                                 listenerManager.notifyDisconnect(connection)
                             }
                         }
@@ -332,13 +332,14 @@ open class Server<CONNECTION : Connection>(
                 connections.clear()
 
                 cons.forEach { connection ->
-                    logger.error { "${connection.id} cleanup and close" }
-                    // have to free up resources!
-                    // NOTE: This can only occur on the polling dispatch thread!!
-                    handshake.cleanup(connection)
+                    logger.error { "[${connection.id}] connection cleanup and close" }
 
                     // make sure the connection is closed (close can only happen once, so a duplicate call does nothing!)
                     connection.close()
+
+                    // have to free up resources!
+                    // NOTE: This can only occur on the polling dispatch thread!!
+                    handshake.freeResources(connection)
 
                     // have to manually notify the server-listenerManager that this connection was closed
                     // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
@@ -346,7 +347,7 @@ open class Server<CONNECTION : Connection>(
                     // NOTE: this must be the LAST thing happening!
 
                     // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    val job = actionDispatch.eventLoop {
+                    val job = actionDispatch.launch {
                         listenerManager.notifyDisconnect(connection)
                     }
                     jobs.add(job)
@@ -361,6 +362,13 @@ open class Server<CONNECTION : Connection>(
                 ipv4Poller.close()
                 ipv6Poller.close()
                 ipcPoller.close()
+
+                try {
+                    // make sure that we have de-allocated all connection data
+                    handshake.checkForMemoryLeaks()
+                } catch (e: AllocationException) {
+                    logger.error(e) { "Error during server cleanup" }
+                }
 
                 // clear all the handshake info
                 handshake.clear()
@@ -408,12 +416,10 @@ open class Server<CONNECTION : Connection>(
      * Closes the server and all it's connections. After a close, you may call 'bind' again.
      */
     final override fun close0() {
-        // when we call close, it will shutdown the polling mechanism then wait for us to tell it to cleanup connections.
+        // when we call close, it will shutdown the polling mechanism, then wait for us to tell it to cleanup connections.
         //
         // Aeron + the Media Driver will have already been shutdown at this point.
-        if (bindAlreadyCalled) {
-            bindAlreadyCalled = false
-
+        if (bindAlreadyCalled.getAndSet(false)) {
             runBlocking {
                 // These are run in lock-step
                 try {

@@ -520,9 +520,23 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     /**
      * Free up resources from the closed connection
      */
-    fun cleanup(connection: CONNECTION) {
+    fun freeResources(connection: CONNECTION) {
         // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+        logger.debug { "[${connection.id}] Freeing resources" }
+
         connection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
+    }
+
+
+    /**
+     * Validates that all the resources have been freed (for all connections)
+     */
+    fun checkForMemoryLeaks() {
+        val noAllocations = connectionsPerIpCounts.isEmpty() && sessionIdAllocator.isEmpty() && streamIdAllocator.isEmpty()
+
+        if (!noAllocations) {
+            throw AllocationException("Unequal allocate/free method calls for validation.")
+        }
     }
 
     /**

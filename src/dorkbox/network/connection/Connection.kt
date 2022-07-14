@@ -446,13 +446,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // cleans up the connection information
     internal fun cleanup(connectionsPerIpCounts: ConnectionCounts, sessionIdAllocator: RandomId65kAllocator, streamIdAllocator: RandomId65kAllocator) {
         // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+        sessionIdAllocator.free(id)
+
         if (isIpc) {
-            sessionIdAllocator.free(subscriptionPort)
-            sessionIdAllocator.free(publicationPort)
-            streamIdAllocator.free(streamId)
+            streamIdAllocator.free(publicationPort)
+            streamIdAllocator.free(subscriptionPort)
         } else {
+            // unique for UDP endpoints
             connectionsPerIpCounts.decrementSlow(remoteAddress!!)
-            sessionIdAllocator.free(id)
             streamIdAllocator.free(streamId)
         }
     }
