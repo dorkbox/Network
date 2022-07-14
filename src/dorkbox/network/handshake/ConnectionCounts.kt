@@ -27,4 +27,8 @@ internal class ConnectionCounts {
             connectionsPerIpCounts[inetAddress] = defaultVal - 1
         }
     }
+
+    fun isEmpty(): Boolean {
+        return connectionsPerIpCounts.isEmpty()
+    }
 }

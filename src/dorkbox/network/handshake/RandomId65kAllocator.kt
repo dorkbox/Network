@@ -87,4 +87,8 @@ class RandomId65kAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = 
         }
         cache.put(id)
     }
+
+    fun isEmpty(): Boolean {
+        return assigned.value == 0
+    }
 }
