@@ -73,7 +73,6 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
                 .controlEndpoint("$connectionString:$publicationPort")
-                .controlMode("dynamic")
 
         // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         val subscriptionUri = uri()

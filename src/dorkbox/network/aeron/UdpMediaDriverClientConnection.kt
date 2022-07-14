@@ -96,7 +96,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         val subscriptionUri = uri()
             .controlEndpoint("$aeronAddressString:$subscriptionPort")
-            .controlMode("dynamic")
+//            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
         if (logger.isTraceEnabled) {
             logger.trace("client sub URI: $ipType ${subscriptionUri.build()}")
