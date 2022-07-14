@@ -110,6 +110,8 @@ object AeronClient {
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.subscriptionPort = 2000
         configuration.publicationPort = 2001
+        configuration.enableIpc = false
+
         val client = Client<Connection>(configuration)
 
         client.filter(IpSubnetFilterRule(IPv4.LOCALHOST, 32))

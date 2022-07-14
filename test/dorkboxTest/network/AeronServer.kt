@@ -96,6 +96,13 @@ object AeronServer {
 
         val server: Server<*> = Server<Connection>(configuration)
 
+        // we must always make sure that aeron is shut-down before starting again.
+        while (server.isRunning()) {
+            server.logger.error("Aeron was still running. Waiting for it to stop...")
+            Thread.sleep(2000)
+        }
+
+
         server.filter {
             println("should the connection $this be allowed?")
             true
