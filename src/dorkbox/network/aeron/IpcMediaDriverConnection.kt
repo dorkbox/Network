@@ -28,10 +28,11 @@ import java.util.concurrent.*
  * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
  * NOTE: IPC connection will ALWAYS have a timeout of 10 second to connect. This is IPC, it should connect fast
  */
-internal open class IpcMediaDriverConnection(streamId: Int,
-                                        val streamIdSubscription: Int,
-                                        sessionId: Int,
-                                        ) :
+internal open class IpcMediaDriverConnection(
+    streamId: Int,
+    val streamIdSubscription: Int,
+    sessionId: Int,
+    ) :
         MediaDriverConnection(0, 0, streamId, sessionId, 10, true) {
 
     private fun uri(): ChannelUriStringBuilder {
