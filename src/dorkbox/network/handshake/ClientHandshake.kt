@@ -89,8 +89,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             }
 
             if (connectKey != message.connectKey) {
-                logger.error("Ignored handshake (client connect key: ${message.connectKey}) intended for another client (mine is:" +
-                                     " ${connectKey})")
+                logger.error("[$connectKey] ignored handshake for ${message.connectKey} (Was for another client)")
                 return@FragmentAssembler
             }
 
