@@ -69,6 +69,10 @@ class MultiClientTest : BaseTest() {
                     System.out.format("%3d: %,20d - %s%n", counterId, counterValue, label)
                     //}
                 }
+
+                println(server.driverBacklog().output())
+
+
                 stopEndPoints(10000L)
             }
         }
