@@ -740,7 +740,7 @@ internal constructor(val type: Class<*>,
                 val enableRemove = type == Client::class.java
                 connections.forEach {
                     logger.info { "Closing connection: ${it.id}" }
-                    it.close(enableRemove)
+                    it.close(enableRemove, true)
                 }
 
                 // Connections are closed first, because we want to make sure that no RMI messages can be received

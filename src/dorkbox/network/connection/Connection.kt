@@ -90,7 +90,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     private val isClosed = atomic(false)
 
-    internal var closeAction: suspend () -> Unit = {}
+    // enableNotifyDisconnect : we don't always want to enable notifications on disconnect
+    internal var closeAction: suspend (enableNotifyDisconnect: Boolean) -> Unit = {}
 
     // only accessed on a single thread!
     private var connectionLastCheckTimeNanos = 0L
@@ -336,7 +337,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * Closes the connection, and removes all connection specific listeners
      */
     suspend fun close() {
-        close(true)
+        close(enableRemove = true,
+              enableNotifyDisconnect = true)
     }
 
     internal fun closeBlocking() {
@@ -349,7 +351,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    internal suspend fun close(enableRemove: Boolean) {
+    internal suspend fun close(enableRemove: Boolean, enableNotifyDisconnect: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
@@ -393,11 +395,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                 endPoint.removeConnection(this)
             }
 
-            // NOTE: notifyDisconnect() is called in postCloseAction()!!
+            // NOTE: notifyDisconnect() is called in closeAction()!!
 
             // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other
-            closeAction()
+            closeAction(enableNotifyDisconnect)
             logger.debug {"[$id] connection closed"}
         }
     }
@@ -445,7 +447,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     // cleans up the connection information
     internal fun cleanup(connectionsPerIpCounts: ConnectionCounts, sessionIdAllocator: RandomId65kAllocator, streamIdAllocator: RandomId65kAllocator) {
-        // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
         sessionIdAllocator.free(id)
 
         if (isIpc) {

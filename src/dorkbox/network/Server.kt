@@ -221,17 +221,17 @@ open class Server<CONNECTION : Connection>(
      * Binds the server to AERON configuration
      */
     @Suppress("DuplicatedCode")
-    fun bind() {
+    fun bind() = runBlocking {
         if (bindAlreadyCalled.getAndSet(true)) {
             logger.error { "Unable to bind when the server is already running!" }
-            return
+            return@runBlocking
         }
 
         try {
             initEndpointState()
         } catch (e: Exception) {
             logger.error(e) { "Unable to initialize the endpoint state" }
-            return
+            return@runBlocking
         }
 
         config as ServerConfiguration
@@ -241,7 +241,8 @@ open class Server<CONNECTION : Connection>(
         // this forces the current thread to WAIT until poll system has started
         val mutex = Mutex(locked = true)
 
-        val ipcPoller: AeronPoller = ServerHandshakePollers.IPC(aeronDriver, config, this)
+        val server = this@Server
+        val ipcPoller: AeronPoller = ServerHandshakePollers.IPC(aeronDriver, config, server)
 
         // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
         val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address == IPv6.WILDCARD
@@ -252,15 +253,15 @@ open class Server<CONNECTION : Connection>(
             if (canUseIPv4 && canUseIPv6) {
                 // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
                 ipv4Poller = ServerHandshakePollers.disabled("IPv4 Disabled")
-                ipv6Poller = ServerHandshakePollers.ip6Wildcard(aeronDriver, config, this)
+                ipv6Poller = ServerHandshakePollers.ip6Wildcard(aeronDriver, config, server)
             } else {
                 // only 1 will be a real poller
-                ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, this)
-                ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, this)
+                ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server)
+                ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server)
             }
         } else {
-            ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, this)
-            ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, this)
+            ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server)
+            ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server)
         }
 
 
@@ -302,9 +303,6 @@ open class Server<CONNECTION : Connection>(
                             // this will call removeConnection again, but that is ok
                             connection.close()
 
-                            // have to free up resources!
-                            handshake.freeResources(connection)
-
                             // have to manually notify the server-listenerManager that this connection was closed
                             // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
                             // instantly notified and on cleanup, the server-listenermanager is called
@@ -337,10 +335,6 @@ open class Server<CONNECTION : Connection>(
                     // make sure the connection is closed (close can only happen once, so a duplicate call does nothing!)
                     connection.close()
 
-                    // have to free up resources!
-                    // NOTE: This can only occur on the polling dispatch thread!!
-                    handshake.freeResources(connection)
-
                     // have to manually notify the server-listenerManager that this connection was closed
                     // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
                     // instantly notified and on cleanup, the server-listenermanager is called
@@ -363,15 +357,15 @@ open class Server<CONNECTION : Connection>(
                 ipv6Poller.close()
                 ipcPoller.close()
 
+                // clear all the handshake info
+                handshake.clear()
+
                 try {
                     // make sure that we have de-allocated all connection data
                     handshake.checkForMemoryLeaks()
                 } catch (e: AllocationException) {
                     logger.error(e) { "Error during server cleanup" }
                 }
-
-                // clear all the handshake info
-                handshake.clear()
 
                 // finish closing -- this lets us make sure that we don't run into race conditions on the thread that calls close()
                 try {
@@ -380,9 +374,8 @@ open class Server<CONNECTION : Connection>(
             }
         }
 
-        runBlocking {
-            mutex.withLock {  }
-        }
+        // wait for the polling coroutine to startup before letting bind() return
+        mutex.withLock {  }
     }
 
     /**

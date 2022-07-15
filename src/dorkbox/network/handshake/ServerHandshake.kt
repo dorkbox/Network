@@ -106,9 +106,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             } else {
                 logger.debug { "[${message.connectKey}] Connection (${pendingConnection.id}) from $connectionString done with handshake." }
 
-                pendingConnection.closeAction = {
-                    // called on connection.close()
-                    pendingConnection.doNotifyDisconnect()
+                // called on connection.close()
+                pendingConnection.closeAction = { enableNotifyDisconnect ->
+                    // clean up the resources associated with this connection when it's closed
+                    logger.debug { "[${pendingConnection.id}] Freeing resources" }
+                    pendingConnection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
+
+                    if (enableNotifyDisconnect) {
+                        pendingConnection.doNotifyDisconnect()
+                    }
                 }
 
                 // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
@@ -518,32 +524,32 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     }
 
     /**
-     * Free up resources from the closed connection
-     */
-    fun freeResources(connection: CONNECTION) {
-        // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-        logger.debug { "[${connection.id}] Freeing resources" }
-
-        connection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
-    }
-
-
-    /**
      * Validates that all the resources have been freed (for all connections)
+     *
+     * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      */
     fun checkForMemoryLeaks() {
         val noAllocations = connectionsPerIpCounts.isEmpty() && sessionIdAllocator.isEmpty() && streamIdAllocator.isEmpty()
 
         if (!noAllocations) {
-            throw AllocationException("Unequal allocate/free method calls for validation.")
+            throw AllocationException("Unequal allocate/free method calls for validation. \n" +
+                                      "connectionsPerIpCounts: '$connectionsPerIpCounts' \n" +
+                                      "sessionIdAllocator: $sessionIdAllocator \n" +
+                                      "streamIdAllocator: $streamIdAllocator")
+
         }
     }
 
     /**
      * Reset and clear all connection information
+     *
+     * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      */
-    fun clear() {
-        // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+    suspend fun clear() {
+        pendingConnections.forEach { (k, v) ->
+            v.close()
+        }
+
         pendingConnections.clear()
     }
 }
