@@ -31,4 +31,8 @@ internal class ConnectionCounts {
     fun isEmpty(): Boolean {
         return connectionsPerIpCounts.isEmpty()
     }
+
+    override fun toString(): String {
+        return connectionsPerIpCounts.entries.joinToString()
+    }
 }

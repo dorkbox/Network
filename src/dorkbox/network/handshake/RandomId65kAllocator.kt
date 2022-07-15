@@ -91,4 +91,8 @@ class RandomId65kAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = 
     fun isEmpty(): Boolean {
         return assigned.value == 0
     }
+
+    override fun toString(): String {
+        return "$assigned"
+    }
 }
