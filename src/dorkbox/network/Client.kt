@@ -210,9 +210,11 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
      */
-    fun connect(remoteAddress: InetAddress,
-                connectionTimeoutSec: Int = 30,
-                reliable: Boolean = true) {
+     fun connect(
+        remoteAddress: InetAddress,
+        connectionTimeoutSec: Int = 30,
+        reliable: Boolean = true)
+    = runBlocking {
 
         val remoteAddressString = when (remoteAddress) {
             is Inet4Address -> IPv4.toString(remoteAddress)
@@ -240,9 +242,12 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientRejectedException if the client connection is rejected
      */
     @Suppress("DuplicatedCode")
-    fun connectIpc(ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
-                   ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
-                   connectionTimeoutSec: Int = 30) {
+    fun connectIpc(
+        ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
+        ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
+        connectionTimeoutSec: Int = 30)
+    = runBlocking {
+
         // Default IPC ports are flipped because they are in the perspective of the SERVER
 
         require(ipcPublicationId != ipcSubscriptionId) { "IPC publication and subscription ports cannot be the same! The must match the server's configuration." }
@@ -281,9 +286,11 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientRejectedException if the client connection is rejected
      */
     @Suppress("BlockingMethodInNonBlockingContext")
-    fun connect(remoteAddress: String = "",
-                connectionTimeoutSec: Int = 30,
-                reliable: Boolean = true) {
+    fun connect(
+        remoteAddress: String = "",
+        connectionTimeoutSec: Int = 30,
+        reliable: Boolean = true)
+    = runBlocking {
 
         when {
             // this is default IPC settings
@@ -392,13 +399,16 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientException if there are misc errors
      */
     @Suppress("DuplicatedCode")
-    private fun connect(remoteAddress: InetAddress? = null,
-                        remoteAddressString: String,
-                        // Default IPC ports are flipped because they are in the perspective of the SERVER
-                        ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
-                        ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
-                        connectionTimeoutSec: Int = 30,
-                        reliable: Boolean = true) {
+    private suspend fun connect(
+        remoteAddress: InetAddress? = null,
+        remoteAddressString: String,
+        // Default IPC ports are flipped because they are in the perspective of the SERVER
+        ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
+        ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
+        connectionTimeoutSec: Int = 30,
+        reliable: Boolean = true)
+    {
+
         require(connectionTimeoutSec >= 0) { "connectionTimeoutSec '$connectionTimeoutSec' is invalid. It must be >=0" }
 
         if (isConnected) {
@@ -443,80 +453,78 @@ open class Client<CONNECTION : Connection>(
 
         val handshake = ClientHandshake(crypto, this, logger)
 
-        runBlocking {
-            val handshakeTimeout = 5
-            val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
-            val startTime = System.nanoTime()
-            var success = false
-            while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
-                if (isShutdown()) {
-                    // If we are connecting indefinitely, we have to make sure to end the connection process
-                    val exception = ClientShutdownException("Unable to connect while shutting down")
-                    logger.error(exception) { "Aborting connection retry attempt to server." }
-                    listenerManager.notifyError(exception)
-                    throw exception
-                }
-
-                try {
-                    val handshakeConnection = if (autoChangeToIpc) {
-                        buildIpcHandshake(
-                            ipcSubscriptionId = ipcSubscriptionId,
-                            ipcPublicationId = ipcPublicationId,
-                            connectionTimeoutSec = handshakeTimeout,
-                            reliable = reliable
-                        )
-                    } else {
-                        buildUdpHandshake(connectionTimeoutSec = handshakeTimeout, reliable = reliable)
-                    }
-
-                    logger.info { handshakeConnection.clientInfo }
-
-
-                    connect0(handshake, handshakeConnection, handshakeTimeout)
-                    success = true
-
-                    // once we're done with the connection process, stop trying
-                    break
-                } catch (e: ClientRetryException) {
-                    handshake.reset()
-
-                    // maybe the aeron driver isn't running?
-                    aeronDriver.start()
-
-                    // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
-                    delay(500)
-                    if (logger.isTraceEnabled) {
-                        logger.trace(e) { "Unable to connect to '$remoteAddressString', retrying..." }
-                    } else {
-                        logger.info { "Unable to connect to '$remoteAddressString', retrying..." }
-                    }
-
-                } catch (e: Exception) {
-                    logger.error(e) { "[${handshake.connectKey}] : Un-recoverable error during handshake. Aborting." }
-                    handshake.reset()
-
-                    listenerManager.notifyError(e)
-                    throw e
-                }
-            }
-
-            if (!success) {
-                if (System.nanoTime() - startTime < timoutInNanos) {
-                    // we timed out. Throw the appropriate exception
-                    val exception = ClientTimedOutException("Unable to connect to the server in $connectionTimeoutSec seconds")
-                    logger.error(exception) { "Aborting connection attempt to server." }
-                    listenerManager.notifyError(exception)
-                    throw exception
-                }
-
-                // If we did not connect - throw an error. When `client.connect()` is called, either it connects or throws an error
-                val exception = ClientRejectedException("The server did not respond or permit the connection attempt")
-                ListenerManager.cleanStackTrace(exception)
-
+        val handshakeTimeout = 5
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+        val startTime = System.nanoTime()
+        var success = false
+        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
+            if (isShutdown()) {
+                // If we are connecting indefinitely, we have to make sure to end the connection process
+                val exception = ClientShutdownException("Unable to connect while shutting down")
                 logger.error(exception) { "Aborting connection retry attempt to server." }
                 listenerManager.notifyError(exception)
                 throw exception
             }
+
+            try {
+                val handshakeConnection = if (autoChangeToIpc) {
+                    buildIpcHandshake(
+                        ipcSubscriptionId = ipcSubscriptionId,
+                        ipcPublicationId = ipcPublicationId,
+                        connectionTimeoutSec = handshakeTimeout,
+                        reliable = reliable
+                    )
+                } else {
+                    buildUdpHandshake(connectionTimeoutSec = handshakeTimeout, reliable = reliable)
+                }
+
+                logger.info { handshakeConnection.clientInfo }
+
+
+                connect0(handshake, handshakeConnection, handshakeTimeout)
+                success = true
+
+                // once we're done with the connection process, stop trying
+                break
+            } catch (e: ClientRetryException) {
+                handshake.reset()
+
+                // maybe the aeron driver isn't running?
+                aeronDriver.start()
+
+                // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
+                delay(500)
+                if (logger.isTraceEnabled) {
+                    logger.trace(e) { "Unable to connect to '$remoteAddressString', retrying..." }
+                } else {
+                    logger.info { "Unable to connect to '$remoteAddressString', retrying..." }
+                }
+
+            } catch (e: Exception) {
+                logger.error(e) { "[${handshake.connectKey}] : Un-recoverable error during handshake. Aborting." }
+                handshake.reset()
+
+                listenerManager.notifyError(e)
+                throw e
+            }
+        }
+
+        if (!success) {
+            if (System.nanoTime() - startTime < timoutInNanos) {
+                // we timed out. Throw the appropriate exception
+                val exception = ClientTimedOutException("Unable to connect to the server in $connectionTimeoutSec seconds")
+                logger.error(exception) { "Aborting connection attempt to server." }
+                listenerManager.notifyError(exception)
+                throw exception
+            }
+
+            // If we did not connect - throw an error. When `client.connect()` is called, either it connects or throws an error
+            val exception = ClientRejectedException("The server did not respond or permit the connection attempt")
+            ListenerManager.cleanStackTrace(exception)
+
+            logger.error(exception) { "Aborting connection retry attempt to server." }
+            listenerManager.notifyError(exception)
+            throw exception
         }
     }
 
@@ -880,8 +888,7 @@ open class Client<CONNECTION : Connection>(
         }
     }
 
-    // no impl
     final override fun close0() {
-        // when we close(), don't permit reconnect. add "close(boolean)" (aka "shutdown"), to deny a connect request (and permanently stay closed)
+        // no impl
     }
 }

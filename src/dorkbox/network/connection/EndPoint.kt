@@ -216,7 +216,7 @@ internal constructor(val type: Class<*>,
     /**
      * @throws Exception if there is a problem starting the media driver
      */
-    internal fun initEndpointState() {
+    internal suspend fun initEndpointState() {
         shutdown.getAndSet(false)
         shutdownMutex = Mutex(locked = true)
 
