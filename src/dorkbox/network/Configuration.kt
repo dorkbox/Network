@@ -431,7 +431,7 @@ open class Configuration {
      *
      * A value of 0 will 'auto-configure' this setting
      */
-    var sendBufferSize = 0
+    var sendBufferSize = 2097152
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -448,7 +448,7 @@ open class Configuration {
      *
      * A value of 0 will 'auto-configure' this setting.
      */
-    var receiveBufferSize = 0
+    var receiveBufferSize = 2097152
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
