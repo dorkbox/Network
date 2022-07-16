@@ -6,6 +6,7 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.io.IOException
@@ -204,7 +205,9 @@ class DisconnectReconnectTest : BaseTest() {
     fun manualMediaDriverAndReconnectClient() {
         // NOTE: once a config is assigned to a driver, the config cannot be changed
         val aeronDriver = AeronDriver(serverConfig())
-        aeronDriver.start()
+        runBlocking {
+            aeronDriver.start()
+        }
 
         run {
             val serverConfiguration = serverConfig()
@@ -251,7 +254,9 @@ class DisconnectReconnectTest : BaseTest() {
 
 
         waitForThreads()
-        aeronDriver.close()
+        runBlocking {
+            aeronDriver.close()
+        }
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)
