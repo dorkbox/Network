@@ -12,6 +12,7 @@ import dorkbox.network.connection.Connection
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
+import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
 
 internal object ServerHandshakePollers {
@@ -23,7 +24,11 @@ internal object ServerHandshakePollers {
         }
     }
 
-    fun <CONNECTION : Connection> IPC(aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>): AeronPoller {
+    suspend fun <CONNECTION : Connection> IPC(
+        aeronDriver: AeronDriver,
+        config: ServerConfiguration,
+        server: Server<CONNECTION>): AeronPoller
+    {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
         val handshake = server.handshake
@@ -61,9 +66,11 @@ internal object ServerHandshakePollers {
                         return@FragmentAssembler
                     }
 
-                    handshake.processIpcHandshakeMessageServer(
-                        server, publication, message, aeronDriver, connectionFunc, logger
-                    )
+                    runBlocking {
+                        handshake.processIpcHandshakeMessageServer(
+                            server, publication, message, aeronDriver, connectionFunc, logger
+                        )
+                    }
                 }
 
                 override fun poll(): Int {
@@ -86,7 +93,11 @@ internal object ServerHandshakePollers {
 
 
 
-    fun <CONNECTION : Connection> ip4(aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>): AeronPoller {
+    suspend fun <CONNECTION : Connection> ip4(
+        aeronDriver: AeronDriver,
+        config: ServerConfiguration,
+        server: Server<CONNECTION>): AeronPoller
+    {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
         val handshake = server.handshake
@@ -146,9 +157,11 @@ internal object ServerHandshakePollers {
                         return@FragmentAssembler
                     }
 
-                    handshake.processUdpHandshakeMessageServer(
-                        server, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
-                    )
+                    runBlocking {
+                        handshake.processUdpHandshakeMessageServer(
+                            server, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
+                        )
+                    }
                 }
 
                 override fun poll(): Int {
@@ -169,7 +182,11 @@ internal object ServerHandshakePollers {
         return poller
     }
 
-    fun <CONNECTION : Connection> ip6(aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>): AeronPoller {
+    suspend fun <CONNECTION : Connection> ip6(
+        aeronDriver: AeronDriver,
+        config: ServerConfiguration,
+        server: Server<CONNECTION>): AeronPoller
+    {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
         val handshake = server.handshake
@@ -227,9 +244,11 @@ internal object ServerHandshakePollers {
                         return@FragmentAssembler
                     }
 
-                    handshake.processUdpHandshakeMessageServer(
-                        server, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
-                    )
+                    runBlocking {
+                        handshake.processUdpHandshakeMessageServer(
+                            server, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
+                        )
+                    }
                 }
 
                 override fun poll(): Int {
@@ -250,7 +269,7 @@ internal object ServerHandshakePollers {
         return poller
     }
 
-    fun <CONNECTION : Connection> ip6Wildcard(
+    suspend fun <CONNECTION : Connection> ip6Wildcard(
         aeronDriver: AeronDriver,
         config: ServerConfiguration,
         server: Server<CONNECTION>
@@ -312,9 +331,11 @@ internal object ServerHandshakePollers {
                     return@FragmentAssembler
                 }
 
-                handshake.processUdpHandshakeMessageServer(
-                    server, publication, remoteIpAndPort, message, aeronDriver, true, connectionFunc, logger
-                )
+                runBlocking {
+                    handshake.processUdpHandshakeMessageServer(
+                        server, publication, remoteIpAndPort, message, aeronDriver, true, connectionFunc, logger
+                    )
+                }
             }
 
             override fun poll(): Int {

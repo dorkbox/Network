@@ -201,7 +201,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
 
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    fun processIpcHandshakeMessageServer(
+    suspend fun processIpcHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshakePublication: Publication,
         message: HandshakeMessage,
@@ -336,7 +336,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     }
 
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    fun processUdpHandshakeMessageServer(
+    suspend fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshakePublication: Publication,
         remoteIpAndPort: String,

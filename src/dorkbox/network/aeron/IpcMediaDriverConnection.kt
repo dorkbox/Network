@@ -131,7 +131,7 @@ internal open class IpcMediaDriverConnection(
      *
      * serverAddress is ignored for IPC
      */
-    override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
+    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()

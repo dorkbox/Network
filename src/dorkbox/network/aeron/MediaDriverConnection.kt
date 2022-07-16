@@ -31,7 +31,7 @@ abstract class MediaDriverConnection(val publicationPort: Int, val subscriptionP
 
 
     abstract suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
-    abstract fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
+    abstract suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
 
     abstract val clientInfo : String
     abstract val serverInfo : String

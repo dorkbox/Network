@@ -448,7 +448,7 @@ internal constructor(val type: Class<*>,
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = handshakeKryo.read(buffer, offset, length) as HandshakeMessage
 
-            logger.trace { "[${message.connectKey}] received HS: $message" }
+            logger.trace { "[${message.connectKey}] received HS: $message (Might not be for this connection)" }
 
             message
         } catch (e: Exception) {
@@ -732,9 +732,10 @@ internal constructor(val type: Class<*>,
     final override fun close() {
         if (shutdown.compareAndSet(expect = false, update = true)) {
             logger.info { "Shutting down..." }
-            aeronDriver.close()
 
             runBlocking {
+                aeronDriver.close()
+
                 // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
                 // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
                 val enableRemove = type == Client::class.java

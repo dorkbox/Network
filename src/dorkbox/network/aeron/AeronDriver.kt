@@ -11,6 +11,9 @@ import io.aeron.Publication
 import io.aeron.Subscription
 import io.aeron.driver.MediaDriver
 import io.aeron.samples.SamplesUtil
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
@@ -21,9 +24,6 @@ import org.agrona.concurrent.status.CountersReader
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.lang.Thread.sleep
-import java.util.concurrent.locks.*
-import kotlin.concurrent.read
-import kotlin.concurrent.write
 
 /**
  * Class for managing the Aeron+Media drivers
@@ -61,7 +61,7 @@ class AeronDriver(
         private const val AERON_PUBLICATION_LINGER_TIMEOUT = 5_000L  // in MS
 
         // prevents multiple instances, within the same JVM, from starting at the exact same time.
-        private val lock = ReentrantReadWriteLock()
+        private val mutex = Mutex()
 
         private fun setConfigDefaults(config: Configuration, logger: KLogger) {
             // explicitly don't set defaults if we already have the context defined!
@@ -234,8 +234,8 @@ class AeronDriver(
         }
     }
 
-    private fun isLoaded(): Boolean {
-        return lock.read {
+    private suspend fun isLoaded(): Boolean {
+        return mutex.withLock {
             val mediaDriverLoaded = mediaDriverWasAlreadyRunning || mediaDriver != null
             mediaDriverLoaded && aeron != null && aeron?.isClosed == false
         }
@@ -246,12 +246,12 @@ class AeronDriver(
      *
      * @return true if we are successfully connected to the aeron client
      */
-    fun start(): Boolean {
+    suspend fun start(): Boolean {
         if (isLoaded()) {
             return true
         }
 
-        lock.write {
+        mutex.withLock {
             if (!mediaDriverWasAlreadyRunning && mediaDriver == null) {
                 // only start if we didn't already start... There will be several checks.
 
@@ -261,7 +261,7 @@ class AeronDriver(
                     // SOMETIMES aeron is in the middle of shutting down, and this prevents us from trying to connect to
                     // that instance
                     logger.debug { "Aeron Media driver already running. Double checking status..." }
-                    sleep(context.driverTimeout/2)
+                    delay(context.driverTimeout/2)
                     running = isRunning()
                 }
 
@@ -277,7 +277,7 @@ class AeronDriver(
                             break
                         } catch (e: Exception) {
                             logger.warn(e) { "Unable to start the Aeron Media driver at ${context.driverDirectory}. Retrying $count more times..." }
-                            sleep(context.driverTimeout)
+                            delay(context.driverTimeout)
                         }
                     }
                 } else {
@@ -325,7 +325,7 @@ class AeronDriver(
         return true
     }
 
-    fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
+    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
         val uri = publicationUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -339,7 +339,7 @@ class AeronDriver(
 
         // in the client, if we are unable to connect to the server, we will attempt to start the media driver + connect to aeron
 
-        lock.read {
+        mutex.withLock {
             val aeron1 = aeron
             if (aeron1 == null || aeron1.isClosed) {
                 // there was an error connecting to the aeron client or media driver.
@@ -360,7 +360,7 @@ class AeronDriver(
         }
     }
 
-    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
+    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
         val uri = subscriptionUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -377,7 +377,7 @@ class AeronDriver(
 
         // subscriptions do not depend on a response from the remote endpoint, and should always succeed if aeron is available
 
-        return lock.read {
+        return mutex.withLock {
             val aeron1 = aeron
             if (aeron1 == null || aeron1.isClosed) {
                 // there was an error connecting to the aeron client or media driver.
@@ -413,8 +413,8 @@ class AeronDriver(
      * NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
      *   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
      */
-    fun close() {
-        lock.write {
+    suspend fun close() {
+        mutex.withLock {
             try {
                 aeron?.close()
             } catch (e: Exception) {

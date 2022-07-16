@@ -66,7 +66,7 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
         throw ServerException("Client info not implemented in Server MediaDriver Connection")
     }
 
-    override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
+    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         val connectionString = aeronConnectionString(listenAddress)
 
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.

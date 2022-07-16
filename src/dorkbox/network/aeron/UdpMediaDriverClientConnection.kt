@@ -168,7 +168,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         }
     }
 
-    override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
+    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         throw ClientException("Server info not implemented in Client MediaDriver Connection")
     }
     override val serverInfo: String
