@@ -296,7 +296,7 @@ open class Server<CONNECTION : Connection>(
                             pollCount += connection.pollSubscriptions()
                         } else {
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                            logger.debug { "[${connection.id}] connection expired" }
+                            logger.debug { "[${connection.id}/${connection.streamId}] connection expired" }
 
                             removeConnection(connection)
 

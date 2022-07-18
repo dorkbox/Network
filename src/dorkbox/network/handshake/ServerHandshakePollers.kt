@@ -51,25 +51,29 @@ internal object ServerHandshakePollers {
                     // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
                     // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
                     val sessionId = header.sessionId()
+                    val streamId = header.streamId()
+                    val aeronLogInfo = "$sessionId/$streamId"
 
-                    val message = server.readHandshakeMessage(buffer, offset, length, header)
-
-                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-                    if (message !is HandshakeMessage) {
-                        logger.error { "[$sessionId] Connection from IPC not allowed! Invalid connection request" }
-
-                        try {
-                            server.writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                        } catch (e: Exception) {
-                            logger.error(e) { "Handshake error!" }
-                        }
-                        return@FragmentAssembler
-                    }
+                    val message = server.readHandshakeMessage(buffer, offset, length, header, aeronLogInfo)
 
                     runBlocking {
-                        handshake.processIpcHandshakeMessageServer(
-                            server, publication, message, aeronDriver, connectionFunc, logger
-                        )
+                        // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                        if (message !is HandshakeMessage) {
+                            logger.error { "[$aeronLogInfo] Connection from IPC not allowed! Invalid connection request" }
+
+                            try {
+                                server.writeHandshakeMessage(publication, aeronLogInfo,
+                                                             HandshakeMessage.error("Invalid connection request"))
+                            } catch (e: Exception) {
+                                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+                            }
+                        } else {
+                            handshake.processIpcHandshakeMessageServer(
+                                server, publication, message,
+                                aeronDriver, aeronLogInfo,
+                                connectionFunc, logger
+                            )
+                        }
                     }
                 }
 
@@ -133,34 +137,38 @@ internal object ServerHandshakePollers {
                     // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
                     // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
                     val sessionId = header.sessionId()
+                    val streamId = header.streamId()
+                    val aeronLogInfo = "$sessionId/$streamId"
 
                     // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
                     val remoteIpAndPort = (header.context() as Image).sourceIdentity()
 
-                    val message = server.readHandshakeMessage(buffer, offset, length, header)
-
-                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-                    if (message !is HandshakeMessage) {
-                        logger.error {
-                            // split
-                            val splitPoint = remoteIpAndPort.lastIndexOf(':')
-                            val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
-
-                            "[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"
-                        }
-
-                        try {
-                            server.writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                        } catch (e: Exception) {
-                            logger.error(e) { "Handshake error!" }
-                        }
-                        return@FragmentAssembler
-                    }
+                    val message = server.readHandshakeMessage(buffer, offset, length, header, aeronLogInfo)
 
                     runBlocking {
-                        handshake.processUdpHandshakeMessageServer(
-                            server, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
-                        )
+                        // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                        if (message !is HandshakeMessage) {
+                            logger.error {
+                                // split
+                                val splitPoint = remoteIpAndPort.lastIndexOf(':')
+                                val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
+
+                                "[$aeronLogInfo] Connection from $clientAddressString not allowed! Invalid connection request"
+                            }
+
+                            try {
+                                server.writeHandshakeMessage(publication, aeronLogInfo,
+                                                             HandshakeMessage.error("Invalid connection request"))
+                            } catch (e: Exception) {
+                                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+                            }
+                        } else {
+                            handshake.processUdpHandshakeMessageServer(
+                                server, publication, remoteIpAndPort, message,
+                                aeronDriver, aeronLogInfo, false,
+                                connectionFunc, logger
+                            )
+                        }
                     }
                 }
 
@@ -172,7 +180,7 @@ internal object ServerHandshakePollers {
                     driver.close()
                 }
 
-                override val serverInfo = driver.serverInfo
+                override val serverInfo = "IPv4 ${driver.serverInfo}"
             }
         } else {
             disabled("IPv4 Disabled")
@@ -221,33 +229,38 @@ internal object ServerHandshakePollers {
                     // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
                     // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
                     val sessionId = header.sessionId()
+                    val streamId = header.streamId()
+                    val aeronLogInfo = "$sessionId/$streamId"
 
                     // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
                     val remoteIpAndPort = (header.context() as Image).sourceIdentity()
 
-                    val message = server.readHandshakeMessage(buffer, offset, length, header)
-
-                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-                    if (message !is HandshakeMessage) {
-                        logger.error {
-                            // split
-                            val splitPoint = remoteIpAndPort.lastIndexOf(':')
-                            val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
-                            "[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"
-                        }
-
-                        try {
-                            server.writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                        } catch (e: Exception) {
-                            logger.error(e) { "Handshake error!" }
-                        }
-                        return@FragmentAssembler
-                    }
+                    val message = server.readHandshakeMessage(buffer, offset, length, header, aeronLogInfo)
 
                     runBlocking {
-                        handshake.processUdpHandshakeMessageServer(
-                            server, publication, remoteIpAndPort, message, aeronDriver, false, connectionFunc, logger
-                        )
+                        // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                        if (message !is HandshakeMessage) {
+                            logger.error {
+                                // split
+                                val splitPoint = remoteIpAndPort.lastIndexOf(':')
+                                val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
+                                "[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"
+                            }
+
+                            try {
+                                server.writeHandshakeMessage(publication, aeronLogInfo,
+                                                             HandshakeMessage.error("Invalid connection request"))
+                            } catch (e: Exception) {
+                                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+                            }
+                        }
+                        else {
+                            handshake.processUdpHandshakeMessageServer(
+                                server, publication, remoteIpAndPort, message,
+                                aeronDriver, aeronLogInfo, false,
+                                connectionFunc, logger
+                            )
+                        }
                     }
                 }
 
@@ -259,7 +272,7 @@ internal object ServerHandshakePollers {
                     driver.close()
                 }
 
-                override val serverInfo = driver.serverInfo
+                override val serverInfo = "IPv6 ${driver.serverInfo}"
             }
         } else {
             disabled("IPv6 Disabled")
@@ -308,33 +321,37 @@ internal object ServerHandshakePollers {
                 // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
                 // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
                 val sessionId = header.sessionId()
+                val streamId = header.streamId()
+                val aeronLogInfo = "$sessionId/$streamId"
 
                 // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
                 val remoteIpAndPort = (header.context() as Image).sourceIdentity()
 
-                val message = server.readHandshakeMessage(buffer, offset, length, header)
-
-                // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-                if (message !is HandshakeMessage) {
-                    logger.error {
-                        // split
-                        val splitPoint = remoteIpAndPort.lastIndexOf(':')
-                        val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
-                        "[$sessionId] Connection from $clientAddressString not allowed! Invalid connection request"
-                    }
-
-                    try {
-                        server.writeHandshakeMessage(publication, HandshakeMessage.error("Invalid connection request"))
-                    } catch (e: Exception) {
-                        logger.error(e) { "Handshake error!" }
-                    }
-                    return@FragmentAssembler
-                }
+                val message = server.readHandshakeMessage(buffer, offset, length, header, aeronLogInfo)
 
                 runBlocking {
-                    handshake.processUdpHandshakeMessageServer(
-                        server, publication, remoteIpAndPort, message, aeronDriver, true, connectionFunc, logger
-                    )
+                    // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                    if (message !is HandshakeMessage) {
+                        logger.error {
+                            // split
+                            val splitPoint = remoteIpAndPort.lastIndexOf(':')
+                            val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
+                            "[$aeronLogInfo] Connection from $clientAddressString not allowed! Invalid connection request"
+                        }
+
+                        try {
+                            server.writeHandshakeMessage(publication, aeronLogInfo,
+                                                         HandshakeMessage.error("Invalid connection request"))
+                        } catch (e: Exception) {
+                            logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+                        }
+                    } else {
+                        handshake.processUdpHandshakeMessageServer(
+                            server, publication, remoteIpAndPort, message,
+                            aeronDriver, aeronLogInfo,  true,
+                            connectionFunc, logger
+                        )
+                    }
                 }
             }
 
@@ -346,7 +363,7 @@ internal object ServerHandshakePollers {
                 driver.close()
             }
 
-            override val serverInfo = driver.serverInfo
+            override val serverInfo = "IPv4+6 ${driver.serverInfo}"
         }
 
         logger.info { poller.serverInfo }

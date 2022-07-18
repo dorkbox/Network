@@ -674,7 +674,9 @@ open class Client<CONNECTION : Connection>(
             throw exception
         }
 
-
+        val sessionId = clientConnection.sessionId
+        val streamId = clientConnection.streamId
+        val aeronLogInfo = "$sessionId/$streamId"
 
         val newConnection: CONNECTION
         if (isUsingIPC) {
@@ -687,13 +689,13 @@ open class Client<CONNECTION : Connection>(
             val permitConnection = listenerManager.notifyFilter(newConnection)
             if (!permitConnection) {
                 handshakeConnection.close()
-                val exception = ClientRejectedException("[${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString was not permitted!")
+                val exception = ClientRejectedException("[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString was not permitted!")
                 ListenerManager.cleanStackTrace(exception)
                 logger.error(exception) { "Permission error" }
                 throw exception
             }
 
-            logger.info { "[${handshake.connectKey}] Connection (${newConnection.id}) adding new signature for $remoteAddressString : ${connectionInfo.publicKey.toHexString()}" }
+            logger.info { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) adding new signature for $remoteAddressString : ${connectionInfo.publicKey.toHexString()}" }
             storage.addRegisteredServerKey(remoteAddress!!, connectionInfo.publicKey)
         }
 
@@ -706,7 +708,7 @@ open class Client<CONNECTION : Connection>(
 
             // on the client, we want to GUARANTEE that the disconnect happens-before connect.
             if (!lockStepForConnect.compareAndSet(null, Mutex(locked = true))) {
-                logger.error { "[${handshake.connectKey}] Connection ${newConnection.id} : close lockStep for disconnect was in the wrong state!" }
+                logger.error { "[$aeronLogInfo - ${handshake.connectKey}] Connection ${newConnection.id} : close lockStep for disconnect was in the wrong state!" }
             }
 
             isConnected = false
@@ -737,13 +739,13 @@ open class Client<CONNECTION : Connection>(
         try {
             handshake.done(handshakeConnection, successAttemptTimeout)
         } catch (e: Exception) {
-            logger.error(e) { "[${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString error during handshake" }
+            logger.error(e) { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString error during handshake" }
             throw e
         }
 
         isConnected = true
 
-        logger.debug { "[${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString done with handshake." }
+        logger.debug { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString done with handshake." }
 
         // this forces the current thread to WAIT until poll system has started
         val mutex = Mutex(locked = true)
@@ -769,7 +771,7 @@ open class Client<CONNECTION : Connection>(
                     pollIdleStrategy.idle(pollCount)
                 } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                    logger.debug { "[${newConnection.id}] connection expired" }
+                    logger.debug { "[$aeronLogInfo] connection expired" }
 
                     // event-loop is required, because we want to run this code AFTER the current coroutine has finished. This prevents
                     // odd race conditions when a client is restarted. Can only be run from inside another co-routine!

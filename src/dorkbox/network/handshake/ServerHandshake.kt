@@ -29,7 +29,6 @@ import dorkbox.network.exceptions.AllocationException
 import io.aeron.Publication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
@@ -70,27 +69,31 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
-    private fun validateMessageTypeAndDoPending(
+    private suspend fun validateMessageTypeAndDoPending(
         server: Server<CONNECTION>,
         actionDispatch: CoroutineScope,
         handshakePublication: Publication,
         message: HandshakeMessage,
         connectionString: String,
+        aeronLogInfo: String,
         logger: KLogger
     ): Boolean {
         // check to see if this sessionId is ALREADY in use by another connection!
         // this can happen if there are multiple connections from the SAME ip address (ie: localhost)
         if (message.state == HandshakeMessage.HELLO) {
             // this should be null.
-            val hasExistingConnectionInProgress = pendingConnections[message.connectKey] != null
-            if (hasExistingConnectionInProgress) {
+
+            val existingConnection = pendingConnections[message.connectKey]
+            if (existingConnection != null) {
+                val existingAeronLogInfo = "${existingConnection.id}/${existingConnection.streamId}"
+
                 // WHOOPS! tell the client that it needs to retry, since a DIFFERENT client has a handshake in progress with the same sessionId
-                logger.error { "[${message.connectKey}] Connection from $connectionString had an in-use session ID! Telling client to retry." }
+                logger.error { "[$existingAeronLogInfo - ${message.connectKey}] Connection from $connectionString had an in-use session ID! Telling client to retry." }
 
                 try {
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.retry("Handshake already in progress for sessionID!"))
+                    server.writeHandshakeMessage(handshakePublication, aeronLogInfo, HandshakeMessage.retry("Handshake already in progress for sessionID!"))
                 } catch (e: Error) {
-                    logger.error(e) { "Handshake error!" }
+                    logger.error(e) { "[$aeronLogInfo - $existingAeronLogInfo] Handshake error!" }
                 }
                 return false
             }
@@ -100,41 +103,42 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
         // check to see if this is a pending connection
         if (message.state == HandshakeMessage.DONE) {
-            val pendingConnection = pendingConnections.remove(message.connectKey)
-            if (pendingConnection == null) {
-                logger.error { "[${message.connectKey}] Error! Pending connection from client $connectionString was null, and cannot complete handshake!" }
+            val existingConnection = pendingConnections.remove(message.connectKey)
+            if (existingConnection == null) {
+                logger.error { "[$aeronLogInfo - ${message.connectKey}] Error! Pending connection from client $connectionString was null, and cannot complete handshake!" }
             } else {
-                logger.debug { "[${message.connectKey}] Connection (${pendingConnection.id}) from $connectionString done with handshake." }
+                val existingAeronLogInfo = "${existingConnection.id}/${existingConnection.streamId}"
+
+                logger.debug { "[$aeronLogInfo - $existingAeronLogInfo - ${message.connectKey}] Connection from $connectionString done with handshake." }
 
                 // called on connection.close()
-                pendingConnection.closeAction = { enableNotifyDisconnect ->
+                existingConnection.closeAction = { enableNotifyDisconnect ->
                     // clean up the resources associated with this connection when it's closed
-                    logger.debug { "[${pendingConnection.id}] Freeing resources" }
-                    pendingConnection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
+                    logger.debug { "[$existingAeronLogInfo] Freeing resources" }
+                    existingConnection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
 
                     if (enableNotifyDisconnect) {
-                        pendingConnection.doNotifyDisconnect()
+                        existingConnection.doNotifyDisconnect()
                     }
                 }
 
                 // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
-                runBlocking {
-                    listenerManager.notifyInit(pendingConnection)
-                }
+                listenerManager.notifyInit(existingConnection)
 
                 // this enables the connection to start polling for messages
-                server.addConnection(pendingConnection)
+                server.addConnection(existingConnection)
 
                 // now tell the client we are done
                 try {
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.doneToClient(message.connectKey))
+                    server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                                 HandshakeMessage.doneToClient(message.connectKey))
 
                     // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
                     actionDispatch.launch {
-                        listenerManager.notifyConnect(pendingConnection)
+                        listenerManager.notifyConnect(existingConnection)
                     }
                 } catch (e: Exception) {
-                    logger.error(e) { "Handshake error!" }
+                    logger.error(e) { "$aeronLogInfo - $existingAeronLogInfo - Handshake error!" }
                 }
             }
             return false
@@ -147,24 +151,26 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    private fun validateUdpConnectionInfo(
+    private suspend fun validateUdpConnectionInfo(
         server: Server<CONNECTION>,
         handshakePublication: Publication,
         config: ServerConfiguration,
         clientAddressString: String,
         clientAddress: InetAddress,
+        aeronLogInfo: String,
         logger: KLogger
     ): Boolean {
 
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
             if (server.connections.connectionCount() >= config.maxClientCount) {
-                logger.error("Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}")
+                logger.error("[$aeronLogInfo] Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}")
 
                 try {
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Server is full"))
+                    server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                                 HandshakeMessage.error("Server is full"))
                 } catch (e: Exception) {
-                    logger.error(e) { "Handshake error!" }
+                    logger.error(e) { "[$aeronLogInfo] Handshake error!" }
                 }
                 return false
             }
@@ -176,23 +182,25 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
                 connectionsPerIpCounts.decrement(clientAddress, currentCountForIp)
 
-                logger.error { "Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}" }
+                logger.error { "[$aeronLogInfo] Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}" }
 
                 try {
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Too many connections for IP address"))
+                    server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                                 HandshakeMessage.error("Too many connections for IP address"))
                 } catch (e: Exception) {
-                    logger.error(e) { "Handshake error!" }
+                    logger.error(e) { "[$aeronLogInfo] Handshake error!" }
                 }
                 return false
             }
             connectionsPerIpCounts.increment(clientAddress, currentCountForIp)
         } catch (e: Exception) {
-            logger.error(e) { "could not validate client message" }
+            logger.error(e) { "[$aeronLogInfo] Could not validate client message" }
 
             try {
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Invalid connection"))
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Invalid connection"))
             } catch (e: Exception) {
-                logger.error(e) { "Handshake error!" }
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
             }
         }
 
@@ -206,13 +214,22 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         handshakePublication: Publication,
         message: HandshakeMessage,
         aeronDriver: AeronDriver,
+        aeronLogInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ) {
 
         val connectionString = "IPC"
 
-        if (!validateMessageTypeAndDoPending(server, server.actionDispatch, handshakePublication, message, connectionString, logger)) {
+        if (!validateMessageTypeAndDoPending(
+                server,
+                server.actionDispatch,
+                handshakePublication,
+                message,
+                connectionString,
+                aeronLogInfo,
+                logger
+            )) {
             return
         }
 
@@ -230,12 +247,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         try {
             connectionSessionId = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
-            logger.error { "Connection from $connectionString not allowed! Unable to allocate a session ID for the client connection!" }
+            logger.error { "[$aeronLogInfo] Connection from $connectionString not allowed! Unable to allocate a session ID for the client connection!" }
 
             try {
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                logger.error(e) { "Handshake error!" }
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
             }
             return
         }
@@ -248,12 +266,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // have to unwind actions!
             sessionIdAllocator.free(connectionSessionId)
 
-            logger.error { "Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!" }
+            logger.error { "[$aeronLogInfo] Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!" }
 
             try {
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                logger.error(e) { "Handshake error!" }
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
             }
             return
         }
@@ -266,12 +285,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             sessionIdAllocator.free(connectionSessionId)
             sessionIdAllocator.free(connectionStreamPubId)
 
-            logger.error { "Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!" }
+            logger.error { "[$aeronLogInfo] Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!" }
 
             try {
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                logger.error(e) { "Handshake error!" }
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
             }
             return
         }
@@ -286,7 +306,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // we have to construct how the connection will communicate!
             clientConnection.buildServer(aeronDriver, logger, true)
 
-            logger.info { "[${clientConnection.sessionId}] IPC connection established to [${clientConnection.streamIdSubscription}|${clientConnection.streamId}]" }
+            logger.info { "[$aeronLogInfo - ${clientConnection.sessionId}] IPC connection established to [${clientConnection.streamIdSubscription}|${clientConnection.streamId}]" }
 
             val connection = connectionFunc(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
 
@@ -325,13 +345,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             pendingConnections[message.connectKey] = connection
 
             // this tells the client all the info to connect.
-            server.writeHandshakeMessage(handshakePublication, successMessage) // exception is already caught!
+            server.writeHandshakeMessage(handshakePublication, aeronLogInfo, successMessage) // exception is already caught!
         } catch (e: Exception) {
             // have to unwind actions!
             sessionIdAllocator.free(connectionSessionId)
             streamIdAllocator.free(connectionStreamPubId)
 
-            logger.error(e) { "Connection handshake from $connectionString crashed! Message $message" }
+            logger.error(e) { "[$aeronLogInfo] Connection handshake from $connectionString crashed! Message $message" }
         }
     }
 
@@ -342,6 +362,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         remoteIpAndPort: String,
         message: HandshakeMessage,
         aeronDriver: AeronDriver,
+        aeronLogInfo: String,
         isIpv6Wildcard: Boolean,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
@@ -355,14 +376,17 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         // this should never be null, because we are feeding it a valid IP address from aeron
         val clientAddress = IP.toAddress(clientAddressString)
         if (clientAddress == null) {
-            logger.error { "Connection from $clientAddressString not allowed! Invalid IP address!" }
+            logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Invalid IP address!" }
             return
         }
 
 
 
         // Manage the Handshake state
-        if (!validateMessageTypeAndDoPending(server, server.actionDispatch, handshakePublication, message, clientAddressString, logger)) {
+        if (!validateMessageTypeAndDoPending(
+                server, server.actionDispatch, handshakePublication, message,
+                clientAddressString, aeronLogInfo, logger))
+        {
             return
         }
 
@@ -375,13 +399,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         // VALIDATE:: check to see if the remote connection's public key has changed!
         validateRemoteAddress = server.crypto.validateRemoteAddress(clientAddress, clientAddressString, clientPublicKeyBytes)
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
-            logger.error { "Connection from $clientAddressString not allowed! Public key mismatch." }
+            logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Public key mismatch." }
             return
         }
 
 
         if (!clientAddress.isLoopbackAddress &&
-            !validateUdpConnectionInfo(server, handshakePublication, config, clientAddressString, clientAddress, logger)) {
+            !validateUdpConnectionInfo(server, handshakePublication, config, clientAddressString, clientAddress, aeronLogInfo, logger)) {
             // we do not want to limit the loopback addresses!
             return
         }
@@ -402,12 +426,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
 
-            logger.error { "Connection from $clientAddressString not allowed! Unable to allocate a session ID for the client connection!" }
+            logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Unable to allocate a session ID for the client connection!" }
 
             try {
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                logger.error(e) { "Handshake error!" }
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
             }
             return
         }
@@ -421,12 +446,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             connectionsPerIpCounts.decrementSlow(clientAddress)
             sessionIdAllocator.free(connectionSessionId)
 
-            logger.error { "Connection from $clientAddressString not allowed! Unable to allocate a stream ID for the client connection!" }
+            logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Unable to allocate a stream ID for the client connection!" }
 
             try {
-                server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection error!"))
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
             } catch (e: Exception) {
-                logger.error(e) { "Handshake error!" }
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
             }
             return
         }
@@ -461,7 +487,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // we have to construct how the connection will communicate!
             clientConnection.buildServer(aeronDriver, logger, true)
 
-            logger.info { "Creating new connection from $clientConnection" }
+            logger.info { "[$aeronLogInfo] Creating new connection from $clientConnection" }
 
             connection = connectionFunc(ConnectionParams(server, clientConnection, validateRemoteAddress))
 
@@ -474,12 +500,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 streamIdAllocator.free(connectionStreamId)
                 connection.closeBlocking()
 
-                logger.error { "Connection $clientAddressString was not permitted!" }
+                logger.error { "[$aeronLogInfo] Connection $clientAddressString was not permitted!" }
 
                 try {
-                    server.writeHandshakeMessage(handshakePublication, HandshakeMessage.error("Connection was not permitted!"))
+                    server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                                 HandshakeMessage.error("Connection was not permitted!"))
                 } catch (e: Exception) {
-                    logger.error(e) { "Handshake error!" }
+                    logger.error(e) { "[$aeronLogInfo] Handshake error!" }
                 }
                 return
             }
@@ -509,17 +536,17 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = connection
 
-            logger.debug { "[${message.connectKey}] Connection (${connection.id}) responding to handshake hello." }
+            logger.debug { "[$aeronLogInfo - ${message.connectKey}] Connection (${connection.streamId}/${connection.id}) responding to handshake hello." }
 
             // this tells the client all the info to connect.
-            server.writeHandshakeMessage(handshakePublication, successMessage) // exception is already caught
+            server.writeHandshakeMessage(handshakePublication, aeronLogInfo, successMessage) // exception is already caught
         } catch (e: Exception) {
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
             sessionIdAllocator.free(connectionSessionId)
             streamIdAllocator.free(connectionStreamId)
 
-            logger.error(e) { "[${message.connectKey}] Connection (${connection?.id}) handshake from $clientAddressString crashed! Message $message" }
+            logger.error(e) { "[$aeronLogInfo - ${message.connectKey}] Connection (${connection?.streamId}/${connection?.id}) handshake from $clientAddressString crashed! Message $message" }
         }
     }
 
