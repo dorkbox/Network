@@ -134,14 +134,19 @@ class AeronDriver(
             }
         }
 
-        private fun aeronCounters(aeronLocation: File): CountersReader {
-            val cncByteBuffer = SamplesUtil.mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
-            val cncMetaDataBuffer: DirectBuffer = CncFileDescriptor.createMetaDataBuffer(cncByteBuffer)
+        private fun aeronCounters(aeronLocation: File): CountersReader? {
+            val resolve = aeronLocation.resolve("cnc.dat")
+            return if (resolve.exists()) {
+                val cncByteBuffer = SamplesUtil.mapExistingFileReadOnly(resolve)
+                val cncMetaDataBuffer: DirectBuffer = CncFileDescriptor.createMetaDataBuffer(cncByteBuffer)
 
-           return CountersReader(
-                CncFileDescriptor.createCountersMetaDataBuffer(cncByteBuffer, cncMetaDataBuffer),
-                CncFileDescriptor.createCountersValuesBuffer(cncByteBuffer, cncMetaDataBuffer)
-            )
+               CountersReader(
+                    CncFileDescriptor.createCountersMetaDataBuffer(cncByteBuffer, cncMetaDataBuffer),
+                    CncFileDescriptor.createCountersValuesBuffer(cncByteBuffer, cncMetaDataBuffer)
+                )
+            } else {
+                null
+            }
         }
 
         /**
@@ -149,7 +154,7 @@ class AeronDriver(
          */
         fun driverCounters(aeronLocation: File, counterFunction: (counterId: Int, counterValue: Long, typeId: Int, keyBuffer: DirectBuffer?, label: String?) -> Unit) {
             val countersReader = aeronCounters(aeronLocation)
-            countersReader.forEach { counterId: Int, typeId: Int, keyBuffer: DirectBuffer?, label: String? ->
+            countersReader?.forEach { counterId: Int, typeId: Int, keyBuffer: DirectBuffer?, label: String? ->
                 val counterValue = countersReader.getCounterValue(counterId)
                 counterFunction(counterId, counterValue, typeId, keyBuffer, label)
             }
@@ -158,10 +163,14 @@ class AeronDriver(
         /**
          * @return the backlog statistics for the Aeron driver
          */
-        fun driverBacklog(aeronLocation: File): BacklogStat {
+        fun driverBacklog(aeronLocation: File): BacklogStat? {
             val countersReader = aeronCounters(aeronLocation)
 
-            return BacklogStat(countersReader)
+            return if (countersReader != null) {
+                BacklogStat(countersReader)
+            } else {
+                null
+            }
         }
 
         /**
@@ -193,6 +202,7 @@ class AeronDriver(
 
 
 
+    @Volatile
     private var aeron: Aeron? = null
     private var mediaDriver: MediaDriver? = null
 
@@ -234,24 +244,19 @@ class AeronDriver(
         }
     }
 
-    private suspend fun isLoaded(): Boolean {
-        return mutex.withLock {
-            val mediaDriverLoaded = mediaDriverWasAlreadyRunning || mediaDriver != null
-            mediaDriverLoaded && aeron != null && aeron?.isClosed == false
-        }
-    }
-
     /**
      * If the driver is not already running, this will start the driver. This will ALSO connect to the aeron client
      *
      * @return true if we are successfully connected to the aeron client
      */
     suspend fun start(): Boolean {
-        if (isLoaded()) {
-            return true
-        }
-
         mutex.withLock {
+            val mediaDriverLoaded = mediaDriverWasAlreadyRunning || mediaDriver != null
+            val isLoaded = mediaDriverLoaded && aeron != null && aeron?.isClosed == false
+            if (isLoaded) {
+                return true
+            }
+
             if (!mediaDriverWasAlreadyRunning && mediaDriver == null) {
                 // only start if we didn't already start... There will be several checks.
 
@@ -339,25 +344,23 @@ class AeronDriver(
 
         // in the client, if we are unable to connect to the server, we will attempt to start the media driver + connect to aeron
 
-        mutex.withLock {
-            val aeron1 = aeron
-            if (aeron1 == null || aeron1.isClosed) {
-                // there was an error connecting to the aeron client or media driver.
-                val ex = ClientRetryException("Error adding a publication to aeron")
-                ListenerManager.cleanAllStackTrace(ex)
-                throw ex
-            }
-
-            val publication = aeron1.addPublication(uri, streamId)
-            if (publication == null) {
-                // there was an error connecting to the aeron client or media driver.
-                val ex = ClientRetryException("Error adding a publication to the remote endpoint")
-                ListenerManager.cleanAllStackTrace(ex)
-                throw ex
-            }
-
-            return publication
+        val aeron1 = aeron
+        if (aeron1 == null || aeron1.isClosed) {
+            // there was an error connecting to the aeron client or media driver.
+            val ex = ClientRetryException("Error adding a publication to aeron")
+            ListenerManager.cleanAllStackTrace(ex)
+            throw ex
         }
+
+        val publication = aeron1.addPublication(uri, streamId)
+        if (publication == null) {
+            // there was an error connecting to the aeron client or media driver.
+            val ex = ClientRetryException("Error adding a publication to the remote endpoint")
+            ListenerManager.cleanAllStackTrace(ex)
+            throw ex
+        }
+
+        return publication
     }
 
     suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
@@ -377,24 +380,22 @@ class AeronDriver(
 
         // subscriptions do not depend on a response from the remote endpoint, and should always succeed if aeron is available
 
-        return mutex.withLock {
-            val aeron1 = aeron
-            if (aeron1 == null || aeron1.isClosed) {
-                // there was an error connecting to the aeron client or media driver.
-                val ex = ClientRetryException("Error adding a subscription to aeron")
-                ListenerManager.cleanAllStackTrace(ex)
-                throw ex
-            }
-
-            val subscription = aeron1.addSubscription(uri, streamId)
-            if (subscription == null) {
-                // there was an error connecting to the aeron client or media driver.
-                val ex = ClientRetryException("Error adding a subscript to the remote endpoint")
-                ListenerManager.cleanAllStackTrace(ex)
-                throw ex
-            }
-            subscription
+        val aeron1 = aeron
+        if (aeron1 == null || aeron1.isClosed) {
+            // there was an error connecting to the aeron client or media driver.
+            val ex = ClientRetryException("Error adding a subscription to aeron")
+            ListenerManager.cleanAllStackTrace(ex)
+            throw ex
         }
+
+        val subscription = aeron1.addSubscription(uri, streamId)
+        if (subscription == null) {
+            // there was an error connecting to the aeron client or media driver.
+            val ex = ClientRetryException("Error adding a subscript to the remote endpoint")
+            ListenerManager.cleanAllStackTrace(ex)
+            throw ex
+        }
+        return subscription
     }
 
     /**
@@ -504,7 +505,7 @@ class AeronDriver(
     /**
      * @return the backlog statistics for the Aeron driver
      */
-    fun driverBacklog(): BacklogStat {
+    fun driverBacklog(): BacklogStat? {
         return driverBacklog(context.driverDirectory)
     }
 
