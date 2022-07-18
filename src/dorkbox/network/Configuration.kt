@@ -29,7 +29,7 @@ import io.aeron.driver.Configuration
 import io.aeron.driver.ThreadingMode
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import mu.KLogger
 import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
@@ -150,6 +150,8 @@ open class Configuration {
 
         @Volatile
         private var alreadyShownTips = false
+
+        private val networkDispatcher = Executors.newWorkStealingPool().asCoroutineDispatcher()
     }
 
     /**
@@ -258,10 +260,20 @@ open class Configuration {
         }
 
     /**
-     * The dispatch responsible for executing events that arrive via the network. Normally, events should be
-     * dispatched asynchronously across a thread pool, but in certain circumstances you may want to constrain this to a single thread dispatcher, I/O, or a custom dispatcher.
+     * The dispatch responsible for executing events that arrive via the network.
+     *
+     * This is very specifically NOT 'CoroutineScope(Dispatchers.Default)', because it is very easy (and tricky) to make sure
+     * that there is no thread starvation going on, which can, and WILL happen.
+     *
+     * Normally, events should be dispatched asynchronously across a thread pool, but in certain circumstances you may want to constrain this to a single thread dispatcher or other, custom dispatcher.
      */
-    var dispatch = CoroutineScope(Dispatchers.Default)
+    var dispatch = CoroutineScope(networkDispatcher)
+
+    /**
+     * Allows the user to change how endpoint settings and public key information are saved.
+     *
+     *  Note: This field is overridden for server configurations, so that the file used is different for client/server
+     */
 
     /**
      * Allows the user to change how endpoint settings and public key information are saved.
@@ -273,6 +285,10 @@ open class Configuration {
             require(!contextDefined) { errorMessage }
             field = value
         }
+
+        /**
+     * Specify the serialization manager to use. The type must extend `Connection`, since this will be cast
+     */
 
     /**
      * Specify the serialization manager to use. The type must extend `Connection`, since this will be cast
