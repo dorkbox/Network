@@ -53,14 +53,12 @@ import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.MutableDirectBuffer
-import org.agrona.concurrent.IdleStrategy
 
 fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
     // UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently in a different thread
     //   we want this behavior to prevent "stack overflow" in case there are nested calls
     return launch(start = CoroutineStart.UNDISPATCHED, block = block)
 }
-
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
 // it results in severe UDP packet loss and contention.
@@ -138,11 +136,8 @@ internal constructor(val type: Class<*>,
 
     private val handshakeKryo: KryoExtra<CONNECTION>
 
-    private val sendIdleStrategy: CoroutineIdleStrategy
-    private val sendIdleStrategyHandShake: IdleStrategy
-
-    private val pollIdleStrategy: CoroutineIdleStrategy
-    internal val pollIdleStrategyHandShake: IdleStrategy
+    internal val sendIdleStrategy: CoroutineIdleStrategy
+    internal val pollIdleStrategy: CoroutineIdleStrategy
 
     /**
      * Crypto and signature management
@@ -179,9 +174,6 @@ internal constructor(val type: Class<*>,
         sendIdleStrategy = config.sendIdleStrategy
         pollIdleStrategy = config.pollIdleStrategy
 
-        sendIdleStrategyHandShake = sendIdleStrategy.cloneToNormal()
-        pollIdleStrategyHandShake = pollIdleStrategy.cloneToNormal()
-
         handshakeKryo = serialization.initHandshakeKryo()
 
         // we have to be able to specify the property store
@@ -214,14 +206,21 @@ internal constructor(val type: Class<*>,
     }
 
     /**
+     * Only starts the media driver if we are NOT already running!
+     */
+    suspend fun init() {
+        aeronDriver.start()
+    }
+
+
+    /**
      * @throws Exception if there is a problem starting the media driver
      */
     internal suspend fun initEndpointState() {
         shutdown.getAndSet(false)
         shutdownMutex = Mutex(locked = true)
 
-        // Only starts the media driver if we are NOT already running!
-        aeronDriver.start()
+        init()
     }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
@@ -378,9 +377,9 @@ internal constructor(val type: Class<*>,
      * @return true if the message was successfully sent by aeron
      */
     @Suppress("DuplicatedCode")
-    internal fun writeHandshakeMessage(publication: Publication, message: HandshakeMessage) {
+    internal suspend fun writeHandshakeMessage(publication: Publication, aeronLogInfo: String, message: HandshakeMessage) {
         // The handshake sessionId IS NOT globally unique
-        logger.trace { "[${message.connectKey}] send HS: $message" }
+        logger.trace { "[$aeronLogInfo - ${message.connectKey}] send HS: $message" }
 
         try {
             // we are not thread-safe!
@@ -409,13 +408,13 @@ internal constructor(val type: Class<*>,
                  */
                 if (result >= Publication.ADMIN_ACTION) {
                     // we should retry.
-                    sendIdleStrategyHandShake.idle()
+                    sendIdleStrategy.idle()
                     continue
                 }
 
                 // more critical error sending the message. we shouldn't retry or anything.
                 // this exception will be a ClientException or a ServerException
-                val exception = newException("[${publication.sessionId()}] Error sending handshake message. $message (${errorCodeName(result)})")
+                val exception = newException("[$aeronLogInfo] Error sending handshake message. $message (${errorCodeName(result)})")
                 ListenerManager.cleanStackTraceInternal(exception)
                 listenerManager.notifyError(exception)
                 throw exception
@@ -424,13 +423,13 @@ internal constructor(val type: Class<*>,
             if (e is ClientException || e is ServerException) {
                 throw e
             } else {
-                val exception = newException("[${publication.sessionId()}] Error serializing handshake message $message", e)
+                val exception = newException("[$aeronLogInfo] Error serializing handshake message $message", e)
                 ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
                 listenerManager.notifyError(exception)
                 throw exception
             }
         } finally {
-            sendIdleStrategyHandShake.reset()
+            sendIdleStrategy.reset()
         }
     }
 
@@ -443,17 +442,17 @@ internal constructor(val type: Class<*>,
      * @return the message
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header): Any? {
+    internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, aeronLogInfo: String): Any? {
         return try {
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = handshakeKryo.read(buffer, offset, length) as HandshakeMessage
 
-            logger.trace { "[${message.connectKey}] received HS: $message (Might not be for this connection)" }
+            logger.trace { "[$aeronLogInfo - ${message.connectKey}] received HS: $message (Might not be for this connection)" }
 
             message
         } catch (e: Exception) {
             // The handshake sessionId IS NOT globally unique
-            logger.error("Error de-serializing message on connection ${header.sessionId()}!", e)
+            logger.error("[$aeronLogInfo] Error de-serializing message on connection ${header.sessionId()}!", e)
             listenerManager.notifyError(e)
             null
         }
@@ -689,7 +688,7 @@ internal constructor(val type: Class<*>,
     /**
      * @return the backlog statistics for the Aeron driver
      */
-    fun driverBacklog(): BacklogStat {
+    fun driverBacklog(): BacklogStat? {
         return aeronDriver.driverBacklog()
     }
 
