@@ -83,11 +83,15 @@ class AeronContext(
         }
     }
 
+    // this is the aeron conductor/network processor thread factory which manages the incoming messages from the network.
+    internal val threadFactory = NamedThreadFactory(
+        "Aeron",
+        ThreadGroup("${type.simpleName}-AeronDriver"), Thread.MAX_PRIORITY,
+        true)
+
+
     // the context is validated before the AeronDriver object is created
-    internal val threadFactory = NamedThreadFactory("Thread", ThreadGroup("${type.simpleName}-AeronDriver"), true)
-
-
-     val context: MediaDriver.Context
+    val context: MediaDriver.Context
 
     /**
      * @return the configured driver timeout
