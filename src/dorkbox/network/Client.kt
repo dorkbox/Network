@@ -493,7 +493,8 @@ open class Client<CONNECTION : Connection>(
                 aeronDriver.start()
 
                 // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
-                delay(500)
+                // we also want to go at SLIGHTLY slower that the aeron driver timeout frequency, this way - if there are connection or handshake issues, the server has the chance to expire the connections.
+                delay(aeronDriver.driverTimeout()+1)
                 if (logger.isTraceEnabled) {
                     logger.trace(e) { "Unable to connect to '$remoteAddressString', retrying..." }
                 } else {

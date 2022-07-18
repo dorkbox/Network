@@ -489,6 +489,14 @@ class AeronDriver(
     }
 
     /**
+     * @return the aeron driver timeout
+     */
+    fun driverTimeout(): Long {
+        return context.driverTimeout
+    }
+
+
+    /**
      * @return the aeron media driver log file for a specific publication. This should be removed when a publication is closed (but is not always!)
      */
     fun getMediaDriverPublicationFile(publicationRegId: Long): File {
