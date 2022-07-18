@@ -8,13 +8,14 @@ import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.text.SimpleDateFormat
 import java.util.*
 
 class MultiClientTest : BaseTest() {
-    private val totalCount = 8 // this number is dependent on the number of CPU cores on the box!
+    private val totalCount = 14 // this number is dependent on the number of CPU cores on the box!
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
     private val disconnectCount = atomic(0)
@@ -42,13 +43,12 @@ class MultiClientTest : BaseTest() {
             clients += client
         }
 
-        GlobalScope.launch {
+        // start up the drivers first
+        runBlocking {
             clients.forEach {
-                // long connection timeout, since the more that try to connect at the same time, the longer it takes to setup aeron (since it's all shared)
-                launch { it.connect(LOCALHOST, 30*totalCount) }
+                it.init()
             }
         }
-
 
         val configuration = serverConfig()
         configuration.enableIPv6 = false
@@ -78,14 +78,24 @@ class MultiClientTest : BaseTest() {
 
         server.bind()
 
-        waitForThreads()
+        GlobalScope.launch {
+            clients.forEach {
+                // long connection timeout, since the more that try to connect at the same time, the longer it takes to setup aeron (since it's all shared)
+                launch { it.connect(LOCALHOST, 300*totalCount) }
+            }
+        }
+
+        waitForThreads {
+            outputStats(server)
+        }
+
 
         Assert.assertEquals(totalCount, clientConnectCount.value)
         Assert.assertEquals(totalCount, serverConnectCount.value)
         Assert.assertEquals(totalCount, disconnectCount.value)
     }
 
-    suspend fun outputStats(server: Server<Connection>) {
+    fun outputStats(server: Server<Connection>) {
         val dateFormat = SimpleDateFormat("HH:mm:ss")
         print(dateFormat.format(Date()))
         println("======================================================================")
@@ -95,6 +105,6 @@ class MultiClientTest : BaseTest() {
             //}
         }
 
-        println(server.driverBacklog().output())
+        println(server.driverBacklog()?.output())
     }
 }

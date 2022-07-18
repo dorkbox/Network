@@ -243,16 +243,21 @@ abstract class BaseTest {
      *
      * @param stopAfterSeconds how many seconds to wait, the default is 2 minutes.
      */
-    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT) {
-        try {
+    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT, preShutdownAction: () -> Unit = {}) {
+        val latchTriggered = try {
             if (stopAfterSeconds == 0L) {
                 latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
             } else {
                 latch.await(stopAfterSeconds, TimeUnit.SECONDS)
             }
-
         } catch (e: InterruptedException) {
             e.printStackTrace()
+            false
+        }
+
+        // run actions before we actually shutdown, but after we wait
+        if (!latchTriggered) {
+            preShutdownAction()
         }
 
         // always stop the endpoints
