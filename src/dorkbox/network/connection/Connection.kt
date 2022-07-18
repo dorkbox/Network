@@ -52,7 +52,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * the stream id of this connection. Can be 0 for IPC connections
      */
-    private val streamId: Int
+    val streamId: Int
 
     /**
      * the session id of this connection. This value is UNIQUE
@@ -137,7 +137,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             remoteAddress = null
             remoteAddressString = "ipc"
 
-            toString0 = "[$id] IPC [$subscriptionPort|$publicationPort]"
+            toString0 = "[$${id}] IPC [$subscriptionPort|$publicationPort]"
         } else {
             streamId = mediaDriverConnection.streamId // NOTE: this is UNIQUE per server!
             subscriptionPort = mediaDriverConnection.subscriptionPort
@@ -157,7 +157,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                 }
             }
 
-            toString0 = "[$id] $remoteAddressString [$publicationPort|$subscriptionPort]"
+            toString0 = "[$${id}/${streamId}] $remoteAddressString [$publicationPort|$subscriptionPort]"
         }
 
 
@@ -360,7 +360,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (isClosed.compareAndSet(expect = false, update = true)) {
-            logger.debug {"[$id] connection closing"}
+            val aeronLogInfo = "${id}/${streamId}"
+            logger.debug {"[$aeronLogInfo] connection closing"}
 
             subscription.close()
 
@@ -388,7 +389,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             }
 
             if (logFile.exists()) {
-                logger.error("Connection $id: Unable to delete aeron publication log on close: $logFile")
+                logger.error("[$aeronLogInfo] Unable to delete aeron publication log on close: $logFile")
             }
 
             if (enableRemove) {
@@ -400,7 +401,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other
             closeAction(enableNotifyDisconnect)
-            logger.debug {"[$id] connection closed"}
+            logger.debug {"[$aeronLogInfo] connection closed"}
         }
     }
 
