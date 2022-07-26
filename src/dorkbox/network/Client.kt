@@ -42,11 +42,11 @@ import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.lang.Thread.sleep
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -130,7 +130,7 @@ open class Client<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "5.27"
+        const val version = "5.28"
 
         /**
          * Checks to see if a client (using the specified configuration) is running.
@@ -214,8 +214,7 @@ open class Client<CONNECTION : Connection>(
         remoteAddress: InetAddress,
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true)
-    = runBlocking {
-
+     {
         val remoteAddressString = when (remoteAddress) {
             is Inet4Address -> IPv4.toString(remoteAddress)
             is Inet6Address -> IPv6.toString(remoteAddress, true)
@@ -246,7 +245,7 @@ open class Client<CONNECTION : Connection>(
         ipcPublicationId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB,
         ipcSubscriptionId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB,
         connectionTimeoutSec: Int = 30)
-    = runBlocking {
+     {
 
         // Default IPC ports are flipped because they are in the perspective of the SERVER
 
@@ -290,7 +289,7 @@ open class Client<CONNECTION : Connection>(
         remoteAddress: String = "",
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true)
-    = runBlocking {
+        {
 
         when {
             // this is default IPC settings
@@ -399,7 +398,7 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientException if there are misc errors
      */
     @Suppress("DuplicatedCode")
-    private suspend fun connect(
+    private fun connect(
         remoteAddress: InetAddress? = null,
         remoteAddressString: String,
         // Default IPC ports are flipped because they are in the perspective of the SERVER
@@ -489,12 +488,15 @@ open class Client<CONNECTION : Connection>(
             } catch (e: ClientRetryException) {
                 handshake.reset()
 
-                // maybe the aeron driver isn't running?
+                // maybe the aeron driver isn't running? (or isn't running correctly?)
+                aeronDriver.closeIfSingle()
                 aeronDriver.start()
 
                 // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
                 // we also want to go at SLIGHTLY slower that the aeron driver timeout frequency, this way - if there are connection or handshake issues, the server has the chance to expire the connections.
-                delay(aeronDriver.driverTimeout()+1)
+                // If we go TOO FAST, then the server will EVENTUALLY have aeron errors (since it can't keep up per client). We literally
+                // want to have 1 in-flight handshake, per connection attempt, during the aeron connection timeout
+                sleep(aeronDriver.driverTimeout()+1)
                 if (logger.isTraceEnabled) {
                     logger.trace(e) { "Unable to connect to '$remoteAddressString', retrying..." }
                 } else {
@@ -529,7 +531,7 @@ open class Client<CONNECTION : Connection>(
         }
     }
 
-    private suspend fun buildIpcHandshake(ipcSubscriptionId: Int, ipcPublicationId: Int, connectionTimeoutSec: Int, reliable: Boolean): MediaDriverConnection {
+    private fun buildIpcHandshake(ipcSubscriptionId: Int, ipcPublicationId: Int, connectionTimeoutSec: Int, reliable: Boolean): MediaDriverConnection {
         if (remoteAddress == null) {
             logger.info { "IPC enabled" }
         } else {
@@ -581,7 +583,7 @@ open class Client<CONNECTION : Connection>(
         return udpConnection
     }
 
-    private suspend fun buildUdpHandshake(connectionTimeoutSec: Int, reliable: Boolean): MediaDriverConnection {
+    private fun buildUdpHandshake(connectionTimeoutSec: Int, reliable: Boolean): MediaDriverConnection {
         val test = UdpMediaDriverClientConnection(
             address = remoteAddress!!,
             publicationPort = config.subscriptionPort,
@@ -598,7 +600,7 @@ open class Client<CONNECTION : Connection>(
     }
 
     // the handshake process might have to restart this connection process.
-    private suspend fun connect0(handshake: ClientHandshake<CONNECTION>, handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) {
+    private fun connect0(handshake: ClientHandshake<CONNECTION>, handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) {
         // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
         val isUsingIPC = handshakeConnection is IpcMediaDriverConnection
 

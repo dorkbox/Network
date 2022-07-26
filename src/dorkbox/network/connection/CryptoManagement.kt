@@ -40,7 +40,7 @@ import javax.crypto.spec.SecretKeySpec
 
 
 /**
- * Management for all of the crypto stuff used
+ * Management for all the crypto stuff used
  */
 internal class CryptoManagement(val logger: KLogger,
                                 private val settingsStore: SettingsStore,
@@ -87,7 +87,7 @@ internal class CryptoManagement(val logger: KLogger,
             try {
                 // seed our RNG based off of this and create our ECC keys
                 val seedBytes = Entropy["There are no ECC keys for the ${type.simpleName} yet"]
-                logger.info("Now generating ECC ($curve25519) keys. Please wait!")
+                logger.debug("Now generating ECC ($curve25519) keys. Please wait!")
 
                 secureRandom.nextBytes(seedBytes)
 

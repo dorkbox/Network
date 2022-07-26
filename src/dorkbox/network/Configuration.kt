@@ -18,21 +18,23 @@ package dorkbox.network
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
-import dorkbox.network.aeron.CoroutineIdleStrategy
-import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import dorkbox.os.OS
 import dorkbox.storage.Storage
+import dorkbox.util.NamedThreadFactory
 import io.aeron.driver.Configuration
 import io.aeron.driver.ThreadingMode
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import mu.KLogger
 import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
+import org.agrona.concurrent.BackoffIdleStrategy
+import org.agrona.concurrent.IdleStrategy
+import org.agrona.concurrent.SleepingMillisIdleStrategy
 import java.io.File
 import java.net.BindException
 import java.util.concurrent.*
@@ -42,7 +44,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         /**
          * Gets the version number.
          */
-        const val version = "5.27"
+        const val version = "5.28"
     }
 
     /**
@@ -92,6 +94,16 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         }
 
     /**
+     * Specifies the Java thread that will poll the underlying network for incoming messages
+     */
+    var networkInterfaceEventDispatcher = Executors.newSingleThreadExecutor(
+        NamedThreadFactory( "Network Event Dispatcher", Thread.currentThread().threadGroup, Thread.NORM_PRIORITY, true))
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+    /**
      * Allows the user to change how endpoint settings and public key information are saved.
      */
     override var settingsStore: Storage.Builder = Storage.Property().file("settings-server.db")
@@ -120,7 +132,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         require(enableIpc || enableIPv4 || enableIPv6) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
 
         if (enableIpc) {
-            require(!aeronDirectoryForceUnique) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
+            require(!uniqueAeronDirectory) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
         } else {
             if (enableIPv4 && !enableIPv6) {
                 require(IPv4.isAvailable) { "IPC/IPv6 are disabled and IPv4 is enabled, but there is no IPv4 interface available!" }
@@ -267,7 +279,7 @@ open class Configuration {
      *
      * Normally, events should be dispatched asynchronously across a thread pool, but in certain circumstances you may want to constrain this to a single thread dispatcher or other, custom dispatcher.
      */
-    var dispatch = CoroutineScope(networkDispatcher)
+    var dispatch = CoroutineScope(Dispatchers.Default)
 
     /**
      * Allows the user to change how endpoint settings and public key information are saved.
@@ -310,7 +322,7 @@ open class Configuration {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(maxSpins = 100, maxYields = 10, minParkPeriodMs = 1, maxParkPeriodMs = 100)
+    var pollIdleStrategy: IdleStrategy = BackoffIdleStrategy(100, 10, 1, 100)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -327,7 +339,7 @@ open class Configuration {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var sendIdleStrategy: CoroutineIdleStrategy = CoroutineSleepingMillisIdleStrategy(sleepPeriodMs = 100)
+    var sendIdleStrategy: IdleStrategy = SleepingMillisIdleStrategy(100)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -375,7 +387,7 @@ open class Configuration {
     /**
      * Should we force the Aeron location to be unique for every instance? This is mutually exclusive with IPC.
      */
-    var aeronDirectoryForceUnique = false
+    var uniqueAeronDirectory = false
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -547,7 +559,7 @@ open class Configuration {
     open fun validate() {
         // have to do some basic validation of our configuration
 
-        require(!(enableIpc && aeronDirectoryForceUnique)) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
+        require(!(enableIpc && uniqueAeronDirectory)) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
 
         require(publicationPort > 0) { "configuration port must be > 0" }
         require(publicationPort < 65535)  { "configuration port must be < 65535" }

@@ -34,8 +34,6 @@ import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.net.InetAddress
 import java.util.concurrent.*
 
@@ -124,7 +122,7 @@ open class Server<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "5.27"
+        const val version = "5.28"
 
         /**
          * Checks to see if a server (using the specified configuration) is running.
@@ -154,8 +152,11 @@ open class Server<CONNECTION : Connection>(
     /**
      * These are run in lock-step to shutdown/close the server. Afterwards, bind() can be called again
      */
-    private val shutdownPollMutex = Mutex(locked = true)
-    private val shutdownEventMutex = Mutex(locked = true)
+    @Volatile
+    private var shutdownPollLatch = CountDownLatch(1)
+
+    @Volatile
+    private var shutdownEventLatch = CountDownLatch(1)
 
 
     /**
@@ -221,28 +222,31 @@ open class Server<CONNECTION : Connection>(
      * Binds the server to AERON configuration
      */
     @Suppress("DuplicatedCode")
-    fun bind() = runBlocking {
+    fun bind() {
         if (bindAlreadyCalled.getAndSet(true)) {
             logger.error { "Unable to bind when the server is already running!" }
-            return@runBlocking
+            return
         }
 
         try {
             initEndpointState()
         } catch (e: Exception) {
             logger.error(e) { "Unable to initialize the endpoint state" }
-            return@runBlocking
+            return
         }
+
+        shutdownPollLatch = CountDownLatch(1)
+        shutdownEventLatch = CountDownLatch(1)
 
         config as ServerConfiguration
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
 
         // this forces the current thread to WAIT until poll system has started
-        val mutex = Mutex(locked = true)
+        val pollStartupLatch = CountDownLatch(1)
 
         val server = this@Server
-        val ipcPoller: AeronPoller = ServerHandshakePollers.IPC(aeronDriver, config, server)
+        val ipcPoller: AeronPoller = ServerHandshakePollers.ipc(aeronDriver, config, server)
 
         // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
         val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address == IPv6.WILDCARD
@@ -265,11 +269,9 @@ open class Server<CONNECTION : Connection>(
         }
 
 
-        actionDispatch.launch {
-            try {
-                mutex.unlock()
-            } catch (ignored: Exception) {}
 
+        val networkEventProcessor = Runnable {
+            pollStartupLatch.countDown()
 
             val pollIdleStrategy = config.pollIdleStrategy
             try {
@@ -301,7 +303,10 @@ open class Server<CONNECTION : Connection>(
                             removeConnection(connection)
 
                             // this will call removeConnection again, but that is ok
-                            connection.close()
+                            runBlocking {
+                                // this is blocking, because the connection MUST be removed in the same thread that is processing events
+                                connection.close()
+                            }
 
                             // have to manually notify the server-listenerManager that this connection was closed
                             // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
@@ -319,7 +324,7 @@ open class Server<CONNECTION : Connection>(
                 }
 
                 // we want to process **actual** close cleanup events on this thread as well, otherwise we will have threading problems
-                shutdownPollMutex.withLock {  }
+                shutdownPollLatch.await()
 
                 // we have to manually cleanup the connections and call server-notifyDisconnect because otherwise this will never get called
                 val jobs = mutableListOf<Job>()
@@ -330,7 +335,7 @@ open class Server<CONNECTION : Connection>(
                 connections.clear()
 
                 cons.forEach { connection ->
-                    logger.error { "[${connection.id}] connection cleanup and close" }
+                    logger.info { "[${connection.id}/${connection.streamId}] Connection cleanup and close" }
 
                     // make sure the connection is closed (close can only happen once, so a duplicate call does nothing!)
                     connection.close()
@@ -349,7 +354,9 @@ open class Server<CONNECTION : Connection>(
 
                 // when we close a client or a server, we want to make sure that ALL notifications are finished.
                 // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
-                jobs.forEach { it.join() }
+                runBlocking {
+                    jobs.forEach { it.join() }
+                }
             } catch (e: Exception) {
                 logger.error(e) { "Unexpected error during server message polling!" }
             } finally {
@@ -369,13 +376,14 @@ open class Server<CONNECTION : Connection>(
 
                 // finish closing -- this lets us make sure that we don't run into race conditions on the thread that calls close()
                 try {
-                    shutdownEventMutex.unlock()
+                    shutdownEventLatch.countDown()
                 } catch (ignored: Exception) {}
             }
         }
+        config.networkInterfaceEventDispatcher.submit(networkEventProcessor)
 
-        // wait for the polling coroutine to startup before letting bind() return
-        mutex.withLock {  }
+        // wait for the polling thread to startup before letting bind() return
+        pollStartupLatch.await()
     }
 
     /**
@@ -413,14 +421,10 @@ open class Server<CONNECTION : Connection>(
         //
         // Aeron + the Media Driver will have already been shutdown at this point.
         if (bindAlreadyCalled.getAndSet(false)) {
-            runBlocking {
-                // These are run in lock-step
-                try {
-                    shutdownPollMutex.unlock()
-                } catch (ignored: Exception) {}
 
-                shutdownEventMutex.withLock {  }
-            }
+            // These are run in lock-step
+            shutdownPollLatch.countDown()
+            shutdownEventLatch.await()
         }
     }
 

@@ -49,14 +49,14 @@ class BacklogStat
      */
     fun snapshot(): Map<StreamCompositeKey, StreamBacklog> {
         val streams: MutableMap<StreamCompositeKey, StreamBacklog> = HashMap()
-        counters.forEach { counterId: Int, typeId: Int, keyBuffer: DirectBuffer, label: String? ->
+        counters.forEach { counterId: Int, typeId: Int, keyBuffer: DirectBuffer, _: String? ->
             if (typeId >= PublisherLimit.PUBLISHER_LIMIT_TYPE_ID && typeId <= ReceiverPos.RECEIVER_POS_TYPE_ID || typeId == SenderLimit.SENDER_LIMIT_TYPE_ID || typeId == PerImageIndicator.PER_IMAGE_TYPE_ID || typeId == PublisherPos.PUBLISHER_POS_TYPE_ID) {
                 val key = StreamCompositeKey(
                     keyBuffer.getInt(StreamCounter.SESSION_ID_OFFSET),
                     keyBuffer.getInt(StreamCounter.STREAM_ID_OFFSET),
                     keyBuffer.getStringAscii(StreamCounter.CHANNEL_OFFSET)
                 )
-                val streamBacklog = streams.computeIfAbsent(key) { ignore: StreamCompositeKey? -> StreamBacklog() }
+                val streamBacklog = streams.computeIfAbsent(key) { _: StreamCompositeKey? -> StreamBacklog() }
                 val registrationId = keyBuffer.getLong(StreamCounter.REGISTRATION_ID_OFFSET)
                 val value = counters.getCounterValue(counterId)
                 when (typeId) {
@@ -215,14 +215,14 @@ class BacklogStat
         /**
          * {@inheritDoc}
          */
-        override fun equals(o: Any?): Boolean {
-            if (this === o) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) {
                 return true
             }
-            if (o !is StreamCompositeKey) {
+            if (other !is StreamCompositeKey) {
                 return false
             }
-            val that = o
+            val that = other
             return sessionId == that.sessionId && streamId == that.streamId && channel == that.channel
         }
 

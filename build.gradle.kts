@@ -37,7 +37,7 @@ object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "5.27"
+    const val version = "5.28"
 
     // set as project.ext
     const val name = "Network"
@@ -147,14 +147,14 @@ dependencies {
     api("com.dorkbox:ByteUtilities:1.5")
     api("com.dorkbox:Collections:1.1")
     api("com.dorkbox:MinLog:2.4")
-    api("com.dorkbox:NetworkDNS:2.7")
+    api("com.dorkbox:NetworkDNS:2.7.1")
     api("com.dorkbox:NetworkUtils:2.18")
     api("com.dorkbox:ObjectPool:4.0")
     api("com.dorkbox:OS:1.0")
     api("com.dorkbox:Serializers:2.7")
     api("com.dorkbox:Storage:1.1")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.28")
+    api("com.dorkbox:Utilities:1.29")
 
 
     // we include ALL of aeron, in case we need to debug aeron behavior

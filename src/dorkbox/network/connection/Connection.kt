@@ -29,9 +29,8 @@ import io.aeron.Subscription
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
+import java.lang.Thread.sleep
 import java.net.InetAddress
 import java.util.concurrent.*
 
@@ -91,7 +90,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val isClosed = atomic(false)
 
     // enableNotifyDisconnect : we don't always want to enable notifications on disconnect
-    internal var closeAction: suspend (enableNotifyDisconnect: Boolean) -> Unit = {}
+    internal var closeAction: (enableNotifyDisconnect: Boolean) -> Unit = {}
 
     // only accessed on a single thread!
     private var connectionLastCheckTimeNanos = 0L
@@ -216,23 +215,12 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    suspend fun send(message: Any): Boolean {
+    fun send(message: Any): Boolean {
         messagesInProgress.getAndIncrement()
         val success = endPoint.send(message, publication, this)
         messagesInProgress.getAndDecrement()
 
         return success
-    }
-
-    /**
-     * Safely sends objects to a destination.
-     *
-     * @return true if the message was successfully sent by aeron
-     */
-    fun sendBlocking(message: Any): Boolean {
-        return runBlocking {
-            send(message)
-        }
     }
 
     /**
@@ -336,22 +324,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    suspend fun close() {
+    fun close() {
         close(enableRemove = true,
               enableNotifyDisconnect = true)
     }
 
-    internal fun closeBlocking() {
-        runBlocking {
-            close()
-        }
-    }
-
-
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    internal suspend fun close(enableRemove: Boolean, enableNotifyDisconnect: Boolean) {
+    internal fun close(enableRemove: Boolean, enableNotifyDisconnect: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
@@ -372,7 +353,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
             // we want a timeout-check, otherwise this will run forever
             while (messagesInProgress.value != 0 && System.nanoTime() - closeTimeoutTime < timoutInNanos) {
-                delay(50)
+                sleep(50)
             }
 
             // on close, we want to make sure this file is DELETED!
@@ -385,7 +366,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                 if (logFile.delete()) {
                     break
                 }
-                delay(100)
+                sleep(100)
             }
 
             if (logFile.exists()) {

@@ -22,8 +22,8 @@ import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
-import kotlinx.coroutines.delay
 import mu.KLogger
+import java.lang.Thread.sleep
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.*
@@ -68,7 +68,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
     @Suppress("DuplicatedCode")
-    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
+    override fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         val aeronAddressString = if (address is Inet4Address) {
             address.hostAddress
         } else {
@@ -96,7 +96,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         val subscriptionUri = uri()
             .controlEndpoint("$aeronAddressString:$subscriptionPort")
-//            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+//            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC) // this allows us to listen for message from a different network without port forwarding
 
         if (logger.isTraceEnabled) {
             logger.trace("client sub URI: $ipType ${subscriptionUri.build()}")
@@ -118,7 +118,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                 break
             }
 
-            delay(500L)
+            sleep(500L)
         }
 
         if (!success) {
@@ -140,7 +140,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
                 break
             }
 
-            delay(500L)
+            sleep(500L)
         }
 
         if (!success) {
@@ -168,7 +168,7 @@ internal class UdpMediaDriverClientConnection(val address: InetAddress,
         }
     }
 
-    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
+    override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         throw ClientException("Server info not implemented in Client MediaDriver Connection")
     }
     override val serverInfo: String

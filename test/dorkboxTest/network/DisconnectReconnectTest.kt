@@ -71,7 +71,7 @@ class DisconnectReconnectTest : BaseTest() {
     fun reconnectClientViaClientClose() {
         run {
             val configuration = serverConfig() {
-                aeronDirectoryForceUnique = true
+                uniqueAeronDirectory = true
             }
 
             val server: Server<Connection> = Server(configuration)
@@ -81,7 +81,7 @@ class DisconnectReconnectTest : BaseTest() {
 
         run {
             val config = clientConfig() {
-                aeronDirectoryForceUnique = true
+                uniqueAeronDirectory = true
             }
 
             val client: Client<Connection> = Client(config)
@@ -324,7 +324,7 @@ class DisconnectReconnectTest : BaseTest() {
         run {
             val config = serverConfig()
             config.enableIpc = false
-            config.aeronDirectoryForceUnique = true
+            config.uniqueAeronDirectory = true
 
             server = Server(config)
             addEndPoint(server)
@@ -339,7 +339,7 @@ class DisconnectReconnectTest : BaseTest() {
         run {
             val config = clientConfig()
             config.enableIpc = false
-            config.aeronDirectoryForceUnique = true
+            config.uniqueAeronDirectory = true
 
             client = Client(config)
             addEndPoint(client)

@@ -11,9 +11,7 @@ import io.aeron.Publication
 import io.aeron.Subscription
 import io.aeron.driver.MediaDriver
 import io.aeron.samples.SamplesUtil
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.atomicfu.atomic
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
@@ -61,7 +59,10 @@ class AeronDriver(
         private const val AERON_PUBLICATION_LINGER_TIMEOUT = 5_000L  // in MS
 
         // prevents multiple instances, within the same JVM, from starting at the exact same time.
-        private val mutex = Mutex()
+        // since this is "global" and cannot be run in parallel, we DO NOT use coroutines!
+        private val lock = arrayOf(0)
+        private val mediaDriverUsageCount = atomic(0)
+        private val aeronClientUsageCount = atomic(0)
 
         private fun setConfigDefaults(config: Configuration, logger: KLogger) {
             // explicitly don't set defaults if we already have the context defined!
@@ -249,8 +250,8 @@ class AeronDriver(
      *
      * @return true if we are successfully connected to the aeron client
      */
-    suspend fun start(): Boolean {
-        mutex.withLock {
+    fun start(): Boolean {
+        synchronized(lock) {
             val mediaDriverLoaded = mediaDriverWasAlreadyRunning || mediaDriver != null
             val isLoaded = mediaDriverLoaded && aeron != null && aeron?.isClosed == false
             if (isLoaded) {
@@ -266,7 +267,7 @@ class AeronDriver(
                     // SOMETIMES aeron is in the middle of shutting down, and this prevents us from trying to connect to
                     // that instance
                     logger.debug { "Aeron Media driver already running. Double checking status..." }
-                    delay(context.driverTimeout/2)
+                    sleep(context.driverTimeout/2)
                     running = isRunning()
                 }
 
@@ -279,10 +280,11 @@ class AeronDriver(
                         try {
                             mediaDriver = MediaDriver.launch(context.context)
                             logger.debug { "Started the Aeron Media driver." }
+                            mediaDriverUsageCount.getAndIncrement()
                             break
                         } catch (e: Exception) {
                             logger.warn(e) { "Unable to start the Aeron Media driver at ${context.driverDirectory}. Retrying $count more times..." }
-                            delay(context.driverTimeout)
+                            sleep(context.driverTimeout)
                         }
                     }
                 } else {
@@ -326,11 +328,12 @@ class AeronDriver(
         // this might succeed if we can connect to the media driver
         aeron = Aeron.connect(aeronDriverContext)
         logger.debug { "Connected to Aeron driver." }
+        aeronClientUsageCount.getAndIncrement()
 
         return true
     }
 
-    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
+    fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
         val uri = publicationUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -363,7 +366,7 @@ class AeronDriver(
         return publication
     }
 
-    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
+    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
         val uri = subscriptionUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -391,7 +394,7 @@ class AeronDriver(
         val subscription = aeron1.addSubscription(uri, streamId)
         if (subscription == null) {
             // there was an error connecting to the aeron client or media driver.
-            val ex = ClientRetryException("Error adding a subscript to the remote endpoint")
+            val ex = ClientRetryException("Error adding a subscription to the remote endpoint")
             ListenerManager.cleanAllStackTrace(ex)
             throw ex
         }
@@ -409,15 +412,29 @@ class AeronDriver(
     }
 
     /**
+     * A safer way to try to close the media driver if in the ENTIRE JVM, our process is the only one using aeron with it's specific configuration
+     *
+     * NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
+     *   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
+     */
+    fun closeIfSingle() {
+        if (aeronClientUsageCount.value == 1 && mediaDriverUsageCount.value == 1) {
+            close()
+        }
+    }
+
+
+    /**
      * A safer way to try to close the media driver
      *
      * NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
      *   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
      */
-    suspend fun close() {
-        mutex.withLock {
+    fun close() {
+        synchronized(lock) {
             try {
                 aeron?.close()
+                aeronClientUsageCount.getAndDecrement()
             } catch (e: Exception) {
                 logger.error(e) { "Error stopping aeron." }
             }
@@ -445,6 +462,7 @@ class AeronDriver(
 
             // if we are the ones that started the media driver, then we must be the ones to close it
             try {
+                mediaDriverUsageCount.getAndDecrement()
                 mediaDriver!!.close()
             } catch (e: Exception) {
                 logger.error(e) { "Error closing the Aeron media driver" }
@@ -475,8 +493,6 @@ class AeronDriver(
 
             // make sure the context is also closed.
             context.close()
-            context_ = null
-
             try {
                 val deletedAeron = context.driverDirectory.deleteRecursively()
                 if (!deletedAeron) {
@@ -485,6 +501,8 @@ class AeronDriver(
             } catch (e: Exception) {
                 logger.error(e) { "Error deleting Aeron directory at: ${context.driverDirectory}"}
             }
+
+            context_ = null
         }
     }
 

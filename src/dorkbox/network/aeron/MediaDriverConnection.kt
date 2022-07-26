@@ -30,8 +30,10 @@ abstract class MediaDriverConnection(val publicationPort: Int, val subscriptionP
     lateinit var publication: Publication
 
 
-    abstract suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
-    abstract suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
+    // We don't use 'suspend' for these, because we have to pump events from a NORMAL thread. If there are any suspend points, there is
+    // the potential for a live-lock due to coroutine scheduling
+    abstract fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
+    abstract fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
 
     abstract val clientInfo : String
     abstract val serverInfo : String

@@ -70,7 +70,7 @@ object TestClient {
         config.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         config.enableRemoteSignatureValidation = false
         config.enableIpc = false
-        config.aeronDirectoryForceUnique = true
+        config.uniqueAeronDirectory = true
 
 
         val client = Client<Connection>(config)

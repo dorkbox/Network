@@ -29,6 +29,7 @@ import dorkbox.network.exceptions.AllocationException
 import io.aeron.Publication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
@@ -54,7 +55,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         .expirationListener<Long, CONNECTION> { clientConnectKey, connection ->
             // this blocks until it fully runs (which is ok. this is fast)
             logger.error { "[${clientConnectKey} Connection (${connection.id}) Timed out waiting for registration response from client" }
-            connection.closeBlocking()
+            connection.close()
         }
         .build<Long, CONNECTION>()
 
@@ -69,7 +70,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
-    private suspend fun validateMessageTypeAndDoPending(
+    private fun validateMessageTypeAndDoPending(
         server: Server<CONNECTION>,
         actionDispatch: CoroutineScope,
         handshakePublication: Publication,
@@ -114,11 +115,14 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 // called on connection.close()
                 existingConnection.closeAction = { enableNotifyDisconnect ->
                     // clean up the resources associated with this connection when it's closed
-                    logger.debug { "[$existingAeronLogInfo] Freeing resources" }
+                    logger.debug { "[$existingAeronLogInfo] freeing resources" }
                     existingConnection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
 
                     if (enableNotifyDisconnect) {
-                        existingConnection.doNotifyDisconnect()
+                        // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                        actionDispatch.launch {
+                            existingConnection.doNotifyDisconnect()
+                        }
                     }
                 }
 
@@ -151,7 +155,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
      * @return true if we should continue parsing the incoming message, false if we should abort
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    private suspend fun validateUdpConnectionInfo(
+    private fun validateUdpConnectionInfo(
         server: Server<CONNECTION>,
         handshakePublication: Publication,
         config: ServerConfiguration,
@@ -209,7 +213,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
 
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    suspend fun processIpcHandshakeMessageServer(
+    fun processIpcHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshakePublication: Publication,
         message: HandshakeMessage,
@@ -356,7 +360,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     }
 
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-    suspend fun processUdpHandshakeMessageServer(
+    fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshakePublication: Publication,
         remoteIpAndPort: String,
@@ -498,7 +502,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 connectionsPerIpCounts.decrementSlow(clientAddress)
                 sessionIdAllocator.free(connectionSessionId)
                 streamIdAllocator.free(connectionStreamId)
-                connection.closeBlocking()
+                connection.close()
 
                 logger.error { "[$aeronLogInfo] Connection $clientAddressString was not permitted!" }
 
@@ -572,11 +576,13 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
      *
      * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      */
-    suspend fun clear() {
-        pendingConnections.forEach { (k, v) ->
-            v.close()
-        }
+    fun clear() {
+        runBlocking {
+            pendingConnections.forEach { (_, v) ->
+                v.close()
+            }
 
-        pendingConnections.clear()
+            pendingConnections.clear()
+        }
     }
 }

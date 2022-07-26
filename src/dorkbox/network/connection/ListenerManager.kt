@@ -21,6 +21,7 @@ import dorkbox.os.OS
 import dorkbox.util.classes.ClassHelper
 import dorkbox.util.classes.ClassHierarchy
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
@@ -361,14 +362,16 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     /**
      * Invoked when a connection is first initialized, but BEFORE it's connected to the remote address.
      */
-    suspend fun notifyInit(connection: CONNECTION) {
-        onInitList.value.forEach {
-            try {
-                it(connection)
-            } catch (t: Throwable) {
-                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
-                logger.error("Connection ${connection.id} error", t)
+    fun notifyInit(connection: CONNECTION) {
+        runBlocking {
+            onInitList.value.forEach {
+                try {
+                    it(connection)
+                } catch (t: Throwable) {
+                    // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                    cleanStackTrace(t)
+                    logger.error("Connection ${connection.id} error", t)
+                }
             }
         }
     }

@@ -62,21 +62,22 @@ internal open class UdpMediaDriverServerConnection(val listenAddress: InetAddres
     }
 
     @Suppress("DuplicatedCode")
-    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
+    override fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         throw ServerException("Client info not implemented in Server MediaDriver Connection")
     }
 
-    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
+    override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         val connectionString = aeronConnectionString(listenAddress)
 
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
-                .controlEndpoint("$connectionString:$publicationPort")
+            .controlEndpoint("$connectionString:$publicationPort")
+//            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC) // this allows us to listen for message from a different network without port forwarding
 
         // Create a subscription with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         val subscriptionUri = uri()
-                .endpoint("$connectionString:$subscriptionPort")
+            .endpoint("$connectionString:$subscriptionPort")
 
 
 

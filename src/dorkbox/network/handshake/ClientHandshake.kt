@@ -26,9 +26,9 @@ import dorkbox.network.exceptions.ServerException
 import io.aeron.FragmentAssembler
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
-import kotlinx.coroutines.delay
 import mu.KLogger
 import org.agrona.DirectBuffer
+import java.lang.Thread.sleep
 import java.util.concurrent.*
 
 internal class ClientHandshake<CONNECTION: Connection>(
@@ -158,7 +158,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
-    suspend fun hello(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) : ClientConnectionInfo {
+    fun hello(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) : ClientConnectionInfo {
         failedException = null
         connectKey = getSafeConnectKey()
         val publicKey = endPoint.storage.getPublicKey()!!
@@ -226,7 +226,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
-    suspend fun done(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) {
+    fun done(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) {
         val registrationMessage = HandshakeMessage.doneFromClient(connectKey)
 
         val aeronLogInfo = "${handshakeConnection.sessionId}/${handshakeConnection.streamId}"
@@ -264,7 +264,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 startTime = System.nanoTime()
             }
 
-            delay(100)
+            sleep(100L)
 
             // 0 means we idle. >0 means reset and don't idle (because there are likely more)
             pollIdleStrategy.idle(pollCount)

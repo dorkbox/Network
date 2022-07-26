@@ -111,6 +111,7 @@ object AeronClient {
         configuration.subscriptionPort = 2000
         configuration.publicationPort = 2001
         configuration.enableIpc = false
+        configuration.uniqueAeronDirectory = true
 
         val client = Client<Connection>(configuration)
 

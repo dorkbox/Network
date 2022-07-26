@@ -163,8 +163,8 @@ class ListenerTest : BaseTest() {
 
         Assert.assertTrue(overrideCheck.value)
         Assert.assertTrue(serverOnMessage.value)
-        Assert.assertEquals(serverConnectionOnMessage.value, limitCheck)
-        Assert.assertEquals(serverDisconnectMessage.value, 1)
+        Assert.assertEquals(limitCheck, serverConnectionOnMessage.value)
+        Assert.assertEquals(1, serverDisconnectMessage.value)
         Assert.assertTrue(serverConnect.value)
         Assert.assertTrue(serverDisconnect.value)
         Assert.assertTrue(clientConnect.value)

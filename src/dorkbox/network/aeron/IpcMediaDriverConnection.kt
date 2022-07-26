@@ -20,8 +20,8 @@ import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.ChannelUriStringBuilder
-import kotlinx.coroutines.delay
 import mu.KLogger
+import java.lang.Thread.sleep
 import java.util.concurrent.*
 
 /**
@@ -50,7 +50,7 @@ internal open class IpcMediaDriverConnection(
      * @throws ClientRetryException if we need to retry to connect
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
-    override suspend fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
+    override fun buildClient(aeronDriver: AeronDriver, logger: KLogger) {
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()
@@ -86,7 +86,7 @@ internal open class IpcMediaDriverConnection(
                 break
             }
 
-            delay(500L)
+            sleep(500L)
         }
 
         if (!success) {
@@ -109,7 +109,7 @@ internal open class IpcMediaDriverConnection(
                 break
             }
 
-            delay(500L)
+            sleep(500L)
         }
 
         if (!success) {
@@ -131,7 +131,7 @@ internal open class IpcMediaDriverConnection(
      *
      * serverAddress is ignored for IPC
      */
-    override suspend fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
+    override fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean) {
         // Create a publication with a control port (for dynamic MDC) at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uri()

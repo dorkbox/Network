@@ -21,7 +21,6 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
-import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -47,12 +46,12 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.MutableDirectBuffer
+import org.agrona.concurrent.IdleStrategy
+import java.util.concurrent.*
 
 fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
     // UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently in a different thread
@@ -136,8 +135,8 @@ internal constructor(val type: Class<*>,
 
     private val handshakeKryo: KryoExtra<CONNECTION>
 
-    internal val sendIdleStrategy: CoroutineIdleStrategy
-    internal val pollIdleStrategy: CoroutineIdleStrategy
+    internal val sendIdleStrategy: IdleStrategy
+    internal val pollIdleStrategy: IdleStrategy
 
     /**
      * Crypto and signature management
@@ -147,7 +146,7 @@ internal constructor(val type: Class<*>,
     private val shutdown = atomic(false)
 
     @Volatile
-    private var shutdownMutex = Mutex(locked = true)
+    private var shutdownLatch = CountDownLatch(1)
 
     /**
      * Returns the storage used by this endpoint. This is the backing data structure for key/value pairs, and can be a database, file, etc
@@ -208,7 +207,7 @@ internal constructor(val type: Class<*>,
     /**
      * Only starts the media driver if we are NOT already running!
      */
-    suspend fun init() {
+    fun init() {
         aeronDriver.start()
     }
 
@@ -216,9 +215,9 @@ internal constructor(val type: Class<*>,
     /**
      * @throws Exception if there is a problem starting the media driver
      */
-    internal suspend fun initEndpointState() {
+    internal fun initEndpointState() {
         shutdown.getAndSet(false)
-        shutdownMutex = Mutex(locked = true)
+        shutdownLatch = CountDownLatch(1)
 
         init()
     }
@@ -377,7 +376,7 @@ internal constructor(val type: Class<*>,
      * @return true if the message was successfully sent by aeron
      */
     @Suppress("DuplicatedCode")
-    internal suspend fun writeHandshakeMessage(publication: Publication, aeronLogInfo: String, message: HandshakeMessage) {
+    internal fun writeHandshakeMessage(publication: Publication, aeronLogInfo: String, message: HandshakeMessage) {
         // The handshake sessionId IS NOT globally unique
         logger.trace { "[$aeronLogInfo - ${message.connectKey}] send HS: $message" }
 
@@ -570,7 +569,7 @@ internal constructor(val type: Class<*>,
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
     @Suppress("DuplicatedCode", "UNCHECKED_CAST")
-    internal suspend fun send(message: Any, publication: Publication, connection: Connection): Boolean {
+    internal fun send(message: Any, publication: Publication, connection: Connection): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace {
             "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message"
@@ -620,7 +619,7 @@ internal constructor(val type: Class<*>,
     }
 
     // the actual bits that send data on the network.
-    internal suspend fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
+    internal fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
         var result: Long
         while (true) {
             result = publication.offer(internalBuffer, offset, objectSize)
@@ -724,8 +723,8 @@ internal constructor(val type: Class<*>,
     /**
      * Waits for this endpoint to be closed
      */
-    suspend fun waitForClose() {
-        shutdownMutex.withLock {  }
+    fun waitForClose() {
+        shutdownLatch.await()
     }
 
     final override fun close() {
@@ -733,13 +732,11 @@ internal constructor(val type: Class<*>,
             logger.info { "Shutting down..." }
 
             runBlocking {
-                aeronDriver.close()
-
                 // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
                 // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
                 val enableRemove = type == Client::class.java
                 connections.forEach {
-                    logger.info { "Closing connection: ${it.id}" }
+                    logger.info { "[${it.id}/${it.streamId}] Closing connection" }
                     it.close(enableRemove, true)
                 }
 
@@ -754,9 +751,11 @@ internal constructor(val type: Class<*>,
 
             close0()
 
+            aeronDriver.close()
+
             // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
             try {
-                shutdownMutex.unlock()
+                shutdownLatch.countDown()
             } catch (ignored: Exception) {}
 
             logger.info { "Done shutting down..." }

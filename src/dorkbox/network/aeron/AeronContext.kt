@@ -155,12 +155,12 @@ class AeronContext(
         }
 
         // this is incompatible with IPC, and will not be set if IPC is enabled
-        if (config.aeronDirectoryForceUnique && isRunning) {
+        if (config.uniqueAeronDirectory && isRunning) {
             val savedParent = aeronDir.parentFile
             var retry = 0
             val retryMax = 100
 
-            while (config.aeronDirectoryForceUnique && isRunning) {
+            while (config.uniqueAeronDirectory && isRunning) {
                 if (retry++ > retryMax) {
                     throw IllegalArgumentException("Unable to force unique aeron Directory. Tried $retryMax times and all tries were in use.")
                 }
@@ -185,7 +185,7 @@ class AeronContext(
             }
         }
 
-        logger.info { "Aeron directory: '${context.aeronDirectory()}'" }
+        logger.info { "Aeron directory: '$aeronDir'" }
 
         this.context = context
     }
