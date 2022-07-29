@@ -137,6 +137,7 @@ internal constructor(val type: Class<*>,
 
     internal val sendIdleStrategy: IdleStrategy
     internal val pollIdleStrategy: IdleStrategy
+    internal val handshakeSendIdleStrategy: IdleStrategy
 
     /**
      * Crypto and signature management
@@ -170,8 +171,9 @@ internal constructor(val type: Class<*>,
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
-        sendIdleStrategy = config.sendIdleStrategy
-        pollIdleStrategy = config.pollIdleStrategy
+        sendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
+        pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
+        handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
 
         handshakeKryo = serialization.initHandshakeKryo()
 
@@ -386,12 +388,48 @@ internal constructor(val type: Class<*>,
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
+            var timeoutInNanos = 0L
+            var startTime = 0L
+
             var result: Long
             while (true) {
                 result = publication.offer(internalBuffer, 0, objectSize)
                 if (result >= 0) {
                     // success!
                     return
+                }
+
+                /**
+                 * Since the publication is not connected, we weren't able to send data to the remote endpoint.
+                 *
+                 * According to Aeron Docs, Pubs and Subs can "come and go", whatever that means. We just want to make sure that we
+                 * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
+                 */
+                if (result == Publication.NOT_CONNECTED) {
+                    if (timeoutInNanos == 0L) {
+                        timeoutInNanos = (aeronDriver.getLingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
+                        startTime = System.nanoTime()
+                    }
+
+                    if (System.nanoTime() - startTime < timeoutInNanos) {
+                        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+                        //  publication of any state to other threads and not be long running or re-entrant with the client.
+                        // on close, the publication CAN linger (in case a client goes away, and then comes back)
+                        // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+
+                        //fixme: this should be the linger timeout, not a retry count!
+
+                        // we should retry.
+                        handshakeSendIdleStrategy.idle()
+                        continue
+                    } else {
+                        // more critical error sending the message. we shouldn't retry or anything.
+                        // this exception will be a ClientException or a ServerException
+                        val exception = newException("[$aeronLogInfo] Error sending message. (Connection in non-connected state longer than linger timeout ${errorCodeName(result)})")
+                        ListenerManager.cleanStackTraceInternal(exception)
+                        listenerManager.notifyError(exception)
+                        throw exception
+                    }
                 }
 
                 /**
@@ -407,7 +445,7 @@ internal constructor(val type: Class<*>,
                  */
                 if (result >= Publication.ADMIN_ACTION) {
                     // we should retry.
-                    sendIdleStrategy.idle()
+                    handshakeSendIdleStrategy.idle()
                     continue
                 }
 
@@ -428,7 +466,7 @@ internal constructor(val type: Class<*>,
                 throw exception
             }
         } finally {
-            sendIdleStrategy.reset()
+            handshakeSendIdleStrategy.reset()
         }
     }
 
@@ -620,12 +658,46 @@ internal constructor(val type: Class<*>,
 
     // the actual bits that send data on the network.
     internal fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
+        var timeoutInNanos = 0L
+        var startTime = 0L
+
         var result: Long
         while (true) {
             result = publication.offer(internalBuffer, offset, objectSize)
             if (result >= 0) {
                 // success!
                 return true
+            }
+
+            /**
+             * Since the publication is not connected, we weren't able to send data to the remote endpoint.
+             *
+             * According to Aeron Docs, Pubs and Subs can "come and go", whatever that means. We just want to make sure that we
+             * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
+             */
+            if (result == Publication.NOT_CONNECTED) {
+                if (timeoutInNanos == 0L) {
+                    timeoutInNanos = (aeronDriver.getLingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
+                    startTime = System.nanoTime()
+                }
+
+                if (System.nanoTime() - startTime < timeoutInNanos) {
+                    // we should retry.
+                    sendIdleStrategy.idle()
+                    continue
+                } else {
+                    // more critical error sending the message. we shouldn't retry or anything.
+                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})"
+
+                    // either client or server. No other choices. We create an exception, because it's more useful!
+                    val exception = newException(errorMessage)
+
+                    // +2 because we do not want to see the stack for the abstract `newException`
+                    // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+                    // where we see who is calling "send()"
+                    ListenerManager.cleanStackTrace(exception, 5)
+                    return false
+                }
             }
 
             /**

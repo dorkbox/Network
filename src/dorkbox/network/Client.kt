@@ -750,20 +750,16 @@ open class Client<CONNECTION : Connection>(
 
         logger.debug { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString done with handshake." }
 
-        // this forces the current thread to WAIT until poll system has started
-        val mutex = Mutex(locked = true)
+        // this forces the current thread to WAIT until the network poll system has started
+        val pollStartupLatch = CountDownLatch(1)
 
         // have to make a new thread to listen for incoming data!
         // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
 
-        // these have to be in two SEPARATE actionDispatch.launch commands.... otherwise...
-        // if something inside-of notifyConnect is blocking or suspends, then polling will never happen!
-        actionDispatch.launch {
-            try {
-                mutex.unlock()
-            } catch (ignored: Exception) {}
+        val networkEventProcessor = Runnable {
+            pollStartupLatch.countDown()
 
-            val pollIdleStrategy = config.pollIdleStrategy
+            val pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
 
             while (!isShutdown()) {
                 if (!newConnection.isClosedViaAeron()) {
@@ -782,14 +778,17 @@ open class Client<CONNECTION : Connection>(
                         // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
                         newConnection.close()
                     }
-                    return@launch
+                    return@Runnable
                 }
             }
         }
+        config.networkInterfaceEventDispatcher.submit(networkEventProcessor)
 
+        pollStartupLatch.await()
+
+        // these have to be in two SEPARATE "runnables".... otherwise...
+        // if something inside-of listenerManager.notifyConnect is blocking or suspends, then polling will never happen!
         actionDispatch.launch {
-            mutex.withLock {  }
-
             lockStepForConnect.getAndSet(null)?.withLock {  }
             listenerManager.notifyConnect(newConnection)
         }

@@ -242,7 +242,7 @@ open class Server<CONNECTION : Connection>(
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
 
-        // this forces the current thread to WAIT until poll system has started
+        // this forces the current thread to WAIT until the network poll system has started
         val pollStartupLatch = CountDownLatch(1)
 
         val server = this@Server
@@ -273,7 +273,7 @@ open class Server<CONNECTION : Connection>(
         val networkEventProcessor = Runnable {
             pollStartupLatch.countDown()
 
-            val pollIdleStrategy = config.pollIdleStrategy
+            val pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
             try {
                 var pollCount: Int
 

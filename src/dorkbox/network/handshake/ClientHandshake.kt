@@ -168,7 +168,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         // Send the one-time pad to the server.
         val publication = handshakeConnection.publication
         val subscription = handshakeConnection.subscription
-        val pollIdleStrategy = endPoint.pollIdleStrategy
+        val pollIdleStrategy = endPoint.config.pollIdleStrategy.cloneToNormal()
 
         try {
             endPoint.writeHandshakeMessage(publication, aeronLogInfo,

@@ -555,4 +555,12 @@ class AeronDriver(
     fun contextInfo(): String {
         return context.toString()
     }
+
+    /**
+     * @return the publication linger timeout. With IPC connections, another publication WITHIN the linger timeout will
+     *         cause errors inside of Aeron
+     */
+    fun getLingerNs(): Long {
+        return context.context.publicationLingerTimeoutNs()
+    }
 }

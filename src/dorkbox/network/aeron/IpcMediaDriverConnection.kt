@@ -76,7 +76,7 @@ internal open class IpcMediaDriverConnection(
         // We must add the subscription first, because we must be available to listen when the server responds.
 
 
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
         var startTime = System.nanoTime()
 
         // this will wait for the server to acknowledge the connection (all via aeron)

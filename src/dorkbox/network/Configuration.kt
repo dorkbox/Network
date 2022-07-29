@@ -18,6 +18,9 @@ package dorkbox.network
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
+import dorkbox.network.aeron.CoroutineIdleStrategy
+import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import dorkbox.os.OS
@@ -28,13 +31,9 @@ import io.aeron.driver.ThreadingMode
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asCoroutineDispatcher
 import mu.KLogger
 import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
-import org.agrona.concurrent.BackoffIdleStrategy
-import org.agrona.concurrent.IdleStrategy
-import org.agrona.concurrent.SleepingMillisIdleStrategy
 import java.io.File
 import java.net.BindException
 import java.util.concurrent.*
@@ -88,16 +87,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      * The IPC Subscription ID is used to define what ID the server will receive data on. The client IPC publication ID must match this value.
      */
     var ipcSubscriptionId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
-
-    /**
-     * Specifies the Java thread that will poll the underlying network for incoming messages
-     */
-    var networkInterfaceEventDispatcher = Executors.newSingleThreadExecutor(
-        NamedThreadFactory( "Network Event Dispatcher", Thread.currentThread().threadGroup, Thread.NORM_PRIORITY, true))
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -162,9 +151,18 @@ open class Configuration {
 
         @Volatile
         private var alreadyShownTips = false
-
-        private val networkDispatcher = Executors.newWorkStealingPool().asCoroutineDispatcher()
     }
+
+    /**
+     * Specifies the Java thread that will poll the underlying network for incoming messages
+     */
+    var networkInterfaceEventDispatcher = Executors.newSingleThreadExecutor(
+        NamedThreadFactory( "Network Event Dispatcher", Thread.currentThread().threadGroup, Thread.NORM_PRIORITY, true)
+    )
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
 
     /**
      * Enables the ability to use the IPv4 network stack.
@@ -322,7 +320,7 @@ open class Configuration {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var pollIdleStrategy: IdleStrategy = BackoffIdleStrategy(100, 10, 1, 100)
+    var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(100, 10, 1, 100)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -339,7 +337,7 @@ open class Configuration {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var sendIdleStrategy: IdleStrategy = SleepingMillisIdleStrategy(100)
+    var sendIdleStrategy: CoroutineIdleStrategy = CoroutineSleepingMillisIdleStrategy(100)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
