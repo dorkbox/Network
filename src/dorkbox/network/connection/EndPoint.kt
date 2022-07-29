@@ -177,7 +177,7 @@ internal constructor(val type: Class<*>,
         pollIdleStrategy = config.pollIdleStrategy.clone()
         handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
 
-        handshakeKryo = serialization.initGlobalKryo()
+        handshakeKryo = serialization.initHandshakeKryo()
 
         // we have to be able to specify the property store
         storage = SettingsStore(config.settingsStore.logger(logger), logger)
@@ -383,9 +383,8 @@ internal constructor(val type: Class<*>,
         logger.trace { "[$aeronLogInfo - ${message.connectKey}] send HS: $message" }
         var retryAttempts = 0
 
-        val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
         try {
-            val buffer = kryo.write(message)
+            val buffer = handshakeKryo.write(message)
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
@@ -460,7 +459,6 @@ internal constructor(val type: Class<*>,
                 throw exception
             }
         } finally {
-            serialization.returnKryo(kryo)
             handshakeSendIdleStrategy.reset()
         }
     }

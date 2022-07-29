@@ -298,9 +298,30 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     }
 
     /**
+     * Kryo specifically for handshakes
+     */
+    internal fun initHandshakeKryo(): KryoExtra<CONNECTION> {
+        val kryo = KryoExtra<CONNECTION>()
+
+        kryo.instantiatorStrategy = instantiatorStrategy
+        kryo.references = references
+
+        if (factory != null) {
+            kryo.setDefaultSerializer(factory)
+        }
+
+        // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
+        SerializationDefaults.register(kryo)
+
+        kryo.register(HandshakeMessage::class.java)
+
+        return kryo
+    }
+
+    /**
     * called as the first thing inside when initializing the classesToRegister
     */
-    internal fun initGlobalKryo(): KryoExtra<CONNECTION> {
+    private fun initGlobalKryo(): KryoExtra<CONNECTION> {
         // NOTE:  classesToRegister.forEach will be called after serialization init!
 
         val kryo = KryoExtra<CONNECTION>()
