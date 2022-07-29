@@ -15,7 +15,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class MultiClientTest : BaseTest() {
-    private val totalCount = 14 // this number is dependent on the number of CPU cores on the box!
+    private val totalCount = 10
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
     private val disconnectCount = atomic(0)
@@ -30,10 +30,14 @@ class MultiClientTest : BaseTest() {
         for (i in 1..totalCount) {
             val config = clientConfig()
             config.enableIPv6 = false
+            config.uniqueAeronDirectory = true
+            config.subscriptionPort += i
+
             val client: Client<Connection> = Client(config, "Client$i")
             client.onConnect {
-                clientConnectCount.getAndIncrement()
-                logger.error("${this.id} - Connected $i!")
+                val count = clientConnectCount.getAndIncrement()
+
+                logger.error("${this.id} - Connected $count ($i)!")
             }
             client.onDisconnect {
                 disconnectCount.getAndIncrement()
@@ -85,7 +89,7 @@ class MultiClientTest : BaseTest() {
             }
         }
 
-        waitForThreads {
+        waitForThreads(0) {
             outputStats(server)
         }
 

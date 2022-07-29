@@ -418,7 +418,7 @@ class AeronDriver(
      *   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
      */
     fun closeIfSingle() {
-        if (aeronClientUsageCount.value == 1 && mediaDriverUsageCount.value == 1) {
+        if (!mediaDriverWasAlreadyRunning && aeronClientUsageCount.value == 1 && mediaDriverUsageCount.value == 1) {
             close()
         }
     }
@@ -554,5 +554,13 @@ class AeronDriver(
      */
     fun contextInfo(): String {
         return context.toString()
+    }
+
+    /**
+     * @return the publication linger timeout. With IPC connections, another publication WITHIN the linger timeout will
+     *         cause errors inside of Aeron
+     */
+    fun getLingerNs(): Long {
+        return context.context.publicationLingerTimeoutNs()
     }
 }

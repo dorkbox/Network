@@ -13,12 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dorkbox.network.connection
+@file:Suppress("DuplicatedCode")
 
-import dorkbox.network.aeron.MediaDriverConnectInfo
+package dorkbox.network.aeron
 
-data class ConnectionParams<CONNECTION : Connection>(
-    val endPoint: EndPoint<CONNECTION>,
-    val connectionInfo: MediaDriverConnectInfo,
-    val publicKeyValidation: PublicKeyValidationState
-)
+import io.aeron.Subscription
+
+abstract class MediaDriverServer(subscriptionPort: Int,
+                                 streamId: Int, sessionId: Int,
+                                 connectionTimeoutSec: Int, isReliable: Boolean) :
+    MediaDriverConnection(subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
+
+    lateinit var subscription: Subscription
+}

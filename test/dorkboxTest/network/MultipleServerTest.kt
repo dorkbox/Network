@@ -64,7 +64,6 @@ class MultipleServerTest : BaseTest() {
 
             val configuration = serverConfig()
             configuration.subscriptionPort += offset
-            configuration.publicationPort += offset
             configuration.aeronDirectory = serverAeronDir
             configuration.enableIpc = false
 
@@ -140,7 +139,6 @@ class MultipleServerTest : BaseTest() {
 
             val configuration = serverConfig()
             configuration.subscriptionPort += offset
-            configuration.publicationPort += offset
             configuration.aeronDirectory = serverAeronDir
             configuration.enableIpc = true
 

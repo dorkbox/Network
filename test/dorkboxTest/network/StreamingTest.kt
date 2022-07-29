@@ -45,7 +45,7 @@ class StreamingTest : BaseTest() {
 
             client.onConnect {
                 val params = connectionParams ?: throw Exception("We should not have null connectionParams!")
-                val publication = params.mediaDriverConnection.publication
+                val publication = params.connectionInfo.publication
                 this.endPoint.send(hugeData, publication, this)
             }
 

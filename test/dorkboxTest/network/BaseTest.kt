@@ -38,6 +38,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.joran.JoranConfigurator
 import dorkbox.network.Client
+import dorkbox.network.ClientConfiguration
 import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
@@ -104,12 +105,12 @@ abstract class BaseTest {
             }
         }
 
-        fun clientConfig(block: Configuration.() -> Unit = {}): Configuration {
+        fun clientConfig(block: Configuration.() -> Unit = {}): ClientConfiguration {
 
-            val configuration = Configuration()
+            val configuration = ClientConfiguration()
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-            configuration.subscriptionPort = 2200
-            configuration.publicationPort = 2201
+            configuration.subscriptionPort = 2201
+            configuration.publicationPort = 2200
 
             configuration.enableIpc = false
 
@@ -122,7 +123,6 @@ abstract class BaseTest {
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
 
             configuration.subscriptionPort = 2200
-            configuration.publicationPort = 2201
 
             configuration.enableIpc = false
             configuration.maxClientCount = 5

@@ -34,8 +34,9 @@ internal class HandshakeMessage private constructor() {
 
     var errorMessage: String? = null
 
-    var publicationPort = 0
     var subscriptionPort = 0
+    var streamId = 0
+    var sessionId = 0
 
 
     // by default, this will be a reliable connection. When the client connects to the server, the client will specify if the new connection
@@ -55,11 +56,14 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 3
         const val DONE_ACK = 4
 
-        fun helloFromClient(connectKey: Long, publicKey: ByteArray): HandshakeMessage {
+        fun helloFromClient(connectKey: Long, publicKey: ByteArray, sessionId: Int, subscriptionPort: Int, streamId: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
             hello.connectKey = connectKey // this is 'bounced back' by the server, so the client knows if it's the correct connection message
             hello.publicKey = publicKey
+            hello.sessionId = sessionId
+            hello.subscriptionPort = subscriptionPort
+            hello.streamId = streamId
             return hello
         }
 
@@ -77,10 +81,12 @@ internal class HandshakeMessage private constructor() {
             return hello
         }
 
-        fun doneFromClient(connectKey: Long): HandshakeMessage {
+        fun doneFromClient(connectKey: Long, subscriptionPort: Int, streamId: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = DONE
             hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
+            hello.subscriptionPort = subscriptionPort
+            hello.streamId = streamId
             return hello
         }
 

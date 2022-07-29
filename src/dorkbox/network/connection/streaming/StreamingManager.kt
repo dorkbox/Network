@@ -204,7 +204,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
         }
     }
 
-    private fun sendFailMessageAndThrow(
+    private suspend fun sendFailMessageAndThrow(
         e: Exception,
         streamSessionId: Long,
         publication: Publication,
@@ -244,7 +244,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
      * @param internalBuffer this is the ORIGINAL object data that is to be "chunked" and sent across the wire
      * @return true if ALL the message chunks were successfully sent by aeron, false otherwise. Exceptions are caught and rethrown!
      */
-    fun send(
+    suspend fun send(
         publication: Publication,
         internalBuffer: MutableDirectBuffer,
         objectSize: Int,

@@ -17,31 +17,55 @@
 
 package dorkbox.network.aeron
 
-import io.aeron.Publication
-import io.aeron.Subscription
-import mu.KLogger
+import io.aeron.ChannelUriStringBuilder
+import java.net.Inet4Address
+import java.net.InetAddress
 
-abstract class MediaDriverConnection(val publicationPort: Int, val subscriptionPort: Int,
+abstract class MediaDriverConnection(val subscriptionPort: Int,
                                      val streamId: Int, val sessionId: Int,
-                                     val connectionTimeoutSec: Int, val isReliable: Boolean) : AutoCloseable {
+                                     val connectionTimeoutSec: Int, val isReliable: Boolean) {
 
     var success: Boolean = false
-    lateinit var subscription: Subscription
-    lateinit var publication: Publication
+    abstract val type: String
+
+    companion object {
+        fun connectionString(ipAddress: InetAddress): String {
+            return if (ipAddress is Inet4Address) {
+                ipAddress.hostAddress
+            } else {
+                // IPv6 requires the address to be bracketed by [...]
+                val host = ipAddress.hostAddress
+                if (host[0] == '[') {
+                    host
+                } else {
+                    "[${ipAddress.hostAddress}]"
+                }
+            }
+        }
+
+        fun uri(type: String, sessionId: Int, isReliable: Boolean? = null): ChannelUriStringBuilder {
+            val builder = ChannelUriStringBuilder().media(type)
+            if (isReliable != null) {
+                builder.reliable(isReliable)
+            }
+
+            if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
+                builder.sessionId(sessionId)
+            }
+
+            return builder
+        }
+
+        fun uriEndpoint(type: String, sessionId: Int, isReliable: Boolean, endpoint: String): ChannelUriStringBuilder {
+            val builder = uri(type, sessionId, isReliable)
+            builder.endpoint(endpoint)
+            return builder
+        }
+    }
+
 
 
     // We don't use 'suspend' for these, because we have to pump events from a NORMAL thread. If there are any suspend points, there is
     // the potential for a live-lock due to coroutine scheduling
-    abstract fun buildClient(aeronDriver: AeronDriver, logger: KLogger)
-    abstract fun buildServer(aeronDriver: AeronDriver, logger: KLogger, pairConnection: Boolean = false)
-
-    abstract val clientInfo : String
-    abstract val serverInfo : String
-
-    override fun close() {
-        if (success) {
-            subscription.close()
-            publication.close()
-        }
-    }
+    abstract val info : String
 }

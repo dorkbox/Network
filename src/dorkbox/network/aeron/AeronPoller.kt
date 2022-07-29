@@ -4,5 +4,5 @@ internal interface AeronPoller {
     fun poll(): Int
     fun close()
 
-    val serverInfo: String
+    val info: String
 }

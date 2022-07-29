@@ -16,7 +16,7 @@
 package dorkbox.network.handshake
 
 import dorkbox.network.Client
-import dorkbox.network.aeron.MediaDriverConnection
+import dorkbox.network.aeron.MediaDriverClient
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.ListenerManager
@@ -41,6 +41,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
     // correct when this happens. There are no race-conditions to be wary of.
 
     private val handler: FragmentHandler
+
+    private val pollIdleStrategy = endPoint.config.pollIdleStrategy.cloneToNormal()
 
     // used to keep track and associate UDP/IPC handshakes between client/server
     @Volatile
@@ -92,7 +94,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             }
 
             if (connectKey != message.connectKey) {
-                logger.error("[$aeronLogInfo} - $connectKey] ignored handshake for ${message.connectKey} (Was for another client)")
+                logger.error("[$aeronLogInfo - $connectKey] ignored handshake for ${message.connectKey} (Was for another client)")
                 return@FragmentAssembler
             }
 
@@ -158,7 +160,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
-    fun hello(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) : ClientConnectionInfo {
+    fun hello(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) : ClientConnectionInfo {
         failedException = null
         connectKey = getSafeConnectKey()
         val publicKey = endPoint.storage.getPublicKey()!!
@@ -168,14 +170,16 @@ internal class ClientHandshake<CONNECTION: Connection>(
         // Send the one-time pad to the server.
         val publication = handshakeConnection.publication
         val subscription = handshakeConnection.subscription
-        val pollIdleStrategy = endPoint.pollIdleStrategy
 
         try {
             endPoint.writeHandshakeMessage(publication, aeronLogInfo,
-                                           HandshakeMessage.helloFromClient(connectKey, publicKey))
+                                           HandshakeMessage.helloFromClient(connectKey, publicKey,
+                                                                            handshakeConnection.localSessionId,
+                                                                            handshakeConnection.subscriptionPort,
+                                                                            handshakeConnection.subscription.streamId()))
         } catch (e: Exception) {
-            publication.close()
             subscription.close()
+            publication.close()
 
             logger.error("[$aeronLogInfo] Handshake error!", e)
             throw e
@@ -183,9 +187,10 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         // block until we receive the connection information from the server
         var pollCount: Int
+        pollIdleStrategy.reset()
 
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + endPoint.aeronDriver.getLingerNs()
         val startTime = System.nanoTime()
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
         while (System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
@@ -201,21 +206,18 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
-            publication.close()
-            subscription.close()
-
             // no longer necessary to hold this connection open (if not a failure, we close the handshake after the DONE message)
-            handshakeConnection.close()
+            subscription.close()
+            publication.close()
+
             ListenerManager.cleanStackTraceInternal(failedEx)
             throw failedEx
         }
 
         if (connectionHelloInfo == null) {
-            publication.close()
-            subscription.close()
-
             // no longer necessary to hold this connection open (if not a failure, we close the handshake after the DONE message)
-            handshakeConnection.close()
+            subscription.close()
+            publication.close()
 
             val exception = ClientTimedOutException("[$aeronLogInfo] Waiting for registration response from server")
             ListenerManager.cleanStackTraceInternal(exception)
@@ -226,8 +228,10 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
-    fun done(handshakeConnection: MediaDriverConnection, connectionTimeoutSec: Int) {
-        val registrationMessage = HandshakeMessage.doneFromClient(connectKey)
+    fun done(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) {
+        val registrationMessage = HandshakeMessage.doneFromClient(connectKey,
+                                                                                      handshakeConnection.subscriptionPort,
+                                                                                      handshakeConnection.subscription.streamId())
 
         val aeronLogInfo = "${handshakeConnection.sessionId}/${handshakeConnection.streamId}"
 
@@ -235,16 +239,19 @@ internal class ClientHandshake<CONNECTION: Connection>(
         try {
             endPoint.writeHandshakeMessage(handshakeConnection.publication, aeronLogInfo, registrationMessage)
         } catch (e: Exception) {
-            handshakeConnection.close()
+            handshakeConnection.subscription.close()
+            handshakeConnection.publication.close()
             throw e
         }
 
         // block until we receive the connection information from the server
 
         failedException = null
+        pollIdleStrategy.reset()
+
         var pollCount: Int
+
         val subscription = handshakeConnection.subscription
-        val pollIdleStrategy = endPoint.pollIdleStrategy
 
         val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
         var startTime = System.nanoTime()
@@ -269,9 +276,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
             // 0 means we idle. >0 means reset and don't idle (because there are likely more)
             pollIdleStrategy.idle(pollCount)
         }
-
-        // finished with the handshake, so always close the connection
-        handshakeConnection.close()
 
         val failedEx = failedException
         if (failedEx != null) {

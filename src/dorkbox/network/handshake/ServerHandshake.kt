@@ -19,7 +19,9 @@ import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.IpcMediaDriverConnection
+import dorkbox.network.aeron.MediaDriverConnectInfo
+import dorkbox.network.aeron.MediaDriverConnection
+import dorkbox.network.aeron.ServerIpc_MediaDriver
 import dorkbox.network.aeron.UdpMediaDriverPairedConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
@@ -44,13 +46,17 @@ import java.util.concurrent.*
  * NOTE: all methods in here are called by the SAME thread!
  */
 @Suppress("DuplicatedCode", "JoinDeclarationAndAssignment")
-internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLogger,
-                                                        private val config: ServerConfiguration,
-                                                        private val listenerManager: ListenerManager<CONNECTION>) {
+internal class ServerHandshake<CONNECTION : Connection>(
+    private val logger: KLogger,
+    private val config: ServerConfiguration,
+    private val listenerManager: ListenerManager<CONNECTION>,
+    aeronDriver: AeronDriver
+) {
 
     // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
     private val pendingConnections = ExpiringMap.builder()
-        .expiration(config.connectionCloseTimeoutInSeconds.toLong() * 2, TimeUnit.SECONDS)
+        // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
+        .expiration(TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong() * 2) + aeronDriver.getLingerNs(), TimeUnit.NANOSECONDS)
         .expirationPolicy(ExpirationPolicy.CREATED)
         .expirationListener<Long, CONNECTION> { clientConnectKey, connection ->
             // this blocks until it fully runs (which is ok. this is fast)
@@ -66,8 +72,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     private val sessionIdAllocator = RandomId65kAllocator(AeronDriver.RESERVED_SESSION_ID_LOW, AeronDriver.RESERVED_SESSION_ID_HIGH)
     private val streamIdAllocator = RandomId65kAllocator(1, Integer.MAX_VALUE)
 
+
     /**
-     * @return true if we should continue parsing the incoming message, false if we should abort
+     * @return true if we should continue parsing the incoming message, false if we should abort (as we are DONE processing data)
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
     private fun validateMessageTypeAndDoPending(
@@ -98,8 +105,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 }
                 return false
             }
-
-            return true
         }
 
         // check to see if this is a pending connection
@@ -107,6 +112,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             val existingConnection = pendingConnections.remove(message.connectKey)
             if (existingConnection == null) {
                 logger.error { "[$aeronLogInfo - ${message.connectKey}] Error! Pending connection from client $connectionString was null, and cannot complete handshake!" }
+                return true
             } else {
                 val existingAeronLogInfo = "${existingConnection.id}/${existingConnection.streamId}"
 
@@ -144,8 +150,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 } catch (e: Exception) {
                     logger.error(e) { "$aeronLogInfo - $existingAeronLogInfo - Handshake error!" }
                 }
+
+                return false
             }
-            return false
         }
 
         return true
@@ -212,7 +219,9 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
     }
 
 
-    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+    /**
+     * @return true if the handshake poller is to close the publication, false will keep the publication (as we are DONE processing data)
+     */
     fun processIpcHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshakePublication: Publication,
@@ -303,14 +312,30 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
 
         // create a new connection. The session ID is encrypted.
         try {
-            val clientConnection = IpcMediaDriverConnection(streamId = connectionStreamPubId,
-                                                            streamIdSubscription = connectionStreamSubId,
-                                                            sessionId = connectionSessionId)
+            // Create a subscription at the given address and port, using the given stream ID.
+            val driver = ServerIpc_MediaDriver(streamId = connectionStreamPubId,
+                                               streamIdSubscription = connectionStreamSubId,
+                                               sessionId = connectionSessionId)
+            driver.build(aeronDriver, logger)
 
-            // we have to construct how the connection will communicate!
-            clientConnection.buildServer(aeronDriver, logger, true)
+            // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
+            val publicationUri = MediaDriverConnection.uri("ipc", handshakePublication.sessionId())
+            val clientPublication = aeronDriver.addPublication(publicationUri, message.subscriptionPort)
 
-            logger.info { "[$aeronLogInfo - ${clientConnection.sessionId}] IPC connection established to [${clientConnection.streamIdSubscription}|${clientConnection.streamId}]" }
+            val clientConnection = MediaDriverConnectInfo(
+                publication = clientPublication,
+                subscription = driver.subscription,
+                subscriptionPort = driver.streamIdSubscription,
+                publicationPort = driver.streamId,
+                streamId = 0, // this is because with IPC, we have stream sub/pub (which are replaced as port sub/pub)
+                sessionId = driver.sessionId,
+                isReliable = driver.isReliable,
+                remoteAddress = null,
+                remoteAddressString = "ipc"
+            )
+
+
+            logger.info { "[$aeronLogInfo] Creating new IPC connection from $driver" }
 
             val connection = connectionFunc(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
 
@@ -359,11 +384,15 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         }
     }
 
-    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+    /**
+     * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+     * @return true if the handshake poller is to close the publication, false will keep the publication
+     */
     fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshakePublication: Publication,
         remoteIpAndPort: String,
+        isReliable: Boolean,
         message: HandshakeMessage,
         aeronDriver: AeronDriver,
         aeronLogInfo: String,
@@ -383,7 +412,6 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
             logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Invalid IP address!" }
             return
         }
-
 
 
         // Manage the Handshake state
@@ -462,7 +490,7 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
         }
 
         // the pub/sub do not necessarily have to be the same. They can be ANY port
-        val publicationPort = config.publicationPort
+        val publicationPort = message.subscriptionPort
         val subscriptionPort = config.subscriptionPort
 
 
@@ -478,20 +506,37 @@ internal class ServerHandshake<CONNECTION : Connection>(private val logger: KLog
                 server.listenIPv6Address!!
             }
 
-            val clientConnection = UdpMediaDriverPairedConnection(listenAddress,
-                                                                  clientAddress,
-                                                                  clientAddressString,
-                                                                  publicationPort,
-                                                                  subscriptionPort,
-                                                                  connectionStreamId,
-                                                                  connectionSessionId,
-                                                                  0,
-                                                                  message.isReliable)
+            // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
+            val publicationUri = MediaDriverConnection.uriEndpoint("udp", message.sessionId, isReliable, "$clientAddressString:${message.subscriptionPort}")
+            val clientPublication = aeronDriver.addPublication(publicationUri, message.streamId)
 
-            // we have to construct how the connection will communicate!
-            clientConnection.buildServer(aeronDriver, logger, true)
+            val driver = UdpMediaDriverPairedConnection(
+                listenAddress,
+                clientAddress,
+                clientAddressString,
+                publicationPort,
+                subscriptionPort,
+                connectionStreamId,
+                connectionSessionId,
+                0,
+                isReliable,
+                clientPublication
+            )
 
-            logger.info { "[$aeronLogInfo] Creating new connection from $clientConnection" }
+            driver.build(aeronDriver, logger)
+            logger.info { "[$aeronLogInfo] Creating new connection from $driver" }
+
+            val clientConnection = MediaDriverConnectInfo(
+                publication = driver.publication,
+                subscription = driver.subscription,
+                subscriptionPort = driver.subscriptionPort,
+                publicationPort = publicationPort,
+                streamId = driver.streamId,
+                sessionId = driver.sessionId,
+                isReliable = driver.isReliable,
+                remoteAddress = clientAddress,
+                remoteAddressString = clientAddressString
+            )
 
             connection = connectionFunc(ConnectionParams(server, clientConnection, validateRemoteAddress))
 

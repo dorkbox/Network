@@ -23,7 +23,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import dorkbox.netUtil.IPv4
 import dorkbox.network.Client
-import dorkbox.network.Configuration
+import dorkbox.network.ClientConfiguration
 import dorkbox.network.connection.Connection
 import dorkbox.network.ipFilter.IpSubnetFilterRule
 import dorkbox.storage.Storage
@@ -65,8 +65,8 @@ object AeronClient {
 //        rootLogger.setLevel(Level.OFF);
 
         // rootLogger.setLevel(Level.INFO);
-        rootLogger.level = Level.DEBUG
-        // rootLogger.setLevel(Level.TRACE);
+//        rootLogger.level = Level.DEBUG
+        rootLogger.level = Level.TRACE
 //        rootLogger.setLevel(Level.ALL);
 
 
@@ -106,12 +106,13 @@ object AeronClient {
     @Throws(Exception::class)
     @JvmStatic
     fun main(args: Array<String>) {
-        val configuration = Configuration()
+        val configuration = ClientConfiguration()
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-        configuration.subscriptionPort = 2000
-        configuration.publicationPort = 2001
-        configuration.enableIpc = false
-        configuration.uniqueAeronDirectory = true
+        configuration.subscriptionPort = 4000
+        configuration.publicationPort = 2000
+//        configuration.enableIpc = true
+//        configuration.enableIpc = false
+//        configuration.uniqueAeronDirectory = true
 
         val client = Client<Connection>(configuration)
 

@@ -16,22 +16,26 @@
 
 package dorkbox.network.aeron
 
+import io.aeron.Publication
 import java.net.InetAddress
 
 /**
  * This represents the connection PAIR between a server<->client
  * A connection timeout of 0, means to wait forever
  */
-internal class UdpMediaDriverPairedConnection(listenAddress: InetAddress,
-                                              val remoteAddress: InetAddress,
-                                              val remoteAddressString: String,
-                                              publicationPort: Int,
-                                              subscriptionPort: Int,
-                                              streamId: Int,
-                                              sessionId: Int,
-                                              connectionTimeoutSec: Int,
-                                              isReliable: Boolean = true) :
-    UdpMediaDriverServerConnection(listenAddress, publicationPort, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
+internal class UdpMediaDriverPairedConnection(
+    listenAddress: InetAddress,
+    val remoteAddress: InetAddress,
+    val remoteAddressString: String,
+    val publicationPort: Int,
+    subscriptionPort: Int,
+    streamId: Int,
+    sessionId: Int,
+    connectionTimeoutSec: Int,
+    isReliable: Boolean,
+    val publication: Publication
+) :
+    ServerUdp_MediaDriver(listenAddress, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
     override fun toString(): String {
         return "$remoteAddressString [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"

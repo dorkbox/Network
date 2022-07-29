@@ -18,6 +18,9 @@ package dorkbox.network
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
+import dorkbox.network.aeron.CoroutineIdleStrategy
+import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
 import dorkbox.network.connection.Connection
 import dorkbox.network.serialization.Serialization
 import dorkbox.os.OS
@@ -28,13 +31,9 @@ import io.aeron.driver.ThreadingMode
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asCoroutineDispatcher
 import mu.KLogger
 import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
-import org.agrona.concurrent.BackoffIdleStrategy
-import org.agrona.concurrent.IdleStrategy
-import org.agrona.concurrent.SleepingMillisIdleStrategy
 import java.io.File
 import java.net.BindException
 import java.util.concurrent.*
@@ -118,6 +117,8 @@ class ServerConfiguration : dorkbox.network.Configuration() {
      */
     @Suppress("DuplicatedCode")
     override fun validate() {
+        super.validate()
+
         // have to do some basic validation of our configuration
         if (listenIpAddress != listenIpAddress.lowercase()) {
             // only do this once!
@@ -127,43 +128,43 @@ class ServerConfiguration : dorkbox.network.Configuration() {
 
 
         require(listenIpAddress.isNotBlank()) { "Blank listen IP address, cannot continue." }
-
-        // can't disable everything!
-        require(enableIpc || enableIPv4 || enableIPv6) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
-
-        if (enableIpc) {
-            require(!uniqueAeronDirectory) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
-        } else {
-            if (enableIPv4 && !enableIPv6) {
-                require(IPv4.isAvailable) { "IPC/IPv6 are disabled and IPv4 is enabled, but there is no IPv4 interface available!" }
-            }
-
-            if (!enableIPv4 && enableIPv6) {
-                require(IPv6.isAvailable) { "IPC/IPv4 are disabled and IPv6 is enabled, but there is no IPv6 interface available!" }
-            }
-        }
-
-
-        require(publicationPort > 0) { "configuration port must be > 0" }
-        require(publicationPort < 65535) { "configuration port must be < 65535" }
-
-        require(subscriptionPort > 0) { "configuration controlPort must be > 0" }
-        require(subscriptionPort < 65535) { "configuration controlPort must be < 65535" }
-
-        require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
-        require(networkMtuSize < 9 * 1024) { "configuration networkMtuSize must be < ${9 * 1024}" }
-
     }
 }
 
-open class Configuration {
+class ClientConfiguration : dorkbox.network.Configuration() {
+    /**
+     * Specify the UDP port to use. This port is used to establish client-server connections, and is from the
+     * perspective of the server
+     *
+     * This means that server-pub -> {{network}} -> client-sub
+     *
+     * Must be greater than 0
+     */
+    var publicationPort: Int = 0
+        set(value) {
+            require(!contextDefined) { dorkbox.network.Configuration.errorMessage }
+            field = value
+        }
+
+    /**
+     * Validates the current configuration
+     */
+    @Suppress("DuplicatedCode")
+    override fun validate() {
+        super.validate()
+        // have to do some basic validation of our configuration
+
+        require(publicationPort > 0) { "configuration port must be > 0" }
+        require(publicationPort < 65535)  { "configuration port must be < 65535" }
+    }
+}
+
+abstract class Configuration {
     companion object {
         internal const val errorMessage = "Cannot set a property after the configuration context has been created!"
 
         @Volatile
         private var alreadyShownTips = false
-
-        private val networkDispatcher = Executors.newWorkStealingPool().asCoroutineDispatcher()
     }
 
     /**
@@ -207,22 +208,9 @@ open class Configuration {
             field = value
         }
 
-    /**
-     * Specify the UDP port to use. This port is used to establish client-server connections, and is from the
-     * perspective of the server
-     *
-     * This means that server-pub -> {{network}} -> client-sub
-     *
-     * Must be greater than 0
-     */
-    var publicationPort: Int = 0
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
 
     /**
-     * Specify the UDP MDC subscription port to use. This port is used to establish client-server connections, and is from the
+     * Specify the UDP subscription port to use. This port is used to establish client-server connections, and is from the
      * perspective of the server.
      *
      * This means that client-pub -> {{network}} -> server-sub
@@ -272,6 +260,16 @@ open class Configuration {
         }
 
     /**
+     * Set the subscription semantics for if data loss is acceptable or not, for a reliable message delivery.
+     */
+    var isReliable = true
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+
+    /**
      * The dispatch responsible for executing events that arrive via the network.
      *
      * This is very specifically NOT 'CoroutineScope(Dispatchers.Default)', because it is very easy (and tricky) to make sure
@@ -298,10 +296,6 @@ open class Configuration {
             field = value
         }
 
-        /**
-     * Specify the serialization manager to use. The type must extend `Connection`, since this will be cast
-     */
-
     /**
      * Specify the serialization manager to use. The type must extend `Connection`, since this will be cast
      */
@@ -322,7 +316,7 @@ open class Configuration {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var pollIdleStrategy: IdleStrategy = BackoffIdleStrategy(100, 10, 1, 100)
+    var pollIdleStrategy: CoroutineIdleStrategy = CoroutineBackoffIdleStrategy(maxSpins = 100, maxYields = 10, minParkPeriodMs = 1, maxParkPeriodMs = 100)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -339,7 +333,7 @@ open class Configuration {
      * The main difference in strategies is how responsive to changes should the idler be when idle for a little bit of time and
      * how much CPU should be consumed when no work is being done. There is an inherent tradeoff to consider.
      */
-    var sendIdleStrategy: IdleStrategy = SleepingMillisIdleStrategy(100)
+    var sendIdleStrategy: CoroutineIdleStrategy = CoroutineSleepingMillisIdleStrategy(sleepPeriodMs = 100)
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -559,10 +553,20 @@ open class Configuration {
     open fun validate() {
         // have to do some basic validation of our configuration
 
-        require(!(enableIpc && uniqueAeronDirectory)) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
+        // can't disable everything!
+        require(enableIpc || enableIPv4 || enableIPv6) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
 
-        require(publicationPort > 0) { "configuration port must be > 0" }
-        require(publicationPort < 65535)  { "configuration port must be < 65535" }
+        if (enableIpc) {
+            require(!uniqueAeronDirectory) { "IPC enabled and forcing a unique Aeron directory are incompatible (IPC requires shared Aeron directories)!" }
+        } else {
+            if (enableIPv4 && !enableIPv6) {
+                require(IPv4.isAvailable) { "IPC/IPv6 are disabled and IPv4 is enabled, but there is no IPv4 interface available!" }
+            }
+
+            if (!enableIPv4 && enableIPv6) {
+                require(IPv6.isAvailable) { "IPC/IPv4 are disabled and IPv6 is enabled, but there is no IPv6 interface available!" }
+            }
+        }
 
         require(subscriptionPort > 0) { "configuration controlPort must be > 0" }
         require(subscriptionPort < 65535) { "configuration controlPort must be < 65535" }

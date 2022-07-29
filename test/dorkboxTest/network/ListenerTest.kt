@@ -154,7 +154,7 @@ class ListenerTest : BaseTest() {
 
         client.connect(LOCALHOST)
 
-        waitForThreads()
+        waitForThreads(0)
 
         // +1 BECAUSE we are `getAndIncrement` for each check earlier
         val limitCheck = limit+1

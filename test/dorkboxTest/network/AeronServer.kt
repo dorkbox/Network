@@ -58,8 +58,8 @@ object AeronServer {
 //        rootLogger.setLevel(Level.OFF);
 
         // rootLogger.setLevel(Level.INFO);
-        rootLogger.level = Level.DEBUG
-        // rootLogger.setLevel(Level.TRACE);
+//        rootLogger.level = Level.DEBUG
+        rootLogger.level = Level.TRACE
 //        rootLogger.setLevel(Level.ALL);
 
 
@@ -90,8 +90,8 @@ object AeronServer {
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.listenIpAddress = "127.0.0.1"
         configuration.subscriptionPort = 2000
-        configuration.publicationPort = 2001
         configuration.maxClientCount = 5
+        configuration.enableIpc = true
         configuration.maxConnectionsPerIpAddress = 5
 
         val server: Server<*> = Server<Connection>(configuration)

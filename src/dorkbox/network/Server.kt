@@ -158,12 +158,6 @@ open class Server<CONNECTION : Connection>(
     @Volatile
     private var shutdownEventLatch = CountDownLatch(1)
 
-
-    /**
-     * Used for handshake connections
-     */
-    internal val handshake = ServerHandshake(logger, config, listenerManager)
-
     /**
      * Maintains a thread-safe collection of rules used to define the connection type with this server.
      */
@@ -223,6 +217,8 @@ open class Server<CONNECTION : Connection>(
      */
     @Suppress("DuplicatedCode")
     fun bind() {
+        // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
+
         if (bindAlreadyCalled.getAndSet(true)) {
             logger.error { "Unable to bind when the server is already running!" }
             return
@@ -240,13 +236,15 @@ open class Server<CONNECTION : Connection>(
 
         config as ServerConfiguration
 
+        val handshake = ServerHandshake(logger, config, listenerManager, aeronDriver)
+
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
 
         // this forces the current thread to WAIT until poll system has started
         val pollStartupLatch = CountDownLatch(1)
 
         val server = this@Server
-        val ipcPoller: AeronPoller = ServerHandshakePollers.ipc(aeronDriver, config, server)
+        val ipcPoller: AeronPoller = ServerHandshakePollers.ipc(aeronDriver, config, server, handshake)
 
         // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
         val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address == IPv6.WILDCARD
@@ -257,23 +255,22 @@ open class Server<CONNECTION : Connection>(
             if (canUseIPv4 && canUseIPv6) {
                 // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
                 ipv4Poller = ServerHandshakePollers.disabled("IPv4 Disabled")
-                ipv6Poller = ServerHandshakePollers.ip6Wildcard(aeronDriver, config, server)
+                ipv6Poller = ServerHandshakePollers.ip6Wildcard(aeronDriver, config, server, handshake)
             } else {
                 // only 1 will be a real poller
-                ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server)
-                ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server)
+                ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server, handshake)
+                ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server, handshake)
             }
         } else {
-            ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server)
-            ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server)
+            ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server, handshake)
+            ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server, handshake)
         }
-
 
 
         val networkEventProcessor = Runnable {
             pollStartupLatch.countDown()
 
-            val pollIdleStrategy = config.pollIdleStrategy
+            val pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
             try {
                 var pollCount: Int
 
@@ -303,10 +300,8 @@ open class Server<CONNECTION : Connection>(
                             removeConnection(connection)
 
                             // this will call removeConnection again, but that is ok
-                            runBlocking {
-                                // this is blocking, because the connection MUST be removed in the same thread that is processing events
-                                connection.close()
-                            }
+                            // this is blocking, because the connection MUST be removed in the same thread that is processing events
+                            connection.close()
 
                             // have to manually notify the server-listenerManager that this connection was closed
                             // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
@@ -421,7 +416,6 @@ open class Server<CONNECTION : Connection>(
         //
         // Aeron + the Media Driver will have already been shutdown at this point.
         if (bindAlreadyCalled.getAndSet(false)) {
-
             // These are run in lock-step
             shutdownPollLatch.countDown()
             shutdownEventLatch.await()

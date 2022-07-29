@@ -15,9 +15,6 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.aeron.IpcMediaDriverConnection
-import dorkbox.network.aeron.UdpMediaDriverClientConnection
-import dorkbox.network.aeron.UdpMediaDriverPairedConnection
 import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.handshake.RandomId65kAllocator
 import dorkbox.network.ping.Ping
@@ -29,6 +26,7 @@ import io.aeron.Subscription
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
+import kotlinx.coroutines.runBlocking
 import org.agrona.DirectBuffer
 import java.lang.Thread.sleep
 import java.net.InetAddress
@@ -39,8 +37,8 @@ import java.util.concurrent.*
  */
 open class Connection(connectionParameters: ConnectionParams<*>) {
     private var messageHandler: FragmentAssembler
-    private val subscription: Subscription
-    private val publication: Publication
+    internal val subscription: Subscription
+    internal val publication: Publication
 
     /**
      * The publication port (used by aeron) for this connection. This is from the perspective of the server!
@@ -71,7 +69,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * @return true if this connection is an IPC connection
      */
-    val isIpc = connectionParameters.mediaDriverConnection is IpcMediaDriverConnection
+    val isIpc = connectionParameters.connectionInfo.remoteAddress == null
 
     /**
      * @return true if this connection is a network connection
@@ -87,17 +85,18 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val listenerManager = atomic<ListenerManager<Connection>?>(null)
     val logger = endPoint.logger
 
-    private val isClosed = atomic(false)
+    internal val isClosed = atomic(false)
 
     // enableNotifyDisconnect : we don't always want to enable notifications on disconnect
-    internal var closeAction: (enableNotifyDisconnect: Boolean) -> Unit = {}
+    internal var closeAction: suspend (enableNotifyDisconnect: Boolean) -> Unit = {}
 
     // only accessed on a single thread!
     private var connectionLastCheckTimeNanos = 0L
     private var connectionTimeoutTimeNanos = 0L
 
-    private val connectionCheckIntervalNanos = connectionParameters.endPoint.config.connectionCheckIntervalNanos
-    private val connectionExpirationTimoutNanos = connectionParameters.endPoint.config.connectionExpirationTimoutNanos
+    // always offset by the linger amount, since we cannot act faster than the linger for adding/removing publications
+    private val connectionCheckIntervalNanos = connectionParameters.endPoint.config.connectionCheckIntervalNanos + endPoint.aeronDriver.getLingerNs()
+    private val connectionExpirationTimoutNanos = connectionParameters.endPoint.config.connectionExpirationTimoutNanos + endPoint.aeronDriver.getLingerNs()
 
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
@@ -119,46 +118,25 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // we customize the toString() value for this connection, and it's just better to cache it's value (since it's a modestly complex string)
     private val toString0: String
 
+
+
     init {
-        val mediaDriverConnection = connectionParameters.mediaDriverConnection
+        val connectionInfo = connectionParameters.connectionInfo
+
+        id = connectionInfo.sessionId // NOTE: this is UNIQUE per server!
+
+        subscription = connectionInfo.subscription
+        publication = connectionInfo.publication
 
         // can only get this AFTER we have built the sub/pub
-        subscription = mediaDriverConnection.subscription
-        publication = mediaDriverConnection.publication
+        streamId = connectionInfo.streamId // NOTE: this is UNIQUE per server!
+        subscriptionPort = connectionInfo.subscriptionPort
+        publicationPort = connectionInfo.publicationPort
 
-        id = mediaDriverConnection.sessionId // NOTE: this is UNIQUE per server!
+        remoteAddress = connectionInfo.remoteAddress
+        remoteAddressString = connectionInfo.remoteAddressString
 
-        if (mediaDriverConnection is IpcMediaDriverConnection) {
-            streamId = 0 // this is because with IPC, we have stream sub/pub (which are replaced as port sub/pub)
-            subscriptionPort = mediaDriverConnection.streamIdSubscription
-            publicationPort = mediaDriverConnection.streamId
-
-            remoteAddress = null
-            remoteAddressString = "ipc"
-
-            toString0 = "[$${id}] IPC [$subscriptionPort|$publicationPort]"
-        } else {
-            streamId = mediaDriverConnection.streamId // NOTE: this is UNIQUE per server!
-            subscriptionPort = mediaDriverConnection.subscriptionPort
-            publicationPort = mediaDriverConnection.publicationPort
-
-            when (mediaDriverConnection) {
-                is UdpMediaDriverClientConnection -> {
-                    remoteAddress = mediaDriverConnection.address
-                    remoteAddressString = mediaDriverConnection.addressString
-                }
-                is UdpMediaDriverPairedConnection -> {
-                    remoteAddress = mediaDriverConnection.remoteAddress
-                    remoteAddressString = mediaDriverConnection.remoteAddressString
-                }
-                else -> {
-                    throw Exception("Invalid media driver connection type! : ${mediaDriverConnection::class.qualifiedName}")
-                }
-            }
-
-            toString0 = "[$${id}/${streamId}] $remoteAddressString [$publicationPort|$subscriptionPort]"
-        }
-
+        toString0 = "[${id}/${streamId}] $remoteAddressString [$publicationPort|$subscriptionPort]"
 
         messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
@@ -207,7 +185,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     internal fun pollSubscriptions(): Int {
         // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
         //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-        return subscription.poll(messageHandler, 1)
+        return subscription.poll(messageHandler, 10)
     }
 
     /**
@@ -215,12 +193,23 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    fun send(message: Any): Boolean {
+    suspend fun send(message: Any): Boolean {
         messagesInProgress.getAndIncrement()
         val success = endPoint.send(message, publication, this)
         messagesInProgress.getAndDecrement()
 
         return success
+    }
+
+    /**
+     * Safely sends objects to a destination.
+     *
+     * @return true if the message was successfully sent by aeron
+     */
+    fun sendBlocking(message: Any): Boolean {
+        return runBlocking {
+            send(message)
+        }
     }
 
     /**
@@ -297,7 +286,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
         connectionLastCheckTimeNanos = now
 
-        // if there is a network blip, we want to make sure that it is a network blip for a while, instead of just once or twice.
+        // as long as we are connected, we reset the state, so that if there is a network blip, we want to make sure that it is
+        // a network blip for a while, instead of just once or twice. (which can happen)
         if (subscription.isConnected && publication.isConnected) {
             // reset connection timeout
             connectionTimeoutTimeNanos = 0L
@@ -381,7 +371,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other
-            closeAction(enableNotifyDisconnect)
+            runBlocking {
+                closeAction(enableNotifyDisconnect)
+            }
             logger.debug {"[$aeronLogInfo] connection closed"}
         }
     }

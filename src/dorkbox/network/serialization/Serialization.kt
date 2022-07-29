@@ -298,30 +298,9 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     }
 
     /**
-     * Kryo specifically for handshakes
-     */
-    internal fun initHandshakeKryo(): KryoExtra<CONNECTION> {
-        val kryo = KryoExtra<CONNECTION>()
-
-        kryo.instantiatorStrategy = instantiatorStrategy
-        kryo.references = references
-
-        if (factory != null) {
-            kryo.setDefaultSerializer(factory)
-        }
-
-        // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
-        SerializationDefaults.register(kryo)
-
-        kryo.register(HandshakeMessage::class.java)
-
-        return kryo
-    }
-
-    /**
     * called as the first thing inside when initializing the classesToRegister
     */
-    private fun initGlobalKryo(): KryoExtra<CONNECTION> {
+    internal fun initGlobalKryo(): KryoExtra<CONNECTION> {
         // NOTE:  classesToRegister.forEach will be called after serialization init!
 
         val kryo = KryoExtra<CONNECTION>()
@@ -360,6 +339,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         kryo.register(StreamingData::class.java, streamingDataSerializer)
 
         kryo.register(Ping::class.java, pingSerializer)
+        kryo.register(HandshakeMessage::class.java)
 
         @Suppress("UNCHECKED_CAST")
         kryo.register(InvocationHandler::class.java as Class<Any>, rmiClientSerializer)

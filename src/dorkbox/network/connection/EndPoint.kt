@@ -21,6 +21,7 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
+import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -77,12 +78,10 @@ fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
 abstract class EndPoint<CONNECTION : Connection>
 internal constructor(val type: Class<*>,
                      internal val config: Configuration,
-                     @Suppress("UNCHECKED_CAST")
                      internal val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                      loggerName: String)
              : AutoCloseable {
 
-    @Suppress("UNCHECKED_CAST")
     protected constructor(config: Configuration,
                           connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                           loggerName: String)
@@ -94,6 +93,9 @@ internal constructor(val type: Class<*>,
             : this(Server::class.java, config, connectionFunc, loggerName)
 
     companion object {
+        // how many times to retry sending data if the connection is not connected
+        private const val sendDataRetryMax = 100
+
         /**
          * @return the error code text for the specified number
          */
@@ -135,8 +137,9 @@ internal constructor(val type: Class<*>,
 
     private val handshakeKryo: KryoExtra<CONNECTION>
 
-    internal val sendIdleStrategy: IdleStrategy
-    internal val pollIdleStrategy: IdleStrategy
+    private val sendIdleStrategy: CoroutineIdleStrategy
+    private val pollIdleStrategy: CoroutineIdleStrategy
+    private val handshakeSendIdleStrategy: IdleStrategy
 
     /**
      * Crypto and signature management
@@ -170,10 +173,11 @@ internal constructor(val type: Class<*>,
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
-        sendIdleStrategy = config.sendIdleStrategy
-        pollIdleStrategy = config.pollIdleStrategy
+        sendIdleStrategy = config.sendIdleStrategy.clone()
+        pollIdleStrategy = config.pollIdleStrategy.clone()
+        handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
 
-        handshakeKryo = serialization.initHandshakeKryo()
+        handshakeKryo = serialization.initGlobalKryo()
 
         // we have to be able to specify the property store
         storage = SettingsStore(config.settingsStore.logger(logger), logger)
@@ -190,13 +194,11 @@ internal constructor(val type: Class<*>,
 
         if (type.javaClass == Server::class.java) {
             // server cannot "get" global RMI objects, only the client can
-            @Suppress("UNCHECKED_CAST")
             rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, serialization)
             { _, _, _ ->
                 throw IllegalAccessException("Global RMI access is only possible from a Client connection!")
             }
         } else {
-            @Suppress("UNCHECKED_CAST")
             rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, serialization)
             { connection, objectId, interfaceClass ->
                 return@RmiManagerConnections rmiGlobalSupport.getGlobalRemoteObject(connection, objectId, interfaceClass)
@@ -379,10 +381,11 @@ internal constructor(val type: Class<*>,
     internal fun writeHandshakeMessage(publication: Publication, aeronLogInfo: String, message: HandshakeMessage) {
         // The handshake sessionId IS NOT globally unique
         logger.trace { "[$aeronLogInfo - ${message.connectKey}] send HS: $message" }
+        var retryAttempts = 0
 
+        val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
         try {
-            // we are not thread-safe!
-            val buffer = handshakeKryo.write(message)
+            val buffer = kryo.write(message)
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
@@ -392,6 +395,35 @@ internal constructor(val type: Class<*>,
                 if (result >= 0) {
                     // success!
                     return
+                }
+
+                /**
+                 * Since the publication is not connected, we weren't able to send data to the remote endpoint.
+                 *
+                 * According to Aeron Docs, Pubs and Subs can "come and go", whatever that means. We just want to make sure that we
+                 * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
+                 */
+                if (result == Publication.NOT_CONNECTED) {
+                    if (retryAttempts++ < sendDataRetryMax) {
+
+                        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+                        //  publication of any state to other threads and not be long running or re-entrant with the client.
+                        // on close, the publication CAN linger (in case a client goes away, and then comes back)
+                        // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+
+                        //fixme: this should be the linger timeout, not a retry count!
+
+                        // we should retry.
+                        handshakeSendIdleStrategy.idle()
+                        continue
+                    } else {
+                        // more critical error sending the message. we shouldn't retry or anything.
+                        // this exception will be a ClientException or a ServerException
+                        val exception = newException("[$aeronLogInfo] Error sending message. (Retry count more than ${retryAttempts-1} ${errorCodeName(result)})")
+                        ListenerManager.cleanStackTraceInternal(exception)
+                        listenerManager.notifyError(exception)
+                        throw exception
+                    }
                 }
 
                 /**
@@ -407,7 +439,7 @@ internal constructor(val type: Class<*>,
                  */
                 if (result >= Publication.ADMIN_ACTION) {
                     // we should retry.
-                    sendIdleStrategy.idle()
+                    handshakeSendIdleStrategy.idle()
                     continue
                 }
 
@@ -428,7 +460,8 @@ internal constructor(val type: Class<*>,
                 throw exception
             }
         } finally {
-            sendIdleStrategy.reset()
+            serialization.returnKryo(kryo)
+            handshakeSendIdleStrategy.reset()
         }
     }
 
@@ -446,7 +479,7 @@ internal constructor(val type: Class<*>,
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = handshakeKryo.read(buffer, offset, length) as HandshakeMessage
 
-            logger.trace { "[$aeronLogInfo - ${message.connectKey}] received HS: $message (Might not be for this connection)" }
+            logger.trace { "[$aeronLogInfo - ${message.connectKey}] received HS: $message" }
 
             message
         } catch (e: Exception) {
@@ -474,7 +507,7 @@ internal constructor(val type: Class<*>,
         try {
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = serialization.readMessage(buffer, offset, length, connection)
-            logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
+            logger.error { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
 
             // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept date BEFORE it goes to a coroutine
 
@@ -536,7 +569,6 @@ internal constructor(val type: Class<*>,
                     // NOTE: This MUST be on a new co-routine
                     actionDispatch.launch {
                         try {
-                            @Suppress("UNCHECKED_CAST")
                             var hasListeners = listenerManager.notifyOnMessage(connection, message)
 
                             // each connection registers, and is polled INDEPENDENTLY for messages.
@@ -569,7 +601,7 @@ internal constructor(val type: Class<*>,
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
     @Suppress("DuplicatedCode", "UNCHECKED_CAST")
-    internal fun send(message: Any, publication: Publication, connection: Connection): Boolean {
+    internal suspend fun send(message: Any, publication: Publication, connection: Connection): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace {
             "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message"
@@ -619,13 +651,42 @@ internal constructor(val type: Class<*>,
     }
 
     // the actual bits that send data on the network.
-    internal fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
+    internal suspend fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
         var result: Long
+        var retryAttempts = 0
+
         while (true) {
             result = publication.offer(internalBuffer, offset, objectSize)
+            logger.error { "SEND DATA: $result" }
             if (result >= 0) {
                 // success!
                 return true
+            }
+
+            /**
+             * Since the publication is not connected, we weren't able to send data to the remote endpoint.
+             *
+             * According to Aeron Docs, Pubs and Subs can "come and go", whatever that means. We just want to make sure that we
+             * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
+             */
+            if (result == Publication.NOT_CONNECTED) {
+                if (retryAttempts++ < sendDataRetryMax) {
+                    // we should retry.
+                    sendIdleStrategy.idle()
+                    continue
+                } else {
+                    // more critical error sending the message. we shouldn't retry or anything.
+                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Retry count more than ${retryAttempts-1} ${errorCodeName(result)})"
+
+                    // either client or server. No other choices. We create an exception, because it's more useful!
+                    val exception = newException(errorMessage)
+
+                    // +2 because we do not want to see the stack for the abstract `newException`
+                    // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+                    // where we see who is calling "send()"
+                    ListenerManager.cleanStackTrace(exception, 5)
+                    return false
+                }
             }
 
             /**
@@ -644,7 +705,6 @@ internal constructor(val type: Class<*>,
                 sendIdleStrategy.idle()
                 continue
             }
-
 
             if (result == Publication.CLOSED && connection.isClosedViaAeron()) {
                 // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
@@ -744,19 +804,18 @@ internal constructor(val type: Class<*>,
                 // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
                 // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via and RMI method)
                 responseManager.close()
-            }
 
-            // the storage is closed via this as well.
-            storage.close()
 
-            close0()
+                // the storage is closed via this as well.
+                storage.close()
 
-            aeronDriver.close()
+                close0()
 
-            // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
-            try {
+                aeronDriver.close()
+
+                // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
                 shutdownLatch.countDown()
-            } catch (ignored: Exception) {}
+            }
 
             logger.info { "Done shutting down..." }
         }
