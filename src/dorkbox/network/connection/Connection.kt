@@ -193,23 +193,12 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    suspend fun send(message: Any): Boolean {
+    fun send(message: Any): Boolean {
         messagesInProgress.getAndIncrement()
         val success = endPoint.send(message, publication, this)
         messagesInProgress.getAndDecrement()
 
         return success
-    }
-
-    /**
-     * Safely sends objects to a destination.
-     *
-     * @return true if the message was successfully sent by aeron
-     */
-    fun sendBlocking(message: Any): Boolean {
-        return runBlocking {
-            send(message)
-        }
     }
 
     /**

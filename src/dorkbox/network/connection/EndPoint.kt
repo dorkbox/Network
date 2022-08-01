@@ -648,8 +648,15 @@ internal constructor(val type: Class<*>,
         return false
     }
 
-    // the actual bits that send data on the network.
-    internal suspend fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
+    /**
+     * the actual bits that send data on the network.
+     *
+     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    internal fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
+        var timeoutInNanos = 0L
+        var startTime = 0L
+
         var result: Long
         var retryAttempts = 0
 
