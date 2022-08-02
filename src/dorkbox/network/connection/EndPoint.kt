@@ -21,7 +21,6 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
-import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -137,8 +136,8 @@ internal constructor(val type: Class<*>,
 
     private val handshakeKryo: KryoExtra<CONNECTION>
 
-    private val sendIdleStrategy: CoroutineIdleStrategy
-    private val pollIdleStrategy: CoroutineIdleStrategy
+    private val sendIdleStrategy: IdleStrategy
+    private val pollIdleStrategy: IdleStrategy
     private val handshakeSendIdleStrategy: IdleStrategy
 
     /**
@@ -173,8 +172,8 @@ internal constructor(val type: Class<*>,
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
-        sendIdleStrategy = config.sendIdleStrategy.clone()
-        pollIdleStrategy = config.pollIdleStrategy.clone()
+        sendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
+        pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
         handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
 
         handshakeKryo = serialization.initHandshakeKryo()
@@ -192,15 +191,13 @@ internal constructor(val type: Class<*>,
             throw e
         }
 
-        if (type.javaClass == Server::class.java) {
+        rmiConnectionSupport = if (type.javaClass == Server::class.java) {
             // server cannot "get" global RMI objects, only the client can
-            rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, serialization)
-            { _, _, _ ->
+            RmiManagerConnections(logger, responseManager, listenerManager, serialization) { _, _, _ ->
                 throw IllegalAccessException("Global RMI access is only possible from a Client connection!")
             }
         } else {
-            rmiConnectionSupport = RmiManagerConnections(logger, responseManager, listenerManager, serialization)
-            { connection, objectId, interfaceClass ->
+            RmiManagerConnections(logger, responseManager, listenerManager, serialization) { connection, objectId, interfaceClass ->
                 return@RmiManagerConnections rmiGlobalSupport.getGlobalRemoteObject(connection, objectId, interfaceClass)
             }
         }
@@ -381,12 +378,14 @@ internal constructor(val type: Class<*>,
     internal fun writeHandshakeMessage(publication: Publication, aeronLogInfo: String, message: HandshakeMessage) {
         // The handshake sessionId IS NOT globally unique
         logger.trace { "[$aeronLogInfo - ${message.connectKey}] send HS: $message" }
-        var retryAttempts = 0
 
         try {
             val buffer = handshakeKryo.write(message)
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
+
+            var timeoutInNanos = 0L
+            var startTime = 0L
 
             var result: Long
             while (true) {
@@ -403,8 +402,12 @@ internal constructor(val type: Class<*>,
                  * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
                  */
                 if (result == Publication.NOT_CONNECTED) {
-                    if (retryAttempts++ < sendDataRetryMax) {
+                    if (timeoutInNanos == 0L) {
+                        timeoutInNanos = (aeronDriver.getLingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
+                        startTime = System.nanoTime()
+                    }
 
+                    if (System.nanoTime() - startTime < timeoutInNanos) {
                         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
                         //  publication of any state to other threads and not be long running or re-entrant with the client.
                         // on close, the publication CAN linger (in case a client goes away, and then comes back)
@@ -415,13 +418,19 @@ internal constructor(val type: Class<*>,
                         // we should retry.
                         handshakeSendIdleStrategy.idle()
                         continue
-                    } else {
+                    } else if (!publication.isClosed) {
                         // more critical error sending the message. we shouldn't retry or anything.
                         // this exception will be a ClientException or a ServerException
-                        val exception = newException("[$aeronLogInfo] Error sending message. (Retry count more than ${retryAttempts-1} ${errorCodeName(result)})")
+                        val exception = newException(
+                            "[$aeronLogInfo] Error sending message. (Connection in non-connected state longer than linger timeout ${errorCodeName(result)})"
+                        )
                         ListenerManager.cleanStackTraceInternal(exception)
                         listenerManager.notifyError(exception)
                         throw exception
+                    }
+                    else {
+                        // publication was actually closed, so no bother throwing an error
+                        return
                     }
                 }
 
@@ -505,7 +514,7 @@ internal constructor(val type: Class<*>,
         try {
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = serialization.readMessage(buffer, offset, length, connection)
-            logger.error { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
+            logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
 
             // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept date BEFORE it goes to a coroutine
 
@@ -599,7 +608,7 @@ internal constructor(val type: Class<*>,
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
     @Suppress("DuplicatedCode", "UNCHECKED_CAST")
-    internal suspend fun send(message: Any, publication: Publication, connection: Connection): Boolean {
+    internal fun send(message: Any, publication: Publication, connection: Connection): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace {
             "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message"
@@ -658,11 +667,8 @@ internal constructor(val type: Class<*>,
         var startTime = 0L
 
         var result: Long
-        var retryAttempts = 0
-
         while (true) {
             result = publication.offer(internalBuffer, offset, objectSize)
-            logger.error { "SEND DATA: $result" }
             if (result >= 0) {
                 // success!
                 return true
@@ -675,13 +681,18 @@ internal constructor(val type: Class<*>,
              * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
              */
             if (result == Publication.NOT_CONNECTED) {
-                if (retryAttempts++ < sendDataRetryMax) {
+                if (timeoutInNanos == 0L) {
+                    timeoutInNanos = (aeronDriver.getLingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
+                    startTime = System.nanoTime()
+                }
+
+                if (System.nanoTime() - startTime < timeoutInNanos) {
                     // we should retry.
                     sendIdleStrategy.idle()
                     continue
-                } else {
+                } else if (!publication.isClosed) {
                     // more critical error sending the message. we shouldn't retry or anything.
-                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Retry count more than ${retryAttempts-1} ${errorCodeName(result)})"
+                    val errorMessage = "[${publication.sessionId()}] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})"
 
                     // either client or server. No other choices. We create an exception, because it's more useful!
                     val exception = newException(errorMessage)
@@ -690,6 +701,9 @@ internal constructor(val type: Class<*>,
                     // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                     // where we see who is calling "send()"
                     ListenerManager.cleanStackTrace(exception, 5)
+                    return false
+                } else {
+                    // publication was actually closed, so no bother throwing an error
                     return false
                 }
             }
@@ -710,6 +724,7 @@ internal constructor(val type: Class<*>,
                 sendIdleStrategy.idle()
                 continue
             }
+
 
             if (result == Publication.CLOSED && connection.isClosedViaAeron()) {
                 // this can happen when we use RMI to close a connection. RMI will (in most cases) ALWAYS send a response when it's
@@ -796,31 +811,31 @@ internal constructor(val type: Class<*>,
         if (shutdown.compareAndSet(expect = false, update = true)) {
             logger.info { "Shutting down..." }
 
-            runBlocking {
-                // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
-                // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
-                val enableRemove = type == Client::class.java
-                connections.forEach {
-                    logger.info { "[${it.id}/${it.streamId}] Closing connection" }
-                    it.close(enableRemove, true)
-                }
 
+            // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
+            // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
+            val enableRemove = type == Client::class.java
+            connections.forEach {
+                logger.info { "[${it.id}/${it.streamId}] Closing connection" }
+                it.close(enableRemove, true)
+            }
+
+            runBlocking {
                 // Connections are closed first, because we want to make sure that no RMI messages can be received
                 // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
                 // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via and RMI method)
                 responseManager.close()
-
-
-                // the storage is closed via this as well.
-                storage.close()
-
-                close0()
-
-                aeronDriver.close()
-
-                // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
-                shutdownLatch.countDown()
             }
+
+            // the storage is closed via this as well.
+            storage.close()
+
+            close0()
+
+            aeronDriver.close()
+
+            // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
+            shutdownLatch.countDown()
 
             logger.info { "Done shutting down..." }
         }

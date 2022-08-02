@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron
+package dorkbox.network.aeron.mediaDriver
 
 import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
+import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uriEndpoint
 import mu.KLogger
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -27,21 +29,21 @@ import java.net.InetAddress
  * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER.
  * A connection timeout of 0, means to wait forever
  */
-internal open class ServerUdp_MediaDriver(val listenAddress: InetAddress,
-                                          subscriptionPort: Int,
-                                          streamId: Int,
-                                          sessionId: Int,
-                                          connectionTimeoutSec: Int,
-                                          isReliable: Boolean) :
-    MediaDriverServer(subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
+internal open class ServerUdpDriver(val listenAddress: InetAddress,
+                                    port: Int,
+                                    streamId: Int,
+                                    sessionId: Int,
+                                    connectionTimeoutSec: Int,
+                                    isReliable: Boolean) :
+    MediaDriverServer(port, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
+
+    var success: Boolean = false
     override val type = "udp"
 
     fun build(aeronDriver: AeronDriver, logger: KLogger) {
-        val connectionString = connectionString(listenAddress)
-
         // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = uriEndpoint("udp", sessionId, isReliable, "$connectionString:$subscriptionPort")
+        val subscriptionUri = uriEndpoint("udp", sessionId, isReliable, listenAddress, IP.toString(listenAddress), port)
 
         if (logger.isTraceEnabled) {
             if (listenAddress is Inet4Address) {
@@ -67,9 +69,9 @@ internal open class ServerUdp_MediaDriver(val listenAddress: InetAddress,
         }
 
         if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
-            "Listening on $address [$subscriptionPort] [$streamId|$sessionId] (reliable:$isReliable)"
+            "Listening on $address [$port] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
-            "Listening handshake on $address [$subscriptionPort] [$streamId|*] (reliable:$isReliable)"
+            "Listening handshake on $address [$port] [$streamId|*] (reliable:$isReliable)"
         }
     }
 

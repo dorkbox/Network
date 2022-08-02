@@ -15,16 +15,15 @@
  */
 @file:Suppress("DuplicatedCode")
 
-package dorkbox.network.aeron
+package dorkbox.network.aeron.mediaDriver
 
-import io.aeron.Publication
 import io.aeron.Subscription
 
-abstract class MediaDriverClient(subscriptionPort: Int,
-                                 streamId: Int, sessionId: Int, val localSessionId: Int,
-                                 connectionTimeoutSec: Int, isReliable: Boolean) :
-    MediaDriverConnection(subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
+abstract class MediaDriverServer(val port: Int,
+                                 val streamId: Int,
+                                 val sessionId: Int,
+                                 val connectionTimeoutSec: Int, val
+                                 isReliable: Boolean) : MediaDriverConnection {
 
     lateinit var subscription: Subscription
-    lateinit var publication: Publication
 }

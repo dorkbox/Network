@@ -1,4 +1,4 @@
-package dorkbox.network.aeron
+package dorkbox.network.aeron.mediaDriver
 
 import io.aeron.Publication
 import io.aeron.Subscription

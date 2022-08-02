@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron
+package dorkbox.network.aeron.mediaDriver
 
-import dorkbox.netUtil.IP
+import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uriEndpoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
@@ -30,20 +31,16 @@ import java.util.concurrent.*
  * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER.
  * A connection timeout of 0, means to wait forever
  */
-internal class ClientUdp_MediaDriver(val address: InetAddress,
-                                     val publicationPort: Int,
-                                     subscriptionPort: Int,
-                                     streamId: Int,
-                                     sessionId: Int,
-                                     localSessionId: Int,
-                                     connectionTimeoutSec: Int = 0,
-                                     isReliable: Boolean) :
-    MediaDriverClient(subscriptionPort, streamId, sessionId, localSessionId, connectionTimeoutSec, isReliable) {
+internal class ClientUdpDriver(val address: InetAddress, val addressString: String,
+                               port: Int,
+                               streamId: Int,
+                               sessionId: Int,
+                               localSessionId: Int,
+                               connectionTimeoutSec: Int = 0,
+                               isReliable: Boolean) :
+    MediaDriverClient(port, streamId, sessionId, localSessionId, connectionTimeoutSec, isReliable) {
 
-    private val addressString: String by lazy {
-        IP.toString(address)
-    }
-
+    var success: Boolean = false
     override val type: String by lazy {
         if (address is Inet4Address) {
             "IPv4"
@@ -52,15 +49,12 @@ internal class ClientUdp_MediaDriver(val address: InetAddress,
         }
     }
 
-
     /**
      * @throws ClientRetryException if we need to retry to connect
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
     @Suppress("DuplicatedCode")
     fun build(aeronDriver: AeronDriver, logger: KLogger) {
-        val aeronAddressString = connectionString(address)
-
         var success = false
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
@@ -71,10 +65,10 @@ internal class ClientUdp_MediaDriver(val address: InetAddress,
 
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-        val publicationUri = uriEndpoint("udp", sessionId, isReliable, "$aeronAddressString:$publicationPort")
+        val publicationUri = uriEndpoint("udp", remoteSessionId, isReliable, address, addressString, port)
 
         // Create a subscription the given address and port, using the given stream ID.
-        val subscriptionUri = uriEndpoint("udp", localSessionId, isReliable, "$aeronAddressString:$subscriptionPort")
+        val subscriptionUri = uriEndpoint("udp", localSessionId, isReliable, address, addressString, 0)
 
 
         if (logger.isTraceEnabled) {
@@ -84,14 +78,13 @@ internal class ClientUdp_MediaDriver(val address: InetAddress,
 
         // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
         //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
-        val lingerTimeoutNs = aeronDriver.getLingerNs()
 
         val publication = aeronDriver.addPublication(publicationUri, streamId)
         val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
 
 
         // always include the linger timeout, so we don't accidentally kill ourself by taking too long
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + lingerTimeoutNs
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
         val startTime = System.nanoTime()
 
         while (System.nanoTime() - startTime < timoutInNanos) {
@@ -119,9 +112,9 @@ internal class ClientUdp_MediaDriver(val address: InetAddress,
 
     override val info: String by lazy {
         if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
-            "$addressString [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
+            "$addressString [$port|$subscriptionPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
-            "Connecting handshake to $addressString [$subscriptionPort|$publicationPort] [$streamId|*] (reliable:$isReliable)"
+            "Connecting handshake to $addressString [$port|$subscriptionPort] [$streamId|*] (reliable:$isReliable)"
         }
     }
 

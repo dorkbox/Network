@@ -188,7 +188,6 @@ internal class CryptoManagement(val logger: KLogger,
 
     // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the server, mutually exclusive calls to decrypt)
     fun encrypt(clientPublicKeyBytes: ByteArray,
-                publicationPort: Int,
                 subscriptionPort: Int,
                 connectionSessionId: Int,
                 connectionStreamId: Int,
@@ -205,7 +204,6 @@ internal class CryptoManagement(val logger: KLogger,
             cryptOutput.reset()
             cryptOutput.writeInt(connectionSessionId)
             cryptOutput.writeInt(connectionStreamId)
-            cryptOutput.writeInt(publicationPort)
             cryptOutput.writeInt(subscriptionPort)
             cryptOutput.writeInt(kryoRegDetails.size)
             cryptOutput.writeBytes(kryoRegDetails)
@@ -230,7 +228,6 @@ internal class CryptoManagement(val logger: KLogger,
 
             val sessionId = cryptInput.readInt()
             val streamId = cryptInput.readInt()
-            val publicationPort = cryptInput.readInt()
             val subscriptionPort = cryptInput.readInt()
             val regDetailsSize = cryptInput.readInt()
             val regDetails = cryptInput.readBytes(regDetailsSize)
@@ -238,8 +235,7 @@ internal class CryptoManagement(val logger: KLogger,
             // now read data off
             return ClientConnectionInfo(sessionId = sessionId,
                                         streamId = streamId,
-                                        publicationPort = publicationPort,
-                                        subscriptionPort = subscriptionPort,
+                                        port = subscriptionPort,
                                         publicKey = serverPublicKeyBytes,
                                         kryoRegistrationDetails = regDetails)
         } catch (e: Exception) {

@@ -52,6 +52,6 @@ class StreamingTest : BaseTest() {
             client.connect(LOCALHOST)
         }
 
-        waitForThreads(0)
+        waitForThreads()
     }
 }

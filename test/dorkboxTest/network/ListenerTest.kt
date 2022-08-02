@@ -80,6 +80,7 @@ class ListenerTest : BaseTest() {
 
         // standard listener
         server.onMessage<String> { message ->
+            logger.error ("server string message")
             // should be called
             check()
             send(message)
@@ -89,23 +90,28 @@ class ListenerTest : BaseTest() {
         server.onMessage<Any> {
             // should be called!
             serverOnMessage.value = true
+            logger.error ("server any message")
         }
 
         // standard connect check
         server.onConnect {
+            logger.error ("server connect")
             serverConnect.value = true
 
             onMessage<Any> {
+                logger.error ("server connection any message")
                 serverConnectionOnMessage.getAndIncrement()
             }
 
             onDisconnect {
+                logger.error ("server connection disconnect")
                 serverDisconnectMessage.getAndIncrement()
             }
         }
 
         // standard listener disconnect check
         server.onDisconnect {
+            logger.error ("server disconnect")
             serverDisconnect.value = true
         }
 
@@ -122,10 +128,19 @@ class ListenerTest : BaseTest() {
 
 
         client.onConnect {
+            logger.error { "client connect 1" }
             send(origString) // 20 a's
         }
 
+        // standard connect check
+        client.onConnect {
+            logger.error { "client connect 2" }
+            clientConnect.value = true
+        }
+
+
         client.onMessage<String> { message ->
+            logger.error { "client string message" }
             if (origString != message) {
                 checkFail2.value = true
                 System.err.println("original string not equal to the string received")
@@ -140,21 +155,16 @@ class ListenerTest : BaseTest() {
             }
         }
 
-        // standard connect check
-        client.onConnect {
-            clientConnect.value = true
-        }
-
-
         // standard listener disconnect check
         client.onDisconnect {
+            logger.error ("client disconnect")
             clientDisconnect.value = true
         }
 
 
         client.connect(LOCALHOST)
 
-        waitForThreads(0)
+        waitForThreads()
 
         // +1 BECAUSE we are `getAndIncrement` for each check earlier
         val limitCheck = limit+1

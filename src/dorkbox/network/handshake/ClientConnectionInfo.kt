@@ -15,8 +15,7 @@
  */
 package dorkbox.network.handshake
 
-internal class ClientConnectionInfo(val subscriptionPort: Int = 0,
-                                    val publicationPort: Int = 0,
+internal class ClientConnectionInfo(val port: Int = 0,
                                     val sessionId: Int,
                                     val streamId: Int = 0,
                                     val publicKey: ByteArray = ByteArray(0),

@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron
+package dorkbox.network.aeron.mediaDriver
 
+import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
 import mu.KLogger
 
 /**
  * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
  * NOTE: IPC connection will ALWAYS have a timeout of 10 second to connect. This is IPC, it should connect fast
  */
-internal open class ServerIpc_MediaDriver(streamId: Int,
-                                          val streamIdSubscription: Int,
-                                          sessionId: Int) :
+internal open class ServerIpcDriver(streamId: Int,
+                                    sessionId: Int) :
     MediaDriverServer(0, streamId, sessionId, 10, true) {
 
+
+    var success: Boolean = false
     override val type = "ipc"
 
     /**
@@ -43,14 +46,14 @@ internal open class ServerIpc_MediaDriver(streamId: Int,
         }
 
         success = true
-        subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSubscription)
+        subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
     }
 
     override val info : String by lazy {
         if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
-            "[$sessionId] IPC listening on [$streamIdSubscription] [$sessionId]"
+            "[$sessionId] IPC listening on [$streamId] [$sessionId]"
         } else {
-            "Listening handshake on IPC [$streamIdSubscription] [$sessionId]"
+            "Listening handshake on IPC [$streamId] [$sessionId]"
         }
     }
 

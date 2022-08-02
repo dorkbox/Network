@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron
+package dorkbox.network.aeron.mediaDriver
 
+import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
@@ -27,13 +29,19 @@ import java.util.concurrent.*
  * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
  * NOTE: IPC connection will ALWAYS have a timeout of 10 second to connect. This is IPC, it should connect fast
  */
-internal open class ClientIpc_MediaDriver(streamId: Int,
-                                          val streamIdSubscription: Int,
-                                          sessionId: Int,
-                                          localSessionId: Int) :
-    MediaDriverClient(streamIdSubscription, streamId, sessionId, localSessionId, 10, true) {
+internal open class ClientIpcDriver(streamId: Int,
+                                    sessionId: Int,
+                                    localSessionId: Int) :
+    MediaDriverClient(
+        port = streamId,
+        streamId = streamId,
+        remoteSessionId = sessionId,
+        localSessionId = localSessionId,
+        connectionTimeoutSec = 10,
+        isReliable = true
+    ) {
 
-
+    var success: Boolean = false
     override val type = "ipc"
 
     /**
@@ -45,10 +53,10 @@ internal open class ClientIpc_MediaDriver(streamId: Int,
     fun build(aeronDriver: AeronDriver, logger: KLogger) {
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-        val publicationUri = uri("ipc", sessionId)
+        val publicationUri = uri("ipc", remoteSessionId)
 
         // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = uri("ipc", localSessionId)
+        val subscriptionUri = uri("ipc", 0)
 
         if (logger.isTraceEnabled) {
             logger.trace("IPC client pub URI: ${publicationUri.build()}")
@@ -62,14 +70,14 @@ internal open class ClientIpc_MediaDriver(streamId: Int,
 
         // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
         //      ESPECIALLY if it is with the same streamID
-        val lingerTimeoutNs = aeronDriver.getLingerNs()
-        sleep(TimeUnit.NANOSECONDS.toMillis(lingerTimeoutNs))
+        // this check is in the "reconnect" logic
 
         val publication = aeronDriver.addPublication(publicationUri, streamId)
-        val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSubscription)
+        val subscription = aeronDriver.addSubscription(subscriptionUri, localSessionId)
+
 
         // always include the linger timeout, so we don't accidentally kill ourself by taking too long
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + lingerTimeoutNs
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
         val startTime = System.nanoTime()
 
         while (System.nanoTime() - startTime < timoutInNanos) {
@@ -80,7 +88,6 @@ internal open class ClientIpc_MediaDriver(streamId: Int,
 
             sleep(500L)
         }
-
         if (!success) {
             subscription.close()
             publication.close()
@@ -97,9 +104,9 @@ internal open class ClientIpc_MediaDriver(streamId: Int,
 
     override val info : String by lazy {
         if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
-            "[$sessionId] IPC connection established to [$streamIdSubscription|$streamId]"
+            "[$sessionId] IPC connection established to [$streamId|$subscriptionPort]"
         } else {
-            "Connecting handshake to IPC [$streamIdSubscription|$streamId]"
+            "Connecting handshake to IPC [$streamId|$subscriptionPort]"
         }
     }
 

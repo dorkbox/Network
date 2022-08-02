@@ -36,7 +36,10 @@ package dorkboxTest.network
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.ConsoleAppender
 import dorkbox.network.Client
 import dorkbox.network.ClientConfiguration
 import dorkbox.network.Configuration
@@ -93,9 +96,9 @@ abstract class BaseTest {
 //                }
 //            }
 
-//            setLogLevel(Level.TRACE)
+            setLogLevel(Level.TRACE)
 //            setLogLevel(Level.ERROR)
-            setLogLevel(Level.DEBUG)
+//            setLogLevel(Level.DEBUG)
 
             // we want our entropy generation to be simple (ie, no user interaction to generate)
             try {
@@ -109,8 +112,7 @@ abstract class BaseTest {
 
             val configuration = ClientConfiguration()
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-            configuration.subscriptionPort = 2201
-            configuration.publicationPort = 2200
+            configuration.port = 2200
 
             configuration.enableIpc = false
 
@@ -121,12 +123,12 @@ abstract class BaseTest {
         fun serverConfig(block: ServerConfiguration.() -> Unit = {}): ServerConfiguration {
             val configuration = ServerConfiguration()
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-
-            configuration.subscriptionPort = 2200
+            configuration.port = 2200
 
             configuration.enableIpc = false
-            configuration.maxClientCount = 5
-            configuration.maxConnectionsPerIpAddress = 5
+
+            configuration.maxClientCount = 50
+            configuration.maxConnectionsPerIpAddress = 50
 
             block(configuration)
             return configuration
@@ -141,30 +143,31 @@ abstract class BaseTest {
             rootLogger.level = level
 
             val context = rootLogger.loggerContext
-            context.reset() // override default configuration
 
             val jc = JoranConfigurator()
             jc.context = context
             jc.doConfigure(File("logback.xml").absoluteFile)
+            context.reset() // override default configuration
+
+
+            // we only want error messages
+            val nettyLogger = LoggerFactory.getLogger("io.netty") as Logger
+            nettyLogger.level = Level.ERROR
 
             // we only want error messages
             val kryoLogger = LoggerFactory.getLogger("com.esotericsoftware") as Logger
             kryoLogger.level = Level.ERROR
 
-//            val encoder = PatternLayoutEncoder()
-//            encoder.context = context
-//            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
-//            encoder.start()
-//
-//            val consoleAppender = ConsoleAppender<ILoggingEvent>()
-//            consoleAppender.context = context
-//            consoleAppender.encoder = encoder
-//            consoleAppender.start()
-//
-//            rootLogger.addAppender(consoleAppender)
 
-//            context.getLogger(Server::class.simpleName).trace("TESTING")
-//            context.getLogger(Client::class.simpleName).trace("TESTING")
+            val encoder = PatternLayoutEncoder()
+            encoder.context = context
+            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
+            encoder.start()
+            val consoleAppender = ConsoleAppender<ILoggingEvent>()
+            consoleAppender.context = context
+            consoleAppender.encoder = encoder
+            consoleAppender.start()
+            rootLogger.addAppender(consoleAppender)
         }
     }
 

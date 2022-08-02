@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.aeron.MediaDriverConnectInfo
+import dorkbox.network.aeron.mediaDriver.MediaDriverConnectInfo
 
 data class ConnectionParams<CONNECTION : Connection>(
     val endPoint: EndPoint<CONNECTION>,

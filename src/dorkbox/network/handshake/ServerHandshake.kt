@@ -15,14 +15,13 @@
  */
 package dorkbox.network.handshake
 
-import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.MediaDriverConnectInfo
-import dorkbox.network.aeron.MediaDriverConnection
-import dorkbox.network.aeron.ServerIpc_MediaDriver
-import dorkbox.network.aeron.UdpMediaDriverPairedConnection
+import dorkbox.network.aeron.mediaDriver.MediaDriverConnectInfo
+import dorkbox.network.aeron.mediaDriver.MediaDriverConnection
+import dorkbox.network.aeron.mediaDriver.ServerIpcDriver
+import dorkbox.network.aeron.mediaDriver.UdpMediaDriverPairedConnection
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.ListenerManager
@@ -313,9 +312,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
         // create a new connection. The session ID is encrypted.
         try {
             // Create a subscription at the given address and port, using the given stream ID.
-            val driver = ServerIpc_MediaDriver(streamId = connectionStreamPubId,
-                                               streamIdSubscription = connectionStreamSubId,
-                                               sessionId = connectionSessionId)
+            val driver = ServerIpcDriver(streamId = connectionStreamSubId,
+                                         sessionId = connectionSessionId)
             driver.build(aeronDriver, logger)
 
             // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
@@ -325,8 +323,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
             val clientConnection = MediaDriverConnectInfo(
                 publication = clientPublication,
                 subscription = driver.subscription,
-                subscriptionPort = driver.streamIdSubscription,
-                publicationPort = driver.streamId,
+                subscriptionPort = driver.streamId,
+                publicationPort = message.subscriptionPort,
                 streamId = 0, // this is because with IPC, we have stream sub/pub (which are replaced as port sub/pub)
                 sessionId = driver.sessionId,
                 isReliable = driver.isReliable,
@@ -360,7 +358,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
             cryptOutput.reset()
             cryptOutput.writeInt(connectionSessionId)
             cryptOutput.writeInt(connectionStreamSubId)
-            cryptOutput.writeInt(connectionStreamPubId)
 
             val regDetails = serialization.getKryoRegistrationDetails()
             cryptOutput.writeInt(regDetails.size)
@@ -391,7 +388,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
     fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshakePublication: Publication,
-        remoteIpAndPort: String,
+        clientAddress: InetAddress,
+        clientAddressString: String,
         isReliable: Boolean,
         message: HandshakeMessage,
         aeronDriver: AeronDriver,
@@ -400,20 +398,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ) {
-
-        // split
-        val splitPoint = remoteIpAndPort.lastIndexOf(':')
-        val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
-        // val port = remoteIpAndPort.substring(splitPoint+1)
-
-        // this should never be null, because we are feeding it a valid IP address from aeron
-        val clientAddress = IP.toAddress(clientAddressString)
-        if (clientAddress == null) {
-            logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Invalid IP address!" }
-            return
-        }
-
-
         // Manage the Handshake state
         if (!validateMessageTypeAndDoPending(
                 server, server.actionDispatch, handshakePublication, message,
@@ -421,8 +405,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
         {
             return
         }
-
-
 
         val clientPublicKeyBytes = message.publicKey
         val validateRemoteAddress: PublicKeyValidationState
@@ -491,7 +473,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
         // the pub/sub do not necessarily have to be the same. They can be ANY port
         val publicationPort = message.subscriptionPort
-        val subscriptionPort = config.subscriptionPort
+        val subscriptionPort = config.port
 
 
         // create a new connection. The session ID is encrypted.
@@ -507,7 +489,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             }
 
             // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
-            val publicationUri = MediaDriverConnection.uriEndpoint("udp", message.sessionId, isReliable, "$clientAddressString:${message.subscriptionPort}")
+            val publicationUri = MediaDriverConnection.uriEndpoint("udp", message.sessionId, isReliable, clientAddress, clientAddressString, message.subscriptionPort)
             val clientPublication = aeronDriver.addPublication(publicationUri, message.streamId)
 
             val driver = UdpMediaDriverPairedConnection(
@@ -529,7 +511,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             val clientConnection = MediaDriverConnectInfo(
                 publication = driver.publication,
                 subscription = driver.subscription,
-                subscriptionPort = driver.subscriptionPort,
+                subscriptionPort = driver.port,
                 publicationPort = publicationPort,
                 streamId = driver.streamId,
                 sessionId = driver.sessionId,
@@ -574,7 +556,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             // now create the encrypted payload, using ECDH
             successMessage.registrationData = server.crypto.encrypt(clientPublicKeyBytes!!,
-                                                                    publicationPort,
                                                                     subscriptionPort,
                                                                     connectionSessionId,
                                                                     connectionStreamId,

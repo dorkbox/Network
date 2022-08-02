@@ -15,34 +15,22 @@
  */
 @file:Suppress("DuplicatedCode")
 
-package dorkbox.network.aeron
+package dorkbox.network.aeron.mediaDriver
 
+import dorkbox.network.aeron.AeronDriver
 import io.aeron.ChannelUriStringBuilder
 import java.net.Inet4Address
 import java.net.InetAddress
 
-abstract class MediaDriverConnection(val subscriptionPort: Int,
-                                     val streamId: Int, val sessionId: Int,
-                                     val connectionTimeoutSec: Int, val isReliable: Boolean) {
+interface MediaDriverConnection {
 
-    var success: Boolean = false
-    abstract val type: String
+    val type: String
+
+    // We don't use 'suspend' for these, because we have to pump events from a NORMAL thread. If there are any suspend points, there is
+    // the potential for a live-lock due to coroutine scheduling
+    val info : String
 
     companion object {
-        fun connectionString(ipAddress: InetAddress): String {
-            return if (ipAddress is Inet4Address) {
-                ipAddress.hostAddress
-            } else {
-                // IPv6 requires the address to be bracketed by [...]
-                val host = ipAddress.hostAddress
-                if (host[0] == '[') {
-                    host
-                } else {
-                    "[${ipAddress.hostAddress}]"
-                }
-            }
-        }
-
         fun uri(type: String, sessionId: Int, isReliable: Boolean? = null): ChannelUriStringBuilder {
             val builder = ChannelUriStringBuilder().media(type)
             if (isReliable != null) {
@@ -56,16 +44,22 @@ abstract class MediaDriverConnection(val subscriptionPort: Int,
             return builder
         }
 
-        fun uriEndpoint(type: String, sessionId: Int, isReliable: Boolean, endpoint: String): ChannelUriStringBuilder {
+        fun uriEndpoint(type: String, sessionId: Int, isReliable: Boolean, address: InetAddress, addressString: String, port: Int): ChannelUriStringBuilder {
             val builder = uri(type, sessionId, isReliable)
-            builder.endpoint(endpoint)
+
+            if (address is Inet4Address) {
+                builder.endpoint("$addressString:$port")
+            } else {
+                // IPv6 requires the address to be bracketed by [...]
+                if (addressString[0] == '[') {
+                    builder.endpoint("$addressString:$port")
+                } else {
+                    // there MUST be [] surrounding the IPv6 address for aeron to like it!
+                    builder.endpoint("[$addressString]:$port")
+                }
+            }
+
             return builder
         }
     }
-
-
-
-    // We don't use 'suspend' for these, because we have to pump events from a NORMAL thread. If there are any suspend points, there is
-    // the potential for a live-lock due to coroutine scheduling
-    abstract val info : String
 }

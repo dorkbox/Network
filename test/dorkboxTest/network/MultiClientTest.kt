@@ -15,7 +15,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class MultiClientTest : BaseTest() {
-    private val totalCount = 10
+    private val totalCount = 2
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
     private val disconnectCount = atomic(0)
@@ -31,7 +31,6 @@ class MultiClientTest : BaseTest() {
             val config = clientConfig()
             config.enableIPv6 = false
             config.uniqueAeronDirectory = true
-            config.subscriptionPort += i
 
             val client: Client<Connection> = Client(config, "Client$i")
             client.onConnect {
@@ -89,7 +88,7 @@ class MultiClientTest : BaseTest() {
             }
         }
 
-        waitForThreads(0) {
+        waitForThreads() {
             outputStats(server)
         }
 

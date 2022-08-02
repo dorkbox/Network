@@ -16,7 +16,7 @@
 package dorkbox.network.handshake
 
 import dorkbox.network.Client
-import dorkbox.network.aeron.MediaDriverClient
+import dorkbox.network.aeron.mediaDriver.MediaDriverClient
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.ListenerManager
@@ -115,22 +115,20 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 }
                 HandshakeMessage.HELLO_ACK_IPC -> {
                     // The message was intended for this client. Try to parse it as one of the available message types.
-                    // this message is ENCRYPTED!
+                    // this message is NOT-ENCRYPTED!
                     val cryptInput = crypto.cryptInput
 
                     if (registrationData != null) {
                         cryptInput.buffer = registrationData
 
                         val sessId = cryptInput.readInt()
-                        val streamSubId = cryptInput.readInt()
                         val streamPubId = cryptInput.readInt()
                         val regDetailsSize = cryptInput.readInt()
                         val regDetails = cryptInput.readBytes(regDetailsSize)
 
                         // now read data off
                         connectionHelloInfo = ClientConnectionInfo(sessionId = sessId,
-                                                                   subscriptionPort = streamSubId,
-                                                                   publicationPort = streamPubId,
+                                                                   port = streamPubId,
                                                                    kryoRegistrationDetails = regDetails)
                     } else {
                         failedException = ClientRejectedException("[$aeronLogInfo - ${message.connectKey}] canceled handshake for message without registration data")
@@ -165,7 +163,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         connectKey = getSafeConnectKey()
         val publicKey = endPoint.storage.getPublicKey()!!
 
-        val aeronLogInfo = "${handshakeConnection.sessionId}/${handshakeConnection.streamId}"
+        val aeronLogInfo = "${handshakeConnection.remoteSessionId}/${handshakeConnection.streamId}"
 
         // Send the one-time pad to the server.
         val publication = handshakeConnection.publication
@@ -230,10 +228,10 @@ internal class ClientHandshake<CONNECTION: Connection>(
     // called from the connect thread
     fun done(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) {
         val registrationMessage = HandshakeMessage.doneFromClient(connectKey,
-                                                                                      handshakeConnection.subscriptionPort,
-                                                                                      handshakeConnection.subscription.streamId())
+                                                                  handshakeConnection.subscriptionPort,
+                                                                  handshakeConnection.subscription.streamId())
 
-        val aeronLogInfo = "${handshakeConnection.sessionId}/${handshakeConnection.streamId}"
+        val aeronLogInfo = "${handshakeConnection.remoteSessionId}/${handshakeConnection.streamId}"
 
         // Send the done message to the server.
         try {

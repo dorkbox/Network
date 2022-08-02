@@ -75,28 +75,9 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         }
 
     /**
-     * The IPC Publication ID is used to define what ID the server will send data on. The client IPC subscription ID must match this value.
+     * The IPC ID is used to define what ID the server will receive data on. The client IPC ID must match this value.
      */
-    var ipcPublicationId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_PUB
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
-
-    /**
-     * The IPC Subscription ID is used to define what ID the server will receive data on. The client IPC publication ID must match this value.
-     */
-    var ipcSubscriptionId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
-
-    /**
-     * Specifies the Java thread that will poll the underlying network for incoming messages
-     */
-    var networkInterfaceEventDispatcher = Executors.newSingleThreadExecutor(
-        NamedThreadFactory( "Network Event Dispatcher", Thread.currentThread().threadGroup, Thread.NORM_PRIORITY, true))
+    var ipcId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -133,29 +114,12 @@ class ServerConfiguration : dorkbox.network.Configuration() {
 
 class ClientConfiguration : dorkbox.network.Configuration() {
     /**
-     * Specify the UDP port to use. This port is used to establish client-server connections, and is from the
-     * perspective of the server
-     *
-     * This means that server-pub -> {{network}} -> client-sub
-     *
-     * Must be greater than 0
-     */
-    var publicationPort: Int = 0
-        set(value) {
-            require(!contextDefined) { dorkbox.network.Configuration.errorMessage }
-            field = value
-        }
-
-    /**
      * Validates the current configuration
      */
     @Suppress("DuplicatedCode")
     override fun validate() {
         super.validate()
         // have to do some basic validation of our configuration
-
-        require(publicationPort > 0) { "configuration port must be > 0" }
-        require(publicationPort < 65535)  { "configuration port must be < 65535" }
     }
 }
 
@@ -166,6 +130,17 @@ abstract class Configuration {
         @Volatile
         private var alreadyShownTips = false
     }
+
+    /**
+     * Specifies the Java thread that will poll the underlying network for incoming messages
+     */
+    var networkInterfaceEventDispatcher: ExecutorService = Executors.newSingleThreadExecutor(
+        NamedThreadFactory( "Network Event Dispatcher", Thread.currentThread().threadGroup, Thread.NORM_PRIORITY, true)
+    )
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
 
     /**
      * Enables the ability to use the IPv4 network stack.
@@ -210,14 +185,15 @@ abstract class Configuration {
 
 
     /**
-     * Specify the UDP subscription port to use. This port is used to establish client-server connections, and is from the
-     * perspective of the server.
+     * Specify the UDP port to use. This port is used to establish client-server connections.
+     * When used for the server, this is the subscription port, which will be listening for incoming connections
+     * When used for the client, this is the publication port, which is what port to connect to when establishing a connection
      *
      * This means that client-pub -> {{network}} -> server-sub
      *
-     * Must be greater than 0
+     * Must be the value of an unsigned short and greater than 0
      */
-    var subscriptionPort: Int = 0
+    var port: Int = 0
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -568,8 +544,8 @@ abstract class Configuration {
             }
         }
 
-        require(subscriptionPort > 0) { "configuration controlPort must be > 0" }
-        require(subscriptionPort < 65535) { "configuration controlPort must be < 65535" }
+        require(port > 0) { "configuration controlPort must be > 0" }
+        require(port < 65535) { "configuration controlPort must be < 65535" }
 
         require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
         require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }

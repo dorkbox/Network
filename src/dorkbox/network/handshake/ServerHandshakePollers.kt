@@ -2,13 +2,14 @@
 
 package dorkbox.network.handshake
 
+import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
-import dorkbox.network.aeron.MediaDriverConnection
-import dorkbox.network.aeron.ServerIpc_MediaDriver
-import dorkbox.network.aeron.ServerUdp_MediaDriver
+import dorkbox.network.aeron.mediaDriver.MediaDriverConnection
+import dorkbox.network.aeron.mediaDriver.ServerIpcDriver
+import dorkbox.network.aeron.mediaDriver.ServerUdpDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import io.aeron.FragmentAssembler
@@ -87,12 +88,19 @@ internal object ServerHandshakePollers {
         if (message !is HandshakeMessage) {
             logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Invalid connection request" }
         } else {
+            // this should never be null, because we are feeding it a valid IP address from aeron
+            val clientAddress = IP.toAddress(clientAddressString)
+            if (clientAddress == null) {
+                logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Invalid IP address!" }
+                return
+            }
+
             // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-            val publicationUri = MediaDriverConnection.uriEndpoint("udp", message.sessionId, isReliable, "$clientAddressString:${message.subscriptionPort}")
+            val publicationUri = MediaDriverConnection.uriEndpoint("udp", message.sessionId, isReliable, clientAddress, clientAddressString, message.subscriptionPort)
             val publication = aeronDriver.addPublication(publicationUri, message.streamId)
 
             handshake.processUdpHandshakeMessageServer(
-                server, publication, remoteIpAndPort, isReliable, message,
+                server, publication, clientAddress, clientAddressString, isReliable, message,
                 aeronDriver, aeronLogInfo, isIpv6Wildcard,
                 connectionFunc, logger
             )
@@ -112,9 +120,8 @@ internal object ServerHandshakePollers {
         val connectionFunc = server.connectionFunc
 
         val poller = if (config.enableIpc) {
-            val driver = ServerIpc_MediaDriver(
-                streamIdSubscription = config.ipcSubscriptionId,
-                streamId = config.ipcPublicationId,
+            val driver = ServerIpcDriver(
+                streamId = config.ipcId,
                 sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID
             )
             driver.build(aeronDriver, logger)
@@ -155,9 +162,9 @@ internal object ServerHandshakePollers {
         val isReliable = config.isReliable
 
         val poller = if (server.canUseIPv4) {
-            val driver = ServerUdp_MediaDriver(
+            val driver = ServerUdpDriver(
                 listenAddress = server.listenIPv4Address!!,
-                subscriptionPort = config.subscriptionPort,
+                port = config.port,
                 streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
                 connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
@@ -209,9 +216,9 @@ internal object ServerHandshakePollers {
         val isReliable = config.isReliable
 
         val poller = if (server.canUseIPv6) {
-            val driver = ServerUdp_MediaDriver(
+            val driver = ServerUdpDriver(
                 listenAddress = server.listenIPv6Address!!,
-                subscriptionPort = config.subscriptionPort,
+                port = config.port,
                 streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
                 connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
@@ -261,9 +268,9 @@ internal object ServerHandshakePollers {
         val connectionFunc = server.connectionFunc
         val isReliable = config.isReliable
 
-        val driver = ServerUdp_MediaDriver(
+        val driver = ServerUdpDriver(
             listenAddress = server.listenIPv6Address!!,
-            subscriptionPort = config.subscriptionPort,
+            port = config.port,
             streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
             sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
             connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,

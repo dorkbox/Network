@@ -61,7 +61,7 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
 
-        waitForThreads(0)
+        waitForThreads()
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)
@@ -70,7 +70,7 @@ class DisconnectReconnectTest : BaseTest() {
     @Test
     fun reconnectClientViaClientClose() {
         run {
-            val configuration = serverConfig() {
+            val configuration = serverConfig {
                 uniqueAeronDirectory = true
             }
 
@@ -117,7 +117,7 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
 
-        waitForThreads(0)
+        waitForThreads()
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)
@@ -133,6 +133,7 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
         suspend fun close(connection: Connection) {
+            connection.logger.error { "PRE CLOSE MESSAGE!" }
             connection.close()
         }
     }
@@ -169,7 +170,7 @@ class DisconnectReconnectTest : BaseTest() {
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
 
-            client.onConnect {
+            client.onInit {
                 rmi.save(CloseImpl(), CLOSE_ID)
             }
 
@@ -195,7 +196,7 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
 
-        waitForThreads(0)
+        waitForThreads(AUTO_FAIL_TIMEOUT*10)
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)
@@ -312,7 +313,7 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
 
-        waitForThreads(0)
+        waitForThreads()
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)

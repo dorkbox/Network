@@ -366,7 +366,7 @@ class RmiNestedTest : BaseTest() {
 
     private class TestObjectAnnotImpl : TestObject {
         @Transient
-        private val ID = idCounter.getAndIncrement()
+        private val id = idCounter.getAndIncrement()
 
         private val otherObject: OtherObject = OtherObjectImpl()
 
@@ -402,7 +402,7 @@ class RmiNestedTest : BaseTest() {
         }
 
         override fun hashCode(): Int {
-            return ID
+            return id
         }
     }
 
@@ -420,6 +420,18 @@ class RmiNestedTest : BaseTest() {
 
         override fun hashCode(): Int {
             return ID
+        }
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as OtherObjectImpl
+
+            if (ID != other.ID) return false
+            if (aFloat != other.aFloat) return false
+
+            return true
         }
     }
 }

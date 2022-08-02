@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron
+package dorkbox.network.aeron.mediaDriver
 
 import io.aeron.Publication
 import java.net.InetAddress
@@ -35,9 +35,9 @@ internal class UdpMediaDriverPairedConnection(
     isReliable: Boolean,
     val publication: Publication
 ) :
-    ServerUdp_MediaDriver(listenAddress, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
+    ServerUdpDriver(listenAddress, subscriptionPort, streamId, sessionId, connectionTimeoutSec, isReliable) {
 
     override fun toString(): String {
-        return "$remoteAddressString [$subscriptionPort|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
+        return "$remoteAddressString [$port|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
     }
 }

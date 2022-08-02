@@ -108,11 +108,13 @@ object AeronClient {
     fun main(args: Array<String>) {
         val configuration = ClientConfiguration()
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-        configuration.subscriptionPort = 4000
-        configuration.publicationPort = 2000
-//        configuration.enableIpc = true
-        configuration.enableIpc = false
-        configuration.uniqueAeronDirectory = true
+        configuration.port = 2000
+
+        configuration.enableIpc = true
+//        configuration.enableIpc = false
+//        configuration.enableIPv4 = false
+//        configuration.enableIPv6 = true
+//        configuration.uniqueAeronDirectory = true
 
         val client = Client<Connection>(configuration)
 

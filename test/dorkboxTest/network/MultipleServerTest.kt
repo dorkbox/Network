@@ -63,7 +63,7 @@ class MultipleServerTest : BaseTest() {
             val offset = count * portOffset
 
             val configuration = serverConfig()
-            configuration.subscriptionPort += offset
+            configuration.port += offset
             configuration.aeronDirectory = serverAeronDir
             configuration.enableIpc = false
 
@@ -95,8 +95,7 @@ class MultipleServerTest : BaseTest() {
             val offset = count * portOffset
 
             val configuration = clientConfig()
-            configuration.subscriptionPort += offset
-            configuration.publicationPort += offset
+            configuration.port += offset
             configuration.aeronDirectory = clientAeronDir
             configuration.enableIpc = false
 
@@ -138,7 +137,7 @@ class MultipleServerTest : BaseTest() {
             val offset = count * portOffset
 
             val configuration = serverConfig()
-            configuration.subscriptionPort += offset
+            configuration.port += offset
             configuration.aeronDirectory = serverAeronDir
             configuration.enableIpc = true
 
@@ -170,8 +169,7 @@ class MultipleServerTest : BaseTest() {
             val offset = count * portOffset
 
             val configuration = clientConfig()
-            configuration.subscriptionPort += offset
-            configuration.publicationPort += offset
+            configuration.port += offset
             configuration.aeronDirectory = clientAeronDir
             configuration.enableIpc = true
 
