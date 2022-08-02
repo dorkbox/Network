@@ -750,7 +750,7 @@ open class Client<CONNECTION : Connection>(
         //////////////
         ///  Extra Close action
         //////////////
-        newConnection.closeAction = { enableNotifyDisconnect ->
+        newConnection.closeAction = {
             // this is called whenever connection.close() is called by the framework or via client.close()
 
             // on the client, we want to GUARANTEE that the disconnect happens-before connect.
@@ -765,9 +765,7 @@ open class Client<CONNECTION : Connection>(
 
             // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
             actionDispatch.launch {
-                if (enableNotifyDisconnect) {
-                    listenerManager.notifyDisconnect(connection)
-                }
+                listenerManager.notifyDisconnect(connection)
                 lockStepForConnect.getAndSet(null)?.unlock()
             }
         }

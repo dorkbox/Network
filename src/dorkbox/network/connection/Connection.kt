@@ -85,10 +85,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val listenerManager = atomic<ListenerManager<Connection>?>(null)
     val logger = endPoint.logger
 
-    internal val isClosed = atomic(false)
+    private val isClosed = atomic(false)
 
     // enableNotifyDisconnect : we don't always want to enable notifications on disconnect
-    internal var closeAction: suspend (enableNotifyDisconnect: Boolean) -> Unit = {}
+    internal var closeAction: suspend () -> Unit = {}
 
     // only accessed on a single thread!
     private var connectionLastCheckTimeNanos = 0L
@@ -304,14 +304,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * Closes the connection, and removes all connection specific listeners
      */
     fun close() {
-        close(enableRemove = true,
-              enableNotifyDisconnect = true)
+        close(enableRemove = true)
     }
 
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    internal fun close(enableRemove: Boolean, enableNotifyDisconnect: Boolean) {
+    internal fun close(enableRemove: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
@@ -369,7 +368,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other
             runBlocking {
-                closeAction(enableNotifyDisconnect)
+                closeAction()
             }
             logger.debug {"[$aeronLogInfo] connection closed"}
         }

@@ -118,16 +118,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 logger.debug { "[$aeronLogInfo - $existingAeronLogInfo - ${message.connectKey}] Connection from $connectionString done with handshake." }
 
                 // called on connection.close()
-                existingConnection.closeAction = { enableNotifyDisconnect ->
+                existingConnection.closeAction = {
                     // clean up the resources associated with this connection when it's closed
                     logger.debug { "[$existingAeronLogInfo] freeing resources" }
                     existingConnection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
 
-                    if (enableNotifyDisconnect) {
-                        // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                        actionDispatch.launch {
-                            existingConnection.doNotifyDisconnect()
-                        }
+                    // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                    actionDispatch.launch {
+                        existingConnection.doNotifyDisconnect()
                     }
                 }
 

@@ -41,10 +41,12 @@ import dorkbox.network.serialization.SettingsStore
 import io.aeron.Publication
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
@@ -92,9 +94,6 @@ internal constructor(val type: Class<*>,
             : this(Server::class.java, config, connectionFunc, loggerName)
 
     companion object {
-        // how many times to retry sending data if the connection is not connected
-        private const val sendDataRetryMax = 100
-
         /**
          * @return the error code text for the specified number
          */
@@ -122,7 +121,11 @@ internal constructor(val type: Class<*>,
 
     val logger: KLogger = KotlinLogging.logger(loggerName)
 
-    internal val actionDispatch = config.dispatch
+    private val handler = CoroutineExceptionHandler { _, exception ->
+        logger.error(exception) { "Uncaught Coroutine Error!" }
+    }
+
+    internal val actionDispatch = config.dispatch + handler
 
     internal val listenerManager = ListenerManager<CONNECTION>(logger)
     internal val connections = ConnectionManager<CONNECTION>()
@@ -210,6 +213,7 @@ internal constructor(val type: Class<*>,
      */
     fun startDriver() {
         aeronDriver.start()
+        shutdown.value = false
     }
 
     /**
@@ -614,16 +618,14 @@ internal constructor(val type: Class<*>,
     }
 
     /**
-     * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
+     * NOTE: this **MUST** stay on the same thread/coroutine that calls "send". This cannot be re-dispatched onto a different coroutine!
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
     @Suppress("DuplicatedCode", "UNCHECKED_CAST")
     internal fun send(message: Any, publication: Publication, connection: Connection): Boolean {
         // The handshake sessionId IS NOT globally unique
-        logger.trace {
-            "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message"
-        }
+        logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
 
         connection as CONNECTION
 
@@ -835,7 +837,7 @@ internal constructor(val type: Class<*>,
             val enableRemove = type == Client::class.java
             connections.forEach {
                 logger.info { "[${it.id}/${it.streamId}] Closing connection" }
-                it.close(enableRemove, true)
+                it.close(enableRemove)
             }
 
             runBlocking {
@@ -876,7 +878,7 @@ internal constructor(val type: Class<*>,
             val enableRemove = type == Client::class.java
             connections.forEach {
                 logger.info { "[${it.id}/${it.streamId}] Closing connection" }
-                it.close(enableRemove, true)
+                it.close(enableRemove)
             }
 
             close0()
