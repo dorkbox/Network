@@ -377,13 +377,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     // called in postCloseAction(), so we don't expose our internal listenerManager
     internal suspend fun doNotifyDisconnect() {
         val connectionSpecificListenerManager = listenerManager.value
-        if (connectionSpecificListenerManager != null) {
-            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            endPoint.actionDispatch.eventLoop {
-                // a connection might have also registered for disconnect events (THIS IS NOT THE "CLIENT/SERVER" listenerManager!)
-                connectionSpecificListenerManager.notifyDisconnect(this@Connection)
-            }
-        }
+        connectionSpecificListenerManager?.notifyDisconnect(this@Connection)
     }
 
 
