@@ -17,7 +17,6 @@
 
 package dorkbox.network.aeron.mediaDriver
 
-import dorkbox.util.logger
 import io.aeron.Publication
 import io.aeron.Subscription
 
@@ -31,21 +30,5 @@ abstract class MediaDriverClient(val port: Int,
     lateinit var subscription: Subscription
     lateinit var publication: Publication
 
-    val subscriptionPort: Int by lazy {
-        if (this is ClientIpcDriver) {
-            localSessionId
-        } else {
-            val addressesAndPorts = subscription.localSocketAddresses()
-            if (addressesAndPorts.size > 1) {
-                logger().error { "Subscription ports for client is MORE than 1. This is 'ok', but we only support the use the first one!" }
-            }
-
-            val first = addressesAndPorts.first()
-
-            // split
-            val splitPoint = first.lastIndexOf(':')
-            val port = first.substring(splitPoint+1)
-            port.toInt()
-        }
-    }
+    abstract val subscriptionPort: Int
 }

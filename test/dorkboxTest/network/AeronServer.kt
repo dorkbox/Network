@@ -92,9 +92,9 @@ object AeronServer {
         configuration.port = 2000
         configuration.maxClientCount = 50
 
-        configuration.enableIpc = true
+//        configuration.enableIpc = true
 //        configuration.enableIpc = false
-        configuration.enableIPv4 = false
+//        configuration.enableIPv4 = false
         configuration.enableIPv6 = false
 
         configuration.maxConnectionsPerIpAddress = 50

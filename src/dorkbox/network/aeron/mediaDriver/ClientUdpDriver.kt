@@ -16,6 +16,8 @@
 
 package dorkbox.network.aeron.mediaDriver
 
+import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uriEndpoint
 import dorkbox.network.connection.ListenerManager
@@ -24,6 +26,7 @@ import dorkbox.network.exceptions.ClientTimedOutException
 import mu.KLogger
 import java.lang.Thread.sleep
 import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.util.concurrent.*
 
@@ -49,6 +52,16 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
         }
     }
 
+    override val subscriptionPort: Int by lazy {
+        val addressesAndPorts = subscription.localSocketAddresses()
+        val first = addressesAndPorts.first()
+
+        // split
+        val splitPoint = first.lastIndexOf(':')
+        val port = first.substring(splitPoint+1)
+        port.toInt()
+    }
+
     /**
      * @throws ClientRetryException if we need to retry to connect
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
@@ -66,22 +79,31 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
         val publicationUri = uriEndpoint("udp", remoteSessionId, isReliable, address, addressString, port)
-
-        // Create a subscription the given address and port, using the given stream ID.
-        val subscriptionUri = uriEndpoint("udp", localSessionId, isReliable, address, addressString, 0)
-
-
-        if (logger.isTraceEnabled) {
-            logger.trace("client sub URI: $type ${subscriptionUri.build()}")
-            logger.trace("client pub URI: $type ${publicationUri.build()}")
-        }
+        logger.trace("client pub URI: $type ${publicationUri.build()}")
 
         // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
         //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
-
         val publication = aeronDriver.addPublication(publicationUri, streamId)
-        val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
 
+
+        val localAddresses = publication.localSocketAddresses().first()
+        // split
+        val splitPoint = localAddresses.lastIndexOf(':')
+        val localAddressString = localAddresses.substring(0, splitPoint)
+
+
+        // the subscription here is WILDCARD
+        val localAddress = if (address is Inet6Address) {
+            IPv6.toAddress(localAddressString)!!
+        } else {
+            IPv4.toAddress(localAddressString)!!
+        }
+
+        // Create a subscription the given address and port, using the given stream ID.
+        val subscriptionUri = uriEndpoint("udp", localSessionId, isReliable, localAddress, localAddressString, 0)
+        logger.trace("client sub URI: $type ${subscriptionUri.build()}")
+
+        val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
 
         // always include the linger timeout, so we don't accidentally kill ourself by taking too long
         val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()

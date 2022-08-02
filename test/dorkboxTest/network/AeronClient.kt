@@ -110,8 +110,9 @@ object AeronClient {
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.port = 2000
 
-        configuration.enableIpc = true
-//        configuration.enableIpc = false
+//        configuration.enableIpc = true
+        configuration.enableIpc = false
+        configuration.enableIPv4 = true
 //        configuration.enableIPv4 = false
 //        configuration.enableIPv6 = true
 //        configuration.uniqueAeronDirectory = true

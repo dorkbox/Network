@@ -44,6 +44,8 @@ internal open class ClientIpcDriver(streamId: Int,
     var success: Boolean = false
     override val type = "ipc"
 
+    override val subscriptionPort: Int = localSessionId
+
     /**
      * Set up the subscription + publication channels to the server
      *
