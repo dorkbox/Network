@@ -15,7 +15,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class MultiClientTest : BaseTest() {
-    private val totalCount = 2
+    private val totalCount = 20
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
     private val disconnectCount = atomic(0)
