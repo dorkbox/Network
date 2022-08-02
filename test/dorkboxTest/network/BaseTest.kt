@@ -66,8 +66,8 @@ abstract class BaseTest {
     companion object {
         const val LOCALHOST = "localhost"
 
-        // wait minimum of 2 minutes before we automatically fail the unit test.
-        var AUTO_FAIL_TIMEOUT: Long = 120L
+        // wait minimum of 3 minutes before we automatically fail the unit test.
+        var AUTO_FAIL_TIMEOUT: Long = 180L
 
         init {
             if (OS.javaVersion >= 9) {
