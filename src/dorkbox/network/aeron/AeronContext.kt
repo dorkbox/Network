@@ -1,7 +1,6 @@
 package dorkbox.network.aeron
 
 import dorkbox.network.Configuration
-import dorkbox.network.exceptions.AeronDriverException
 import dorkbox.util.NamedThreadFactory
 import io.aeron.driver.MediaDriver
 import io.aeron.exceptions.DriverTimeoutException
@@ -76,7 +75,7 @@ class AeronContext(
             // we DO NOT want to abort the JVM if there are errors.
             // this replaces the default handler with one that doesn't abort the JVM
             mediaDriverContext.errorHandler { error ->
-                aeronErrorHandler(AeronDriverException(error))
+                aeronErrorHandler(error)
             }
 
             return mediaDriverContext

@@ -317,7 +317,7 @@ class AeronDriver(
         // we DO NOT want to abort the JVM if there are errors.
         // this replaces the default handler with one that doesn't abort the JVM
         aeronDriverContext.errorHandler { error ->
-            aeronErrorHandler(AeronDriverException(error))
+            aeronErrorHandler(error)
         }
         aeronDriverContext.subscriberErrorHandler { error ->
             aeronErrorHandler(error)
@@ -355,10 +355,18 @@ class AeronDriver(
             throw ex
         }
 
-        val publication = aeron1.addPublication(uri, streamId)
+        val publication = try {
+            aeron1.addPublication(uri, streamId)
+        } catch (e: Exception) {
+            // this happens if the aeron media driver cannot actually establish connection
+            val ex = ClientRetryException("Error adding a publication", e)
+            ListenerManager.cleanAllStackTrace(ex)
+            throw ex
+        }
+
         if (publication == null) {
             // there was an error connecting to the aeron client or media driver.
-            val ex = ClientRetryException("Error adding a publication to the remote endpoint")
+            val ex = ClientRetryException("Error adding a publication")
             ListenerManager.cleanAllStackTrace(ex)
             throw ex
         }
@@ -391,10 +399,17 @@ class AeronDriver(
             throw ex
         }
 
-        val subscription = aeron1.addSubscription(uri, streamId)
+        val subscription = try {
+            aeron1.addSubscription(uri, streamId)
+        } catch (e: Exception) {
+            val ex = ClientRetryException("Error adding a subscription", e)
+            ListenerManager.cleanAllStackTrace(ex)
+            throw ex
+        }
+
         if (subscription == null) {
             // there was an error connecting to the aeron client or media driver.
-            val ex = ClientRetryException("Error adding a subscription to the remote endpoint")
+            val ex = ClientRetryException("Error adding a subscription")
             ListenerManager.cleanAllStackTrace(ex)
             throw ex
         }

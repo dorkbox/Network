@@ -36,6 +36,7 @@ import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
 import java.io.File
 import java.net.BindException
+import java.nio.channels.ClosedByInterruptException
 import java.util.concurrent.*
 
 class ServerConfiguration : dorkbox.network.Configuration() {
@@ -465,10 +466,12 @@ abstract class Configuration {
      * @return true if the error message should be logged, false to suppress the error
      */
     var aeronErrorFilter: (error: Throwable) -> Boolean = { error ->
-                when (error) {
-                    is DriverTimeoutException -> { false }     // we suppress this because it is already handled
-                    is AgentTerminationException -> { false }  // we suppress this because it is already handled
-                    is BindException -> { false }              // we suppress this because it is already handled
+                // we suppress these because they are already handled
+                when {
+                    error is ClosedByInterruptException || error.cause is ClosedByInterruptException -> { false }
+                    error is DriverTimeoutException || error.cause is DriverTimeoutException -> { false }
+                    error is AgentTerminationException || error.cause is AgentTerminationException-> { false }
+                    error is BindException || error.cause is BindException -> { false }
                     else -> { true }
                 }
             }
