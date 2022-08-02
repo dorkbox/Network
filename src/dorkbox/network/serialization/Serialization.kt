@@ -22,6 +22,7 @@ import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import com.esotericsoftware.minlog.Log
 import dorkbox.network.Server
+import dorkbox.network.connection.CloseMessage
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingControlSerializer
@@ -361,6 +362,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
         kryo.register(Ping::class.java, pingSerializer)
         kryo.register(HandshakeMessage::class.java)
+        kryo.register(CloseMessage::class.java)
 
         @Suppress("UNCHECKED_CAST")
         kryo.register(InvocationHandler::class.java as Class<Any>, rmiClientSerializer)

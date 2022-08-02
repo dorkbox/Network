@@ -325,6 +325,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             subscription.close()
 
+            // send out a "close" message. MAYBE it gets to the remote endpoint, maybe not. If it DOES, then the remote endpoint starts
+            // the close process faster.
+            try {
+                endPoint.send(CloseMessage(), publication, this)
+            } catch (ignored: Exception) {
+            }
+
+
 
             val timoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
             var closeTimeoutTime = System.nanoTime()

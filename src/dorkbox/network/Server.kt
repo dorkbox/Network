@@ -318,6 +318,8 @@ open class Server<CONNECTION : Connection>(
                     pollIdleStrategy.idle(pollCount)
                 }
 
+                logger.debug { "Network event dispatch closing..." }
+
                 // we want to process **actual** close cleanup events on this thread as well, otherwise we will have threading problems
                 shutdownPollLatch.await()
 

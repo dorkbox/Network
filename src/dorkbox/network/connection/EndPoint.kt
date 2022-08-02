@@ -525,6 +525,11 @@ internal constructor(val type: Class<*>,
             // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept date BEFORE it goes to a coroutine
 
             when (message) {
+                is CloseMessage -> {
+                    // immediately close the connection
+                    connection.close()
+                }
+
                 is Ping -> {
                     // NOTE: This MUST be on a new co-routine
                     actionDispatch.launch {
