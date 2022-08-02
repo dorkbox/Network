@@ -814,12 +814,8 @@ open class Client<CONNECTION : Connection>(
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                     logger.debug { "[$aeronLogInfo] connection expired" }
 
-                    // event-loop is required, because we want to run this code AFTER the current coroutine has finished. This prevents
-                    // odd race conditions when a client is restarted. Can only be run from inside another co-routine!
-//                    actionDispatch.eventLoop {
-                        // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
-                        newConnection.close()
-//                    }
+                    // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
+                    newConnection.close()
                     return@Runnable
                 }
             }
