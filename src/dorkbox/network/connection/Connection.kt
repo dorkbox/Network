@@ -182,10 +182,10 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Polls the AERON media driver subscription channel for incoming messages
      */
-    internal fun pollSubscriptions(): Int {
+    internal fun poll(): Int {
         // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
         //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-        return subscription.poll(messageHandler, 10)
+        return subscription.poll(messageHandler, 1)
     }
 
     /**
@@ -356,7 +356,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                 endPoint.removeConnection(this)
             }
 
-            // NOTE: notifyDisconnect() is called in closeAction()!!
+            // NOTE: notifyDisconnect() is called inside closeAction()!!
 
             // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other

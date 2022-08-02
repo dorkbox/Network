@@ -292,7 +292,7 @@ open class Server<CONNECTION : Connection>(
                     connections.forEach { connection ->
                         if (!connection.isClosedViaAeron()) {
                             // Otherwise, poll the connection for messages
-                            pollCount += connection.pollSubscriptions()
+                            pollCount += connection.poll()
                         } else {
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                             logger.debug { "[${connection.id}/${connection.streamId}] connection expired" }
