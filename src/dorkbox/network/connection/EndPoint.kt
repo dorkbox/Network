@@ -861,7 +861,7 @@ internal constructor(val type: Class<*>,
      *  - response manager
      *  - storage
      */
-    internal fun closeForRestart() {
+    fun closeForRestart() {
         if (shutdown.compareAndSet(expect = false, update = true)) {
             logger.info { "Shutting down for restart..." }
 
