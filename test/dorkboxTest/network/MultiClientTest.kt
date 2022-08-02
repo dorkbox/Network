@@ -49,7 +49,7 @@ class MultiClientTest : BaseTest() {
         // start up the drivers first
         runBlocking {
             clients.forEach {
-                it.init()
+                it.startDriver()
             }
         }
 

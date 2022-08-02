@@ -225,9 +225,9 @@ open class Server<CONNECTION : Connection>(
         }
 
         try {
-            initEndpointState()
+            startDriver()
         } catch (e: Exception) {
-            logger.error(e) { "Unable to initialize the endpoint state" }
+            logger.error(e) { "Unable to start the network driver" }
             return
         }
 

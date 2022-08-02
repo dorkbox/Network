@@ -205,6 +205,8 @@ internal constructor(val type: Class<*>,
 
     /**
      * Only starts the media driver if we are NOT already running!
+     *
+     * @throws Exception if there is a problem starting the media driver
      */
     fun startDriver() {
         aeronDriver.start()
@@ -223,17 +225,6 @@ internal constructor(val type: Class<*>,
         } else {
             aeronDriver.closeIfSingle()
         }
-    }
-
-
-    /**
-     * @throws Exception if there is a problem starting the media driver
-     */
-    internal fun initEndpointState() {
-        shutdown.getAndSet(false)
-        shutdownLatch = CountDownLatch(1)
-
-        startDriver()
     }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
@@ -819,7 +810,14 @@ internal constructor(val type: Class<*>,
      * Waits for this endpoint to be closed
      */
     fun waitForClose() {
-        shutdownLatch.await()
+        var latch: CountDownLatch? = null
+
+        while (latch !== shutdownLatch) {
+            latch = shutdownLatch
+            // if we are restarting the network state, we want to continue to wait for a proper close event. Because we RESET the latch,
+            // we must continue to check
+            latch.await()
+        }
     }
 
     final override fun close() {
@@ -849,10 +847,43 @@ internal constructor(val type: Class<*>,
 
             aeronDriver.close()
 
+            shutdownLatch = CountDownLatch(1)
+
             // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
             shutdownLatch.countDown()
 
             logger.info { "Done shutting down..." }
+        }
+    }
+
+    /**
+     * Close in such a way that we enable us to be restarted. This is the same as a "normal close", but DOES NOT close
+     *  - response manager
+     *  - storage
+     */
+    internal fun closeForRestart() {
+        if (shutdown.compareAndSet(expect = false, update = true)) {
+            logger.info { "Shutting down for restart..." }
+
+
+            // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
+            // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
+            val enableRemove = type == Client::class.java
+            connections.forEach {
+                logger.info { "[${it.id}/${it.streamId}] Closing connection" }
+                it.close(enableRemove, true)
+            }
+
+            close0()
+
+            aeronDriver.close()
+
+            shutdownLatch = CountDownLatch(1)
+
+            // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
+            shutdownLatch.countDown()
+
+            logger.info { "Done shutting down for restart..." }
         }
     }
 

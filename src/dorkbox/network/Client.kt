@@ -435,9 +435,9 @@ open class Client<CONNECTION : Connection>(
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         try {
-            initEndpointState()
+            startDriver()
         } catch (e: Exception) {
-            logger.error(e) { "Unable to initialize the endpoint state" }
+            logger.error(e) { "Unable to start the network driver" }
             return
         }
 
