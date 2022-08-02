@@ -95,7 +95,7 @@ Maven Info
     <dependency>
       <groupId>com.dorkbox</groupId>
       <artifactId>Network</artifactId>
-      <version>5.29</version>
+      <version>5.30</version>
     </dependency>
 </dependencies>
 ```
@@ -105,7 +105,7 @@ Gradle Info
 ```
 dependencies {
     ...
-    implementation("com.dorkbox:Network:5.29")
+    implementation("com.dorkbox:Network:5.30")
 }
 ```
 
