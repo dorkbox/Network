@@ -206,8 +206,23 @@ internal constructor(val type: Class<*>,
     /**
      * Only starts the media driver if we are NOT already running!
      */
-    fun init() {
+    fun startDriver() {
         aeronDriver.start()
+    }
+
+    /**
+     * Stops the network driver.
+     *
+     * @param forceTerminate if true, then there is no caution when restarting the Aeron driver, and any other process on the machine using
+     * the same driver will probably crash (unless they have been appropriately stopped). If false (the default), then the Aeron driver is
+     * only stopped if it is safe to do so
+     */
+    fun stopDriver(forceTerminate: Boolean = false) {
+        if (forceTerminate) {
+            aeronDriver.close()
+        } else {
+            aeronDriver.closeIfSingle()
+        }
     }
 
 
@@ -218,7 +233,7 @@ internal constructor(val type: Class<*>,
         shutdown.getAndSet(false)
         shutdownLatch = CountDownLatch(1)
 
-        init()
+        startDriver()
     }
 
     abstract fun newException(message: String, cause: Throwable? = null): Throwable
@@ -869,5 +884,4 @@ internal constructor(val type: Class<*>,
         other as EndPoint<*>
         return crypto == other.crypto
     }
-
 }
