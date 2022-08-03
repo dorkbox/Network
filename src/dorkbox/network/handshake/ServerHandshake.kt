@@ -126,6 +126,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                     // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
                     actionDispatch.launch {
                         existingConnection.doNotifyDisconnect()
+                        listenerManager.notifyDisconnect(existingConnection)
                     }
                 }
 
