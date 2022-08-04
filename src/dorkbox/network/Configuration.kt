@@ -45,7 +45,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         /**
          * Gets the version number.
          */
-        const val version = "5.32"
+        const val version = "5.33"
     }
 
     /**
@@ -472,7 +472,7 @@ abstract class Configuration {
      * the emitted errors from Aeron when we attempt/retry connections. This filters out those errors so we can log (or perform an action)
      * when those errors are encountered
      *
-     * This is for advanced usage, and REALLY should never be over-riden.
+     * This is for advanced usage, and REALLY should never be over-ridden.
      *
      * @return true if the error message should be logged, false to suppress the error
      */

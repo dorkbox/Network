@@ -120,7 +120,7 @@ open class Server<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "5.32"
+        const val version = "5.33"
 
         /**
          * Checks to see if a server (using the specified configuration) is running.
