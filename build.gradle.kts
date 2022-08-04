@@ -159,7 +159,7 @@ dependencies {
 
     // we include ALL of aeron, in case we need to debug aeron behavior
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.38.1"
+    val aeronVer = "1.39.0"
     api("io.aeron:aeron-all:$aeronVer")
 //    api("org.agrona:agrona:1.16.0") // sources for this isn't included in aeron-all!
 
