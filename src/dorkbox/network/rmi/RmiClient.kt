@@ -108,7 +108,7 @@ internal class RmiClient(val isGlobal: Boolean,
 
             connection.send(invokeMethod)
 
-            responseManager.waitForReply(actionDispatch, rmiWaiter, timeoutMillis, logger)
+            responseManager.waitForReply(actionDispatch, rmiWaiter, timeoutMillis, logger, connection)
         }
     }
 
@@ -248,6 +248,7 @@ internal class RmiClient(val isGlobal: Boolean,
             val any = runBlocking {
                 sendRequest(connection.endPoint.actionDispatch, invokeMethod, connection.logger)
             }
+
             when (any) {
                 ResponseManager.TIMEOUT_EXCEPTION -> {
                     val fancyName = RmiUtils.makeFancyMethodName(method)
@@ -263,6 +264,7 @@ internal class RmiClient(val isGlobal: Boolean,
                     throw any
                 }
                 else -> {
+                    // attempt to return a proper value
                     return returnAsyncOrSync(method, any)
                 }
             }

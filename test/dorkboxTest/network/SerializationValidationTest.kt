@@ -18,7 +18,6 @@ package dorkboxTest.network
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
-import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
 import org.junit.Assert
 import org.junit.Test
@@ -55,22 +54,6 @@ class SerializationValidationTest : BaseTest() {
 
         waitForThreads()
     }
-
-    @Test
-    fun checkTakeKryo() {
-        @Suppress("UNCHECKED_CAST")
-        val serialization = serverConfig().serialization as Serialization<Connection>
-
-        val kryos = mutableListOf<KryoExtra<Connection>>()
-        for (i in 0 until 17) {
-            kryos.add(serialization.takeKryo())
-        }
-
-        kryos.forEach {
-            serialization.returnKryo(it)
-        }
-    }
-
 
     @Test
     fun checkOutOfOrder() {

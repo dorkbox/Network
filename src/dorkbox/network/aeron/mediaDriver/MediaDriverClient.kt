@@ -22,13 +22,29 @@ import io.aeron.Subscription
 
 abstract class MediaDriverClient(val port: Int,
                                  val streamId: Int,
-                                 val remoteSessionId: Int,
-                                 val localSessionId: Int,
+                                 sessionId: Int,
                                  val connectionTimeoutSec: Int,
                                  val isReliable: Boolean) : MediaDriverConnection {
 
+    var sessionId: Int
+
+    @Volatile
     lateinit var subscription: Subscription
+
+    @Volatile
     lateinit var publication: Publication
 
-    abstract val subscriptionPort: Int
+    var subscriptionPort = 0
+
+    @Volatile
+    var info = ""
+
+    init {
+        this.sessionId = sessionId
+    }
+
+
+    override fun toString(): String {
+        return info
+    }
 }

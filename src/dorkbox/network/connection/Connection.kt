@@ -301,10 +301,26 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
+     * @return true if this connection has had close() called
+     */
+    fun isClosed(): Boolean {
+        return isClosed.value
+    }
+
+    /**
      * Closes the connection, and removes all connection specific listeners
      */
     fun close() {
-        close(enableRemove = true)
+//        if (messagesInProgress.value > 0) {
+//            // messages were in progress (likely a message triggered the close() call).
+//            // Dispatch the close event "later", so that we don't immediately kill a response (in the event that this is desired)
+//            endPoint.actionDispatch.launch {
+//                delay(10)
+//                close(enableRemove = true)
+//            }
+//        } else {
+            close(enableRemove = true)
+//        }
     }
 
     /**
@@ -363,6 +379,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                 endPoint.removeConnection(this)
             }
 
+            // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
+
             // NOTE: notifyDisconnect() is called inside closeAction()!!
 
             // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
@@ -415,7 +433,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         if (isIpc) {
             streamIdAllocator.free(publicationPort)
-            streamIdAllocator.free(subscriptionPort)
+            sessionIdAllocator.free(subscriptionPort)
         } else {
             // unique for UDP endpoints
             connectionsPerIpCounts.decrementSlow(remoteAddress!!)

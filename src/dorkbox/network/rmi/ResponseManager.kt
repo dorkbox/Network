@@ -15,6 +15,7 @@
  */
 package dorkbox.network.rmi
 
+import dorkbox.network.connection.Connection
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -209,7 +210,13 @@ internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) 
      *
      * @return the result (can be null) or timeout exception
      */
-    suspend fun waitForReply(actionDispatch: CoroutineScope, responseWaiter: ResponseWaiter, timeoutMillis: Long, logger: KLogger): Any? {
+    suspend fun waitForReply(
+        actionDispatch: CoroutineScope,
+        responseWaiter: ResponseWaiter,
+        timeoutMillis: Long,
+        logger: KLogger,
+        connection: Connection
+    ): Any? {
         val rmiId = RmiUtils.unpackUnsignedRight(responseWaiter.id)
 
         logger.trace {
@@ -268,7 +275,11 @@ internal class ResponseManager(logger: KLogger, actionDispatch: CoroutineScope) 
         if (resultOrWaiter is ResponseWaiter) {
             logger.trace { "RMI was canceled ($timeoutMillis): $rmiId" }
 
-            return TIMEOUT_EXCEPTION
+            return if (connection.isClosed() || connection.isClosedViaAeron()) {
+                null
+            } else {
+                TIMEOUT_EXCEPTION
+            }
         }
 
         return resultOrWaiter

@@ -20,13 +20,11 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
-import dorkbox.network.serialization.KryoExtra
-import dorkbox.network.serialization.Serialization
 import dorkboxTest.network.BaseTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Ignore
 import org.junit.Test
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.*
 
 @Ignore
 class MemoryTest : BaseTest() {
@@ -150,70 +148,6 @@ class MemoryTest : BaseTest() {
             }
 
             Thread.sleep(Long.MAX_VALUE)
-        }
-    }
-
-    @Test
-    fun runForeverTestKryoPool() {
-        @Suppress("UNCHECKED_CAST")
-        val serialization = serverConfig().serialization as Serialization<Connection>
-
-        // 17 to force a pool size change
-        var kryo1: KryoExtra<Connection>
-        var kryo2: KryoExtra<Connection>
-        var kryo3: KryoExtra<Connection>
-        var kryo4: KryoExtra<Connection>
-        var kryo5: KryoExtra<Connection>
-        var kryo6: KryoExtra<Connection>
-        var kryo7: KryoExtra<Connection>
-        var kryo8: KryoExtra<Connection>
-        var kryo9: KryoExtra<Connection>
-        var kryo10: KryoExtra<Connection>
-        var kryo11: KryoExtra<Connection>
-        var kryo12: KryoExtra<Connection>
-        var kryo13: KryoExtra<Connection>
-        var kryo14: KryoExtra<Connection>
-        var kryo15: KryoExtra<Connection>
-        var kryo16: KryoExtra<Connection>
-        var kryo17: KryoExtra<Connection>
-
-        while (true) {
-            kryo1 = serialization.takeKryo()
-            kryo2 = serialization.takeKryo()
-            kryo3 = serialization.takeKryo()
-            kryo4 = serialization.takeKryo()
-            kryo5 = serialization.takeKryo()
-            kryo6 = serialization.takeKryo()
-            kryo7 = serialization.takeKryo()
-            kryo8 = serialization.takeKryo()
-            kryo9 = serialization.takeKryo()
-            kryo10 = serialization.takeKryo()
-            kryo11 = serialization.takeKryo()
-            kryo12 = serialization.takeKryo()
-            kryo13 = serialization.takeKryo()
-            kryo14 = serialization.takeKryo()
-            kryo15 = serialization.takeKryo()
-            kryo16 = serialization.takeKryo()
-            kryo17 = serialization.takeKryo()
-
-
-            serialization.returnKryo(kryo1)
-            serialization.returnKryo(kryo2)
-            serialization.returnKryo(kryo3)
-            serialization.returnKryo(kryo4)
-            serialization.returnKryo(kryo5)
-            serialization.returnKryo(kryo6)
-            serialization.returnKryo(kryo7)
-            serialization.returnKryo(kryo8)
-            serialization.returnKryo(kryo9)
-            serialization.returnKryo(kryo10)
-            serialization.returnKryo(kryo11)
-            serialization.returnKryo(kryo12)
-            serialization.returnKryo(kryo13)
-            serialization.returnKryo(kryo14)
-            serialization.returnKryo(kryo15)
-            serialization.returnKryo(kryo16)
-            serialization.returnKryo(kryo17)
         }
     }
 

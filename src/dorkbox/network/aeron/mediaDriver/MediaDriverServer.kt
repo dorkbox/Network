@@ -25,5 +25,13 @@ abstract class MediaDriverServer(val port: Int,
                                  val connectionTimeoutSec: Int, val
                                  isReliable: Boolean) : MediaDriverConnection {
 
+    @Volatile
     lateinit var subscription: Subscription
+
+    @Volatile
+    var info = ""
+
+    override fun toString(): String {
+        return info
+    }
 }

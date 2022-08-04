@@ -17,8 +17,6 @@ package dorkbox.network
 
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
-import dorkbox.netUtil.Inet4
-import dorkbox.netUtil.Inet6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.connection.Connection
@@ -174,14 +172,7 @@ open class Server<CONNECTION : Connection>(
     // We want to listen on BOTH IPv4 and IPv6 (config option lets us configure this)
     internal val listenIPv4Address: InetAddress? =
         if (canUseIPv4) {
-            when (config.listenIpAddress) {
-                "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv4.LOCALHOST
-                "0", "::", "0.0.0.0", "*" -> {
-                    // this is the "wildcard" address. Windows has problems with this.
-                    IPv4.WILDCARD
-                }
-                else -> Inet4.toAddress(config.listenIpAddress) // Inet4Address.getAllByName(config.listenIpAddress)[0]
-            }
+            formatCommonAddress(config.listenIpAddress, true)
         }
         else {
             null
@@ -190,14 +181,7 @@ open class Server<CONNECTION : Connection>(
 
     internal val listenIPv6Address: InetAddress? =
         if (canUseIPv6) {
-            when (config.listenIpAddress) {
-                "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv6.LOCALHOST
-                "0", "::", "0.0.0.0", "*" -> {
-                    // this is the "wildcard" address. Windows has problems with this.
-                    IPv6.WILDCARD
-                }
-                else -> Inet6.toAddress(config.listenIpAddress)
-            }
+            formatCommonAddress(config.listenIpAddress, false)
         }
         else {
             null
@@ -236,7 +220,6 @@ open class Server<CONNECTION : Connection>(
 
         config as ServerConfiguration
 
-        val handshake = ServerHandshake(logger, config, listenerManager, aeronDriver)
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
 
@@ -244,6 +227,7 @@ open class Server<CONNECTION : Connection>(
         val pollStartupLatch = CountDownLatch(1)
 
         val server = this@Server
+        val handshake = ServerHandshake(logger, config, listenerManager, aeronDriver)
         val ipcPoller: AeronPoller = ServerHandshakePollers.ipc(aeronDriver, config, server, handshake)
 
         // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!

@@ -131,7 +131,11 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          *
          * We only want the error message, because we do something based on it (and the full stack trace is meaningless)
          */
-        fun cleanAllStackTrace(throwable: Throwable) {
+        fun cleanAllStackTrace(throwable: Throwable?) {
+            if (throwable == null) {
+                return
+            }
+
             val stackTrace = throwable.stackTrace
             val size = stackTrace.size
 

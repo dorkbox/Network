@@ -18,19 +18,23 @@ package dorkbox.network.aeron.mediaDriver
 
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
+import io.aeron.Publication
 import mu.KLogger
 
 /**
  * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
  * NOTE: IPC connection will ALWAYS have a timeout of 10 second to connect. This is IPC, it should connect fast
  */
-internal open class ServerIpcDriver(streamId: Int,
-                                    sessionId: Int) :
-    MediaDriverServer(port = 0, streamId = streamId, sessionId = sessionId, connectionTimeoutSec = 10, isReliable = true) {
+internal open class ServerIpcPairedDriver(streamId: Int,
+                                          sessionId: Int,
+                                          remoteSessionId: Int) :
+    MediaDriverServer(port = remoteSessionId, streamId = streamId, sessionId = sessionId, connectionTimeoutSec = 10, isReliable = true) {
 
 
     var success: Boolean = false
     override val type = "ipc"
+
+    lateinit var publication: Publication
 
     /**
      * Setup the subscription + publication channels on the server.
@@ -41,18 +45,28 @@ internal open class ServerIpcDriver(streamId: Int,
         // Create a subscription at the given address and port, using the given stream ID.
         val subscriptionUri = uri("ipc", sessionId)
 
+
+        // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
+        val publicationUri = uri("ipc", port)
+//        val clientPublication = aeronDriver.addExclusivePublication(publicationUri, message.subscriptionPort)
+
+
+
+
+
         if (logger.isTraceEnabled) {
+            logger.trace("IPC server pub URI: ${publicationUri.build()},stream-id=$streamId")
             logger.trace("IPC server sub URI: ${subscriptionUri.build()},stream-id=$streamId")
         }
 
-        info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
+        this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
                 "[$sessionId] IPC listening on [$streamId] [$sessionId]"
             } else {
                 "Listening handshake on IPC [$streamId] [$sessionId]"
             }
 
-
-        success = true
-        subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
+        this.success = true
+        this.subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
+        this.publication = aeronDriver.addExclusivePublication(publicationUri, streamId)
     }
 }

@@ -56,7 +56,6 @@ import org.junit.After
 import org.junit.Assert
 import org.junit.Before
 import org.slf4j.LoggerFactory
-import java.io.File
 import java.lang.Thread.sleep
 import java.lang.reflect.Field
 import java.lang.reflect.Method
@@ -112,7 +111,7 @@ abstract class BaseTest {
 
             val configuration = ClientConfiguration()
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-            configuration.port = 2200
+            configuration.port = 2000
 
             configuration.enableIpc = false
 
@@ -123,7 +122,7 @@ abstract class BaseTest {
         fun serverConfig(block: ServerConfiguration.() -> Unit = {}): ServerConfiguration {
             val configuration = ServerConfiguration()
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-            configuration.port = 2200
+            configuration.port = 2000
 
             configuration.enableIpc = false
 
@@ -146,7 +145,7 @@ abstract class BaseTest {
 
             val jc = JoranConfigurator()
             jc.context = context
-            jc.doConfigure(File("logback.xml").absoluteFile)
+//            jc.doConfigure(File("logback.xml").absoluteFile)
             context.reset() // override default configuration
 
 

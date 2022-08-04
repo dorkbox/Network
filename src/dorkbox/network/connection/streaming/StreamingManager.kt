@@ -17,7 +17,10 @@ import mu.KLogger
 import org.agrona.MutableDirectBuffer
 import java.security.SecureRandom
 
-internal class StreamingManager<CONNECTION : Connection>(private val logger: KLogger, private val actionDispatch: CoroutineScope) {
+internal class StreamingManager<CONNECTION : Connection>(
+    private val logger: KLogger,
+    private val actionDispatch: CoroutineScope
+) {
     private val streamingDataTarget = LockFreeHashMap<Long, StreamingControl>()
     private val streamingDataInMemory = LockFreeHashMap<Long, AeronOutput>()
 
@@ -67,7 +70,11 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
     /**
     * Reassemble/figure out the internal message pieces
     */
-    fun processControlMessage(message: StreamingControl, endPoint: EndPoint<CONNECTION>, connection: CONNECTION) {
+    fun processControlMessage(
+        message: StreamingControl,
+        endPoint: EndPoint<CONNECTION>,
+        connection: CONNECTION
+    ) {
         val streamId = message.streamId
 
         when (message.state) {
@@ -100,7 +107,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
                                     hasListeners = hasListeners or connection.notifyOnMessage(streamedMessage)
 
                                     if (!hasListeners) {
-                                        logger.error("No message callbacks found for ${streamedMessage::class.java.name}")
+                                        logger.error("No streamed message callbacks found for ${streamedMessage::class.java.name}")
                                     }
                                 } catch (e: Exception) {
                                     logger.error("Error processing message ${streamedMessage::class.java.name}", e)
@@ -187,7 +194,9 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
 
         val controlMessage = streamingDataTarget[streamId]
         if (controlMessage != null) {
-            streamingDataInMemory.getOrPut(streamId) { AeronOutput() }.writeBytes(message.payload!!)
+            synchronized(streamingDataInMemory) {
+                streamingDataInMemory.getOrPut(streamId) { AeronOutput() }.writeBytes(message.payload!!)
+            }
         } else {
             // something SUPER wrong!
             // more critical error sending the message. we shouldn't retry or anything.
@@ -249,7 +258,8 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
         internalBuffer: MutableDirectBuffer,
         objectSize: Int,
         endPoint: EndPoint<CONNECTION>,
-        connection: CONNECTION): Boolean {
+        connection: CONNECTION
+        ): Boolean {
 
         // NOTE: our max object size for IN-MEMORY messages is an INT. For file transfer it's a LONG (so everything here is cast to a long)
         var remainingPayload = objectSize
@@ -275,8 +285,6 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
         }
 
 
-        val kryo: KryoExtra<CONNECTION> = endPoint.serialization.takeKryo()
-
         // we do the FIRST chunk super-weird, because of the way we copy data around (we inject headers,
         // so the first message is SUPER tiny and is a COPY, the rest are no-copy.
 
@@ -292,6 +300,7 @@ internal class StreamingManager<CONNECTION : Connection>(private val logger: KLo
         val header: ByteArray
         val headerSize: Int
 
+        val kryo = endPoint.serialization.takeKryo()
         try {
             val objectBuffer = kryo.write(connection, chunkData)
             headerSize = objectBuffer.position()

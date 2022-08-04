@@ -4,6 +4,7 @@ import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
+import dorkbox.network.rmi.RemoteObject
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -124,15 +125,15 @@ class DisconnectReconnectTest : BaseTest() {
     }
 
     interface CloseIface {
-        suspend fun close()
+        fun close()
     }
 
     class CloseImpl : CloseIface {
-        override suspend fun close() {
+        override fun close() {
             // the connection specific one is called instead
         }
 
-        suspend fun close(connection: Connection) {
+        fun close(connection: Connection) {
             connection.logger.error { "PRE CLOSE MESSAGE!" }
             connection.close()
         }
@@ -159,6 +160,11 @@ class DisconnectReconnectTest : BaseTest() {
                 logger.error("Disconnecting via RMI ....")
 
                 val closerObject = rmi.get<CloseIface>(CLOSE_ID)
+
+                // the close operation will kill the connection, preventing the response from returning.
+                closerObject as RemoteObject
+                closerObject.async = true
+
                 closerObject.close()
             }
         }

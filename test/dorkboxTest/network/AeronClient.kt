@@ -110,12 +110,11 @@ object AeronClient {
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.port = 2000
 
-//        configuration.enableIpc = true
         configuration.enableIpc = false
-        configuration.enableIPv4 = true
-//        configuration.enableIPv4 = false
-//        configuration.enableIPv6 = true
-//        configuration.uniqueAeronDirectory = true
+        configuration.enableIPv4 = false
+//        configuration.enableIPv6 = false
+
+        configuration.uniqueAeronDirectory = true
 
         val client = Client<Connection>(configuration)
 
@@ -126,22 +125,26 @@ object AeronClient {
             true
         }
 
+        client.onInit {
+            logger.error("initialized")
+        }
+
         client.onConnect {
-            println("connected")
+            logger.error("connected")
+            send("HI THERE!")
         }
 
         client.onDisconnect {
-            println("disconnect")
+            logger.error("disconnect")
         }
 
         client.onError { throwable ->
-            println("has error")
+            logger.error("has error")
             throwable.printStackTrace()
         }
 
         client.onMessage<String> { message ->
-            println("HAS MESSAGE!")
-            println(message)
+            logger.error("HAS MESSAGE! $message")
         }
 
         client.connect("127.0.0.1") // UDP connection via loopback
@@ -168,7 +171,9 @@ object AeronClient {
         //                  on server, a connection local RMI object "uses" an id for global, so there will never be a conflict
         //                  using some tricks, we can make it so that it DOESN'T matter the order in which objects are created,
         //                  and can specify, if we want, the object created.
-        //                  Once created though, as NEW ONE with the same ID cannot be created until the old one is removed!
+        //                 Once created though, as NEW ONE with the same ID cannot be created until the old one is removed!
+
+        Thread.sleep(2000L)
         client.close()
     }
 }

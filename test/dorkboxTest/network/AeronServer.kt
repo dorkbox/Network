@@ -92,10 +92,10 @@ object AeronServer {
         configuration.port = 2000
         configuration.maxClientCount = 50
 
-//        configuration.enableIpc = true
-//        configuration.enableIpc = false
-//        configuration.enableIPv4 = false
-        configuration.enableIPv6 = false
+        configuration.enableIpc = true
+        configuration.enableIpc = false
+        configuration.enableIPv4 = false
+//        configuration.enableIPv6 = false
 
         configuration.maxConnectionsPerIpAddress = 50
 
@@ -107,31 +107,35 @@ object AeronServer {
             Thread.sleep(2000)
         }
 
-
         server.filter {
             println("should the connection $this be allowed?")
             true
         }
 
+        server.onInit {
+            logger.error("initialized")
+        }
+
         server.onConnect {
-            println("connected: $this")
+            logger.error("connected: $this")
         }
 
         server.onDisconnect {
-            println("disconnect: $this")
+            logger.error("disconnect: $this")
         }
 
         server.onErrorGlobal { throwable ->
-            println("from test: has error")
+            server.logger.error("from test: has error")
             throwable.printStackTrace()
         }
 
         server.onError { throwable ->
-            println("from test: has connection error: $this")
+            logger.error("from test: has connection error: $this")
             throwable.printStackTrace()
         }
 
         server.onMessage<String> { message ->
+            logger.error("got message! $message")
             send("ECHO $message")
         }
 

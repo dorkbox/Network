@@ -15,6 +15,8 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
@@ -53,6 +55,7 @@ import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
+import java.net.InetAddress
 import java.util.concurrent.*
 
 fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
@@ -115,6 +118,49 @@ internal constructor(val type: Class<*>,
                 Publication.MAX_POSITION_EXCEEDED -> "Maximum term position exceeded"
 
                 else -> throw IllegalStateException("Unknown error code: $result")
+            }
+        }
+
+        fun formatCommonAddress(ipAddress: String, isIpv4: Boolean): InetAddress {
+            return if (isIpv4) {
+                when (ipAddress.lowercase()) {
+                    "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv4.LOCALHOST
+                    "0", "::", "0.0.0.0", "*" -> {
+                        // this is the "wildcard" address. Windows has problems with this.
+                        IPv4.WILDCARD
+                    }
+                    else -> IPv4.toAddress(ipAddress)!!
+                }
+            } else {
+                when (ipAddress.lowercase()) {
+                    "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv6.LOCALHOST
+                    "0", "::", "0.0.0.0", "*" -> {
+                        // this is the "wildcard" address. Windows has problems with this.
+                        IPv6.WILDCARD
+                    }
+                    else -> IPv4.toAddress(ipAddress)!!
+                }
+            }
+        }
+        fun formatCommonAddressString(ipAddress: String, isIpv4: Boolean): String {
+            return if (isIpv4) {
+                when (ipAddress.lowercase()) {
+                    "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv4.toString(IPv4.LOCALHOST)
+                    "0", "::", "0.0.0.0", "*" -> {
+                        // this is the "wildcard" address. Windows has problems with this.
+                        IPv4.toString(IPv4.WILDCARD)
+                    }
+                    else -> ipAddress
+                }
+            } else {
+                when (ipAddress.lowercase()) {
+                    "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv6.toString(IPv6.LOCALHOST)
+                    "0", "::", "0.0.0.0", "*" -> {
+                        // this is the "wildcard" address. Windows has problems with this.
+                        IPv6.toString(IPv6.WILDCARD)
+                    }
+                    else -> ipAddress
+                }
             }
         }
     }
@@ -432,7 +478,7 @@ internal constructor(val type: Class<*>,
                         // more critical error sending the message. we shouldn't retry or anything.
                         // this exception will be a ClientException or a ServerException
                         val exception = newException(
-                            "[$aeronLogInfo] Error sending message. (Connection in non-connected state longer than linger timeout ${errorCodeName(result)})"
+                            "[$aeronLogInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})"
                         )
                         ListenerManager.cleanStackTraceInternal(exception)
                         listenerManager.notifyError(exception)
@@ -501,7 +547,7 @@ internal constructor(val type: Class<*>,
             message
         } catch (e: Exception) {
             // The handshake sessionId IS NOT globally unique
-            logger.error("[$aeronLogInfo] Error de-serializing message on connection ${header.sessionId()}!", e)
+            logger.error("[$aeronLogInfo] Error de-serializing handshake message on connection ${header.sessionId()}!", e)
             listenerManager.notifyError(e)
             null
         }
@@ -521,99 +567,101 @@ internal constructor(val type: Class<*>,
         @Suppress("UNCHECKED_CAST")
         connection as CONNECTION
 
-        try {
-            // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
-            val message = serialization.readMessage(buffer, offset, length, connection)
-            logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
+        synchronized(connection) {
+            try {
+                // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
+                val message = serialization.readMessage(buffer, offset, length, connection)
+                logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
 
-            // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept date BEFORE it goes to a coroutine
+                // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept date BEFORE it goes to a coroutine
 
-            when (message) {
-                is CloseMessage -> {
-                    // immediately close the connection
-                    connection.close()
-                }
-
-                is Ping -> {
-                    // NOTE: This MUST be on a new co-routine
-                    actionDispatch.launch {
-                        try {
-                            pingManager.manage(connection, responseManager, message, logger)
-                        } catch (e: Exception) {
-                            logger.error("Error processing message", e)
-                            listenerManager.notifyError(connection, e)
-                        }
+                when (message) {
+                    is CloseMessage -> {
+                        // immediately close the connection
+                        connection.close()
                     }
-                }
 
-                // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
-                // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
-                // go in "lock step"
-                is RmiMessage -> {
-                    // if we are an RMI message/registration, we have very specific, defined behavior.
-                    // We do not use the "normal" listener callback pattern because this requires special functionality
-                    // NOTE: This MUST be on a new co-routine
-                    actionDispatch.launch {
-                        try {
-                            rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
-                        } catch (e: Exception) {
-                            logger.error("Error processing message", e)
-                            listenerManager.notifyError(connection, e)
-                        }
-                    }
-                }
-
-                // streaming/chunked message. This is used when the published data is too large for a single Aeron message.
-                // TECHNICALLY, we could arbitrarily increase the size of the permitted Aeron message, however this doesn't let us
-                // send arbitrarily large pieces of data (gigs in size, potentially).
-                // This will recursively call into this method for each of the unwrapped chunks of data.
-                is StreamingControl -> {
-                    streamingManager.processControlMessage(message, this@EndPoint, connection)
-                }
-                is StreamingData -> {
-                    // NOTE: this will read extra data from the kryo input as necessary (which is why it's not on action dispatch)!
-                    val rawInput = serialization.readRaw()
-                    val dataLength = rawInput.readVarInt(true)
-                    message.payload = rawInput.readBytes(dataLength)
-
-
-                    // NOTE: This MUST NOT be on a new co-routine. It must be on the same thread!
-                    try {
-                        streamingManager.processDataMessage(message, this@EndPoint)
-                    } catch (e: Exception) {
-                        logger.error("Error processing StreamingMessage", e)
-                        listenerManager.notifyError(connection, e)
-                    }
-                }
-
-
-                is Any -> {
-                    // NOTE: This MUST be on a new co-routine
-                    actionDispatch.launch {
-                        try {
-                            var hasListeners = listenerManager.notifyOnMessage(connection, message)
-
-                            // each connection registers, and is polled INDEPENDENTLY for messages.
-                            hasListeners = hasListeners or connection.notifyOnMessage(message)
-
-                            if (!hasListeners) {
-                                logger.error("No message callbacks found for ${message::class.java.name}")
+                    is Ping -> {
+                        // NOTE: This MUST be on a new co-routine
+                        actionDispatch.launch {
+                            try {
+                                pingManager.manage(connection, responseManager, message, logger)
+                            } catch (e: Exception) {
+                                logger.error("Error processing message", e)
+                                listenerManager.notifyError(connection, e)
                             }
+                        }
+                    }
+
+                    // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
+                    // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
+                    // go in "lock step"
+                    is RmiMessage -> {
+                        // if we are an RMI message/registration, we have very specific, defined behavior.
+                        // We do not use the "normal" listener callback pattern because this requires special functionality
+                        // NOTE: This MUST be on a new co-routine
+                        actionDispatch.launch {
+                            try {
+                                rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
+                            } catch (e: Exception) {
+                                logger.error("Error processing message", e)
+                                listenerManager.notifyError(connection, e)
+                            }
+                        }
+                    }
+
+                    // streaming/chunked message. This is used when the published data is too large for a single Aeron message.
+                    // TECHNICALLY, we could arbitrarily increase the size of the permitted Aeron message, however this doesn't let us
+                    // send arbitrarily large pieces of data (gigs in size, potentially).
+                    // This will recursively call into this method for each of the unwrapped chunks of data.
+                    is StreamingControl -> {
+                        streamingManager.processControlMessage(message, this@EndPoint, connection)
+                    }
+                    is StreamingData -> {
+                        // NOTE: this will read extra data from the kryo input as necessary (which is why it's not on action dispatch)!
+                        val rawInput = serialization.readRaw()
+                        val dataLength = rawInput.readVarInt(true)
+                        message.payload = rawInput.readBytes(dataLength)
+
+
+                        // NOTE: This MUST NOT be on a new co-routine. It must be on the same thread!
+                        try {
+                            streamingManager.processDataMessage(message, this@EndPoint)
                         } catch (e: Exception) {
-                            logger.error("Error processing message ${message::class.java.name}", e)
+                            logger.error("Error processing StreamingMessage", e)
                             listenerManager.notifyError(connection, e)
                         }
                     }
-                }
 
-                else -> {
-                    logger.error("Unknown message received!!")
+
+                    is Any -> {
+                        // NOTE: This MUST be on a new co-routine
+                        actionDispatch.launch {
+                            try {
+                                var hasListeners = listenerManager.notifyOnMessage(connection, message)
+
+                                // each connection registers, and is polled INDEPENDENTLY for messages.
+                                hasListeners = hasListeners or connection.notifyOnMessage(message)
+
+                                if (!hasListeners) {
+                                    logger.error("No message callbacks found for ${message::class.java.name}")
+                                }
+                            } catch (e: Exception) {
+                                logger.error("Error processing message ${message::class.java.name}", e)
+                                listenerManager.notifyError(connection, e)
+                            }
+                        }
+                    }
+
+                    else -> {
+                        logger.error("Unknown message received!!")
+                    }
                 }
+            } catch (e: Exception) {
+                // The handshake sessionId IS NOT globally unique
+                logger.error("[${header.sessionId()}] Error de-serializing message", e)
+                listenerManager.notifyError(connection, e)
             }
-        } catch (e: Exception) {
-            // The handshake sessionId IS NOT globally unique
-            logger.error("[${header.sessionId()}] Error de-serializing message", e)
-            listenerManager.notifyError(connection, e)
         }
     }
 
@@ -629,42 +677,44 @@ internal constructor(val type: Class<*>,
 
         connection as CONNECTION
 
-        // since ANY thread can call 'send', we have to take kryo instances in a safe way
-        val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
-        try {
-            // the maximum size that this buffer can be is:
-            //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
-            val buffer = kryo.write(connection, message)
-            val objectSize = buffer.position()
-            val internalBuffer = buffer.internalBuffer
+        synchronized(connection) {
+            // since ANY thread can call 'send', we have to take kryo instances in a safe way
+            val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
+            try {
+                // the maximum size that this buffer can be is:
+                //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
+                val buffer = kryo.write(connection, message)
+                val objectSize = buffer.position()
+                val internalBuffer = buffer.internalBuffer
 
 
-            // one small problem! What if the message is too big to send all at once?
-            val maxMessageLength = publication.maxMessageLength()
-            if (objectSize >= maxMessageLength) {
-                // we must split up the message! It's too large for Aeron to manage.
-                // this will split up the message, construct the necessary control message and state, then CALL the sendData
-                // method directly for each subsequent message.
-                return streamingManager.send(publication, internalBuffer,
-                                             objectSize, this, connection)
+                // one small problem! What if the message is too big to send all at once?
+                val maxMessageLength = publication.maxMessageLength()
+                if (objectSize >= maxMessageLength) {
+                    // we must split up the message! It's too large for Aeron to manage.
+                    // this will split up the message, construct the necessary control message and state, then CALL the sendData
+                    // method directly for each subsequent message.
+                    return streamingManager.send(publication, internalBuffer,
+                                                 objectSize, this, connection)
+                }
+
+                return sendData(publication, internalBuffer, 0, objectSize, connection)
+            } catch (e: Exception) {
+                if (message is MethodResponse && message.result is Exception) {
+                    val result = message.result as Exception
+                    logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
+                    listenerManager.notifyError(connection, result)
+                } else if (message is ClientException || message is ServerException) {
+                    logger.error("[${publication.sessionId()}] Error for message '$message'", e)
+                    listenerManager.notifyError(connection, e)
+                } else {
+                    logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
+                    listenerManager.notifyError(connection, e)
+                }
+            } finally {
+                sendIdleStrategy.reset()
+                serialization.returnKryo(kryo)
             }
-
-            return sendData(publication, internalBuffer, 0, objectSize, connection)
-        } catch (e: Exception) {
-            if (message is MethodResponse && message.result is Exception) {
-                val result = message.result as Exception
-                logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
-                listenerManager.notifyError(connection, result)
-            } else if (message is ClientException || message is ServerException) {
-                logger.error("[${publication.sessionId()}] Error for message '$message'", e)
-                listenerManager.notifyError(connection, e)
-            } else {
-                logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
-                listenerManager.notifyError(connection, e)
-            }
-        } finally {
-            sendIdleStrategy.reset()
-            serialization.returnKryo(kryo)
         }
 
         return false
@@ -681,6 +731,7 @@ internal constructor(val type: Class<*>,
 
         var result: Long
         while (true) {
+            // we use exclusive publications, and they are not thread safe!
             result = publication.offer(internalBuffer, offset, objectSize)
             if (result >= 0) {
                 // success!

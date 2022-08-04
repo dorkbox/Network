@@ -26,17 +26,15 @@ import java.lang.Thread.sleep
 import java.util.concurrent.*
 
 /**
- * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
  * NOTE: IPC connection will ALWAYS have a timeout of 10 second to connect. This is IPC, it should connect fast
  */
 internal open class ClientIpcDriver(streamId: Int,
                                     sessionId: Int,
-                                    localSessionId: Int) :
+                                    remoteSessionId: Int) :
     MediaDriverClient(
-        port = streamId,
+        port = remoteSessionId,
         streamId = streamId,
-        remoteSessionId = sessionId,
-        localSessionId = localSessionId,
+        sessionId = sessionId,
         connectionTimeoutSec = 10,
         isReliable = true
     ) {
@@ -44,7 +42,8 @@ internal open class ClientIpcDriver(streamId: Int,
     var success: Boolean = false
     override val type = "ipc"
 
-    override val subscriptionPort: Int = localSessionId
+
+    private var alreadyBuilt = false
 
     /**
      * Set up the subscription + publication channels to the server
@@ -52,67 +51,64 @@ internal open class ClientIpcDriver(streamId: Int,
      * @throws ClientRetryException if we need to retry to connect
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
-    fun build(aeronDriver: AeronDriver, logger: KLogger) {
-        // Create a publication at the given address and port, using the given stream ID.
-        // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-        val publicationUri = uri("ipc", remoteSessionId)
+    override fun build(aeronDriver: AeronDriver, logger: KLogger) {
+        // only rebuild the subscription.
+        if (!alreadyBuilt) {
+            alreadyBuilt = true
+            // Create a publication at the given address and port, using the given stream ID.
+            // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
+            val publicationUri = uri("ipc", port)
+            logger.trace { "IPC client pub URI: ${publicationUri.build()},stream-id=$streamId" }
 
-        // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = uri("ipc", 0)
+            var success = false
 
-        if (logger.isTraceEnabled) {
-            logger.trace("IPC client pub URI: ${publicationUri.build()}")
-            logger.trace("IPC server sub URI: ${subscriptionUri.build()}")
-        }
+            // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+            //  publication of any state to other threads and not be long running or re-entrant with the client.
 
-        var success = false
+            // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
+            //      ESPECIALLY if it is with the same streamID
+            // this check is in the "reconnect" logic
 
-        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
-        //  publication of any state to other threads and not be long running or re-entrant with the client.
+            val publication = aeronDriver.addExclusivePublication(publicationUri, streamId)
 
-        // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
-        //      ESPECIALLY if it is with the same streamID
-        // this check is in the "reconnect" logic
+            // always include the linger timeout, so we don't accidentally kill ourself by taking too long
+            val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
+            val startTime = System.nanoTime()
 
-        val publication = aeronDriver.addPublication(publicationUri, streamId)
-        val subscription = aeronDriver.addSubscription(subscriptionUri, localSessionId)
+            while (System.nanoTime() - startTime < timoutInNanos) {
+                if (publication.isConnected) {
+                    success = true
+                    break
+                }
 
+                sleep(500L)
+            }
+            if (!success) {
+                publication.close()
 
-        // always include the linger timeout, so we don't accidentally kill ourself by taking too long
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
-        val startTime = System.nanoTime()
-
-        while (System.nanoTime() - startTime < timoutInNanos) {
-            if (publication.isConnected) {
-                success = true
-                break
+                val clientTimedOutException = ClientTimedOutException("Cannot create publication IPC connection to server")
+                ListenerManager.cleanAllStackTrace(clientTimedOutException)
+                throw clientTimedOutException
             }
 
-            sleep(500L)
+            this.publication = publication
         }
-        if (!success) {
-            subscription.close()
-            publication.close()
 
-            val clientTimedOutException = ClientTimedOutException("Cannot create publication IPC connection to server")
-            ListenerManager.cleanAllStackTrace(clientTimedOutException)
-            throw clientTimedOutException
-        }
+        // Create a subscription at the given address and port, using the given stream ID.
+        val subscriptionUri = uri("ipc", sessionId)
+        logger.trace { "IPC server sub URI: ${subscriptionUri.build()},stream-id=$streamId" }
+
+        val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
+
+        this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
+                "[$sessionId] IPC connection established to [$streamId|$subscriptionPort]"
+            } else {
+                "Connecting handshake to IPC [$streamId|$subscriptionPort]"
+            }
+
+        this.subscriptionPort = streamId
 
         this.success = true
         this.subscription = subscription
-        this.publication = publication
-    }
-
-    override val info : String by lazy {
-        if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
-            "[$sessionId] IPC connection established to [$streamId|$subscriptionPort]"
-        } else {
-            "Connecting handshake to IPC [$streamId|$subscriptionPort]"
-        }
-    }
-
-    override fun toString(): String {
-        return info
     }
 }

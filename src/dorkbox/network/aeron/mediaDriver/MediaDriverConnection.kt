@@ -19,19 +19,27 @@ package dorkbox.network.aeron.mediaDriver
 
 import dorkbox.network.aeron.AeronDriver
 import io.aeron.ChannelUriStringBuilder
-import java.net.Inet4Address
-import java.net.InetAddress
+import mu.KLogger
 
+fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, port: Int): ChannelUriStringBuilder {
+    this.endpoint(MediaDriverConnection.address(isIpv4, addressString, port))
+    return this
+}
+fun ChannelUriStringBuilder.controlEndpoint(isIpv4: Boolean, addressString: String, port: Int): ChannelUriStringBuilder {
+    this.controlEndpoint(MediaDriverConnection.address(isIpv4, addressString, port))
+    return this
+}
+
+// We don't use 'suspend' for these, because we have to pump events from a NORMAL thread. If there are any suspend points, there is
+// the potential for a live-lock due to coroutine scheduling
 interface MediaDriverConnection {
 
     val type: String
 
-    // We don't use 'suspend' for these, because we have to pump events from a NORMAL thread. If there are any suspend points, there is
-    // the potential for a live-lock due to coroutine scheduling
-    val info : String
+    fun build(aeronDriver: AeronDriver, logger: KLogger)
 
     companion object {
-        fun uri(type: String, sessionId: Int, isReliable: Boolean? = null): ChannelUriStringBuilder {
+        fun uri(type: String, sessionId: Int = AeronDriver.RESERVED_SESSION_ID_INVALID, isReliable: Boolean? = null): ChannelUriStringBuilder {
             val builder = ChannelUriStringBuilder().media(type)
             if (isReliable != null) {
                 builder.reliable(isReliable)
@@ -44,22 +52,16 @@ interface MediaDriverConnection {
             return builder
         }
 
-        fun uriEndpoint(type: String, sessionId: Int, isReliable: Boolean, address: InetAddress, addressString: String, port: Int): ChannelUriStringBuilder {
-            val builder = uri(type, sessionId, isReliable)
-
-            if (address is Inet4Address) {
-                builder.endpoint("$addressString:$port")
-            } else {
+        fun address(isIpv4: Boolean, addressString: String, port: Int): String {
+            return if (isIpv4) {
+                "$addressString:$port"
+            } else if (addressString[0] == '[') {
                 // IPv6 requires the address to be bracketed by [...]
-                if (addressString[0] == '[') {
-                    builder.endpoint("$addressString:$port")
-                } else {
-                    // there MUST be [] surrounding the IPv6 address for aeron to like it!
-                    builder.endpoint("[$addressString]:$port")
-                }
+                "$addressString:$port"
+            } else {
+                // there MUST be [] surrounding the IPv6 address for aeron to like it!
+                "[$addressString]:$port"
             }
-
-            return builder
         }
     }
 }

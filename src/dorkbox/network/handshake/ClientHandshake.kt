@@ -121,14 +121,16 @@ internal class ClientHandshake<CONNECTION: Connection>(
                     if (registrationData != null) {
                         cryptInput.buffer = registrationData
 
-                        val sessId = cryptInput.readInt()
-                        val streamPubId = cryptInput.readInt()
+                        val port = cryptInput.readInt()
+                        val sessionId = cryptInput.readInt()
+                        val streamId = cryptInput.readInt()
                         val regDetailsSize = cryptInput.readInt()
                         val regDetails = cryptInput.readBytes(regDetailsSize)
 
                         // now read data off
-                        connectionHelloInfo = ClientConnectionInfo(sessionId = sessId,
-                                                                   port = streamPubId,
+                        connectionHelloInfo = ClientConnectionInfo(streamId = streamId,
+                                                                   sessionId = sessionId,
+                                                                   port = port,
                                                                    kryoRegistrationDetails = regDetails)
                     } else {
                         failedException = ClientRejectedException("[$aeronLogInfo - ${message.connectKey}] canceled handshake for message without registration data")
@@ -163,7 +165,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         connectKey = getSafeConnectKey()
         val publicKey = endPoint.storage.getPublicKey()!!
 
-        val aeronLogInfo = "${handshakeConnection.remoteSessionId}/${handshakeConnection.streamId}"
+        val aeronLogInfo = "${handshakeConnection.sessionId}/${handshakeConnection.streamId}"
 
         // Send the one-time pad to the server.
         val publication = handshakeConnection.publication
@@ -172,7 +174,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         try {
             endPoint.writeHandshakeMessage(publication, aeronLogInfo,
                                            HandshakeMessage.helloFromClient(connectKey, publicKey,
-                                                                            handshakeConnection.localSessionId,
+                                                                            handshakeConnection.sessionId,
                                                                             handshakeConnection.subscriptionPort,
                                                                             handshakeConnection.subscription.streamId()))
         } catch (e: Exception) {
@@ -204,19 +206,11 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
-            // no longer necessary to hold this connection open (if not a failure, we close the handshake after the DONE message)
-            subscription.close()
-            publication.close()
-
             ListenerManager.cleanStackTraceInternal(failedEx)
             throw failedEx
         }
 
         if (connectionHelloInfo == null) {
-            // no longer necessary to hold this connection open (if not a failure, we close the handshake after the DONE message)
-            subscription.close()
-            publication.close()
-
             val exception = ClientTimedOutException("[$aeronLogInfo] Waiting for registration response from server")
             ListenerManager.cleanStackTraceInternal(exception)
             throw exception
@@ -228,10 +222,11 @@ internal class ClientHandshake<CONNECTION: Connection>(
     // called from the connect thread
     fun done(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) {
         val registrationMessage = HandshakeMessage.doneFromClient(connectKey,
-                                                                  handshakeConnection.subscriptionPort,
-                                                                  handshakeConnection.subscription.streamId())
+                                                                  handshakeConnection.port+1,
+                                                                  handshakeConnection.subscription.streamId(),
+                                                                  handshakeConnection.sessionId)
 
-        val aeronLogInfo = "${handshakeConnection.remoteSessionId}/${handshakeConnection.streamId}"
+        val aeronLogInfo = "${handshakeConnection.sessionId}/${handshakeConnection.streamId}"
 
         // Send the done message to the server.
         try {

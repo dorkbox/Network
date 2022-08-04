@@ -28,6 +28,7 @@ import dorkbox.storage.Storage
 import dorkbox.util.NamedThreadFactory
 import io.aeron.driver.Configuration
 import io.aeron.driver.ThreadingMode
+import io.aeron.driver.exceptions.InvalidChannelException
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -78,7 +79,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
     /**
      * The IPC ID is used to define what ID the server will receive data on. The client IPC ID must match this value.
      */
-    var ipcId = AeronDriver.IPC_HANDSHAKE_STREAM_ID_SUB
+    var ipcId = AeronDriver.IPC_HANDSHAKE_STREAM_ID
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -187,18 +188,28 @@ abstract class Configuration {
 
     /**
      * Specify the UDP port to use. This port is used to establish client-server connections.
+     *
      * When used for the server, this is the subscription port, which will be listening for incoming connections
      * When used for the client, this is the publication port, which is what port to connect to when establishing a connection
      *
      * This means that client-pub -> {{network}} -> server-sub
      *
      * Must be the value of an unsigned short and greater than 0
+     *
+     * In order to bypass issues with NAT, one EXTRA port is used - by default it is this port + 1
      */
     var port: Int = 0
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
         }
+
+    var controlPort: Int = 0
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
 
     /**
      * How long a connection must be disconnected before we cleanup the memory associated with it
@@ -468,6 +479,7 @@ abstract class Configuration {
     var aeronErrorFilter: (error: Throwable) -> Boolean = { error ->
                 // we suppress these because they are already handled
                 when {
+                    error is InvalidChannelException || error.cause is InvalidChannelException -> { false }
                     error is ClosedByInterruptException || error.cause is ClosedByInterruptException -> { false }
                     error is DriverTimeoutException || error.cause is DriverTimeoutException -> { false }
                     error is AgentTerminationException || error.cause is AgentTerminationException-> { false }

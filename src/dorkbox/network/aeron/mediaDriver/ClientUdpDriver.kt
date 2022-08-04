@@ -16,32 +16,35 @@
 
 package dorkbox.network.aeron.mediaDriver
 
-import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uriEndpoint
+import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
+import io.aeron.CommonContext
 import mu.KLogger
 import java.lang.Thread.sleep
 import java.net.Inet4Address
-import java.net.Inet6Address
 import java.net.InetAddress
 import java.util.concurrent.*
 
 /**
- * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER.
  * A connection timeout of 0, means to wait forever
  */
 internal class ClientUdpDriver(val address: InetAddress, val addressString: String,
                                port: Int,
                                streamId: Int,
                                sessionId: Int,
-                               localSessionId: Int,
                                connectionTimeoutSec: Int = 0,
                                isReliable: Boolean) :
-    MediaDriverClient(port, streamId, sessionId, localSessionId, connectionTimeoutSec, isReliable) {
+    MediaDriverClient(
+        port = port,
+        streamId = streamId,
+        sessionId = sessionId,
+        connectionTimeoutSec = connectionTimeoutSec,
+        isReliable = isReliable
+    ) {
 
     var success: Boolean = false
     override val type: String by lazy {
@@ -52,22 +55,12 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
         }
     }
 
-    override val subscriptionPort: Int by lazy {
-        val addressesAndPorts = subscription.localSocketAddresses()
-        val first = addressesAndPorts.first()
-
-        // split
-        val splitPoint = first.lastIndexOf(':')
-        val port = first.substring(splitPoint+1)
-        port.toInt()
-    }
-
     /**
      * @throws ClientRetryException if we need to retry to connect
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
     @Suppress("DuplicatedCode")
-    fun build(aeronDriver: AeronDriver, logger: KLogger) {
+    override fun build(aeronDriver: AeronDriver, logger: KLogger) {
         var success = false
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
@@ -75,33 +68,41 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
 
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
         // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+        val isIpv4 = address is Inet4Address
 
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-        val publicationUri = uriEndpoint("udp", remoteSessionId, isReliable, address, addressString, port)
-        logger.trace("client pub URI: $type ${publicationUri.build()}")
+        val publicationUri = uri("udp", sessionId, isReliable).endpoint(isIpv4, addressString, port)
+
 
         // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
         //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
-        val publication = aeronDriver.addPublication(publicationUri, streamId)
+        val publication = aeronDriver.addExclusivePublication(publicationUri, streamId)
 
 
         val localAddresses = publication.localSocketAddresses().first()
-        // split
         val splitPoint = localAddresses.lastIndexOf(':')
-        val localAddressString = localAddresses.substring(0, splitPoint)
+        var localAddressString = localAddresses.substring(0, splitPoint)
 
-
-        // the subscription here is WILDCARD
-        val localAddress = if (address is Inet6Address) {
-            IPv6.toAddress(localAddressString)!!
-        } else {
-            IPv4.toAddress(localAddressString)!!
+        if (!isIpv4) {
+            // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
+            // aeron IPv6 addresses all have [...]
+            localAddressString = localAddressString.substring(1, localAddressString.length-1)
+            localAddressString = IPv6.toString(IPv6.toAddress(localAddressString)!!)
         }
 
+
         // Create a subscription the given address and port, using the given stream ID.
-        val subscriptionUri = uriEndpoint("udp", localSessionId, isReliable, localAddress, localAddressString, 0)
-        logger.trace("client sub URI: $type ${subscriptionUri.build()}")
+        val subscriptionUri = uri("udp", sessionId, isReliable)
+        subscriptionUri.endpoint(isIpv4, localAddressString, 0)
+        subscriptionUri.controlEndpoint(isIpv4, addressString, port+1)
+        subscriptionUri.controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+
+
+        if (logger.isTraceEnabled) {
+            logger.trace("client pub URI: $type ${publicationUri.build()},stream-id=$streamId")
+            logger.trace("client sub URI: $type ${subscriptionUri.build()},stream-id=$streamId")
+        }
 
         val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
 
@@ -127,20 +128,19 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
             throw ex
         }
 
-        this.success = true
-        this.publication = publication
-        this.subscription = subscription
-    }
-
-    override val info: String by lazy {
-        if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
+        info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             "$addressString [$port|$subscriptionPort] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
             "Connecting handshake to $addressString [$port|$subscriptionPort] [$streamId|*] (reliable:$isReliable)"
         }
-    }
 
-    override fun toString(): String {
-        return info
+
+        val addressesAndPorts = subscription.localSocketAddresses().first()
+        val splitPoint2 = addressesAndPorts.lastIndexOf(':')
+        this.subscriptionPort = addressesAndPorts.substring(splitPoint2+1).toInt()
+
+        this.success = true
+        this.publication = publication
+        this.subscription = subscription
     }
 }

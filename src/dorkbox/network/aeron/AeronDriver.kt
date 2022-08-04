@@ -50,8 +50,8 @@ class AeronDriver(
         internal const val RESERVED_SESSION_ID_HIGH = Integer.MAX_VALUE
 
         const val UDP_HANDSHAKE_STREAM_ID: Int = 0x1337cafe
-        const val IPC_HANDSHAKE_STREAM_ID_PUB: Int = 0x1337c0de
-        const val IPC_HANDSHAKE_STREAM_ID_SUB: Int = 0x1337c0d3
+        const val IPC_HANDSHAKE_STREAM_ID: Int = 0x1337c0de
+        const val IPC_HANDSHAKE_SESSION_ID: Int = 0x1337c0d3
 
 
         // on close, the publication CAN linger (in case a client goes away, and then comes back)
@@ -335,6 +335,7 @@ class AeronDriver(
 
     fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
         val uri = publicationUri.build()
+        logger.trace { "${type.simpleName} pub URI: $uri,stream-id=$streamId" }
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
@@ -359,6 +360,54 @@ class AeronDriver(
             aeron1.addPublication(uri, streamId)
         } catch (e: Exception) {
             // this happens if the aeron media driver cannot actually establish connection
+            ListenerManager.cleanAllStackTrace(e)
+            val ex = ClientRetryException("Error adding a publication", e)
+            ListenerManager.cleanAllStackTrace(ex)
+            throw ex
+        }
+
+        if (publication == null) {
+            // there was an error connecting to the aeron client or media driver.
+            val ex = ClientRetryException("Error adding a publication")
+            ListenerManager.cleanAllStackTrace(ex)
+            throw ex
+        }
+
+        return publication
+    }
+
+    /**
+     * This is not a thread-safe publication!
+     */
+    fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
+        val uri = publicationUri.build()
+        logger.trace { "${type.simpleName} e-pub URI: $uri,stream-id=$streamId" }
+
+        // reasons we cannot add a pub/sub to aeron
+        // 1) the driver was closed
+        // 2) aeron was unable to connect to the driver
+        // 3) the address already in use
+
+        // configuring pub/sub to aeron is LINEAR -- and it happens in 2 places.
+        // 1) starting up the client/server
+        // 2) creating a new client-server connection pair (the media driver won't be "dead" at this point)
+
+        // in the client, if we are unable to connect to the server, we will attempt to start the media driver + connect to aeron
+
+        val aeron1 = aeron
+        if (aeron1 == null || aeron1.isClosed) {
+            // there was an error connecting to the aeron client or media driver.
+            val ex = ClientRetryException("Error adding a publication to aeron")
+            ListenerManager.cleanAllStackTrace(ex)
+            throw ex
+        }
+
+        val publication = try {
+            aeron1.addExclusivePublication(uri, streamId)
+        } catch (e: Exception) {
+            // this happens if the aeron media driver cannot actually establish connection
+            ListenerManager.cleanAllStackTrace(e)
+            ListenerManager.cleanAllStackTrace(e.cause)
             val ex = ClientRetryException("Error adding a publication", e)
             ListenerManager.cleanAllStackTrace(ex)
             throw ex
@@ -376,6 +425,7 @@ class AeronDriver(
 
     fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
         val uri = subscriptionUri.build()
+        logger.trace { "${type.simpleName} sub URI: $uri,stream-id=$streamId" }
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
@@ -402,6 +452,7 @@ class AeronDriver(
         val subscription = try {
             aeron1.addSubscription(uri, streamId)
         } catch (e: Exception) {
+            ListenerManager.cleanAllStackTrace(e)
             val ex = ClientRetryException("Error adding a subscription", e)
             ListenerManager.cleanAllStackTrace(ex)
             throw ex

@@ -6,7 +6,6 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
@@ -15,7 +14,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class MultiClientTest : BaseTest() {
-    private val totalCount = 20
+    private val totalCount = 2
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
     private val disconnectCount = atomic(0)
@@ -66,14 +65,14 @@ class MultiClientTest : BaseTest() {
 
             if (count == totalCount) {
                 logger.error { "Stopping endpoints!" }
-                delay(6000)
-                outputStats(server)
-
-                delay(2000)
-                outputStats(server)
-
-                delay(2000)
-                outputStats(server)
+//                delay(6000)
+//                outputStats(server)
+//
+//                delay(2000)
+//                outputStats(server)
+//
+//                delay(2000)
+//                outputStats(server)
 
                 stopEndPoints(10000L)
             }

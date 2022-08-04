@@ -163,6 +163,7 @@ dependencies {
     api("io.aeron:aeron-all:$aeronVer")
 //    api("io.aeron:aeron-client:$aeronVer")
 //    api("io.aeron:aeron-driver:$aeronVer")
+    api("org.agrona:agrona:1.16.0")
 
     // https://github.com/EsotericSoftware/kryo
     api("com.esotericsoftware:kryo:5.3.0") {

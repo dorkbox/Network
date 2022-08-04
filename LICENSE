@@ -49,6 +49,12 @@
        Copyright 2022
          Real Logic Limited
 
+     - Agrona - A Library of data structures and utility methods for high-performance applications
+       [The Apache Software License, Version 2.0]
+       https://github.com/real-logic/agrona
+       Copyright 2022
+         Real Logic Limited
+
      - Kryo - Fast and efficient binary object graph serialization framework for Java
        [BSD 3-Clause License]
        https://github.com/EsotericSoftware/kryo

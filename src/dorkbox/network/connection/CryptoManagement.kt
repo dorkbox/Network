@@ -188,9 +188,9 @@ internal class CryptoManagement(val logger: KLogger,
 
     // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the server, mutually exclusive calls to decrypt)
     fun encrypt(clientPublicKeyBytes: ByteArray,
-                subscriptionPort: Int,
-                connectionSessionId: Int,
-                connectionStreamId: Int,
+                port: Int,
+                sessionId: Int,
+                streamId: Int,
                 kryoRegDetails: ByteArray): ByteArray {
 
         try {
@@ -202,9 +202,9 @@ internal class CryptoManagement(val logger: KLogger,
 
             // now create the byte array that holds all our data
             cryptOutput.reset()
-            cryptOutput.writeInt(connectionSessionId)
-            cryptOutput.writeInt(connectionStreamId)
-            cryptOutput.writeInt(subscriptionPort)
+            cryptOutput.writeInt(sessionId)
+            cryptOutput.writeInt(streamId)
+            cryptOutput.writeInt(port)
             cryptOutput.writeInt(kryoRegDetails.size)
             cryptOutput.writeBytes(kryoRegDetails)
 

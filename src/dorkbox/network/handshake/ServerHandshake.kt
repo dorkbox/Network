@@ -19,9 +19,9 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.mediaDriver.MediaDriverConnectInfo
-import dorkbox.network.aeron.mediaDriver.MediaDriverConnection
-import dorkbox.network.aeron.mediaDriver.ServerIpcDriver
-import dorkbox.network.aeron.mediaDriver.UdpMediaDriverPairedConnection
+import dorkbox.network.aeron.mediaDriver.ServerIpcPairedDriver
+import dorkbox.network.aeron.mediaDriver.ServerUdpDriver
+import dorkbox.network.aeron.mediaDriver.ServerUdpPairedDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.ListenerManager
@@ -34,7 +34,6 @@ import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
-import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.*
 
@@ -49,13 +48,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
     private val logger: KLogger,
     private val config: ServerConfiguration,
     private val listenerManager: ListenerManager<CONNECTION>,
-    aeronDriver: AeronDriver
+    val aeronDriver: AeronDriver
 ) {
 
     // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
     private val pendingConnections = ExpiringMap.builder()
         // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
-        .expiration(TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong() * 2) + aeronDriver.getLingerNs(), TimeUnit.NANOSECONDS)
+        .expiration(TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong() * 2) + aeronDriver.getLingerNs(), TimeUnit.HOURS)
         .expirationPolicy(ExpirationPolicy.CREATED)
         .expirationListener<Long, CONNECTION> { clientConnectKey, connection ->
             // this blocks until it fully runs (which is ok. this is fast)
@@ -221,11 +220,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
      * @return true if the handshake poller is to close the publication, false will keep the publication (as we are DONE processing data)
      */
     fun processIpcHandshakeMessageServer(
-        server: Server<CONNECTION>,
-        handshakePublication: Publication,
-        message: HandshakeMessage,
-        aeronDriver: AeronDriver,
-        aeronLogInfo: String,
+        server: Server<CONNECTION>, handshakePublication: Publication, message: HandshakeMessage,
+        aeronDriver: AeronDriver, aeronLogInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ) {
@@ -254,11 +250,28 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
         // allocate session/stream id's
-        val connectionSessionId: Int
+        val connectionSessionSubId: Int
         try {
-            connectionSessionId = sessionIdAllocator.allocate()
+            connectionSessionSubId = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
-            logger.error { "[$aeronLogInfo] Connection from $connectionString not allowed! Unable to allocate a session ID for the client connection!" }
+            logger.error { "[$aeronLogInfo] Connection from $connectionString not allowed! Unable to allocate a session sub ID for the client connection!" }
+
+            try {
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+            }
+            return
+        }
+
+        val connectionSessionPubId: Int
+        try {
+            connectionSessionPubId = sessionIdAllocator.allocate()
+        } catch (e: AllocationException) {
+            sessionIdAllocator.free(connectionSessionSubId)
+
+            logger.error { "[$aeronLogInfo] Connection from $connectionString not allowed! Unable to allocate a session pub ID for the client connection!" }
 
             try {
                 server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
@@ -270,31 +283,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
         }
 
 
-        val connectionStreamPubId: Int
+        val connectionStreamId: Int
         try {
-            connectionStreamPubId = streamIdAllocator.allocate()
+            connectionStreamId = streamIdAllocator.allocate()
         } catch (e: AllocationException) {
             // have to unwind actions!
-            sessionIdAllocator.free(connectionSessionId)
-
-            logger.error { "[$aeronLogInfo] Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!" }
-
-            try {
-                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
-                                             HandshakeMessage.error("Connection error!"))
-            } catch (e: Exception) {
-                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
-            }
-            return
-        }
-
-        val connectionStreamSubId: Int
-        try {
-            connectionStreamSubId = streamIdAllocator.allocate()
-        } catch (e: AllocationException) {
-            // have to unwind actions!
-            sessionIdAllocator.free(connectionSessionId)
-            sessionIdAllocator.free(connectionStreamPubId)
+            sessionIdAllocator.free(connectionSessionSubId)
+            sessionIdAllocator.free(connectionSessionPubId)
 
             logger.error { "[$aeronLogInfo] Connection from $connectionString not allowed! Unable to allocate a stream ID for the client connection!" }
 
@@ -311,16 +306,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
         // create a new connection. The session ID is encrypted.
         try {
             // Create a subscription at the given address and port, using the given stream ID.
-            val driver = ServerIpcDriver(streamId = connectionStreamSubId,
-                                         sessionId = connectionSessionId)
+            val driver = ServerIpcPairedDriver(streamId = connectionStreamId,
+                                               sessionId = connectionSessionSubId,
+                                               remoteSessionId = connectionSessionPubId)
+
             driver.build(aeronDriver, logger)
 
-            // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
-            val publicationUri = MediaDriverConnection.uri("ipc", handshakePublication.sessionId())
-            val clientPublication = aeronDriver.addPublication(publicationUri, message.subscriptionPort)
-
             val clientConnection = MediaDriverConnectInfo(
-                publication = clientPublication,
+                publication = driver.publication,
                 subscription = driver.subscription,
                 subscriptionPort = driver.streamId,
                 publicationPort = message.subscriptionPort,
@@ -355,8 +348,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // now create the encrypted payload, using ECDH
             val cryptOutput = server.crypto.cryptOutput
             cryptOutput.reset()
-            cryptOutput.writeInt(connectionSessionId)
-            cryptOutput.writeInt(connectionStreamSubId)
+            cryptOutput.writeInt(connectionSessionSubId) // port (local ID that we are listening on - server sub)
+            cryptOutput.writeInt(connectionSessionPubId) // session id (local ID that we are sending data to -- the client must sub to this)
+            cryptOutput.writeInt(connectionStreamId)     // stream id
 
             val regDetails = serialization.getKryoRegistrationDetails()
             cryptOutput.writeInt(regDetails.size)
@@ -373,8 +367,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
             server.writeHandshakeMessage(handshakePublication, aeronLogInfo, successMessage) // exception is already caught!
         } catch (e: Exception) {
             // have to unwind actions!
-            sessionIdAllocator.free(connectionSessionId)
-            streamIdAllocator.free(connectionStreamPubId)
+            sessionIdAllocator.free(connectionSessionSubId)
+            sessionIdAllocator.free(connectionSessionPubId)
 
             logger.error(e) { "[$aeronLogInfo] Connection handshake from $connectionString crashed! Message $message" }
         }
@@ -386,18 +380,17 @@ internal class ServerHandshake<CONNECTION : Connection>(
      */
     fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
+        driver: ServerUdpDriver,
         handshakePublication: Publication,
         clientAddress: InetAddress,
         clientAddressString: String,
         isReliable: Boolean,
         message: HandshakeMessage,
-        aeronDriver: AeronDriver,
         aeronLogInfo: String,
-        isIpv6Wildcard: Boolean,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ) {
-        // Manage the Handshake state
+        // Manage the Handshake state. When done with a connection, this returns
         if (!validateMessageTypeAndDoPending(
                 server, server.actionDispatch, handshakePublication, message,
                 clientAddressString, aeronLogInfo, logger))
@@ -478,33 +471,18 @@ internal class ServerHandshake<CONNECTION : Connection>(
         // create a new connection. The session ID is encrypted.
         var connection: CONNECTION? = null
         try {
-            // connection timeout of 0 doesn't matter. it is not used by the server
-            // the client address WILL BE either IPv4 or IPv6
-            val listenAddress = if (clientAddress is Inet4Address && !isIpv6Wildcard) {
-                server.listenIPv4Address!!
-            } else {
-                // wildcard is SPECIAL, in that if we bind wildcard, it will ALSO bind to IPv4, so we can't bind both!
-                server.listenIPv6Address!!
-            }
-
-            // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
-            val publicationUri = MediaDriverConnection.uriEndpoint("udp", message.sessionId, isReliable, clientAddress, clientAddressString, message.subscriptionPort)
-            val clientPublication = aeronDriver.addPublication(publicationUri, message.streamId)
-
-            val driver = UdpMediaDriverPairedConnection(
-                listenAddress,
-                clientAddress,
-                clientAddressString,
-                publicationPort,
-                subscriptionPort,
-                connectionStreamId,
-                connectionSessionId,
-                0,
-                isReliable,
-                clientPublication
+            val driver = ServerUdpPairedDriver(
+                listenAddress = driver.listenAddress,
+                remoteAddress = clientAddress,
+                port = subscriptionPort,
+                streamId = connectionStreamId,
+                sessionId = connectionSessionId,
+                connectionTimeoutSec = 0,
+                isReliable = isReliable
             )
 
             driver.build(aeronDriver, logger)
+
             logger.info { "[$aeronLogInfo] Creating new connection from $driver" }
 
             val clientConnection = MediaDriverConnectInfo(

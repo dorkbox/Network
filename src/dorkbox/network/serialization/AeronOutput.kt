@@ -106,7 +106,7 @@ class AeronOutput : Output {
      */
     @Deprecated("This buffer does not used a byte[]")
     override fun getBuffer(): ByteArray {
-        throw UnsupportedOperationException("This buffer does not used a byte[], see #getInternaleBuffer().")
+        throw UnsupportedOperationException("This buffer does not use a byte[], see #getInternaleBuffer().")
     }
 
     /**
