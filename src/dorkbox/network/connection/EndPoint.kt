@@ -97,6 +97,9 @@ internal constructor(val type: Class<*>,
             : this(Server::class.java, config, connectionFunc, loggerName)
 
     companion object {
+        // connections are extremely difficult to diagnose when the connection timeout is short
+        internal val DEBUG_CONNECTIONS = false
+
         /**
          * @return the error code text for the specified number
          */
@@ -837,14 +840,14 @@ internal constructor(val type: Class<*>,
 
 
     /**
-     * @return the internal heartbeat of the Aeron driver in the current aeron directory
+     * @return the internal heartbeat of the Aeron driver in the current Aeron directory
      */
     fun driverHeartbeatMs(): Long {
         return aeronDriver.driverHeartbeatMs()
     }
 
     /**
-     * @return the internal version of the Aeron driver in the current aeron directory
+     * @return the internal version of the Aeron driver in the current Aeron directory
      */
     fun driverVersion(): String {
         return aeronDriver.driverVersion()

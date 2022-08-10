@@ -24,6 +24,7 @@ import dorkbox.network.aeron.mediaDriver.ServerUdpDriver
 import dorkbox.network.aeron.mediaDriver.ServerUdpPairedDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.AllocationException
@@ -53,8 +54,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
     // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
     private val pendingConnections = ExpiringMap.builder()
-        // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
-        .expiration(TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong() * 2) + aeronDriver.getLingerNs(), TimeUnit.HOURS)
+        .apply {
+            // connections are extremely difficult to diagnose when the connection timeout is short
+            val timeUnit = if (EndPoint.DEBUG_CONNECTIONS) { TimeUnit.HOURS } else { TimeUnit.NANOSECONDS }
+
+            // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
+            this.expiration(TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong() * 2) + aeronDriver.getLingerNs(), timeUnit)
+        }
         .expirationPolicy(ExpirationPolicy.CREATED)
         .expirationListener<Long, CONNECTION> { clientConnectKey, connection ->
             // this blocks until it fully runs (which is ok. this is fast)

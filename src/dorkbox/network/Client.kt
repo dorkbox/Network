@@ -232,8 +232,7 @@ open class Client<CONNECTION : Connection>(
     /**
      * Will attempt to connect to the server via IPC, with a default 30 second connection timeout and will block until completed.
      *
-     * @param ipcId The IPC publication address for the client to connect to
-     * @param ipcSubscriptionId The IPC subscription address for the client to connect to
+     * @param ipcId The IPC address for the client to connect to
      * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
      *
      * @throws IllegalArgumentException if the remote address is invalid
@@ -402,8 +401,7 @@ open class Client<CONNECTION : Connection>(
      * ### Case does not matter, and "localhost" is the default.
      *
      * @param remoteAddress The network or if localhost, IPC address for the client to connect to
-     * @param ipcPublicationId The IPC publication address for the client to connect to
-     * @param ipcSubscriptionId The IPC subscription address for the client to connect to
+     * @param ipcId The IPC publication address for the client to connect to
      * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
      * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
      *
@@ -421,8 +419,8 @@ open class Client<CONNECTION : Connection>(
         ipcId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID,
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true)
-     {
-         // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
+    {
+        // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
         config as ClientConfiguration
 
         require(connectionTimeoutSec >= 0) { "connectionTimeoutSec '$connectionTimeoutSec' is invalid. It must be >=0" }
@@ -469,8 +467,15 @@ open class Client<CONNECTION : Connection>(
 
         val handshake = ClientHandshake(crypto, this, logger)
 
-        val handshakeTimeout = 5
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+        var handshakeTimeoutSec = 5
+        var timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+
+        if (DEBUG_CONNECTIONS) {
+            // connections are extremely difficult to diagnose when the connection timeout is short
+            timoutInNanos += TimeUnit.HOURS.toNanos(1).toInt()
+            handshakeTimeoutSec += TimeUnit.HOURS.toSeconds(1).toInt()
+        }
+
         val startTime = System.nanoTime()
         var success = false
         while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
@@ -525,7 +530,7 @@ open class Client<CONNECTION : Connection>(
                             port = config.port,
                             streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                             sessionId = crypto.secureRandom.nextInt() + 1, // this helps prevent handshake collisions
-                            connectionTimeoutSec = connectionTimeoutSec,
+                            connectionTimeoutSec = handshakeTimeoutSec,
                             isReliable = reliable
                         )
 
@@ -542,7 +547,7 @@ open class Client<CONNECTION : Connection>(
                         port = config.port,
                         streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                         sessionId = crypto.secureRandom.nextInt() + 1, // this helps prevent handshake collisions
-                        connectionTimeoutSec = handshakeTimeout,
+                        connectionTimeoutSec = handshakeTimeoutSec,
                         isReliable = reliable
                     )
 
@@ -556,7 +561,7 @@ open class Client<CONNECTION : Connection>(
                 logger.info { handshakeConnection }
 
 
-                connect0(handshake, handshakeConnection, handshakeTimeout)
+                connect0(handshake, handshakeConnection, handshakeTimeoutSec)
                 success = true
 
 
