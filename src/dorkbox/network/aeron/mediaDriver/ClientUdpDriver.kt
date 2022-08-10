@@ -107,10 +107,10 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
         val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
 
         // always include the linger timeout, so we don't accidentally kill ourself by taking too long
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
+        val timeoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
         val startTime = System.nanoTime()
 
-        while (System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < timeoutInNanos) {
             if (publication.isConnected) {
                 success = true
                 break
