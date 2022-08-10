@@ -7,16 +7,23 @@ import dorkbox.network.exceptions.ClientRetryException
 import io.aeron.Aeron
 import io.aeron.ChannelUriStringBuilder
 import io.aeron.CncFileDescriptor
+import io.aeron.CommonContext
 import io.aeron.Publication
 import io.aeron.Subscription
 import io.aeron.driver.MediaDriver
+import io.aeron.driver.reports.LossReportReader
+import io.aeron.driver.reports.LossReportUtil
 import io.aeron.samples.SamplesUtil
 import kotlinx.atomicfu.atomic
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
+import org.agrona.IoUtil
 import org.agrona.SemanticVersion
+import org.agrona.concurrent.AtomicBuffer
 import org.agrona.concurrent.BackoffIdleStrategy
+import org.agrona.concurrent.UnsafeBuffer
+import org.agrona.concurrent.errors.ErrorLogReader
 import org.agrona.concurrent.ringbuffer.RingBufferDescriptor
 import org.agrona.concurrent.status.CountersReader
 import org.slf4j.LoggerFactory
@@ -171,6 +178,50 @@ class AeronDriver(
                 BacklogStat(countersReader)
             } else {
                 null
+            }
+        }
+
+        /**
+         * exposes the Aeron driver loss statistics
+         *
+         * @return the number of errors for the Aeron driver
+         */
+        fun driverErrors(aeronLocation: File, errorAction: (observationCount: Int, firstObservationTimestamp: Long, lastObservationTimestamp: Long, encodedException: String) -> Unit): Int {
+            val errorMmap = SamplesUtil.mapExistingFileReadOnly(aeronLocation.resolve("cnc.dat"))
+
+            try {
+                val buffer: AtomicBuffer = CommonContext.errorLogBuffer(errorMmap)
+
+                return ErrorLogReader.read(buffer) {
+                        observationCount: Int, firstObservationTimestamp: Long, lastObservationTimestamp: Long, encodedException: String ->
+
+                    errorAction(observationCount, firstObservationTimestamp, lastObservationTimestamp, encodedException)
+                }
+            } finally {
+                IoUtil.unmap(errorMmap)
+            }
+        }
+
+        /**
+         * exposes the Aeron driver loss statistics
+         *
+         * @return the number of loss statistics for the Aeron driver
+         */
+        fun driverLossStats(aeronLocation: File, lossStats: (observationCount: Long,
+                                                             totalBytesLost: Long,
+                                                             firstObservationTimestamp: Long,
+                                                             lastObservationTimestamp: Long,
+                                                             sessionId: Int, streamId: Int,
+                                                             channel: String, source: String) -> Unit): Int {
+
+            val lossReportFile = aeronLocation.resolve(LossReportUtil.LOSS_REPORT_FILE_NAME)
+            return if (lossReportFile.exists()) {
+                val mappedByteBuffer = SamplesUtil.mapExistingFileReadOnly(lossReportFile)
+                val buffer: AtomicBuffer = UnsafeBuffer(mappedByteBuffer)
+
+                LossReportReader.read(buffer, lossStats)
+            } else {
+                0
             }
         }
 
@@ -588,7 +639,7 @@ class AeronDriver(
     }
 
     /**
-     * @return the internal counters of the Aeron driver in the current aeron directory
+     * expose the internal counters of the Aeron driver
      */
     fun driverCounters(counterFunction: (counterId: Int, counterValue: Long, typeId: Int, keyBuffer: DirectBuffer?, label: String?) -> Unit) {
         driverCounters(context.driverDirectory, counterFunction)
@@ -606,6 +657,30 @@ class AeronDriver(
      */
     fun driverHeartbeatMs(): Long {
         return driverHeartbeatMs(context.driverDirectory)
+    }
+
+
+    /**
+     * exposes the Aeron driver loss statistics
+     *
+     * @return the number of errors for the Aeron driver
+     */
+    fun driverErrors(errorAction: (observationCount: Int, firstObservationTimestamp: Long, lastObservationTimestamp: Long, encodedException: String) -> Unit) {
+        driverErrors(context.driverDirectory, errorAction)
+    }
+
+    /**
+     * exposes the Aeron driver loss statistics
+     *
+     * @return the number of loss statistics for the Aeron driver
+     */
+    fun driverLossStats(lossStats: (observationCount: Long,
+                                    totalBytesLost: Long,
+                                    firstObservationTimestamp: Long,
+                                    lastObservationTimestamp: Long,
+                                    sessionId: Int, streamId: Int,
+                                    channel: String, source: String) -> Unit): Int {
+        return driverLossStats(context.driverDirectory, lossStats)
     }
 
     /**

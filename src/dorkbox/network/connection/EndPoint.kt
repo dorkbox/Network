@@ -838,6 +838,24 @@ internal constructor(val type: Class<*>,
         return aeronDriver.driverBacklog()
     }
 
+    /**
+     * @param errorAction callback for each of the errors reported by the Aeron driver in the current Aeron directory
+     */
+    fun driverErrors(errorAction: (observationCount: Int, firstObservationTimestamp: Long, lastObservationTimestamp: Long, encodedException: String) -> Unit) {
+        aeronDriver.driverErrors(errorAction)
+    }
+
+    /**
+     * @param lossStats callback for each of the loss statistic entires reported by the Aeron driver in the current Aeron directory
+     */
+    fun driverLossStats(lossStats: (observationCount: Long,
+                                    totalBytesLost: Long,
+                                    firstObservationTimestamp: Long,
+                                    lastObservationTimestamp: Long,
+                                    sessionId: Int, streamId: Int,
+                                    channel: String, source: String) -> Unit): Int {
+        return aeronDriver.driverLossStats(lossStats)
+    }
 
     /**
      * @return the internal heartbeat of the Aeron driver in the current Aeron directory
