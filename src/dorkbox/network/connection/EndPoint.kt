@@ -903,38 +903,19 @@ internal constructor(val type: Class<*>,
         if (shutdown.compareAndSet(expect = false, update = true)) {
             logger.info { "Shutting down..." }
 
-
-            // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
-            // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
-            val enableRemove = type == Client::class.java
-            connections.forEach {
-                logger.info { "[${it.id}/${it.streamId}] Closing connection" }
-                it.close(enableRemove)
-            }
-
-            runBlocking {
-                // Connections are closed first, because we want to make sure that no RMI messages can be received
+            closeAction {
+                // Connections MUST be closed first, because we want to make sure that no RMI messages can be received
                 // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
-                // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via and RMI method)
+                // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via an RMI method)
                 responseManager.close()
+
+                // the storage is closed via this as well.
+                storage.close()
             }
-
-            // the storage is closed via this as well.
-            storage.close()
-
-            close0()
-
-            aeronDriver.close()
-
-            shutdownLatch = CountDownLatch(1)
-
-            // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
-            shutdownLatch.countDown()
 
             logger.info { "Done shutting down..." }
         }
     }
-
     /**
      * Close in such a way that we enable us to be restarted. This is the same as a "normal close", but DOES NOT close
      *  - response manager
@@ -944,27 +925,36 @@ internal constructor(val type: Class<*>,
         if (shutdown.compareAndSet(expect = false, update = true)) {
             logger.info { "Shutting down for restart..." }
 
-
-            // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
-            // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
-            val enableRemove = type == Client::class.java
-            connections.forEach {
-                logger.info { "[${it.id}/${it.streamId}] Closing connection" }
-                it.close(enableRemove)
-            }
-
-            close0()
-
-            aeronDriver.close()
-
-            shutdownLatch = CountDownLatch(1)
-
-            // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
-            shutdownLatch.countDown()
+            closeAction()
 
             logger.info { "Done shutting down for restart..." }
         }
     }
+
+    private fun closeAction(extraActions: suspend () -> Unit = {}) {
+        // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
+        // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
+        val enableRemove = type == Client::class.java
+        connections.forEach {
+            logger.info { "[${it.id}/${it.streamId}] Closing connection" }
+            it.close(enableRemove)
+        }
+
+        // must run after connections have been closed, but before anything else
+        runBlocking {
+            extraActions()
+        }
+
+        close0()
+
+        aeronDriver.close()
+
+        shutdownLatch = CountDownLatch(1)
+
+        // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
+        shutdownLatch.countDown()
+    }
+
 
     internal open fun close0() {}
 

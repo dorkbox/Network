@@ -398,7 +398,7 @@ open class Server<CONNECTION : Connection>(
      * Closes the server and all it's connections. After a close, you may call 'bind' again.
      */
     final override fun close0() {
-        // when we call close, it will shutdown the polling mechanism, then wait for us to tell it to cleanup connections.
+        // when we call close, it will shut-down the polling mechanism, then wait for us to tell it to clean-up connections.
         //
         // Aeron + the Media Driver will have already been shutdown at this point.
         if (bindAlreadyCalled.getAndSet(false)) {
