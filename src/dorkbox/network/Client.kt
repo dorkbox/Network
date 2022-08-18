@@ -284,7 +284,7 @@ open class Client<CONNECTION : Connection>(
 
             fun ipv4Connect() {
                 // we have to check first if it's a valid IPv4 address. If not, maybe it's a DNS lookup
-                val inet4Address = if (IPv4.isValid(remoteAddress)) {
+                val inetAddress = if (IPv4.isValid(remoteAddress)) {
                     Inet4.toAddress(remoteAddress)
                 } else {
                     val client = DnsClient()
@@ -294,12 +294,12 @@ open class Client<CONNECTION : Connection>(
                     records?.get(0)
                 }
 
-                if (inet4Address == null) {
+                if (inetAddress == null) {
                     throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
                 }
 
-                connect(remoteAddress = inet4Address,
-                        remoteAddressString = formatCommonAddressString(remoteAddress, true),
+                connect(remoteAddress = inetAddress,
+                        remoteAddressString = formatCommonAddressString(IP.toString(inetAddress), inetAddress is Inet4Address),
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable)
             }
@@ -321,7 +321,7 @@ open class Client<CONNECTION : Connection>(
                 }
 
                 connect(remoteAddress = inetAddress,
-                        remoteAddressString = formatCommonAddressString(remoteAddress, inetAddress is Inet4Address),
+                        remoteAddressString = formatCommonAddressString(IP.toString(inetAddress), inetAddress is Inet4Address),
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable
                 )
@@ -329,7 +329,7 @@ open class Client<CONNECTION : Connection>(
 
             fun ipv6Connect() {
                 // we have to check first if it's a valid IPv6 address. If not, maybe it's a DNS lookup
-                val inet6Address = if (IPv6.isValid(remoteAddress)) {
+                val inetAddress = if (IPv6.isValid(remoteAddress)) {
                     Inet6.toAddress(remoteAddress)
                 } else {
                     val client = DnsClient()
@@ -339,29 +339,29 @@ open class Client<CONNECTION : Connection>(
                     records?.get(0)
                 }
 
-                if (inet6Address == null) {
+                if (inetAddress == null) {
                     throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
                 }
 
-                when (inet6Address) {
+                when (inetAddress) {
                     IPv4.LOCALHOST -> {
                         connect(remoteAddress = IPv6.LOCALHOST,
-                                remoteAddressString = IPv6.toString(IPv6.LOCALHOST),
+                                remoteAddressString = formatCommonAddressString(IPv6.toString(IPv6.LOCALHOST), true),
                                 connectionTimeoutSec = connectionTimeoutSec,
                                 reliable = reliable)
 
                     }
                     is Inet4Address -> {
                         // we can map the IPv4 address to an IPv6 address.
-                        val address = IPv6.toAddress(IPv4.toString(inet6Address), true)!!
+                        val address = IPv6.toAddress(IPv4.toString(inetAddress), true)!!
                         connect(remoteAddress = address,
-                                remoteAddressString = IPv6.toString(address),
+                                remoteAddressString = formatCommonAddressString(IPv6.toString(address), true),
                                 connectionTimeoutSec = connectionTimeoutSec,
                                 reliable = reliable)
                     }
                     else -> {
-                        connect(remoteAddress = inet6Address,
-                                remoteAddressString = formatCommonAddressString(remoteAddress, false),
+                        connect(remoteAddress = inetAddress,
+                                remoteAddressString = formatCommonAddressString(remoteAddress, inetAddress is Inet6Address),
                                 connectionTimeoutSec = connectionTimeoutSec,
                                 reliable = reliable)
                     }
