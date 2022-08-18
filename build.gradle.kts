@@ -30,6 +30,8 @@ plugins {
     id("com.dorkbox.VersionUpdate") version "2.5"
     id("com.dorkbox.GradlePublish") version "1.12"
 
+    id("com.github.johnrengelman.shadow") version "7.1.2"
+
     kotlin("jvm") version "1.6.10"
 }
 
@@ -138,6 +140,26 @@ tasks.jar.get().apply {
         attributes["Implementation-Vendor"] = Extras.vendor
     }
 }
+
+
+val shadowJar: com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar by tasks
+shadowJar.apply {
+    manifest.inheritFrom(tasks.jar.get().manifest)
+
+    manifest.attributes.apply {
+        put("Main-Class", "dorkboxTest.network.AeronClientServer")
+    }
+
+    mergeServiceFiles()
+
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    from(sourceSets.test.get().output)
+    configurations = listOf(project.configurations.testRuntimeClasspath.get())
+
+    archiveBaseName.set(project.name + "-all")
+}
+
 
 dependencies {
     api("org.jetbrains.kotlinx:atomicfu:0.17.3")
