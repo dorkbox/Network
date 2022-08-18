@@ -50,6 +50,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
