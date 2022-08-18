@@ -47,12 +47,19 @@ internal open class ServerUdpDriver(val listenAddress: InetAddress,
     var success: Boolean = false
     override val type = "udp"
 
+    private val isIpv4 = listenAddress is Inet4Address
+    protected val listenAddressString = IP.toString(listenAddress)
+
+    protected val prettyAddressString = when (listenAddress) {
+        IPv4.WILDCARD -> listenAddressString
+        IPv6.WILDCARD -> IPv4.WILDCARD.hostAddress + "/" + listenAddressString
+        else -> listenAddressString
+    }
+
     override fun build(aeronDriver: AeronDriver, logger: KLogger) {
-        val isIpv4 = listenAddress is Inet4Address
-        val addressString = IP.toString(listenAddress)
 
         // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = uri("udp", sessionId, isReliable).endpoint(isIpv4, addressString, port)
+        val subscriptionUri = uri("udp", sessionId, isReliable).endpoint(isIpv4, listenAddressString, port)
 
         if (logger.isTraceEnabled) {
             if (isIpv4) {
@@ -62,21 +69,10 @@ internal open class ServerUdpDriver(val listenAddress: InetAddress,
             }
         }
 
-
-        val address = if (listenAddress == IPv4.WILDCARD || listenAddress == IPv6.WILDCARD) {
-            if (listenAddress == IPv4.WILDCARD) {
-                listenAddress.hostAddress
-            } else {
-                IPv4.WILDCARD.hostAddress + "/" + listenAddress.hostAddress
-            }
-        } else {
-            IP.toString(listenAddress)
-        }
-
         this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
-            "Listening on $address [$port|${port+1}] [$streamId|$sessionId] (reliable:$isReliable)"
+            "Listening on $prettyAddressString [$port|${port+1}] [$streamId|$sessionId] (reliable:$isReliable)"
         } else {
-            "Listening handshake on $address [$port|${port+1}] [$streamId|*] (reliable:$isReliable)"
+            "Listening handshake on $prettyAddressString [$port|${port+1}] [$streamId|*] (reliable:$isReliable)"
         }
 
         this.success = true

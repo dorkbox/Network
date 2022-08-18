@@ -16,13 +16,13 @@
 
 package dorkbox.network.aeron.mediaDriver
 
-import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
 import io.aeron.Publication
 import mu.KLogger
 import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 
 /**
@@ -48,7 +48,6 @@ internal class ServerUdpPairedDriver(
     ) {
 
     lateinit var publication: Publication
-    private val listenAddressString = IP.toString(listenAddress)
 
     override fun build(aeronDriver: AeronDriver, logger: KLogger) {
         // connection timeout of 0 doesn't matter. it is not used by the server
@@ -82,28 +81,16 @@ internal class ServerUdpPairedDriver(
             }
         }
 
-        val address = if (listenAddress == IPv4.WILDCARD || listenAddress == IPv6.WILDCARD) {
-            if (listenAddress == IPv4.WILDCARD) {
-                listenAddress.hostAddress
-            } else {
-                IPv4.WILDCARD.hostAddress + "/" + listenAddress.hostAddress
-            }
+        val remoteAddressString = if (isIpV4) {
+            IPv4.toString(remoteAddress as Inet4Address)
         } else {
-            IP.toString(listenAddress)
+            IPv6.toString(remoteAddress as Inet6Address)
         }
 
-        this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
-            "NEW222 Listening on $address [$port|${port+1}] [$streamId|$sessionId] (reliable:$isReliable)"
-        } else {
-            "NEW Listening handshake on $address [$port|${port+1}] [$streamId|*] (reliable:$isReliable)"
-        }
+        this.info = "$remoteAddressString via $prettyAddressString [$port|${port+1}] [$streamId|$sessionId] (reliable:$isReliable)"
 
         this.success = true
         this.publication = publication
         this.subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
     }
-
-//    override fun toString(): String {
-//        return "$remoteAddressString [$port|$publicationPort] [$streamId|$sessionId] (reliable:$isReliable)"
-//    }
 }
