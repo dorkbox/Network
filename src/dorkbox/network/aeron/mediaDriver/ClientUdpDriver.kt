@@ -80,6 +80,7 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
         val publication = aeronDriver.addExclusivePublication(publicationUri, streamId)
 
 
+        // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
         val localAddresses = publication.localSocketAddresses().first()
         val splitPoint = localAddresses.lastIndexOf(':')
         var localAddressString = localAddresses.substring(0, splitPoint)
