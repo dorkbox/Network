@@ -60,9 +60,9 @@ internal class ServerUdpPairedDriver(
 
         if (logger.isTraceEnabled) {
             if (isIpV4) {
-                logger.trace("IPV4 server pub URI: ${publicationUri.build()},stream-id=$streamId")
+                logger.trace("IPV4 server e-pub URI: ${publicationUri.build()},stream-id=$streamId")
             } else {
-                logger.trace("IPV6 server pub URI: ${publicationUri.build()},stream-id=$streamId")
+                logger.trace("IPV6 server e-pub URI: ${publicationUri.build()},stream-id=$streamId")
             }
         }
 

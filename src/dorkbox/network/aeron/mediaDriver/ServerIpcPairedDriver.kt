@@ -55,8 +55,8 @@ internal open class ServerIpcPairedDriver(streamId: Int,
 
 
         if (logger.isTraceEnabled) {
-            logger.trace("IPC server pub URI: ${publicationUri.build()},stream-id=$streamId")
-            logger.trace("IPC server sub URI: ${subscriptionUri.build()},stream-id=$streamId")
+            logger.trace("IPC server ipc-pub URI: ${publicationUri.build()},stream-id=$streamId")
+            logger.trace("IPC server ipc-sub URI: ${subscriptionUri.build()},stream-id=$streamId")
         }
 
         this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {

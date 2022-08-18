@@ -101,7 +101,7 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
 
 
         if (logger.isTraceEnabled) {
-            logger.trace("client pub URI: $type ${publicationUri.build()},stream-id=$streamId")
+            logger.trace("client e-pub URI: $type ${publicationUri.build()},stream-id=$streamId")
             logger.trace("client sub URI: $type ${subscriptionUri.build()},stream-id=$streamId")
         }
 
