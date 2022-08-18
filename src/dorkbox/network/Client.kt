@@ -891,11 +891,30 @@ open class Client<CONNECTION : Connection>(
      *
      * @return true if the message was sent successfully, false if the connection has been closed
      */
-    fun send(message: Any): Boolean {
+    suspend fun send(message: Any): Boolean {
         val c = connection0
 
         return if (c != null) {
             c.send(message)
+        } else {
+            val exception = ClientException("Cannot send a message when there is no connection!")
+            logger.error(exception) { "No connection!" }
+            false
+        }
+    }
+
+    /**
+     * Sends a message to the server, if the connection is closed for any reason, this returns false.
+     *
+     * @return true if the message was sent successfully, false if the connection has been closed
+     */
+    fun sendBlocking(message: Any): Boolean {
+        val c = connection0
+
+        return if (c != null) {
+            runBlocking {
+                c.send(message)
+            }
         } else {
             val exception = ClientException("Cannot send a message when there is no connection!")
             logger.error(exception) { "No connection!" }

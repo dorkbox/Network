@@ -27,6 +27,7 @@ import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
 import org.agrona.DirectBuffer
 import java.lang.Thread.sleep
 import java.net.InetAddress
@@ -45,6 +46,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     private val subscriptionPort: Int
     private val publicationPort: Int
+
+    /**
+     * When publishing data, we cannot have concurrent publications for a single connection (per Aeron publication)
+     */
+    internal val publicationMutex = Mutex()
 
     /**
      * the stream id of this connection. Can be 0 for IPC connections
@@ -193,12 +199,23 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      *
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    fun send(message: Any): Boolean {
+    suspend fun send(message: Any): Boolean {
         messagesInProgress.getAndIncrement()
         val success = endPoint.send(message, publication, this)
         messagesInProgress.getAndDecrement()
 
         return success
+    }
+
+    /**
+     * Safely sends objects to a destination.
+     *
+     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    fun sendBlocking(message: Any): Boolean {
+        return runBlocking {
+            send(message)
+        }
     }
 
     /**
@@ -343,10 +360,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             // send out a "close" message. MAYBE it gets to the remote endpoint, maybe not. If it DOES, then the remote endpoint starts
             // the close process faster.
             try {
-                endPoint.send(CloseMessage(), publication, this)
+                runBlocking {
+                    endPoint.send(CloseMessage(), publication, this@Connection)
+                }
             } catch (ignored: Exception) {
             }
-
 
 
             val timoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())

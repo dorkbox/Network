@@ -678,13 +678,13 @@ internal constructor(val type: Class<*>,
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
     @Suppress("DuplicatedCode", "UNCHECKED_CAST")
-    internal fun send(message: Any, publication: Publication, connection: Connection): Boolean {
+    internal suspend fun send(message: Any, publication: Publication, connection: Connection): Boolean {
         // The handshake sessionId IS NOT globally unique
         logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
 
         connection as CONNECTION
 
-        synchronized(connection) {
+        connection.publicationMutex.withLock {
             // since ANY thread can call 'send', we have to take kryo instances in a safe way
             val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
             try {
