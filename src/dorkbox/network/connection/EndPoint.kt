@@ -218,6 +218,10 @@ internal constructor(val type: Class<*>,
     internal val pingManager = PingManager<CONNECTION>()
 
     init {
+        if (DEBUG_CONNECTIONS) {
+            logger.error { "DEBUG_CONNECTIONS is enabled. This should not happen in release!" }
+        }
+
         require(!config.previouslyUsed) { "${type.simpleName} configuration cannot be reused!" }
         config.validate() // this happens more than once! (this is ok)
 
