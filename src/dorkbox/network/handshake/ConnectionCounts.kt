@@ -33,6 +33,6 @@ internal class ConnectionCounts {
     }
 
     override fun toString(): String {
-        return connectionsPerIpCounts.entries.joinToString()
+        return connectionsPerIpCounts.entries.map { it.key }.joinToString()
     }
 }
