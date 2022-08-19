@@ -125,46 +125,37 @@ internal constructor(val type: Class<*>,
             }
         }
 
-        fun formatCommonAddress(ipAddress: String, isIpv4: Boolean): InetAddress {
-            return if (isIpv4) {
-                when (ipAddress.lowercase()) {
-                    "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv4.LOCALHOST
-                    "0", "::", "0.0.0.0", "*" -> {
-                        // this is the "wildcard" address. Windows has problems with this.
-                        IPv4.WILDCARD
-                    }
-                    else -> IPv4.toAddress(ipAddress)!!
-                }
-            } else {
-                when (ipAddress.lowercase()) {
-                    "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv6.LOCALHOST
-                    "0", "::", "0.0.0.0", "*" -> {
-                        // this is the "wildcard" address. Windows has problems with this.
-                        IPv6.WILDCARD
-                    }
-                    else -> IPv4.toAddress(ipAddress)!!
-                }
+        fun isLocalhost(ipAddress: String): Boolean {
+            return when (ipAddress.lowercase()) {
+                "loopback", "localhost", "lo", "127.0.0.1", "::1" -> true
+                else -> false
             }
         }
-        fun formatCommonAddressString(ipAddress: String, isIpv4: Boolean): String {
-            return if (isIpv4) {
-                when (ipAddress.lowercase()) {
-                    "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv4.toString(IPv4.LOCALHOST)
-                    "0", "::", "0.0.0.0", "*" -> {
-                        // this is the "wildcard" address. Windows has problems with this.
-                        IPv4.toString(IPv4.WILDCARD)
-                    }
-                    else -> ipAddress
-                }
+        fun isWildcard(ipAddress: String): Boolean {
+            return when (ipAddress) {
+                // this is the "wildcard" address. Windows has problems with this.
+                "0", "::", "0.0.0.0", "*" -> true
+                else -> false
+            }
+        }
+
+        fun formatCommonAddress(ipAddress: String, isIpv4: Boolean): InetAddress {
+            return if (isLocalhost(ipAddress)) {
+                if (isIpv4) { IPv4.LOCALHOST } else { IPv6.LOCALHOST }
+            } else if (isWildcard(ipAddress)) {
+                if (isIpv4) { IPv4.WILDCARD } else { IPv6.WILDCARD }
             } else {
-                when (ipAddress.lowercase()) {
-                    "loopback", "localhost", "lo", "127.0.0.1", "::1" -> IPv6.toString(IPv6.LOCALHOST)
-                    "0", "::", "0.0.0.0", "*" -> {
-                        // this is the "wildcard" address. Windows has problems with this.
-                        IPv6.toString(IPv6.WILDCARD)
-                    }
-                    else -> ipAddress
-                }
+                if (isIpv4) { IPv4.toAddress(ipAddress)!! } else { IPv6.toAddress(ipAddress)!! }
+            }
+        }
+
+        fun formatCommonAddressString(ipAddress: String, isIpv4: Boolean): String {
+            return if (isLocalhost(ipAddress)) {
+                if (isIpv4) { IPv4.LOCALHOST_STRING } else { IPv6.LOCALHOST_STRING }
+            } else if (isWildcard(ipAddress)) {
+                if (isIpv4) { IPv4.WILDCARD_STRING } else { IPv6.WILDCARD_STRING }
+            } else {
+                ipAddress
             }
         }
     }

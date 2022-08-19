@@ -20,8 +20,6 @@ import dorkbox.dns.DnsClient
 import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
-import dorkbox.netUtil.Inet4
-import dorkbox.netUtil.Inet6
 import dorkbox.netUtil.dnsUtils.ResolvedAddressTypes
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.mediaDriver.ClientIpcDriver
@@ -281,87 +279,63 @@ open class Client<CONNECTION : Connection>(
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true)
         {
-
-            fun ipv4Connect() {
-                // we have to check first if it's a valid IPv4 address. If not, maybe it's a DNS lookup
-                val inetAddress = if (IPv4.isValid(remoteAddress)) {
-                    Inet4.toAddress(remoteAddress)
-                } else {
-                    val client = DnsClient()
-                    client.resolvedAddressTypes(ResolvedAddressTypes.IPV4_ONLY)
-                    val records = client.resolve(remoteAddress)
-                    client.stop()
-                    records?.get(0)
-                }
-
-                if (inetAddress == null) {
-                    throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
-                }
+            // specified when we WANT or SHOULD to connect via IPv4
+            fun ipv4Connect(dnsResolveType: ResolvedAddressTypes = ResolvedAddressTypes.IPV4_ONLY) {
+                val inetAddress = when (formatCommonAddressString(remoteAddress, true)) {
+                    IPv4.LOCALHOST_STRING -> IPv4.LOCALHOST
+                    IPv4.WILDCARD_STRING -> IPv4.WILDCARD
+                    else -> {
+                        // we have to check first if it's a valid IPv4 address. If not, maybe it's a DNS lookup
+                        if (IP.isValid(remoteAddress)) {
+                            IP.toAddress(remoteAddress)
+                        } else {
+                            val client = DnsClient()
+                            client.resolvedAddressTypes(dnsResolveType)
+                            val records = client.resolve(remoteAddress)
+                            client.stop()
+                            records?.get(0)
+                        }
+                    }
+                } ?: throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
 
                 connect(remoteAddress = inetAddress,
+                        // we check again, because the inetAddress that comes back from DNS, might not be what we expect
                         remoteAddressString = formatCommonAddressString(IP.toString(inetAddress), inetAddress is Inet4Address),
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable)
             }
 
-            fun ipv4PreferredConnect() {
-                // we have to check first if it's a valid IPv4 address. If not, maybe it's a DNS lookup
-                val inetAddress = if (IP.isValid(remoteAddress)) {
-                    IP.toAddress(remoteAddress)
-                } else {
-                    val client = DnsClient()
-                    client.resolvedAddressTypes(ResolvedAddressTypes.IPV4_PREFERRED)
-                    val records = client.resolve(remoteAddress)
-                    client.stop()
-                    records?.get(0)
-                }
-
-                if (inetAddress == null) {
-                    throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
-                }
-
-                connect(remoteAddress = inetAddress,
-                        remoteAddressString = formatCommonAddressString(IP.toString(inetAddress), inetAddress is Inet4Address),
-                        connectionTimeoutSec = connectionTimeoutSec,
-                        reliable = reliable
-                )
-            }
-
+            // specified when we WANT to connect via IPv6
             fun ipv6Connect() {
-                // we have to check first if it's a valid IPv6 address. If not, maybe it's a DNS lookup
-                val inetAddress = if (IPv6.isValid(remoteAddress)) {
-                    Inet6.toAddress(remoteAddress)
-                } else {
-                    val client = DnsClient()
-                    client.resolvedAddressTypes(ResolvedAddressTypes.IPV6_ONLY)
-                    val records = client.resolve(remoteAddress)
-                    client.stop()
-                    records?.get(0)
-                }
-
-                if (inetAddress == null) {
-                    throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
-                }
+                val inetAddress = when (formatCommonAddressString(remoteAddress, false)) {
+                    IPv6.LOCALHOST_STRING -> IPv6.LOCALHOST
+                    IPv6.WILDCARD_STRING -> IPv6.WILDCARD
+                    else -> {
+                        // we have to check first if it's a valid IPv6 address. If not, maybe it's a DNS lookup
+                        if (IPv6.isValid(remoteAddress)) {
+                            IPv6.toAddress(remoteAddress)
+                        } else {
+                            val client = DnsClient()
+                            client.resolvedAddressTypes(ResolvedAddressTypes.IPV6_PREFERRED)
+                            val records = client.resolve(remoteAddress)
+                            client.stop()
+                            records?.get(0)
+                        }
+                    }
+                } ?: throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
 
                 when (inetAddress) {
-                    IPv4.LOCALHOST -> {
-                        connect(remoteAddress = IPv6.LOCALHOST,
-                                remoteAddressString = formatCommonAddressString(IPv6.toString(IPv6.LOCALHOST), true),
-                                connectionTimeoutSec = connectionTimeoutSec,
-                                reliable = reliable)
-
-                    }
+                    // we still wanted IPv6, but somehow got an IPv4 address.
                     is Inet4Address -> {
-                        // we can map the IPv4 address to an IPv6 address.
-                        val address = IPv6.toAddress(IPv4.toString(inetAddress), true)!!
-                        connect(remoteAddress = address,
-                                remoteAddressString = formatCommonAddressString(IPv6.toString(address), true),
+                        connect(remoteAddress = inetAddress,
+                                remoteAddressString = formatCommonAddressString(IPv4.toString(inetAddress), true),
                                 connectionTimeoutSec = connectionTimeoutSec,
                                 reliable = reliable)
                     }
                     else -> {
                         connect(remoteAddress = inetAddress,
-                                remoteAddressString = formatCommonAddressString(remoteAddress, inetAddress is Inet6Address),
+                                // we check again, because the inetAddress that comes back from DNS, might not be what we expect
+                                remoteAddressString = formatCommonAddressString(remoteAddress, false),
                                 connectionTimeoutSec = connectionTimeoutSec,
                                 reliable = reliable)
                     }
@@ -378,7 +352,7 @@ open class Client<CONNECTION : Connection>(
                 config.enableIPv6 -> ipv6Connect()
                 config.enableIPv4 || IPv4.isPreferred -> ipv4Connect()
                 IPv6.isPreferred -> ipv6Connect()
-                else -> ipv4PreferredConnect() // if there is no preference, then try to connect via IPv4
+                else -> ipv4Connect(ResolvedAddressTypes.IPV4_PREFERRED)
             }
     }
 
