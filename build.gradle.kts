@@ -176,7 +176,7 @@ dependencies {
     api("com.dorkbox:Serializers:2.7")
     api("com.dorkbox:Storage:1.1")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.29")
+    api("com.dorkbox:Utilities:1.30")
 
 
     // we include ALL of aeron, in case we need to debug aeron behavior

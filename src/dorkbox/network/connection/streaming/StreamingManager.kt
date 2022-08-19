@@ -221,7 +221,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         connection: CONNECTION
     ) {
         val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
-        val failSent = endPoint.send(failMessage, publication, connection)
+        val failSent = endPoint.sendUnsafe(failMessage, publication, connection)
         if (!failSent) {
             // something SUPER wrong!
             // more critical error sending the message. we shouldn't retry or anything.
@@ -269,7 +269,7 @@ internal class StreamingManager<CONNECTION : Connection>(
 
         // tell the other side how much data we are sending
         val startMessage = StreamingControl(StreamingState.START, streamSessionId, objectSize.toLong())
-        val startSent = endPoint.send(startMessage, publication, connection)
+        val startSent = endPoint.sendUnsafe(startMessage, publication, connection)
         if (!startSent) {
             // more critical error sending the message. we shouldn't retry or anything.
             val errorMessage = "[${publication.sessionId()}] Error starting streaming content."
@@ -383,7 +383,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                 payloadSent += amountToSend
             } catch (e: Exception) {
                 val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
-                val failSent = endPoint.send(failMessage, publication, connection)
+                val failSent = endPoint.sendUnsafe(failMessage, publication, connection)
                 if (!failSent) {
                     // something SUPER wrong!
                     // more critical error sending the message. we shouldn't retry or anything.
@@ -406,6 +406,6 @@ internal class StreamingManager<CONNECTION : Connection>(
 
         // send the last chunk of data
         val finishedMessage = StreamingControl(StreamingState.FINISHED, streamSessionId, payloadSent.toLong())
-        return endPoint.send(finishedMessage, publication, connection)
+        return endPoint.sendUnsafe(finishedMessage, publication, connection)
     }
 }

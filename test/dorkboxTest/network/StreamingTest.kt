@@ -44,10 +44,8 @@ class StreamingTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect {
-                val params = connectionParams ?: throw Exception("We should not have null connectionParams!")
-                val publication = params.connectionInfo.publication
                 logger.error { "Sending huge data: ${hugeData.size} bytes" }
-                this.endPoint.send(hugeData, publication, this)
+                send(hugeData)
             }
 
             client.connect(LOCALHOST)

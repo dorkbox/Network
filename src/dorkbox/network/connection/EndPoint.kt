@@ -23,6 +23,7 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
+import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -180,8 +181,7 @@ internal constructor(val type: Class<*>,
 
     private val handshakeKryo: KryoExtra<CONNECTION>
 
-    private val sendIdleStrategy: IdleStrategy
-    private val pollIdleStrategy: IdleStrategy
+    private val sendIdleStrategy: CoroutineIdleStrategy
     private val handshakeSendIdleStrategy: IdleStrategy
 
     /**
@@ -220,8 +220,7 @@ internal constructor(val type: Class<*>,
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
-        sendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
-        pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
+        sendIdleStrategy = config.sendIdleStrategy.clone()
         handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
 
         handshakeKryo = serialization.initHandshakeKryo()
@@ -674,49 +673,53 @@ internal constructor(val type: Class<*>,
         // The handshake sessionId IS NOT globally unique
         logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
 
-        connection as CONNECTION
-
-        connection.publicationMutex.withLock {
-            // since ANY thread can call 'send', we have to take kryo instances in a safe way
-            val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
-            try {
-                // the maximum size that this buffer can be is:
-                //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
-                val buffer = kryo.write(connection, message)
-                val objectSize = buffer.position()
-                val internalBuffer = buffer.internalBuffer
-
-
-                // one small problem! What if the message is too big to send all at once?
-                val maxMessageLength = publication.maxMessageLength()
-                if (objectSize >= maxMessageLength) {
-                    // we must split up the message! It's too large for Aeron to manage.
-                    // this will split up the message, construct the necessary control message and state, then CALL the sendData
-                    // method directly for each subsequent message.
-                    return streamingManager.send(publication, internalBuffer,
-                                                 objectSize, this, connection)
-                }
-
-                return sendData(publication, internalBuffer, 0, objectSize, connection)
-            } catch (e: Exception) {
-                if (message is MethodResponse && message.result is Exception) {
-                    val result = message.result as Exception
-                    logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
-                    listenerManager.notifyError(connection, result)
-                } else if (message is ClientException || message is ServerException) {
-                    logger.error("[${publication.sessionId()}] Error for message '$message'", e)
-                    listenerManager.notifyError(connection, e)
-                } else {
-                    logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
-                    listenerManager.notifyError(connection, e)
-                }
-            } finally {
-                sendIdleStrategy.reset()
-                serialization.returnKryo(kryo)
-            }
+        return connection.publicationMutex.withLock {
+            sendUnsafe(message, publication, connection as CONNECTION)
         }
+    }
 
-        return false
+    /**
+     * Only for use by EndPoint.send() and StreamingManager (for sending chunked data)
+     */
+    internal suspend fun sendUnsafe(message: Any, publication: Publication, connection: CONNECTION): Boolean {
+        // since ANY thread can call 'send', we have to take kryo instances in a safe way
+        val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
+        try {
+            // the maximum size that this buffer can be is:
+            //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
+            val buffer = kryo.write(connection, message)
+            val objectSize = buffer.position()
+            val internalBuffer = buffer.internalBuffer
+
+
+            // one small problem! What if the message is too big to send all at once?
+            val maxMessageLength = publication.maxMessageLength()
+            if (objectSize >= maxMessageLength) {
+                // we must split up the message! It's too large for Aeron to manage.
+                // this will split up the message, construct the necessary control message and state, then CALL the sendData
+                // method directly for each subsequent message.
+                return streamingManager.send(publication, internalBuffer, objectSize, this, connection)
+            }
+
+            return sendData(publication, internalBuffer, 0, objectSize, connection)
+        } catch (e: Exception) {
+            if (message is MethodResponse && message.result is Exception) {
+                val result = message.result as Exception
+                logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
+                listenerManager.notifyError(connection, result)
+            } else if (message is ClientException || message is ServerException) {
+                logger.error("[${publication.sessionId()}] Error for message '$message'", e)
+                listenerManager.notifyError(connection, e)
+            } else {
+                logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
+                listenerManager.notifyError(connection, e)
+            }
+
+            return false
+        } finally {
+            sendIdleStrategy.reset()
+            serialization.returnKryo(kryo)
+        }
     }
 
     /**
@@ -724,7 +727,7 @@ internal constructor(val type: Class<*>,
      *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    internal fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
+    internal suspend fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
         var timeoutInNanos = 0L
         var startTime = 0L
 
