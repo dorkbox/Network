@@ -19,6 +19,7 @@ package dorkbox.network.aeron.mediaDriver
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.connection.EndPoint
 import io.aeron.Publication
 import mu.KLogger
 import java.net.Inet4Address
@@ -52,14 +53,17 @@ internal class ServerUdpPairedDriver(
     override fun build(aeronDriver: AeronDriver, logger: KLogger) {
         // connection timeout of 0 doesn't matter. it is not used by the server
         // the client address WILL BE either IPv4 or IPv6
-        val isIpV4 = remoteAddress is Inet4Address
+        val isRemoteIpv4 = remoteAddress is Inet4Address
+
+        // if we are connecting to localhost IPv4 (but our server is IPv6+4), then aeron MUST publish on the IPv4 version
+        val properPubAddress = EndPoint.formatCommonAddressString(listenAddressString, isRemoteIpv4)
 
         // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
-        val publicationUri = MediaDriverConnection.uri("udp", sessionId, isReliable).controlEndpoint(isIpV4, listenAddressString, port+1)
+        val publicationUri = MediaDriverConnection.uri("udp", sessionId, isReliable).controlEndpoint(isRemoteIpv4, properPubAddress, port+1)
 
 
         if (logger.isTraceEnabled) {
-            if (isIpV4) {
+            if (isRemoteIpv4) {
                 logger.trace("IPV4 server e-pub URI: ${publicationUri.build()},stream-id=$streamId")
             } else {
                 logger.trace("IPV6 server e-pub URI: ${publicationUri.build()},stream-id=$streamId")
@@ -69,19 +73,43 @@ internal class ServerUdpPairedDriver(
         val publication = aeronDriver.addExclusivePublication(publicationUri, streamId)
 
 
+        // if we are IPv6 WILDCARD -- then our subscription must ALSO be IPv6, even if our connection is via IPv4
+        var subShouldBeIpv4 = isRemoteIpv4
+
+        val properSubAddress = if (listenAddress == IPv6.WILDCARD) {
+            subShouldBeIpv4 = false
+            IPv6.WILDCARD_STRING
+        } else {
+            // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
+            val localAddresses = publication.localSocketAddresses().first()
+            val splitPoint = localAddresses.lastIndexOf(':')
+            var localAddressString = localAddresses.substring(0, splitPoint)
+
+            if (!isRemoteIpv4) {
+                // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
+                // aeron IPv6 addresses all have [...]
+                localAddressString = localAddressString.substring(1, localAddressString.length-1)
+                localAddressString = IPv6.toString(IPv6.toAddress(localAddressString)!!)
+            }
+
+            localAddressString
+        }
+
+
+
         // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = MediaDriverConnection.uri("udp", sessionId, isReliable).endpoint(isIpV4, listenAddressString, port)
+        val subscriptionUri = MediaDriverConnection.uri("udp", sessionId, isReliable).endpoint(subShouldBeIpv4, properSubAddress, port)
 
 
         if (logger.isTraceEnabled) {
-            if (isIpV4) {
+            if (isRemoteIpv4) {
                 logger.trace("IPV4 server sub URI: ${subscriptionUri.build()},stream-id=$streamId")
             } else {
                 logger.trace("IPV6 server sub URI: ${subscriptionUri.build()},stream-id=$streamId")
             }
         }
 
-        val remoteAddressString = if (isIpV4) {
+        val remoteAddressString = if (isRemoteIpv4) {
             IPv4.toString(remoteAddress as Inet4Address)
         } else {
             IPv6.toString(remoteAddress as Inet6Address)
