@@ -56,7 +56,7 @@ internal class ServerUdpPairedDriver(
         val isRemoteIpv4 = remoteAddress is Inet4Address
 
         // if we are connecting to localhost IPv4 (but our server is IPv6+4), then aeron MUST publish on the IPv4 version
-        val properPubAddress = EndPoint.formatCommonAddressString(listenAddressString, isRemoteIpv4)
+        val properPubAddress = EndPoint.getWildcard(listenAddress, listenAddressString, isRemoteIpv4)
 
         // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
         val publicationUri = MediaDriverConnection.uri("udp", sessionId, isReliable).controlEndpoint(isRemoteIpv4, properPubAddress, port+1)

@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
@@ -140,23 +141,47 @@ internal constructor(val type: Class<*>,
             }
         }
 
-        fun formatCommonAddress(ipAddress: String, isIpv4: Boolean): InetAddress {
+        fun isWildcard(ipAddress: InetAddress): Boolean {
+            return when (ipAddress) {
+                // this is the "wildcard" address. Windows has problems with this.
+                IPv4.WILDCARD, IPv6.WILDCARD -> true
+                else -> false
+            }
+        }
+
+        fun getWildcard(ipAddress: InetAddress, ipAddressString: String, shouldBeIpv4: Boolean): String {
+            return if (isWildcard(ipAddress)) {
+                if (shouldBeIpv4) {
+                    IPv4.WILDCARD_STRING
+                } else {
+                    IPv6.WILDCARD_STRING
+                }
+            } else {
+                ipAddressString
+            }
+        }
+
+        fun formatCommonAddress(ipAddress: String, isIpv4: Boolean, elseAction: () -> InetAddress?): InetAddress? {
             return if (isLocalhost(ipAddress)) {
                 if (isIpv4) { IPv4.LOCALHOST } else { IPv6.LOCALHOST }
             } else if (isWildcard(ipAddress)) {
                 if (isIpv4) { IPv4.WILDCARD } else { IPv6.WILDCARD }
             } else {
-                if (isIpv4) { IPv4.toAddress(ipAddress)!! } else { IPv6.toAddress(ipAddress)!! }
+                if (IP.isValid(ipAddress)) {
+                    if (isIpv4) { IPv4.toAddress(ipAddress)!! } else { IPv6.toAddress(ipAddress)!! }
+                } else {
+                    elseAction()
+                }
             }
         }
 
-        fun formatCommonAddressString(ipAddress: String, isIpv4: Boolean): String {
+        fun formatCommonAddressString(ipAddress: String, isIpv4: Boolean, elseAction: () -> String = { ipAddress }): String {
             return if (isLocalhost(ipAddress)) {
                 if (isIpv4) { IPv4.LOCALHOST_STRING } else { IPv6.LOCALHOST_STRING }
             } else if (isWildcard(ipAddress)) {
                 if (isIpv4) { IPv4.WILDCARD_STRING } else { IPv6.WILDCARD_STRING }
             } else {
-                ipAddress
+                elseAction()
             }
         }
     }

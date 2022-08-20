@@ -172,7 +172,7 @@ open class Server<CONNECTION : Connection>(
     // We want to listen on BOTH IPv4 and IPv6 (config option lets us configure this)
     internal val listenIPv4Address: InetAddress? =
         if (canUseIPv4) {
-            formatCommonAddress(config.listenIpAddress, true)
+            formatCommonAddress(config.listenIpAddress, true) { null } // if it's not a valid IP, the lambda will return null
         }
         else {
             null
@@ -181,7 +181,7 @@ open class Server<CONNECTION : Connection>(
 
     internal val listenIPv6Address: InetAddress? =
         if (canUseIPv6) {
-            formatCommonAddress(config.listenIpAddress, false)
+            formatCommonAddress(config.listenIpAddress, false) { null } // if it's not a valid IP, the lambda will return null
         }
         else {
             null

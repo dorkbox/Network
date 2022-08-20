@@ -13,6 +13,7 @@ import dorkbox.network.aeron.mediaDriver.ServerUdpDriver
 import dorkbox.network.aeron.mediaDriver.controlEndpoint
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.EndPoint
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
@@ -101,7 +102,8 @@ internal object ServerHandshakePollers {
         val isReliable: Boolean,
         val port: Int
     ) {
-        val listenAddressString = IP.toString(driver.listenAddress)
+        val listenAddress = driver.listenAddress
+        val listenAddressString = IP.toString(listenAddress)
         val timoutInNanos = aeronDriver.getLingerNs()
 
         fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
@@ -133,8 +135,8 @@ internal object ServerHandshakePollers {
                     return
                 }
 
-                val isIpv4 = clientAddress is Inet4Address
-                if (!isIpv4) {
+                val isRemoteIpv4 = clientAddress is Inet4Address
+                if (!isRemoteIpv4) {
                     // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
                     clientAddressString = IP.toString(clientAddress)
                 }
@@ -142,8 +144,11 @@ internal object ServerHandshakePollers {
 
                 // NOTE: publications are REMOVED from Aeron clients when their linger timeout has expired!!!
 
+                // if we are listening on :: (ipv6), and a connection via ipv4 arrives, aeron MUST publish on the IPv4 version
+                val properPubAddress = EndPoint.getWildcard(listenAddress, listenAddressString, isRemoteIpv4)
+
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription CONTROL (which then goes to the proper endpoint)
-                val publicationUri = uri("udp", message.sessionId, isReliable).controlEndpoint(isIpv4, listenAddressString, port)
+                val publicationUri = uri("udp", message.sessionId, isReliable).controlEndpoint(isRemoteIpv4, properPubAddress, port)
                 logger.trace { "Server connection pub $publicationUri,stream-id=${message.streamId}" }
 
 

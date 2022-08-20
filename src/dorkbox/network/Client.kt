@@ -36,6 +36,7 @@ import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientShutdownException
 import dorkbox.network.exceptions.ClientTimedOutException
+import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
@@ -279,23 +280,16 @@ open class Client<CONNECTION : Connection>(
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true)
         {
-            // specified when we WANT or SHOULD to connect via IPv4
-            fun ipv4Connect(dnsResolveType: ResolvedAddressTypes = ResolvedAddressTypes.IPV4_ONLY) {
-                val inetAddress = when (formatCommonAddressString(remoteAddress, true)) {
-                    IPv4.LOCALHOST_STRING -> IPv4.LOCALHOST
-                    IPv4.WILDCARD_STRING -> IPv4.WILDCARD
-                    else -> {
-                        // we have to check first if it's a valid IPv4 address. If not, maybe it's a DNS lookup
-                        if (IP.isValid(remoteAddress)) {
-                            IP.toAddress(remoteAddress)
-                        } else {
-                            val client = DnsClient()
-                            client.resolvedAddressTypes(dnsResolveType)
-                            val records = client.resolve(remoteAddress)
-                            client.stop()
-                            records?.get(0)
-                        }
-                    }
+            fun connect(dnsResolveType: ResolvedAddressTypes) {
+                val ipv4Requested = dnsResolveType == ResolvedAddressTypes.IPV4_ONLY || dnsResolveType == ResolvedAddressTypes.IPV4_PREFERRED
+
+                val inetAddress = formatCommonAddress(remoteAddress, ipv4Requested) {
+                    // we already checked first if it's a valid IP address. This is called if it's not, since it might be a DNS lookup
+                    val client = DnsClient()
+                    client.resolvedAddressTypes(dnsResolveType)
+                    val records = client.resolve(remoteAddress)
+                    client.stop()
+                    records?.get(0)
                 } ?: throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
 
                 connect(remoteAddress = inetAddress,
@@ -305,54 +299,18 @@ open class Client<CONNECTION : Connection>(
                         reliable = reliable)
             }
 
-            // specified when we WANT to connect via IPv6
-            fun ipv6Connect() {
-                val inetAddress = when (formatCommonAddressString(remoteAddress, false)) {
-                    IPv6.LOCALHOST_STRING -> IPv6.LOCALHOST
-                    IPv6.WILDCARD_STRING -> IPv6.WILDCARD
-                    else -> {
-                        // we have to check first if it's a valid IPv6 address. If not, maybe it's a DNS lookup
-                        if (IPv6.isValid(remoteAddress)) {
-                            IPv6.toAddress(remoteAddress)
-                        } else {
-                            val client = DnsClient()
-                            client.resolvedAddressTypes(ResolvedAddressTypes.IPV6_PREFERRED)
-                            val records = client.resolve(remoteAddress)
-                            client.stop()
-                            records?.get(0)
-                        }
-                    }
-                } ?: throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
-
-                when (inetAddress) {
-                    // we still wanted IPv6, but somehow got an IPv4 address.
-                    is Inet4Address -> {
-                        connect(remoteAddress = inetAddress,
-                                remoteAddressString = formatCommonAddressString(IPv4.toString(inetAddress), true),
-                                connectionTimeoutSec = connectionTimeoutSec,
-                                reliable = reliable)
-                    }
-                    else -> {
-                        connect(remoteAddress = inetAddress,
-                                // we check again, because the inetAddress that comes back from DNS, might not be what we expect
-                                remoteAddressString = formatCommonAddressString(remoteAddress, false),
-                                connectionTimeoutSec = connectionTimeoutSec,
-                                reliable = reliable)
-                    }
-                }
-            }
-
             when {
                 // this is default IPC settings
                 remoteAddress.isEmpty() && config.enableIpc -> {
                     connectIpc(connectionTimeoutSec = connectionTimeoutSec)
                 }
 
-                // IPv6 takes precedence if it's enabled
-                config.enableIPv6 -> ipv6Connect()
-                config.enableIPv4 || IPv4.isPreferred -> ipv4Connect()
-                IPv6.isPreferred -> ipv6Connect()
-                else -> ipv4Connect(ResolvedAddressTypes.IPV4_PREFERRED)
+                // IPv6 takes precedence ONLY if it's enabled manually
+                config.enableIPv6 -> connect(ResolvedAddressTypes.IPV6_ONLY)
+                config.enableIPv4 -> connect(ResolvedAddressTypes.IPV4_ONLY)
+                IPv4.isPreferred -> connect(ResolvedAddressTypes.IPV4_PREFERRED)
+                IPv6.isPreferred -> connect(ResolvedAddressTypes.IPV6_PREFERRED)
+                else -> connect(ResolvedAddressTypes.IPV4_PREFERRED)
             }
     }
 
@@ -565,7 +523,17 @@ open class Client<CONNECTION : Connection>(
                 } else {
                     logger.info { "Unable to connect to $type, retrying..." }
                 }
+            } catch (e: ClientRejectedException) {
+                handshake.reset()
 
+                if (e.cause is ServerException) {
+                    val wrapped = ClientException(e.cause.message!!)
+                    listenerManager.notifyError(wrapped)
+                    throw wrapped
+                } else {
+                    listenerManager.notifyError(e)
+                    throw e
+                }
             } catch (e: Exception) {
                 logger.error(e) { "[${handshake.connectKey}] : Un-recoverable error during handshake with $type. Aborting." }
                 handshake.reset()
