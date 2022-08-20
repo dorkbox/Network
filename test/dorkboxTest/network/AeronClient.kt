@@ -111,8 +111,8 @@ object AeronClient {
         configuration.port = 2000
 
         configuration.enableIpc = false
-        configuration.enableIPv4 = false
-//        configuration.enableIPv6 = false
+        configuration.enableIPv4 = true
+        configuration.enableIPv6 = false
 
         configuration.uniqueAeronDirectory = true
 

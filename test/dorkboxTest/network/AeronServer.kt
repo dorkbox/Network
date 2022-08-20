@@ -88,14 +88,15 @@ object AeronServer {
     fun main(args: Array<String>) {
         val configuration = ServerConfiguration()
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-        configuration.listenIpAddress = "127.0.0.1"
+        configuration.listenIpAddress = "*"
+//        configuration.listenIpAddress = "127.0.0.1"
         configuration.port = 2000
         configuration.maxClientCount = 50
 
-        configuration.enableIpc = true
+//        configuration.enableIpc = true
         configuration.enableIpc = false
-        configuration.enableIPv4 = false
-//        configuration.enableIPv6 = false
+        configuration.enableIPv4 = true
+        configuration.enableIPv6 = true
 
         configuration.maxConnectionsPerIpAddress = 50
 
