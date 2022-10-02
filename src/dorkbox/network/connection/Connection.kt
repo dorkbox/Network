@@ -15,20 +15,28 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.network.exceptions.ClientException
+import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.handshake.RandomId65kAllocator
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.RmiSupportConnection
+import dorkbox.network.rmi.messages.MethodResponse
+import dorkbox.network.serialization.KryoExtra
 import io.aeron.FragmentAssembler
 import io.aeron.Publication
 import io.aeron.Subscription
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.agrona.DirectBuffer
+import org.agrona.concurrent.IdleStrategy
 import java.lang.Thread.sleep
 import java.net.InetAddress
 import java.util.concurrent.*
@@ -50,7 +58,19 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * When publishing data, we cannot have concurrent publications for a single connection (per Aeron publication)
      */
-    internal val publicationMutex = Mutex()
+    private val writeMutex = Mutex()
+
+    /**
+     * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has it's own logic on the remote endpoint,
+     * and can have its own back-pressure.
+     */
+    private val sendIdleStrategy: IdleStrategy
+
+    @Suppress("UNCHECKED_CAST")
+    private val writeKryo: KryoExtra<Connection> = connectionParameters.endPoint.serialization.takeKryo() as KryoExtra<Connection>
+
+    @Suppress("UNCHECKED_CAST")
+    private val streamingWriteKryo: KryoExtra<Connection> = connectionParameters.endPoint.serialization.takeKryo() as KryoExtra<Connection>
 
     /**
      * the stream id of this connection. Can be 0 for IPC connections
@@ -144,12 +164,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         toString0 = "[${id}/${streamId}] $remoteAddressString [$publicationPort|$subscriptionPort]"
 
+        sendIdleStrategy = connectionParameters.endPoint.config.sendIdleStrategy.cloneToNormal()
+
         messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
             // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
             //  we exclusively read from the DirectBuffer on a single thread.
-            endPoint.processMessage(buffer, offset, length, header, this@Connection)
+            endPoint.dataReceive(buffer, offset, length, header, this@Connection)
         }
 
         @Suppress("LeakingThis")
@@ -197,12 +219,45 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Safely sends objects to a destination.
      *
+     * NOTE: this is dispatched to the IO context!! (since network calls are IO/blocking calls)
+     *
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
     suspend fun send(message: Any): Boolean {
+        // only reset the sending timeout strategy when a message was successfully sent. There will be multiple, concurrent writes
+        // to the network (at most, one write per connection). If aeron
+        sendIdleStrategy.reset()
+
         messagesInProgress.getAndIncrement()
-        val success = endPoint.send(message, publication, this)
-        messagesInProgress.getAndDecrement()
+
+        // dispatched to the IO context!! (since network calls are IO/blocking calls)
+        val success = withContext(Dispatchers.IO) {
+            writeMutex.withLock {
+                try {
+                    // The handshake sessionId IS NOT globally unique
+                    logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
+                    endPoint.write(writeKryo, streamingWriteKryo, message, publication, sendIdleStrategy, this@Connection)
+                } catch (e: Exception) {
+                    val listenerManager = listenerManager.value!!
+
+                    if (message is MethodResponse && message.result is Exception) {
+                        val result = message.result as Exception
+                        logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
+                        listenerManager.notifyError(this@Connection, result)
+                    } else if (message is ClientException || message is ServerException) {
+                        logger.error("[${publication.sessionId()}] Error for message '$message'", e)
+                        listenerManager.notifyError(this@Connection, e)
+                    } else {
+                        logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
+                        listenerManager.notifyError(this@Connection, e)
+                    }
+
+                    false
+                } finally {
+                    messagesInProgress.getAndDecrement()
+                }
+            }
+        }
 
         return success
     }
@@ -228,7 +283,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
-     * A message in progress means that we have requested to to send an object over the network, but it hasn't finished sending over the network
+     * A message in progress means that we have requested to send an object over the network, but it hasn't finished sending over the network
      *
      * @return the number of messages in progress for this connection.
      */
@@ -328,16 +383,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * Closes the connection, and removes all connection specific listeners
      */
     fun close() {
-//        if (messagesInProgress.value > 0) {
-//            // messages were in progress (likely a message triggered the close() call).
-//            // Dispatch the close event "later", so that we don't immediately kill a response (in the event that this is desired)
-//            endPoint.actionDispatch.launch {
-//                delay(10)
-//                close(enableRemove = true)
-//            }
-//        } else {
-            close(enableRemove = true)
-//        }
+        close(enableRemove = true)
     }
 
     /**
@@ -356,16 +402,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             logger.debug {"[$aeronLogInfo] connection closing"}
 
             subscription.close()
-
-            // send out a "close" message. MAYBE it gets to the remote endpoint, maybe not. If it DOES, then the remote endpoint starts
-            // the close process faster.
-            try {
-                runBlocking {
-                    endPoint.send(CloseMessage(), publication, this@Connection)
-                }
-            } catch (ignored: Exception) {
-            }
-
 
             val timoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
             var closeTimeoutTime = System.nanoTime()
@@ -406,6 +442,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             runBlocking {
                 closeAction()
             }
+
+            endPoint.serialization.returnKryo(writeKryo)
             logger.debug {"[$aeronLogInfo] connection closed"}
         }
     }

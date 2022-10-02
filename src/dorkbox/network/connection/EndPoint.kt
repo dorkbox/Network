@@ -24,7 +24,6 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
-import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -37,7 +36,6 @@ import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.ResponseManager
 import dorkbox.network.rmi.RmiManagerConnections
 import dorkbox.network.rmi.RmiManagerGlobal
-import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.rmi.messages.RmiMessage
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
@@ -46,13 +44,9 @@ import io.aeron.Publication
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
@@ -61,17 +55,11 @@ import org.agrona.concurrent.IdleStrategy
 import java.net.InetAddress
 import java.util.concurrent.*
 
-fun CoroutineScope.eventLoop(block: suspend CoroutineScope.() -> Unit): Job {
-    // UNDISPATCHED means that this coroutine will start as an event loop, instead of concurrently in a different thread
-    //   we want this behavior to prevent "stack overflow" in case there are nested calls
-    return launch(start = CoroutineStart.UNDISPATCHED, block = block)
-}
-
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
 // it results in severe UDP packet loss and contention.
 //
 // http://www.isoc.org/INET97/proceedings/F3/F3_1.HTM
-// also, a google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
+// also, a Google search on just "INET97/proceedings/F3/F3_1.HTM" turns up interesting problems.
 // Usually it's with ISPs.
 /**
  * represents the base of a client/server end point for interacting with aeron
@@ -101,7 +89,7 @@ internal constructor(val type: Class<*>,
 
     companion object {
         // connections are extremely difficult to diagnose when the connection timeout is short
-        internal val DEBUG_CONNECTIONS = false
+        internal const val DEBUG_CONNECTIONS = false
 
         /**
          * @return the error code text for the specified number
@@ -200,13 +188,11 @@ internal constructor(val type: Class<*>,
     internal val aeronDriver: AeronDriver
 
     /**
-     * Returns the serialization wrapper if there is an object type that needs to be added outside of the basic types.
+     * Returns the serialization wrapper if there is an object type that needs to be added in addition to the basic types.
      */
     val serialization: Serialization<CONNECTION>
 
     private val handshakeKryo: KryoExtra<CONNECTION>
-
-    private val sendIdleStrategy: CoroutineIdleStrategy
     private val handshakeSendIdleStrategy: IdleStrategy
 
     /**
@@ -234,6 +220,10 @@ internal constructor(val type: Class<*>,
 
     internal val pingManager = PingManager<CONNECTION>()
 
+
+
+
+
     init {
         if (DEBUG_CONNECTIONS) {
             logger.error { "DEBUG_CONNECTIONS is enabled. This should not happen in release!" }
@@ -245,7 +235,6 @@ internal constructor(val type: Class<*>,
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
-        sendIdleStrategy = config.sendIdleStrategy.clone()
         handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
 
         handshakeKryo = serialization.initHandshakeKryo()
@@ -552,6 +541,8 @@ internal constructor(val type: Class<*>,
     }
 
     /**
+     * NOTE: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+     *
      * @param buffer The buffer
      * @param offset The offset from the start of the buffer
      * @param length The number of bytes to extract
@@ -559,7 +550,6 @@ internal constructor(val type: Class<*>,
      *
      * @return the message
      */
-    // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
     internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, aeronLogInfo: String): Any? {
         return try {
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
@@ -576,8 +566,13 @@ internal constructor(val type: Class<*>,
         }
     }
 
+
     /**
-     * read the message from the aeron buffer
+     * Reads a message off the network.
+     *
+     * This is written in a way that permits modifying/overriding how data is processed on the network
+     *
+     * NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
      *
      * @param buffer The buffer
      * @param offset The offset from the start of the buffer
@@ -585,180 +580,214 @@ internal constructor(val type: Class<*>,
      * @param header The aeron header information
      * @param connection The connection this message happened on
      */
-    internal fun processMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection) {
+    open fun read(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: CONNECTION): Any? {
+        return serialization.readMessage(buffer, offset, length, connection)
+    }
+
+    /**
+     * This is designed to permit modifying/overriding how data is processed on the network.
+     *
+     * This will split a message if it's too large to send in a single network message.
+     *
+     * NOTE: we use exclusive publications, and they are not thread safe/concurrent!
+     *
+     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    open fun write(
+        writeKryo: KryoExtra<Connection>,
+        streamingWriteKryo: KryoExtra<Connection>,
+        message: Any,
+        publication: Publication,
+        sendIdleStrategy: IdleStrategy,
+        connection: Connection
+    ): Boolean {
+        // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
+
+        // since ANY thread can call 'send', we have to take kryo instances in a safe way
+        // the maximum size that this buffer can be is:
+        //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
+        val buffer = writeKryo.write(connection, message)
+        val objectSize = buffer.position()
+        val internalBuffer = buffer.internalBuffer
+
+
+        // one small problem! What if the message is too big to send all at once?
+        val maxMessageLength = publication.maxMessageLength()
+        return if (objectSize >= maxMessageLength) {
+            // we must split up the message! It's too large for Aeron to manage.
+            // this will split up the message, construct the necessary control message and state, then CALL the sendData
+            // method directly for each subsequent message.
+            streamingManager.send(publication, internalBuffer, objectSize, this, streamingWriteKryo, sendIdleStrategy, connection)
+        } else {
+            dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection)
+        }
+    }
+
+    /**
+     * This is designed to permit modifying/overriding how data is processed on the network.
+     *
+     * This will NOT split a message if it's too large. Aeron will just crash. This is used by the exclusively by the streaming manager.
+     *
+     * NOTE: we use exclusive publications, and they are not thread safe/concurrent!
+     *
+     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    open fun writeUnsafe(writeKryo: KryoExtra<Connection>, message: Any, publication: Publication, sendIdleStrategy: IdleStrategy, connection: Connection): Boolean {
+        // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
+
+        // since ANY thread can call 'send', we have to take kryo instances in a safe way
+        // the maximum size that this buffer can be is:
+        //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
+        val buffer = writeKryo.write(connection, message)
+        val objectSize = buffer.position()
+        val internalBuffer = buffer.internalBuffer
+
+        return dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection)
+    }
+
+    /**
+     * Processes a message that has been read off the network.
+     *
+     * This is written in a way that permits modifying/overriding how data is processed on the network
+     *
+     * There are custom objects that are used (Ping, RmiMessages, Streaming object, etc.) are manage and use custom object types. These types
+     * must be EXPLICITLY used by the implementation, and if a custom message processor is to be used (ie: a state machine) you must
+     * guarantee that Ping, RMI, Streaming object, etc. are not used (as it would not function without this custom
+     */
+    open fun processMessage(message: Any?, connection: CONNECTION) {
+        // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept data BEFORE it goes to a coroutine
+        when (message) {
+            is Ping -> {
+                // NOTE: This MUST be on a new co-routine
+                actionDispatch.launch {
+                    try {
+                        pingManager.manage(connection, responseManager, message, logger)
+                    } catch (e: Exception) {
+                        logger.error("Error processing message", e)
+                        listenerManager.notifyError(connection, e)
+                    }
+                }
+            }
+
+            // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
+            // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
+            // go in "lock step"
+            is RmiMessage -> {
+                // if we are an RMI message/registration, we have very specific, defined behavior.
+                // We do not use the "normal" listener callback pattern because this requires special functionality
+                // NOTE: This MUST be on a new co-routine
+                actionDispatch.launch {
+                    try {
+                        rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
+                    } catch (e: Exception) {
+                        logger.error("Error processing message", e)
+                        listenerManager.notifyError(connection, e)
+                    }
+                }
+            }
+
+
+            // streaming/chunked message. This is used when the published data is too large for a single Aeron message.
+            // TECHNICALLY, we could arbitrarily increase the size of the permitted Aeron message, however this doesn't let us
+            // send arbitrarily large pieces of data (gigs in size, potentially).
+            // This will recursively call into this method for each of the unwrapped chunks of data.
+            is StreamingControl -> {
+                streamingManager.processControlMessage(message, this@EndPoint, connection)
+            }
+            is StreamingData -> {
+                // NOTE: this will read extra data from the kryo input as necessary (which is why it's not on action dispatch)!
+                val rawInput = serialization.readRaw()
+                val dataLength = rawInput.readVarInt(true)
+                message.payload = rawInput.readBytes(dataLength)
+
+
+                // NOTE: This MUST NOT be on a new co-routine. It must be on the same thread!
+                try {
+                    streamingManager.processDataMessage(message, this@EndPoint)
+                } catch (e: Exception) {
+                    logger.error("Error processing StreamingMessage", e)
+                    listenerManager.notifyError(connection, e)
+                }
+            }
+
+
+            is Any -> {
+                // NOTE: This MUST be on a new co-routine
+                actionDispatch.launch {
+                    try {
+                        var hasListeners = listenerManager.notifyOnMessage(connection, message)
+
+                        // each connection registers, and is polled INDEPENDENTLY for messages.
+                        hasListeners = hasListeners or connection.notifyOnMessage(message)
+
+                        if (!hasListeners) {
+                            logger.error("No message callbacks found for ${message::class.java.name}")
+                        }
+                    } catch (e: Exception) {
+                        logger.error("Error processing message ${message::class.java.name}", e)
+                        listenerManager.notifyError(connection, e)
+                    }
+                }
+            }
+
+            else -> {
+                logger.error("Unknown message received!!")
+            }
+        }
+    }
+
+
+    /**
+     * reads the message from the aeron buffer and figures out how to process it
+     *
+     * @param buffer The buffer
+     * @param offset The offset from the start of the buffer
+     * @param length The number of bytes to extract
+     * @param header The aeron header information
+     * @param connection The connection this message happened on
+     */
+    internal fun dataReceive(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: Connection) {
         // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
         @Suppress("UNCHECKED_CAST")
         connection as CONNECTION
 
-        synchronized(connection) {
-            try {
-                // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
-                val message = serialization.readMessage(buffer, offset, length, connection)
-                logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
-
-                // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept date BEFORE it goes to a coroutine
-
-                when (message) {
-                    is CloseMessage -> {
-                        // immediately close the connection
-                        connection.close()
-                    }
-
-                    is Ping -> {
-                        // NOTE: This MUST be on a new co-routine
-                        actionDispatch.launch {
-                            try {
-                                pingManager.manage(connection, responseManager, message, logger)
-                            } catch (e: Exception) {
-                                logger.error("Error processing message", e)
-                                listenerManager.notifyError(connection, e)
-                            }
-                        }
-                    }
-
-                    // small problem... If we expect IN ORDER messages (ie: setting a value, then later reading the value), multiple threads don't work.
-                    // this is worked around by having RMI always return (unless async), even with a null value, so the CALLING side of RMI will always
-                    // go in "lock step"
-                    is RmiMessage -> {
-                        // if we are an RMI message/registration, we have very specific, defined behavior.
-                        // We do not use the "normal" listener callback pattern because this requires special functionality
-                        // NOTE: This MUST be on a new co-routine
-                        actionDispatch.launch {
-                            try {
-                                rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
-                            } catch (e: Exception) {
-                                logger.error("Error processing message", e)
-                                listenerManager.notifyError(connection, e)
-                            }
-                        }
-                    }
-
-                    // streaming/chunked message. This is used when the published data is too large for a single Aeron message.
-                    // TECHNICALLY, we could arbitrarily increase the size of the permitted Aeron message, however this doesn't let us
-                    // send arbitrarily large pieces of data (gigs in size, potentially).
-                    // This will recursively call into this method for each of the unwrapped chunks of data.
-                    is StreamingControl -> {
-                        streamingManager.processControlMessage(message, this@EndPoint, connection)
-                    }
-                    is StreamingData -> {
-                        // NOTE: this will read extra data from the kryo input as necessary (which is why it's not on action dispatch)!
-                        val rawInput = serialization.readRaw()
-                        val dataLength = rawInput.readVarInt(true)
-                        message.payload = rawInput.readBytes(dataLength)
-
-
-                        // NOTE: This MUST NOT be on a new co-routine. It must be on the same thread!
-                        try {
-                            streamingManager.processDataMessage(message, this@EndPoint)
-                        } catch (e: Exception) {
-                            logger.error("Error processing StreamingMessage", e)
-                            listenerManager.notifyError(connection, e)
-                        }
-                    }
-
-
-                    is Any -> {
-                        // NOTE: This MUST be on a new co-routine
-                        actionDispatch.launch {
-                            try {
-                                var hasListeners = listenerManager.notifyOnMessage(connection, message)
-
-                                // each connection registers, and is polled INDEPENDENTLY for messages.
-                                hasListeners = hasListeners or connection.notifyOnMessage(message)
-
-                                if (!hasListeners) {
-                                    logger.error("No message callbacks found for ${message::class.java.name}")
-                                }
-                            } catch (e: Exception) {
-                                logger.error("Error processing message ${message::class.java.name}", e)
-                                listenerManager.notifyError(connection, e)
-                            }
-                        }
-                    }
-
-                    else -> {
-                        logger.error("Unknown message received!!")
-                    }
-                }
-            } catch (e: Exception) {
-                // The handshake sessionId IS NOT globally unique
-                logger.error("[${header.sessionId()}] Error de-serializing message", e)
-                listenerManager.notifyError(connection, e)
-            }
-        }
-    }
-
-    /**
-     * NOTE: this **MUST** stay on the same thread/coroutine that calls "send". This cannot be re-dispatched onto a different coroutine!
-     *
-     * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
-     */
-    @Suppress("DuplicatedCode", "UNCHECKED_CAST")
-    internal suspend fun send(message: Any, publication: Publication, connection: Connection): Boolean {
-        // The handshake sessionId IS NOT globally unique
-        logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
-
-        return connection.publicationMutex.withLock {
-            sendUnsafe(message, publication, connection as CONNECTION)
-        }
-    }
-
-    /**
-     * Only for use by EndPoint.send() and StreamingManager (for sending chunked data)
-     */
-    internal suspend fun sendUnsafe(message: Any, publication: Publication, connection: CONNECTION): Boolean {
-        // since ANY thread can call 'send', we have to take kryo instances in a safe way
-        val kryo: KryoExtra<CONNECTION> = serialization.takeKryo()
         try {
-            // the maximum size that this buffer can be is:
-            //   ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH = 1073741824
-            val buffer = kryo.write(connection, message)
-            val objectSize = buffer.position()
-            val internalBuffer = buffer.internalBuffer
-
-
-            // one small problem! What if the message is too big to send all at once?
-            val maxMessageLength = publication.maxMessageLength()
-            if (objectSize >= maxMessageLength) {
-                // we must split up the message! It's too large for Aeron to manage.
-                // this will split up the message, construct the necessary control message and state, then CALL the sendData
-                // method directly for each subsequent message.
-                return streamingManager.send(publication, internalBuffer, objectSize, this, connection)
-            }
-
-            return sendData(publication, internalBuffer, 0, objectSize, connection)
+            val message = read(buffer, offset, length, header, connection)
+            logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
+            processMessage(message, connection)
         } catch (e: Exception) {
-            if (message is MethodResponse && message.result is Exception) {
-                val result = message.result as Exception
-                logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
-                listenerManager.notifyError(connection, result)
-            } else if (message is ClientException || message is ServerException) {
-                logger.error("[${publication.sessionId()}] Error for message '$message'", e)
-                listenerManager.notifyError(connection, e)
-            } else {
-                logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
-                listenerManager.notifyError(connection, e)
-            }
-
-            return false
-        } finally {
-            sendIdleStrategy.reset()
-            serialization.returnKryo(kryo)
+            // The handshake sessionId IS NOT globally unique
+            logger.error("[${header.sessionId()}] Error de-serializing message", e)
+            listenerManager.notifyError(connection, e)
         }
     }
 
     /**
+     * NOTE: we use exclusive publications, and they are not thread safe/concurrent!
+     *
      * the actual bits that send data on the network.
      *
+     * @param publication the connection specific publication
+     * @param internalBuffer the internal buffer that will be copied to the Aeron network driver
+     * @param offset the offset in the internal buffer at which to start copying bytes
+     * @param objectSize the number of bytes to copy (starting at the offset)
+     * @param connection the connection object
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
-    internal suspend fun sendData(publication: Publication, internalBuffer: MutableDirectBuffer, offset: Int, objectSize: Int, connection: CONNECTION): Boolean {
+    internal fun dataSend(
+        publication: Publication,
+        internalBuffer: MutableDirectBuffer,
+        offset: Int,
+        objectSize: Int,
+        sendIdleStrategy: IdleStrategy,
+        connection: Connection
+    ): Boolean {
         var timeoutInNanos = 0L
         var startTime = 0L
 
         var result: Long
         while (true) {
-            // we use exclusive publications, and they are not thread safe!
+            // we use exclusive publications, and they are not thread safe/concurrent!
             result = publication.offer(internalBuffer, offset, objectSize)
             if (result >= 0) {
                 // success!
@@ -870,7 +899,7 @@ internal constructor(val type: Class<*>,
     }
 
     /**
-     * @param lossStats callback for each of the loss statistic entires reported by the Aeron driver in the current Aeron directory
+     * @param lossStats callback for each of the loss statistic entries reported by the Aeron driver in the current Aeron directory
      */
     fun driverLossStats(lossStats: (observationCount: Long,
                                     totalBytesLost: Long,

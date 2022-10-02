@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
 import org.agrona.MutableDirectBuffer
+import org.agrona.concurrent.IdleStrategy
 import java.security.SecureRandom
 
 internal class StreamingManager<CONNECTION : Connection>(
@@ -100,7 +101,6 @@ internal class StreamingManager<CONNECTION : Connection>(
                                 val listenerManager = endPoint.listenerManager
 
                                 try {
-                                    @Suppress("UNCHECKED_CAST")
                                     var hasListeners = listenerManager.notifyOnMessage(connection, streamedMessage)
 
                                     // each connection registers, and is polled INDEPENDENTLY for messages.
@@ -213,15 +213,18 @@ internal class StreamingManager<CONNECTION : Connection>(
         }
     }
 
-    private suspend fun sendFailMessageAndThrow(
+    private fun sendFailMessageAndThrow(
         e: Exception,
         streamSessionId: Long,
         publication: Publication,
         endPoint: EndPoint<CONNECTION>,
-        connection: CONNECTION
+        kryoExtra: KryoExtra<Connection>,
+        sendIdleStrategy: IdleStrategy,
+        connection: Connection
     ) {
         val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
-        val failSent = endPoint.sendUnsafe(failMessage, publication, connection)
+
+        val failSent = endPoint.writeUnsafe(kryoExtra, failMessage, publication, sendIdleStrategy, connection)
         if (!failSent) {
             // something SUPER wrong!
             // more critical error sending the message. we shouldn't retry or anything.
@@ -253,13 +256,15 @@ internal class StreamingManager<CONNECTION : Connection>(
      * @param internalBuffer this is the ORIGINAL object data that is to be "chunked" and sent across the wire
      * @return true if ALL the message chunks were successfully sent by aeron, false otherwise. Exceptions are caught and rethrown!
      */
-    suspend fun send(
+    fun send(
         publication: Publication,
         internalBuffer: MutableDirectBuffer,
         objectSize: Int,
         endPoint: EndPoint<CONNECTION>,
-        connection: CONNECTION
-        ): Boolean {
+        kryoExtra: KryoExtra<Connection>,
+        sendIdleStrategy: IdleStrategy,
+        connection: Connection
+    ): Boolean {
 
         // NOTE: our max object size for IN-MEMORY messages is an INT. For file transfer it's a LONG (so everything here is cast to a long)
         var remainingPayload = objectSize
@@ -269,7 +274,8 @@ internal class StreamingManager<CONNECTION : Connection>(
 
         // tell the other side how much data we are sending
         val startMessage = StreamingControl(StreamingState.START, streamSessionId, objectSize.toLong())
-        val startSent = endPoint.sendUnsafe(startMessage, publication, connection)
+
+        val startSent = endPoint.writeUnsafe(kryoExtra, startMessage, publication, sendIdleStrategy, connection)
         if (!startSent) {
             // more critical error sending the message. we shouldn't retry or anything.
             val errorMessage = "[${publication.sessionId()}] Error starting streaming content."
@@ -300,9 +306,8 @@ internal class StreamingManager<CONNECTION : Connection>(
         val header: ByteArray
         val headerSize: Int
 
-        val kryo = endPoint.serialization.takeKryo()
         try {
-            val objectBuffer = kryo.write(connection, chunkData)
+            val objectBuffer = kryoExtra.write(connection, chunkData)
             headerSize = objectBuffer.position()
             header = ByteArray(headerSize)
 
@@ -327,7 +332,14 @@ internal class StreamingManager<CONNECTION : Connection>(
             remainingPayload -= sizeOfPayload
             payloadSent += sizeOfPayload
 
-            val success = endPoint.sendData(publication, chunkBuffer.internalBuffer, 0, headerSize + varIntSize + sizeOfPayload, connection)
+            val success = endPoint.dataSend(
+                publication,
+                chunkBuffer.internalBuffer,
+                0,
+                headerSize + varIntSize + sizeOfPayload,
+                sendIdleStrategy,
+                connection
+            )
             if (!success) {
                 // something SUPER wrong!
                 // more critical error sending the message. we shouldn't retry or anything.
@@ -343,10 +355,8 @@ internal class StreamingManager<CONNECTION : Connection>(
                 throw exception
             }
         } catch (e: Exception) {
-            sendFailMessageAndThrow(e, streamSessionId, publication, endPoint, connection)
+            sendFailMessageAndThrow(e, streamSessionId, publication, endPoint, kryoExtra, sendIdleStrategy, connection)
             return false // doesn't actually get here because exceptions are thrown, but this makes the IDE happy.
-        } finally {
-            endPoint.serialization.returnKryo(kryo)
         }
 
         // now send the chunks as fast as possible. Aeron will have us back-off if we send too quickly
@@ -378,12 +388,20 @@ internal class StreamingManager<CONNECTION : Connection>(
                 writeVarInt(internalBuffer, writeIndex + headerSize, sizeOfPayload, true)
 
                 // write out the payload
-                endPoint.sendData(publication, internalBuffer, writeIndex, headerSize + varIntSize + amountToSend, connection)
+                endPoint.dataSend(
+                    publication,
+                    internalBuffer,
+                    writeIndex,
+                    headerSize + varIntSize + amountToSend,
+                    sendIdleStrategy,
+                    connection
+                )
 
                 payloadSent += amountToSend
             } catch (e: Exception) {
                 val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
-                val failSent = endPoint.sendUnsafe(failMessage, publication, connection)
+
+                val failSent = endPoint.writeUnsafe(kryoExtra, failMessage, publication, sendIdleStrategy, connection)
                 if (!failSent) {
                     // something SUPER wrong!
                     // more critical error sending the message. we shouldn't retry or anything.
@@ -406,6 +424,7 @@ internal class StreamingManager<CONNECTION : Connection>(
 
         // send the last chunk of data
         val finishedMessage = StreamingControl(StreamingState.FINISHED, streamSessionId, payloadSent.toLong())
-        return endPoint.sendUnsafe(finishedMessage, publication, connection)
+
+        return endPoint.writeUnsafe(kryoExtra, finishedMessage, publication, sendIdleStrategy, connection)
     }
 }

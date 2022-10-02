@@ -22,7 +22,6 @@ import com.esotericsoftware.kryo.io.Input
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import com.esotericsoftware.minlog.Log
 import dorkbox.network.Server
-import dorkbox.network.connection.CloseMessage
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingControlSerializer
@@ -362,7 +361,6 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
         kryo.register(Ping::class.java, pingSerializer)
         kryo.register(HandshakeMessage::class.java)
-        kryo.register(CloseMessage::class.java)
 
         @Suppress("UNCHECKED_CAST")
         kryo.register(InvocationHandler::class.java as Class<Any>, rmiClientSerializer)
@@ -638,6 +636,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     }
 
     /**
+     * // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
+     *
      * @return takes a kryo instance from the pool, or creates one if the pool was empty
      */
     fun takeKryo(): KryoExtra<CONNECTION> {
@@ -647,8 +647,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     /**
      * Returns a kryo instance to the pool for re-use later on
      */
-    fun returnKryo(kryo: KryoExtra<CONNECTION>) {
-        kryoPool.put(kryo)
+    fun returnKryo(kryo: KryoExtra<out Connection>) {
+        kryoPool.put(kryo as KryoExtra<CONNECTION>)
     }
 
     /**
