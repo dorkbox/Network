@@ -527,7 +527,8 @@ open class Client<CONNECTION : Connection>(
                 handshake.reset()
 
                 if (e.cause is ServerException) {
-                    val wrapped = ClientException(e.cause.message!!)
+                    val cause = e.cause!!
+                    val wrapped = ClientException(cause.message!!)
                     listenerManager.notifyError(wrapped)
                     throw wrapped
                 } else {
