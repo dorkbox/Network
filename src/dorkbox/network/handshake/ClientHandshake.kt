@@ -122,14 +122,14 @@ internal class ClientHandshake<CONNECTION: Connection>(
                         cryptInput.buffer = registrationData
 
                         val port = cryptInput.readInt()
-                        val sessionId = cryptInput.readInt()
-                        val streamId = cryptInput.readInt()
+                        val ackSessionId = cryptInput.readInt()
+                        val ackStreamId = cryptInput.readInt()
                         val regDetailsSize = cryptInput.readInt()
                         val regDetails = cryptInput.readBytes(regDetailsSize)
 
                         // now read data off
-                        connectionHelloInfo = ClientConnectionInfo(streamId = streamId,
-                                                                   sessionId = sessionId,
+                        connectionHelloInfo = ClientConnectionInfo(streamId = ackStreamId,
+                                                                   sessionId = ackSessionId,
                                                                    port = port,
                                                                    kryoRegistrationDetails = regDetails)
                     } else {

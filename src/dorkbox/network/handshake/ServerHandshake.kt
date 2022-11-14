@@ -477,7 +477,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         // create a new connection. The session ID is encrypted.
         var connection: CONNECTION? = null
         try {
-            val driver = ServerUdpPairedDriver(
+            val newDriver = ServerUdpPairedDriver(
                 listenAddress = driver.listenAddress,
                 remoteAddress = clientAddress,
                 port = subscriptionPort,
@@ -487,18 +487,18 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 isReliable = isReliable
             )
 
-            driver.build(aeronDriver, logger)
+            newDriver.build(aeronDriver, logger)
 
-            logger.info { "[$aeronLogInfo] Creating new connection from $driver" }
+            logger.info { "[$aeronLogInfo] Creating new connection from $newDriver" }
 
             val clientConnection = MediaDriverConnectInfo(
-                publication = driver.publication,
-                subscription = driver.subscription,
-                subscriptionPort = driver.port,
+                publication = newDriver.publication,
+                subscription = newDriver.subscription,
+                subscriptionPort = newDriver.port,
                 publicationPort = publicationPort,
-                streamId = driver.streamId,
-                sessionId = driver.sessionId,
-                isReliable = driver.isReliable,
+                streamId = newDriver.streamId,
+                sessionId = newDriver.sessionId,
+                isReliable = newDriver.isReliable,
                 remoteAddress = clientAddress,
                 remoteAddressString = clientAddressString
             )

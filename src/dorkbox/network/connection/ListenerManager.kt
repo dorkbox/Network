@@ -415,8 +415,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      *
      * The error is also sent to an error log before notifying callbacks
      */
-    fun notifyError(connection: Connection, exception: Throwable) {
-        connection as CONNECTION
+    fun notifyError(connection: CONNECTION, exception: Throwable) {
         onErrorList.value.forEach {
             try {
                 it(connection, exception)
