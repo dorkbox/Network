@@ -648,6 +648,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      * Returns a kryo instance to the pool for re-use later on
      */
     fun returnKryo(kryo: KryoExtra<out Connection>) {
+        @Suppress("UNCHECKED_CAST")
         kryoPool.put(kryo as KryoExtra<CONNECTION>)
     }
 
