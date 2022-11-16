@@ -25,14 +25,14 @@ import java.time.Instant
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "2.17"
-    id("com.dorkbox.Licensing") version "2.12"
+    id("com.dorkbox.GradleUtils") version "3.2"
+    id("com.dorkbox.Licensing") version "2.13"
     id("com.dorkbox.VersionUpdate") version "2.5"
-    id("com.dorkbox.GradlePublish") version "1.12"
+    id("com.dorkbox.GradlePublish") version "1.13"
 
     id("com.github.johnrengelman.shadow") version "7.1.2"
 
-    kotlin("jvm") version "1.6.10"
+    kotlin("jvm") version "1.7.20"
 }
 
 object Extras {
@@ -76,7 +76,7 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
 // todo: remove BC! use conscrypt instead, or native java? (if possible. we are java 11 now, instead of 1.6)
 
 
-// also, NOT using bouncastle, but instead the google one
+// also, NOT using bounycastle, but instead the google one
 // better SSL library
 // implementation("org.conscrypt:conscrypt-openjdk-uber:2.2.1")
 //    init {
@@ -162,12 +162,12 @@ shadowJar.apply {
 
 
 dependencies {
-    api("org.jetbrains.kotlinx:atomicfu:0.17.3")
-    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
+    api("org.jetbrains.kotlinx:atomicfu:0.18.5")
+    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
 
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:1.5")
-    api("com.dorkbox:Collections:1.1")
+    api("com.dorkbox:Collections:1.2")
     api("com.dorkbox:MinLog:2.4")
     api("com.dorkbox:NetworkDNS:2.7.1")
     api("com.dorkbox:NetworkUtils:2.19")
@@ -181,7 +181,7 @@ dependencies {
 
     // we include ALL of aeron, in case we need to debug aeron behavior
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.39.0"
+    val aeronVer = "1.40.0"
     api("io.aeron:aeron-all:$aeronVer")
 //    api("org.agrona:agrona:1.16.0") // sources for this isn't included in aeron-all!
 
@@ -207,14 +207,14 @@ dependencies {
     api("net.jodah:expiringmap:0.5.10")
 
     // https://github.com/MicroUtils/kotlin-logging
-    api("io.github.microutils:kotlin-logging:2.1.23")
-    api("org.slf4j:slf4j-api:1.8.0-beta4")
+    api("io.github.microutils:kotlin-logging:3.0.4")
+    api("org.slf4j:slf4j-api:2.0.3")
 
 
 
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("ch.qos.logback:logback-classic:1.3.0-alpha4")
+    testImplementation("ch.qos.logback:logback-classic:1.4.4")
 }
 
 publishToSonatype {
