@@ -25,8 +25,8 @@ import java.time.Instant
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "3.2"
-    id("com.dorkbox.Licensing") version "2.13"
+    id("com.dorkbox.GradleUtils") version "3.3"
+    id("com.dorkbox.Licensing") version "2.17"
     id("com.dorkbox.VersionUpdate") version "2.5"
     id("com.dorkbox.GradlePublish") version "1.13"
 
@@ -62,6 +62,7 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
     // enable the use of inline classes. see https://kotlinlang.org/docs/reference/inline-classes.html
     freeCompilerArgs = listOf("-Xinline-classes")
 }
+//GradleUtils.jpms(JavaVersion.VERSION_11)
 //NOTE: we do not support JPMS yet, as there are some libraries missing support for it still
 
 
@@ -208,7 +209,7 @@ dependencies {
 
     // https://github.com/MicroUtils/kotlin-logging
     api("io.github.microutils:kotlin-logging:3.0.4")
-    api("org.slf4j:slf4j-api:2.0.3")
+    api("org.slf4j:slf4j-api:2.0.4")
 
 
 
