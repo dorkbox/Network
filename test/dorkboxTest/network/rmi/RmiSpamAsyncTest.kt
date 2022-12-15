@@ -85,7 +85,7 @@ class RmiSpamAsyncTest : BaseTest() {
 
             client.onConnect {
                 val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
-                val obj = remoteObject as RemoteObject
+                val obj = remoteObject as RemoteObject<TestObject>
                 obj.async = true
 
                 var started = false

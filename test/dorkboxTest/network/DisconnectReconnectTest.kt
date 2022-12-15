@@ -162,7 +162,7 @@ class DisconnectReconnectTest : BaseTest() {
                 val closerObject = rmi.get<CloseIface>(CLOSE_ID)
 
                 // the close operation will kill the connection, preventing the response from returning.
-                closerObject as RemoteObject
+                closerObject as RemoteObject<CloseIface>
                 closerObject.async = true
 
                 closerObject.close()

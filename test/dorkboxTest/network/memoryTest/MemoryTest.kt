@@ -54,7 +54,7 @@ class MemoryTest : BaseTest() {
                 val client = Client<Connection>(clientConfig())
                 client.onConnect {
                     val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
-                    val obj = remoteObject as RemoteObject
+                    val obj = remoteObject as RemoteObject<TestObject>
                     obj.async = true
 
                     var i = 0L
@@ -95,7 +95,7 @@ class MemoryTest : BaseTest() {
                 val client = Client<Connection>(clientConfig())
                 client.onConnect {
                     val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
-                    val obj = remoteObject as RemoteObject
+                    val obj = remoteObject as RemoteObject<TestObject>
                     obj.async = true
 
                     var i = 0L

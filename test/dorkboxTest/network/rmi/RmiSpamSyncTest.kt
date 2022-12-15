@@ -24,7 +24,7 @@ import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.BaseTest
 import org.junit.Assert
 import org.junit.Test
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.*
 
 class RmiSpamSyncTest : BaseTest() {
     private val counter = AtomicLong(0)
@@ -83,7 +83,7 @@ class RmiSpamSyncTest : BaseTest() {
 
             client.onConnect {
                 val remoteObject = rmi.getGlobal<TestObject>(RMI_ID)
-                val obj = remoteObject as RemoteObject
+                val obj = remoteObject as RemoteObject<TestObject>
                 obj.async = false
 
                 var started = false

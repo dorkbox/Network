@@ -45,15 +45,15 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
          * @param rmiId this is the remote object ID (assigned by RMI). This is NOT the kryo registration ID
          * @param interfaceClass this is the RMI interface class
          */
-        internal fun <CONNECTION : Connection> createProxyObject(
+        internal fun <CONNECTION : Connection, Iface> createProxyObject(
             isGlobalObject: Boolean,
             connection: CONNECTION,
             serialization: Serialization<CONNECTION>,
             responseManager: ResponseManager,
             kryoId: Int,
             rmiId: Int,
-            interfaceClass: Class<*>
-        ): RemoteObject {
+            interfaceClass: Class<Iface>
+        ): RemoteObject<Iface> {
 
             // duplicates are fine, as they represent the same object (as specified by the ID) on the remote side.
 
@@ -69,7 +69,8 @@ internal class RmiManagerGlobal<CONNECTION: Connection>(logger: KLogger) : RmiOb
             // This is the interface inheritance by the proxy object
             val interfaces: Array<Class<*>> = arrayOf(RemoteObject::class.java, interfaceClass)
 
-            return Proxy.newProxyInstance(RmiManagerGlobal::class.java.classLoader, interfaces, proxyObject) as RemoteObject
+            @Suppress("UNCHECKED_CAST")
+            return Proxy.newProxyInstance(RmiManagerGlobal::class.java.classLoader, interfaces, proxyObject) as RemoteObject<Iface>
         }
     }
 

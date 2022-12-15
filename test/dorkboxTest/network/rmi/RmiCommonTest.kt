@@ -42,7 +42,7 @@ import org.junit.Assert
 
 object RmiCommonTest {
     suspend fun runTests(connection: Connection, test: TestCow, remoteObjectID: Int) {
-        val remoteObject = test as RemoteObject
+        val remoteObject = RemoteObject.cast<TestCow>(test)
 
         // Default behavior. RMI is transparent, method calls behave like normal
         // (return values and exceptions are returned, call is synchronous)
@@ -84,13 +84,33 @@ object RmiCommonTest {
             connection.logger.error("\tExpected exception (exception log should also be on the object impl side).", e)
         }
 
+
+        remoteObject.sync {
+            moo("Bzzzzzz")
+        }
+
+        remoteObject.syncSuspend {
+            moo("Bzzzzzz----MOOO", 22)
+        }
+
+
         // Non-blocking call tests
         // Non-blocking call tests
         // Non-blocking call tests
         connection.logger.error("I'm currently async: ${remoteObject.async}. Now testing ASYNC")
 
-        remoteObject.async = true
 
+
+        remoteObject.asyncSuspend {
+            // calls that ignore the return value
+            moo("Bark", 4)
+            // Non-blocking call that ignores the return value
+            Assert.assertEquals(0, test.id().toLong())
+        }
+
+
+        // default is false
+        remoteObject.async = true
 
         // calls that ignore the return value
         test.moo("Meow")
@@ -122,7 +142,7 @@ object RmiCommonTest {
         test.moo("Mooooooooo", 4000)
 
 
-        // should wait for a small time
+        // should wait for a small amount of time
         remoteObject.async = false
         remoteObject.responseTimeout = 6000
         connection.logger.error("You should see this 2 seconds before")
@@ -136,6 +156,9 @@ object RmiCommonTest {
         m.number = 678
         m.text = "sometext"
         connection.send(m)
+
+        remoteObject.enableHashCode(true)
+        remoteObject.enableEquals(true)
 
         connection.logger.error("Finished tests")
     }

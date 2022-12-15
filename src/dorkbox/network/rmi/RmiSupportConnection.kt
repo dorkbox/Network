@@ -44,7 +44,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
 
 
     // It is critical that all of the RMI proxy objects are unique, and are saved/cached PER CONNECTION. These cannot be shared between connections!
-    private val proxyObjects = LockFreeIntMap<RemoteObject>()
+    private val proxyObjects = LockFreeIntMap<RemoteObject<*>>()
 
     // callbacks for when a REMOTE object has been created
     private val remoteObjectCreationCallbacks = RemoteObjectStorage(logger)
@@ -58,11 +58,11 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
         return proxyObjects.remove(rmiId) != null
     }
 
-    private fun getProxyObject(rmiId: Int): RemoteObject? {
+    private fun getProxyObject(rmiId: Int): RemoteObject<*>? {
         return proxyObjects[rmiId]
     }
 
-    private fun saveProxyObject(rmiId: Int, remoteObject: RemoteObject) {
+    private fun saveProxyObject(rmiId: Int, remoteObject: RemoteObject<*>) {
         proxyObjects.put(rmiId, remoteObject)
     }
 
@@ -272,7 +272,8 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
         require(interfaceClass.isInterface) { "iface must be an interface." }
 
         // so we can just instantly create the proxy object (or get the cached one)
-        var proxyObject = getProxyObject(rmiId)
+        @Suppress("UNCHECKED_CAST")
+        var proxyObject = getProxyObject(rmiId) as RemoteObject<Iface>?
         if (proxyObject == null) {
             proxyObject = RmiManagerGlobal.createProxyObject(isGlobal,
                                                              connection,
