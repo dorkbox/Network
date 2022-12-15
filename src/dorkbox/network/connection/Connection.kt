@@ -224,15 +224,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
     suspend fun send(message: Any): Boolean {
-        // only reset the sending timeout strategy when a message was successfully sent. There will be multiple, concurrent writes
-        // to the network (at most, one write per connection). If aeron
-        sendIdleStrategy.reset()
-
         messagesInProgress.getAndIncrement()
 
         // dispatched to the IO context!! (since network calls are IO/blocking calls)
         val success = withContext(Dispatchers.IO) {
             writeMutex.withLock {
+                // we reset the sending timeout strategy when a message was successfully sent.
+                sendIdleStrategy.reset()
+
                 try {
                     // The handshake sessionId IS NOT globally unique
                     logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
