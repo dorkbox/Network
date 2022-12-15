@@ -276,6 +276,10 @@ internal class ClientHandshake<CONNECTION: Connection>(
         }
 
         if (!connectionDone) {
+            // since this failed, close everything
+            handshakeConnection.subscription.close()
+            handshakeConnection.publication.close()
+
             val exception = ClientTimedOutException("Waiting for registration response from server")
             ListenerManager.cleanStackTraceInternal(exception)
             throw exception

@@ -496,11 +496,6 @@ open class Client<CONNECTION : Connection>(
                 connect0(handshake, handshakeConnection, handshakeTimeoutSec)
                 success = true
 
-
-                // finished with the handshake, so always close the connection publication
-                // The subscription is RE-USED, so we don't close that!
-                handshakeConnection.publication.close()
-
                 // once we're done with the connection process, stop trying
                 break
             } catch (e: ClientRetryException) {
@@ -753,6 +748,10 @@ open class Client<CONNECTION : Connection>(
             logger.error(e) { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString error during handshake" }
             throw e
         }
+
+        // finished with the handshake, so always close the connection publication
+        // The subscription is RE-USED, so we don't close that!
+        handshakeConnection.publication.close()
 
         isConnected = true
 
