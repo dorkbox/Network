@@ -130,7 +130,7 @@ abstract class Configuration {
         internal const val errorMessage = "Cannot set a property after the configuration context has been created!"
 
         @Volatile
-        private var alreadyShownTips = false
+        private var alreadyShownTempFsTips = false
     }
 
     /**
@@ -519,9 +519,10 @@ abstract class Configuration {
                     suggestedLocation
                 }
                 else {
-                    if (!alreadyShownTips) {
-                        alreadyShownTips = true
-                        logger.info("It is recommended to create a RAM drive for best performance. For example\n" + "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`")
+                    if (!alreadyShownTempFsTips) {
+                        alreadyShownTempFsTips = true
+                        logger.info("It is recommended to create a RAM drive for best performance. For example\n" +
+                                            "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`")
                     }
 
                     OS.TEMP_DIR
