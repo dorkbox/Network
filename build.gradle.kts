@@ -25,14 +25,14 @@ import java.time.Instant
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "3.3"
+    id("com.dorkbox.GradleUtils") version "3.3.1"
     id("com.dorkbox.Licensing") version "2.17"
     id("com.dorkbox.VersionUpdate") version "2.5"
     id("com.dorkbox.GradlePublish") version "1.13"
 
     id("com.github.johnrengelman.shadow") version "7.1.2"
 
-    kotlin("jvm") version "1.7.20"
+    kotlin("jvm") version "1.7.22"
 }
 
 object Extras {
@@ -70,24 +70,10 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
 // rest of unit tests
 // getConnectionUpgradeType
 // ability to send with a function callback (using RMI waiter type stuff for callbacks)
-// use conscrypt?!
 
 // java 14 is faster with aeron!
 // NOTE: now using aeron instead of netty
-// todo: remove BC! use conscrypt instead, or native java? (if possible. we are java 11 now, instead of 1.6)
-
-
-// also, NOT using bounycastle, but instead the google one
-// better SSL library
-// implementation("org.conscrypt:conscrypt-openjdk-uber:2.2.1")
-//    init {
-//            try {
-//                Security.insertProviderAt(Conscrypt.newProvider(), 1);
-//            }
-//            catch (e: Throwable) {
-//                e.printStackTrace();
-//            }
-//        }
+// todo: remove BC! use or native java? (if possible. we are java 11 now, instead of 1.6)
 
 
 licensing {
@@ -170,8 +156,8 @@ dependencies {
     api("com.dorkbox:ByteUtilities:1.5")
     api("com.dorkbox:Collections:1.2")
     api("com.dorkbox:MinLog:2.4")
-    api("com.dorkbox:NetworkDNS:2.7.1")
-    api("com.dorkbox:NetworkUtils:2.19")
+    api("com.dorkbox:NetworkDNS:2.7.2")
+    api("com.dorkbox:NetworkUtils:2.19.1")
     api("com.dorkbox:ObjectPool:4.0")
     api("com.dorkbox:OS:1.0")
     api("com.dorkbox:Serializers:2.7")
