@@ -499,7 +499,7 @@ open class Client<CONNECTION : Connection>(
                         isReliable = reliable
                     )
 
-                    type = "${udpConnection.type} '$remoteAddressString:${config.port}'"
+                    type = "${udpConnection.type} '$remoteAddressPrettyString:${config.port}'"
 
                     // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
                     udpConnection.build(aeronDriver, logger)

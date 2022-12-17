@@ -160,6 +160,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
+    // when exceptions are thrown, the handshake pub/sub will be closed
     fun hello(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) : ClientConnectionInfo {
         failedException = null
         connectKey = getSafeConnectKey()
@@ -206,11 +207,17 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
+            subscription.close()
+            publication.close()
+
             ListenerManager.cleanStackTraceInternal(failedEx)
             throw failedEx
         }
 
         if (connectionHelloInfo == null) {
+            subscription.close()
+            publication.close()
+
             val exception = ClientTimedOutException("[$aeronLogInfo] Waiting for registration response from server")
             ListenerManager.cleanStackTraceInternal(exception)
             throw exception
@@ -220,6 +227,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     }
 
     // called from the connect thread
+    // when exceptions are thrown, the handshake pub/sub will be closed
     fun done(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) {
         val registrationMessage = HandshakeMessage.doneFromClient(connectKey,
                                                                   handshakeConnection.port+1,
@@ -272,6 +280,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
+            handshakeConnection.subscription.close()
+            handshakeConnection.publication.close()
             throw failedEx
         }
 
