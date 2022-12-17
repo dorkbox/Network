@@ -129,7 +129,7 @@ open class Client<CONNECTION : Connection>(
         /**
          * Gets the version number.
          */
-        const val version = "6.0"
+        const val version = "6.1"
 
         /**
          * Checks to see if a client (using the specified configuration) is running.
@@ -217,13 +217,14 @@ open class Client<CONNECTION : Connection>(
         val remoteAddressString = when (remoteAddress) {
             is Inet4Address -> IPv4.toString(remoteAddress)
             is Inet6Address -> IPv6.toString(remoteAddress, true)
-            else ->  throw IllegalArgumentException("Cannot connect to $remoteAddress It is an invalid address!")
+            else ->  throw IllegalArgumentException("Cannot connect to $remoteAddress It is an invalid address type!")
         }
 
 
         // Default IPC ports are flipped because they are in the perspective of the SERVER
         connect(remoteAddress = remoteAddress,
                 remoteAddressString = remoteAddressString,
+                remoteAddressPrettyString = remoteAddressString,
                 connectionTimeoutSec = connectionTimeoutSec,
                 reliable = reliable)
     }
@@ -244,7 +245,8 @@ open class Client<CONNECTION : Connection>(
         connectionTimeoutSec: Int = 30)
      {
         connect(remoteAddress = null, // required!
-                remoteAddressString = "IPC",
+                remoteAddressString = IPC_NAME,
+                remoteAddressPrettyString = IPC_NAME,
                 ipcId = ipcId,
                 connectionTimeoutSec = connectionTimeoutSec)
     }
@@ -292,9 +294,17 @@ open class Client<CONNECTION : Connection>(
                     records?.get(0)
                 } ?: throw IllegalArgumentException("The remote address '$remoteAddress' cannot be found.")
 
+                val remoteAddressAsIp = IP.toString(inetAddress)
+                val formattedString = if (remoteAddress == remoteAddressAsIp) {
+                    remoteAddress
+                } else {
+                    "$remoteAddress ($remoteAddressAsIp)"
+                }
+
                 connect(remoteAddress = inetAddress,
                         // we check again, because the inetAddress that comes back from DNS, might not be what we expect
-                        remoteAddressString = formatCommonAddressString(IP.toString(inetAddress), inetAddress is Inet4Address),
+                        remoteAddressString = remoteAddressAsIp,
+                        remoteAddressPrettyString = formattedString,
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable)
             }
@@ -347,6 +357,7 @@ open class Client<CONNECTION : Connection>(
     private fun connect(
         remoteAddress: InetAddress? = null,
         remoteAddressString: String,
+        remoteAddressPrettyString: String,
         // Default IPC ports are flipped because they are in the perspective of the SERVER
         ipcId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID,
         connectionTimeoutSec: Int = 30,
@@ -365,7 +376,12 @@ open class Client<CONNECTION : Connection>(
         connection0 = null
 
         // localhost/loopback IP might not always be 127.0.0.1 or ::1
+        // will be null if it's IPC
         this.remoteAddress = remoteAddress
+
+        // will be exactly 'IPC' if it's IPC
+        // if it's an IP address, it will be the IP address
+        // if it's a DNS name, the name will be resolved, and it will be DNS (IP)
         this.remoteAddressString = remoteAddressString
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
@@ -378,16 +394,16 @@ open class Client<CONNECTION : Connection>(
 
         // only try to connect via IPv4 if we have a network interface that supports it!
         if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
-            require(false) { "Unable to connect to the IPv4 address $remoteAddressString, there are no IPv4 interfaces available!" }
+            require(false) { "Unable to connect to the IPv4 address $remoteAddressPrettyString, there are no IPv4 interfaces available!" }
         }
 
         // only try to connect via IPv6 if we have a network interface that supports it!
         if (remoteAddress is Inet6Address && !IPv6.isAvailable) {
-            require(false) { "Unable to connect to the IPv6 address $remoteAddressString, there are no IPv6 interfaces available!" }
+            require(false) { "Unable to connect to the IPv6 address $remoteAddressPrettyString, there are no IPv6 interfaces available!" }
         }
 
         if (remoteAddress != null && remoteAddress.isAnyLocalAddress) {
-            require(false) { "Cannot connect to $remoteAddressString It is an invalid address!" }
+            require(false) { "Cannot connect to $remoteAddressPrettyString It is an invalid address!" }
         }
 
         // IPC can be enabled TWO ways!
@@ -439,7 +455,7 @@ open class Client<CONNECTION : Connection>(
                         remoteSessionId = AeronDriver.IPC_HANDSHAKE_SESSION_ID
                     )
 
-                    type = "${ipcConnection.type} '$remoteAddressString:$ipcId'"
+                    type = "${ipcConnection.type} '$ipcId'"
 
                     // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
                     try {
@@ -466,7 +482,7 @@ open class Client<CONNECTION : Connection>(
                             isReliable = reliable
                         )
 
-                        type = "${udpConnection.type} '$remoteAddressString:${config.port}'"
+                        type = "${udpConnection.type} '$remoteAddressPrettyString:${config.port}'"
 
                         // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
                         udpConnection.build(aeronDriver, logger)

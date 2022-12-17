@@ -14,6 +14,7 @@ module dorkbox.network {
 
     requires transitive dorkbox.bytes;
     requires transitive dorkbox.collections;
+    requires transitive dorkbox.dns;
     requires transitive dorkbox.updates;
     requires transitive dorkbox.utilities;
     requires transitive dorkbox.netutil;
@@ -23,11 +24,11 @@ module dorkbox.network {
     requires transitive dorkbox.objectpool;
     requires transitive dorkbox.os;
 
-    requires transitive expiringmap;
+    // requires transitive expiringmap;
     requires net.jodah.typetools;
-    requires transitive com.esotericsoftware.kryo;
-    requires transitive com.esotericsoftware.reflectasm;
-    requires transitive org.objenesis;
+    requires com.esotericsoftware.kryo;
+    requires com.esotericsoftware.reflectasm;
+    requires org.objenesis;
 
     requires io.aeron.all;
     // requires io.aeron.driver;
@@ -35,13 +36,15 @@ module dorkbox.network {
     // requires org.agrona.core;
 
     requires transitive org.slf4j;
-    requires kotlin.logging.jvm;
+    requires io.github.microutils.kotlinlogging;
 
     requires transitive kotlinx.atomicfu;
 
     requires kotlin.stdlib;
     requires kotlin.stdlib.jdk8;
     requires kotlinx.coroutines.core.jvm;
+
+    // requires kotlinx.coroutines.core.jvm;
 
     // compile-only libraries
 //    requires static chronicle.map;
@@ -75,6 +78,5 @@ module dorkbox.network {
 //    requires static jnr.ffi;
 
 
-    requires annotations;
-    requires java.base;
+    // requires java.base;
 }

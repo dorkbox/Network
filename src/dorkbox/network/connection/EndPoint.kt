@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
@@ -91,6 +90,8 @@ internal constructor(val type: Class<*>,
         // connections are extremely difficult to diagnose when the connection timeout is short
         internal const val DEBUG_CONNECTIONS = false
 
+        internal const val IPC_NAME = "IPC"
+
         /**
          * @return the error code text for the specified number
          */
@@ -154,12 +155,12 @@ internal constructor(val type: Class<*>,
                 if (isIpv4) { IPv4.LOCALHOST } else { IPv6.LOCALHOST }
             } else if (isWildcard(ipAddress)) {
                 if (isIpv4) { IPv4.WILDCARD } else { IPv6.WILDCARD }
+            } else if (IPv4.isValid(ipAddress)) {
+                IPv4.toAddress(ipAddress)!!
+            } else if (IPv6.isValid(ipAddress)) {
+                IPv6.toAddress(ipAddress)!!
             } else {
-                if (IP.isValid(ipAddress)) {
-                    if (isIpv4) { IPv4.toAddress(ipAddress)!! } else { IPv6.toAddress(ipAddress)!! }
-                } else {
-                    elseAction()
-                }
+                elseAction()
             }
         }
 
@@ -168,6 +169,10 @@ internal constructor(val type: Class<*>,
                 if (isIpv4) { IPv4.LOCALHOST_STRING } else { IPv6.LOCALHOST_STRING }
             } else if (isWildcard(ipAddress)) {
                 if (isIpv4) { IPv4.WILDCARD_STRING } else { IPv6.WILDCARD_STRING }
+            } else if (IPv4.isValid(ipAddress)) {
+                ipAddress
+            } else if (IPv6.isValid(ipAddress)) {
+                ipAddress
             } else {
                 elseAction()
             }

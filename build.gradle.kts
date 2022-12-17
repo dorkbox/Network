@@ -39,7 +39,7 @@ object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "6.0"
+    const val version = "6.1"
 
     // set as project.ext
     const val name = "Network"
