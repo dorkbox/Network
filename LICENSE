@@ -1,7 +1,7 @@
  - Network - High-performance, event-driven/reactive network stack for Java 11+
    [The Apache Software License, Version 2.0]
    https://git.dorkbox.com/dorkbox/Network
-   Copyright 2022
+   Copyright 2023
      Dorkbox LLC
 
    Extra license information
@@ -40,19 +40,19 @@
      - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
        [The Apache Software License, Version 2.0]
        https://github.com/Kotlin/kotlinx.coroutines
-       Copyright 2022
+       Copyright 2023
          JetBrains s.r.o.
 
      - Aeron - Efficient reliable UDP unicast, UDP multicast, and IPC message transport
        [The Apache Software License, Version 2.0]
        https://github.com/real-logic/aeron
-       Copyright 2022
+       Copyright 2023
          Real Logic Limited
 
      - Kryo - Fast and efficient binary object graph serialization framework for Java
        [BSD 3-Clause License]
        https://github.com/EsotericSoftware/kryo
-       Copyright 2022
+       Copyright 2023
          Nathan Sweet
 
        Extra license information
@@ -74,25 +74,25 @@
      - TypeTools - A simple, zero-dependency library for working with types. Supports Java 1.6+ and Android.
        [The Apache Software License, Version 2.0]
        https://github.com/jhalterman/typetools
-       Copyright 2022
+       Copyright 2023
          Jonathan Halterman and friends
 
      - Jodah Expiring Map - high performance thread-safe map that expires entries
        [The Apache Software License, Version 2.0]
        https://github.com/jhalterman/expiringmap
-       Copyright 2022
+       Copyright 2023
          Jonathan Halterman
 
      - kotlin-logging - Lightweight logging framework for Kotlin
        [The Apache Software License, Version 2.0]
        https://github.com/MicroUtils/kotlin-logging
-       Copyright 2022
+       Copyright 2023
          Ohad Shai
 
      - SLF4J - Simple facade or abstraction for various logging frameworks
        [MIT License]
        http://www.slf4j.org
-       Copyright 2022
+       Copyright 2023
          QOS.ch
 
      - Kotlin - 
