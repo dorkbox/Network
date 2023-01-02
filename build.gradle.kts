@@ -25,14 +25,14 @@ import java.time.Instant
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "3.3.1"
+    id("com.dorkbox.GradleUtils") version "3.5"
     id("com.dorkbox.Licensing") version "2.17"
     id("com.dorkbox.VersionUpdate") version "2.5"
     id("com.dorkbox.GradlePublish") version "1.13"
 
     id("com.github.johnrengelman.shadow") version "7.1.2"
 
-    kotlin("jvm") version "1.7.22"
+    kotlin("jvm") version "1.8.0"
 }
 
 object Extras {
@@ -159,11 +159,11 @@ dependencies {
     api("com.dorkbox:NetworkDNS:2.7.2")
     api("com.dorkbox:NetworkUtils:2.19.1")
     api("com.dorkbox:ObjectPool:4.0")
-    api("com.dorkbox:OS:1.0")
+    api("com.dorkbox:OS:1.2")
     api("com.dorkbox:Serializers:2.7")
     api("com.dorkbox:Storage:1.1")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.30")
+    api("com.dorkbox:Utilities:1.34")
 
 
     // we include ALL of aeron, in case we need to debug aeron behavior
@@ -173,7 +173,7 @@ dependencies {
 //    api("org.agrona:agrona:1.16.0") // sources for this isn't included in aeron-all!
 
     // https://github.com/EsotericSoftware/kryo
-    api("com.esotericsoftware:kryo:5.3.0") {
+    api("com.esotericsoftware:kryo:5.4.0") {
         exclude("com.esotericsoftware", "minlog") // we use our own minlog, that logs to SLF4j instead
     }
 
@@ -195,7 +195,7 @@ dependencies {
 
     // https://github.com/MicroUtils/kotlin-logging
     api("io.github.microutils:kotlin-logging:3.0.4")
-    api("org.slf4j:slf4j-api:2.0.5")
+    api("org.slf4j:slf4j-api:2.0.6")
 
 
 
