@@ -535,7 +535,15 @@ open class Client<CONNECTION : Connection>(
                     logger.info { "Unable to connect to $type, retrying..." }
                 }
             } catch (e: ClientRejectedException) {
-                handshake.reset()
+                aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
+
+                // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
+                // we also want to go at SLIGHTLY slower that the aeron driver timeout frequency, this way - if there are connection or handshake issues, the server has the chance to expire the connections.
+                // If we go TOO FAST, then the server will EVENTUALLY have aeron errors (since it can't keep up per client). We literally
+                // want to have 1 in-flight handshake, per connection attempt, during the aeron connection timeout
+
+                // ALSO, we want to make sure we DO NOT approach the linger timeout!
+                sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs()*2)))
 
                 if (e.cause is ServerException) {
                     val cause = e.cause!!
@@ -548,7 +556,16 @@ open class Client<CONNECTION : Connection>(
                 }
             } catch (e: Exception) {
                 logger.error(e) { "[${handshake.connectKey}] : Un-recoverable error during handshake with $type. Aborting." }
-                handshake.reset()
+
+                aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
+
+                // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
+                // we also want to go at SLIGHTLY slower that the aeron driver timeout frequency, this way - if there are connection or handshake issues, the server has the chance to expire the connections.
+                // If we go TOO FAST, then the server will EVENTUALLY have aeron errors (since it can't keep up per client). We literally
+                // want to have 1 in-flight handshake, per connection attempt, during the aeron connection timeout
+
+                // ALSO, we want to make sure we DO NOT approach the linger timeout!
+                sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs()*2)))
 
                 listenerManager.notifyError(e)
                 throw e
