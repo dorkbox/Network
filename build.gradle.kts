@@ -149,7 +149,7 @@ shadowJar.apply {
 
 
 dependencies {
-    api("org.jetbrains.kotlinx:atomicfu:0.18.5")
+    api("org.jetbrains.kotlinx:atomicfu:0.19.0")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
 
     // https://github.com/dorkbox
@@ -159,11 +159,11 @@ dependencies {
     api("com.dorkbox:NetworkDNS:2.7.2")
     api("com.dorkbox:NetworkUtils:2.19.1")
     api("com.dorkbox:ObjectPool:4.0")
-    api("com.dorkbox:OS:1.2")
+    api("com.dorkbox:OS:1.5")
     api("com.dorkbox:Serializers:2.7")
     api("com.dorkbox:Storage:1.1")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.34")
+    api("com.dorkbox:Utilities:1.35")
 
 
     // we include ALL of aeron, in case we need to debug aeron behavior
