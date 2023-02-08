@@ -25,10 +25,10 @@ import java.time.Instant
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "3.6"
-    id("com.dorkbox.Licensing") version "2.17"
-    id("com.dorkbox.VersionUpdate") version "2.5"
-    id("com.dorkbox.GradlePublish") version "1.15"
+    id("com.dorkbox.GradleUtils") version "3.11"
+    id("com.dorkbox.Licensing") version "2.21"
+    id("com.dorkbox.VersionUpdate") version "2.6"
+    id("com.dorkbox.GradlePublish") version "1.17"
 
     id("com.github.johnrengelman.shadow") version "7.1.2"
 
@@ -153,17 +153,17 @@ dependencies {
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
 
     // https://github.com/dorkbox
-    api("com.dorkbox:ByteUtilities:1.5")
-    api("com.dorkbox:Collections:1.2")
-    api("com.dorkbox:MinLog:2.4")
+    api("com.dorkbox:ByteUtilities:1.8")
+    api("com.dorkbox:Collections:1.4")
+    api("com.dorkbox:MinLog:2.5")
     api("com.dorkbox:NetworkDNS:2.7.2")
     api("com.dorkbox:NetworkUtils:2.19.1")
-    api("com.dorkbox:ObjectPool:4.0")
-    api("com.dorkbox:OS:1.5")
-    api("com.dorkbox:Serializers:2.7")
-    api("com.dorkbox:Storage:1.1")
+//    api("com.dorkbox:ObjectPool:4.2")
+    api("com.dorkbox:OS:1.6")
+    api("com.dorkbox:Serializers:2.8")
+    api("com.dorkbox:Storage:1.2")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.35")
+    api("com.dorkbox:Utilities:1.40")
 
 
     // we include ALL of aeron, in case we need to debug aeron behavior
@@ -194,7 +194,7 @@ dependencies {
     api("net.jodah:expiringmap:0.5.10")
 
     // https://github.com/MicroUtils/kotlin-logging
-    api("io.github.microutils:kotlin-logging:3.0.4")
+    api("io.github.microutils:kotlin-logging:3.0.5")
     api("org.slf4j:slf4j-api:2.0.6")
 
 
