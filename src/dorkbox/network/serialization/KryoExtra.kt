@@ -105,7 +105,7 @@ class KryoExtra<CONNECTION: Connection>() : Kryo() {
      * ++++++++++++++++++++++++++
      */
     @Throws(Exception::class)
-    fun read(buffer: DirectBuffer): Any {
+    fun read(buffer: DirectBuffer): Any? {
         // this properly sets the buffer info
         readerBuffer.setBuffer(buffer, 0, buffer.capacity())
         return readClassAndObject(readerBuffer)
@@ -120,7 +120,7 @@ class KryoExtra<CONNECTION: Connection>() : Kryo() {
      * ++++++++++++++++++++++++++
      */
     @Throws(Exception::class)
-    fun read(buffer: DirectBuffer, offset: Int, length: Int): Any {
+    fun read(buffer: DirectBuffer, offset: Int, length: Int): Any? {
         // this properly sets the buffer info
         readerBuffer.setBuffer(buffer, offset, length)
         return readClassAndObject(readerBuffer)
@@ -190,7 +190,7 @@ class KryoExtra<CONNECTION: Connection>() : Kryo() {
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    fun read(reader: Input): Any {
+    fun read(reader: Input): Any? {
         return readClassAndObject(reader)
     }
 
@@ -200,7 +200,7 @@ class KryoExtra<CONNECTION: Connection>() : Kryo() {
      * + class and object bytes +
      * ++++++++++++++++++++++++++
      */
-    private fun read(connection: CONNECTION, reader: Input): Any {
+    private fun read(connection: CONNECTION, reader: Input): Any? {
         // required by RMI and some serializers to determine which connection wrote (or has info about) this object
         this.connection = connection
 

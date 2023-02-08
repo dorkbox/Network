@@ -628,7 +628,8 @@ open class Client<CONNECTION : Connection>(
         ///////////////
 
         // we set up our kryo information once we connect to a server (using the server's kryo registration details)
-        if (!serialization.finishInit(type, connectionInfo.kryoRegistrationDetails)) {
+        val kryoConfiguredFromServer = serialization.finishClientConnect(connectionInfo.kryoRegistrationDetails)
+        if (kryoConfiguredFromServer == null) {
             handshakeConnection.subscription.close()
             handshakeConnection.publication.close()
 
@@ -642,6 +643,10 @@ open class Client<CONNECTION : Connection>(
             ListenerManager.cleanStackTraceInternal(exception)
             throw exception
         }
+
+        // every time we connect to a server, we have to reconfigure AND reassign the readKryo.
+        readKryo = kryoConfiguredFromServer
+        streamingReadKryo = serialization.initKryo()
 
 
         ///////////////

@@ -187,11 +187,6 @@ open class Server<CONNECTION : Connection>(
             null
         }
 
-    init {
-        // we are done with initial configuration, now finish serialization
-        serialization.finishInit(type)
-    }
-
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ServerException(message, cause)
     }

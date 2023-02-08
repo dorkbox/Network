@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.collections.ConcurrentIterator
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
@@ -188,7 +189,8 @@ internal constructor(val type: Class<*>,
     internal val actionDispatch = config.dispatch + handler
 
     internal val listenerManager = ListenerManager<CONNECTION>(logger)
-    internal val connections = ConnectionManager<CONNECTION>()
+
+    val connections = ConcurrentIterator<CONNECTION>()
 
     internal val aeronDriver: AeronDriver
 
@@ -197,7 +199,12 @@ internal constructor(val type: Class<*>,
      */
     val serialization: Serialization<CONNECTION>
 
-    private val handshakeKryo: KryoExtra<CONNECTION>
+    // These are GLOBAL, single threaded only kryo instances.
+    // The readKryo WILL RE-CONFIGURED during the client handshake! (it is all the same thread, so object visibility is not a problem)
+    internal var readKryo: KryoExtra<CONNECTION>
+    internal var streamingReadKryo: KryoExtra<CONNECTION>
+    private val handshakeReadKryo: KryoExtra<CONNECTION>
+    private val handshakeWriteKryo: KryoExtra<CONNECTION>
     private val handshakeSendIdleStrategy: IdleStrategy
 
     /**
@@ -240,9 +247,27 @@ internal constructor(val type: Class<*>,
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
         serialization = config.serialization as Serialization<CONNECTION>
+
+        // we are done with initial configuration, now finish serialization
+        val kryo = serialization.initGlobalKryo()
+        serialization.finishInit(type, kryo)
+
+
+
         handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
 
-        handshakeKryo = serialization.initHandshakeKryo()
+        // the initial kryo created for serialization is reused as the read kryo
+        if (type == Server::class.java) {
+            readKryo = serialization.initKryo(kryo)
+            streamingReadKryo = serialization.initKryo()
+        } else {
+            // these will be reassigned by the client Connect method!
+            readKryo = kryo
+            streamingReadKryo = kryo
+        }
+
+        handshakeReadKryo = serialization.newHandshakeKryo()
+        handshakeWriteKryo = serialization.newHandshakeKryo()
 
         // we have to be able to specify the property store
         storage = SettingsStore(config.settingsStore.logger(logger), logger)
@@ -444,6 +469,8 @@ internal constructor(val type: Class<*>,
     /**
      * NOTE: this **MUST** stay on the same co-routine that calls "send". This cannot be re-dispatched onto a different coroutine!
      *       CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+     *       Server -> will be network polling thread
+     *       Client -> will be thread that calls `connect()`
      *
      * @return true if the message was successfully sent by aeron
      */
@@ -453,7 +480,7 @@ internal constructor(val type: Class<*>,
         logger.trace { "[$aeronLogInfo - ${message.connectKey}] send HS: $message" }
 
         try {
-            val buffer = handshakeKryo.write(message)
+            val buffer = handshakeWriteKryo.write(message)
             val objectSize = buffer.position()
             val internalBuffer = buffer.internalBuffer
 
@@ -558,7 +585,7 @@ internal constructor(val type: Class<*>,
     internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, aeronLogInfo: String): Any? {
         return try {
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
-            val message = handshakeKryo.read(buffer, offset, length) as HandshakeMessage
+            val message = handshakeReadKryo.read(buffer, offset, length) as HandshakeMessage
 
             logger.trace { "[$aeronLogInfo - ${message.connectKey}] received HS: $message" }
 
@@ -571,24 +598,6 @@ internal constructor(val type: Class<*>,
         }
     }
 
-
-    /**
-     * Reads a message off the network.
-     *
-     * This is written in a way that permits modifying/overriding how data is processed on the network
-     *
-     * NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
-     *
-     * @param buffer The buffer
-     * @param offset The offset from the start of the buffer
-     * @param length The number of bytes to extract
-     * @param header The aeron header information
-     * @param connection The connection this message happened on
-     */
-    open fun read(buffer: DirectBuffer, offset: Int, length: Int, header: Header, connection: CONNECTION): Any? {
-        return serialization.readMessage(buffer, offset, length, connection)
-    }
-
     /**
      * This is designed to permit modifying/overriding how data is processed on the network.
      *
@@ -596,11 +605,13 @@ internal constructor(val type: Class<*>,
      *
      * NOTE: we use exclusive publications, and they are not thread safe/concurrent!
      *
+     * THIS IS CALLED FROM WITHIN A MUTEX!!
+     *
      * @return true if the message was successfully sent by aeron, false otherwise. Exceptions are caught and NOT rethrown!
      */
     open fun write(
         writeKryo: KryoExtra<Connection>,
-        streamingWriteKryo: KryoExtra<Connection>,
+        tempWriteKryo: KryoExtra<Connection>,
         message: Any,
         publication: Publication,
         sendIdleStrategy: IdleStrategy,
@@ -622,7 +633,15 @@ internal constructor(val type: Class<*>,
             // we must split up the message! It's too large for Aeron to manage.
             // this will split up the message, construct the necessary control message and state, then CALL the sendData
             // method directly for each subsequent message.
-            streamingManager.send(publication, internalBuffer, objectSize, this, streamingWriteKryo, sendIdleStrategy, connection)
+            streamingManager.send(
+                publication = publication,
+                internalBuffer = internalBuffer,
+                objectSize = objectSize,
+                endPoint = this,
+                tempWriteKryo = tempWriteKryo,
+                sendIdleStrategy = sendIdleStrategy,
+                connection = connection
+            )
         } else {
             dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection)
         }
@@ -697,18 +716,18 @@ internal constructor(val type: Class<*>,
             // send arbitrarily large pieces of data (gigs in size, potentially).
             // This will recursively call into this method for each of the unwrapped chunks of data.
             is StreamingControl -> {
-                streamingManager.processControlMessage(message, this@EndPoint, connection)
+                streamingManager.processControlMessage(message, readKryo,this@EndPoint, connection)
             }
             is StreamingData -> {
                 // NOTE: this will read extra data from the kryo input as necessary (which is why it's not on action dispatch)!
-                val rawInput = serialization.readRaw()
+                val rawInput = readKryo.readerBuffer
                 val dataLength = rawInput.readVarInt(true)
                 message.payload = rawInput.readBytes(dataLength)
 
 
                 // NOTE: This MUST NOT be on a new co-routine. It must be on the same thread!
                 try {
-                    streamingManager.processDataMessage(message, this@EndPoint)
+                    streamingManager.processDataMessage(message, this@EndPoint, connection)
                 } catch (e: Exception) {
                     logger.error("Error processing StreamingMessage", e)
                     listenerManager.notifyError(connection, e)
@@ -745,6 +764,7 @@ internal constructor(val type: Class<*>,
     /**
      * reads the message from the aeron buffer and figures out how to process it
      *
+     *
      * @param buffer The buffer
      * @param offset The offset from the start of the buffer
      * @param length The number of bytes to extract
@@ -757,7 +777,8 @@ internal constructor(val type: Class<*>,
         connection as CONNECTION
 
         try {
-            val message = read(buffer, offset, length, header, connection)
+            // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
+            val message =  readKryo.read(buffer, offset, length, connection)
             logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
             processMessage(message, connection)
         } catch (e: Exception) {

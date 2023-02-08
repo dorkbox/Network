@@ -2,6 +2,7 @@
 
 package dorkbox.network.connection.streaming
 
+import com.esotericsoftware.kryo.KryoException
 import dorkbox.bytes.OptimizeUtilsByteBuf
 import dorkbox.collections.LockFreeHashMap
 import dorkbox.network.connection.Connection
@@ -69,20 +70,26 @@ internal class StreamingManager<CONNECTION : Connection>(
 
 
     /**
-    * Reassemble/figure out the internal message pieces
+    * Reassemble/figure out the internal message pieces. Processed always on the same thread
     */
     fun processControlMessage(
         message: StreamingControl,
+        kryo: KryoExtra<CONNECTION>,
         endPoint: EndPoint<CONNECTION>,
         connection: CONNECTION
     ) {
-        val streamId = message.streamId
+        // NOTE: the stream session ID is a combination of the connection ID + random ID (on the receiving side),
+        //      otherwise clients can abuse it and corrupt OTHER clients data!!
+        val streamId = (connection.id.toLong() shl 4) or message.streamId.toLong()
 
         when (message.state) {
             StreamingState.START -> {
                 streamingDataTarget[streamId] = message
+
                 if (!message.isFile) {
                     streamingDataInMemory[streamId] = AeronOutput()
+                } else {
+                    // write the file to disk
                 }
             }
             StreamingState.FINISHED -> {
@@ -90,12 +97,56 @@ internal class StreamingManager<CONNECTION : Connection>(
                 if (!message.isFile) {
                     val output = streamingDataInMemory.remove(streamId)
                     if (output != null) {
-                        val kryo: KryoExtra<CONNECTION> = endPoint.serialization.takeKryo()
+                        val streamedMessage: Any?
 
                         try {
                             val input = AeronInput(output.internalBuffer)
-                            val streamedMessage = kryo.read(input)
+                            streamedMessage = kryo.read(input)
+                        } catch (e: Exception) {
+                            if (e is KryoException) {
+                                // YIKES. this isn't good
+                                // print the list of OUR registered message types, emit them (along with the "error" class index)
+                                // send a message to the remote end, that we had an error for class XYZ, and have it emit ITS message types
+//                                endPoint.serialization.logKryoMessages()
+//
+//
+//                                val failSent = endPoint.writeUnsafe(tempWriteKryo, failMessage, publication, sendIdleStrategy, connection)
+//                                if (!failSent) {
+//                                    // something SUPER wrong!
+//                                    // more critical error sending the message. we shouldn't retry or anything.
+//                                    val errorMessage = "[${publication.sessionId()}] Abnormal failure while streaming content."
+//
+//                                    // either client or server. No other choices. We create an exception, because it's more useful!
+//                                    val exception = endPoint.newException(errorMessage)
+//
+//                                    // +2 because we do not want to see the stack for the abstract `newException`
+//                                    // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+//                                    // where we see who is calling "send()"
+//                                    ListenerManager.cleanStackTrace(exception, 5)
+//                                    throw exception
+//                                } else {
+//                                    // send it up!
+//                                    throw e
+//                                }
 
+
+                            }
+
+                            // something SUPER wrong!
+                            // more critical error sending the message. we shouldn't retry or anything.
+                            val errorMessage = "Error serializing message from received streaming content, stream $streamId"
+
+                            // either client or server. No other choices. We create an exception, because it's more useful!
+                            val exception = endPoint.newException(errorMessage, e)
+
+                            // +2 because we do not want to see the stack for the abstract `newException`
+                            // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
+                            // where we see who is calling "send()"
+                            ListenerManager.cleanStackTrace(exception, 2)
+                            throw exception
+                        }
+
+                        if (streamedMessage != null) {
                             // NOTE: This MUST be on a new co-routine
                             actionDispatch.launch {
                                 val listenerManager = endPoint.listenerManager
@@ -114,21 +165,19 @@ internal class StreamingManager<CONNECTION : Connection>(
                                     listenerManager.notifyError(connection, e)
                                 }
                             }
-                        } catch (e: Exception) {
+                        } else {
                             // something SUPER wrong!
                             // more critical error sending the message. we shouldn't retry or anything.
-                            val errorMessage = "Error serializing message from received streaming content, stream $streamId"
+                            val errorMessage = "Error while processing streaming content, stream $streamId was null."
 
                             // either client or server. No other choices. We create an exception, because it's more useful!
-                            val exception = endPoint.newException(errorMessage, e)
+                            val exception = endPoint.newException(errorMessage)
 
                             // +2 because we do not want to see the stack for the abstract `newException`
                             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                             // where we see who is calling "send()"
                             ListenerManager.cleanStackTrace(exception, 2)
                             throw exception
-                        } finally {
-                            endPoint.serialization.returnKryo(kryo)
                         }
                     } else {
                         // something SUPER wrong!
@@ -146,6 +195,8 @@ internal class StreamingManager<CONNECTION : Connection>(
                     }
                 } else {
                     // we are a file, so process accordingly
+                    println("processing file")
+                    // we should save it WHERE exactly?
 
                 }
             }
@@ -188,14 +239,15 @@ internal class StreamingManager<CONNECTION : Connection>(
      *
      * NOTE sending a huge file can prevent other other network traffic from arriving until it's done!
      */
-    fun processDataMessage(message: StreamingData, endPoint: EndPoint<CONNECTION>) {
+    fun processDataMessage(message: StreamingData, endPoint: EndPoint<CONNECTION>, connection: CONNECTION) {
         // the receiving data will ALWAYS come sequentially, but there might be OTHER streaming data received meanwhile.
-        val streamId = message.streamId
+        // NOTE: the stream session ID is a combination of the connection ID + random ID (on the receiving side)
+        val streamId = (connection.id.toLong() shl 4) or message.streamId.toLong()
 
         val controlMessage = streamingDataTarget[streamId]
         if (controlMessage != null) {
             synchronized(streamingDataInMemory) {
-                streamingDataInMemory.getOrPut(streamId) { AeronOutput() }.writeBytes(message.payload!!)
+                streamingDataInMemory.getOrPut(streamId) { AeronOutput() }!!.writeBytes(message.payload!!)
             }
         } else {
             // something SUPER wrong!
@@ -215,7 +267,7 @@ internal class StreamingManager<CONNECTION : Connection>(
 
     private fun sendFailMessageAndThrow(
         e: Exception,
-        streamSessionId: Long,
+        streamSessionId: Int,
         publication: Publication,
         endPoint: EndPoint<CONNECTION>,
         kryoExtra: KryoExtra<Connection>,
@@ -261,7 +313,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         internalBuffer: MutableDirectBuffer,
         objectSize: Int,
         endPoint: EndPoint<CONNECTION>,
-        kryoExtra: KryoExtra<Connection>,
+        tempWriteKryo: KryoExtra<Connection>,
         sendIdleStrategy: IdleStrategy,
         connection: Connection
     ): Boolean {
@@ -270,12 +322,13 @@ internal class StreamingManager<CONNECTION : Connection>(
         var remainingPayload = objectSize
         var payloadSent = 0
 
-        val streamSessionId = random.nextLong()
+        // NOTE: the stream session ID is a combination of the connection ID + random ID (on the receiving side)
+        val streamSessionId = random.nextInt()
 
         // tell the other side how much data we are sending
         val startMessage = StreamingControl(StreamingState.START, streamSessionId, objectSize.toLong())
 
-        val startSent = endPoint.writeUnsafe(kryoExtra, startMessage, publication, sendIdleStrategy, connection)
+        val startSent = endPoint.writeUnsafe(tempWriteKryo, startMessage, publication, sendIdleStrategy, connection)
         if (!startSent) {
             // more critical error sending the message. we shouldn't retry or anything.
             val errorMessage = "[${publication.sessionId()}] Error starting streaming content."
@@ -307,7 +360,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         val headerSize: Int
 
         try {
-            val objectBuffer = kryoExtra.write(connection, chunkData)
+            val objectBuffer = tempWriteKryo.write(connection, chunkData)
             headerSize = objectBuffer.position()
             header = ByteArray(headerSize)
 
@@ -355,7 +408,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                 throw exception
             }
         } catch (e: Exception) {
-            sendFailMessageAndThrow(e, streamSessionId, publication, endPoint, kryoExtra, sendIdleStrategy, connection)
+            sendFailMessageAndThrow(e, streamSessionId, publication, endPoint, tempWriteKryo, sendIdleStrategy, connection)
             return false // doesn't actually get here because exceptions are thrown, but this makes the IDE happy.
         }
 
@@ -401,7 +454,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             } catch (e: Exception) {
                 val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
 
-                val failSent = endPoint.writeUnsafe(kryoExtra, failMessage, publication, sendIdleStrategy, connection)
+                val failSent = endPoint.writeUnsafe(tempWriteKryo, failMessage, publication, sendIdleStrategy, connection)
                 if (!failSent) {
                     // something SUPER wrong!
                     // more critical error sending the message. we shouldn't retry or anything.
@@ -425,6 +478,6 @@ internal class StreamingManager<CONNECTION : Connection>(
         // send the last chunk of data
         val finishedMessage = StreamingControl(StreamingState.FINISHED, streamSessionId, payloadSent.toLong())
 
-        return endPoint.writeUnsafe(kryoExtra, finishedMessage, publication, sendIdleStrategy, connection)
+        return endPoint.writeUnsafe(tempWriteKryo, finishedMessage, publication, sendIdleStrategy, connection)
     }
 }

@@ -46,8 +46,8 @@ import java.util.concurrent.*
  */
 open class Connection(connectionParameters: ConnectionParams<*>) {
     private var messageHandler: FragmentAssembler
-    internal val subscription: Subscription
-    internal val publication: Publication
+    private val subscription: Subscription
+    private val publication: Publication
 
     /**
      * The publication port (used by aeron) for this connection. This is from the perspective of the server!
@@ -61,16 +61,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val writeMutex = Mutex()
 
     /**
-     * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has it's own logic on the remote endpoint,
+     * There can be concurrent writes to the network stack, at most 1 per connection. Each connection has its own logic on the remote endpoint,
      * and can have its own back-pressure.
      */
     private val sendIdleStrategy: IdleStrategy
 
-    @Suppress("UNCHECKED_CAST")
-    private val writeKryo: KryoExtra<Connection> = connectionParameters.endPoint.serialization.takeKryo() as KryoExtra<Connection>
-
-    @Suppress("UNCHECKED_CAST")
-    private val streamingWriteKryo: KryoExtra<Connection> = connectionParameters.endPoint.serialization.takeKryo() as KryoExtra<Connection>
+    private val writeKryo: KryoExtra<Connection>
+    private val tempWriteKryo: KryoExtra<Connection>
 
     /**
      * the stream id of this connection. Can be 0 for IPC connections
@@ -154,6 +151,12 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         subscription = connectionInfo.subscription
         publication = connectionInfo.publication
 
+        @Suppress("UNCHECKED_CAST")
+        writeKryo = connectionParameters.endPoint.serialization.initKryo() as KryoExtra<Connection>
+        @Suppress("UNCHECKED_CAST")
+        tempWriteKryo = connectionParameters.endPoint.serialization.initKryo() as KryoExtra<Connection>
+
+
         // can only get this AFTER we have built the sub/pub
         streamId = connectionInfo.streamId // NOTE: this is UNIQUE per server!
         subscriptionPort = connectionInfo.subscriptionPort
@@ -226,16 +229,19 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     suspend fun send(message: Any): Boolean {
         messagesInProgress.getAndIncrement()
 
-        // dispatched to the IO context!! (since network calls are IO/blocking calls)
-        val success = withContext(Dispatchers.IO) {
-            writeMutex.withLock {
+        // we use a mutex because we do NOT want different threads/coroutines to be able to send data over the SAME connections at the SAME time.
+        // NOTE: additionally we want to propagate back-pressure to the calling coroutines, PER CONNECTION!
+
+        val success = writeMutex.withLock {
+            // dispatched to the IO context!! (since network calls are IO/blocking calls)
+            withContext(Dispatchers.IO) {
                 // we reset the sending timeout strategy when a message was successfully sent.
                 sendIdleStrategy.reset()
 
                 try {
                     // The handshake sessionId IS NOT globally unique
                     logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
-                    endPoint.write(writeKryo, streamingWriteKryo, message, publication, sendIdleStrategy, this@Connection)
+                    endPoint.write(writeKryo, tempWriteKryo, message, publication, sendIdleStrategy, this@Connection)
                 } catch (e: Exception) {
                     val listenerManager = listenerManager.value!!
 
@@ -436,13 +442,12 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
             // NOTE: notifyDisconnect() is called inside closeAction()!!
 
-            // This is set by the client/server so if there is a "connect()" call in the the disconnect callback, we can have proper
+            // This is set by the client/server so if there is a "connect()" call in the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other
             runBlocking {
                 closeAction()
             }
 
-            endPoint.serialization.returnKryo(writeKryo)
             logger.debug {"[$aeronLogInfo] connection closed"}
         }
     }

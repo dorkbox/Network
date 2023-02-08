@@ -177,7 +177,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
-            if (server.connections.connectionCount() >= config.maxClientCount) {
+            if (server.connections.size() >= config.maxClientCount) {
                 logger.error("[$aeronLogInfo] Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}")
 
                 try {
