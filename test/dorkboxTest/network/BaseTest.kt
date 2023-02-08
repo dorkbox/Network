@@ -139,7 +139,6 @@ abstract class BaseTest {
             // assume SLF4J is bound to logback in the current environment
             val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
             rootLogger.detachAndStopAllAppenders()
-            rootLogger.level = level
 
             val context = rootLogger.loggerContext
 
@@ -148,6 +147,22 @@ abstract class BaseTest {
 //            jc.doConfigure(File("logback.xml").absoluteFile)
             context.reset() // override default configuration
 
+            val encoder = PatternLayoutEncoder()
+            encoder.context = context
+            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
+            encoder.start()
+
+            val consoleAppender = ConsoleAppender<ILoggingEvent>()
+            consoleAppender.context = context
+            consoleAppender.encoder = encoder
+            consoleAppender.start()
+
+
+            rootLogger.addAppender(consoleAppender)
+
+            // modify the level AFTER we setup the context!
+
+            rootLogger.level = level
 
             // we only want error messages
             val nettyLogger = LoggerFactory.getLogger("io.netty") as Logger
@@ -156,17 +171,6 @@ abstract class BaseTest {
             // we only want error messages
             val kryoLogger = LoggerFactory.getLogger("com.esotericsoftware") as Logger
             kryoLogger.level = Level.ERROR
-
-
-            val encoder = PatternLayoutEncoder()
-            encoder.context = context
-            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
-            encoder.start()
-            val consoleAppender = ConsoleAppender<ILoggingEvent>()
-            consoleAppender.context = context
-            consoleAppender.encoder = encoder
-            consoleAppender.start()
-            rootLogger.addAppender(consoleAppender)
         }
     }
 
