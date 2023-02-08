@@ -420,16 +420,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      * @throws IllegalArgumentException if there is are too many RMI methods OR if a problem setting up the registration details
      */
     private fun initializeRegistrations(kryo: KryoExtra<CONNECTION>, classesToRegister: List<ClassRegistration<CONNECTION>>) {
-        val mergedRegistrations = mergeClassRegistrations(classesToRegister)
-
-        // we have to check to make sure all classes are registered on the GLOBAL READ KRYO !!!
-        //    Because our classes are registered LAST, this will always be correct.
-
-        // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
-        // note, we have to check to make sure a class is not ALREADY registered for RMI before it is registered again
-        mergedRegistrations.forEach { registration ->
-            registration.register(kryo, rmiHolder)
-        }
+        val mergedRegistrations = mergeClassRegistrations(kryo, classesToRegister)
 
         // make sure our RMI cached methods have been initialized
         initializeRmiMethodCache(mergedRegistrations, kryo)
@@ -441,12 +432,17 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     }
 
 
-
-
     /**
      * Merge all the registrations (since we can have registrations overwrite newer/specific registrations based on ID)
      */
-    private fun mergeClassRegistrations(classesToRegister: List<ClassRegistration<CONNECTION>>): List<ClassRegistration<CONNECTION>> {
+    private fun mergeClassRegistrations(kryo: KryoExtra<CONNECTION>, classesToRegister: List<ClassRegistration<CONNECTION>>): List<ClassRegistration<CONNECTION>> {
+
+        // check to see which interfaces are mapped to RMI (otherwise, the interface requires a serializer)
+        // note, we have to check to make sure a class is not ALREADY registered for RMI before it is registered again
+        classesToRegister.forEach { registration ->
+            registration.register(kryo, rmiHolder)
+        }
+
         // in order to get the ID's, these have to be registered with a kryo instance!
         val mergedRegistrations = mutableListOf<ClassRegistration<CONNECTION>>()
         classesToRegister.forEach { registration ->
