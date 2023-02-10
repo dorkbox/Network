@@ -32,7 +32,10 @@ import java.security.SecureRandom
  * @param min The minimum ID (inclusive)
  * @param max The maximum ID (exclusive)
  */
-class RandomId65kAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = Integer.MAX_VALUE) {
+class RandomId65kAllocator(private val min: Int, max: Int) {
+
+    constructor(size: Int): this(1, size + 1)
+
 
     private val cache: Pool<Int>
     private val maxAssignments: Int
@@ -45,11 +48,12 @@ class RandomId65kAllocator(private val min: Int = Integer.MIN_VALUE, max: Int = 
             "Maximum value $max must be >= minimum value $min"
         }
 
-        maxAssignments = (max - min).coerceIn(1, Short.MAX_VALUE * 2)
+        val max65k = Short.MAX_VALUE * 2
+        maxAssignments = (max - min).coerceIn(1, max65k)
 
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
         val ids = ArrayList<Int>(maxAssignments)
-        for (id in min..(min + maxAssignments - 1)) {
+        for (id in min until min + maxAssignments) {
             ids.add(id)
         }
 

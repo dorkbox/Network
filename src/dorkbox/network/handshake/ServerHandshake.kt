@@ -74,7 +74,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
     // guarantee that session/stream ID's will ALWAYS be unique! (there can NEVER be a collision!)
     private val sessionIdAllocator = RandomId65kAllocator(AeronDriver.RESERVED_SESSION_ID_LOW, AeronDriver.RESERVED_SESSION_ID_HIGH)
-    private val streamIdAllocator = RandomId65kAllocator(1, Integer.MAX_VALUE)
+    private val streamIdAllocator = RandomId65kAllocator(Short.MAX_VALUE * 2) // this is 65k
 
 
     /**
