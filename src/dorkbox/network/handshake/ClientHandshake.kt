@@ -76,6 +76,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             // it must be a registration message
             if (message !is HandshakeMessage) {
                 failedException = ClientRejectedException("[$aeronLogInfo] cancelled handshake for unrecognized message: $message")
+                ListenerManager.cleanAllStackTrace(failedException)
                 return@FragmentAssembler
             }
 
@@ -83,6 +84,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             if (message.state == HandshakeMessage.INVALID) {
                 val cause = ServerException(message.errorMessage ?: "Unknown").apply { stackTrace = stackTrace.copyOfRange(0, 1) }
                 failedException = ClientRejectedException("[$aeronLogInfo} - ${message.connectKey}] cancelled handshake", cause)
+                ListenerManager.cleanAllStackTrace(failedException)
                 return@FragmentAssembler
             }
 
@@ -111,6 +113,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                         connectionHelloInfo = crypto.decrypt(registrationData, serverPublicKeyBytes)
                     } else {
                         failedException = ClientRejectedException("[$aeronLogInfo} - ${message.connectKey}] canceled handshake for message without registration and/or public key info")
+                        ListenerManager.cleanAllStackTrace(failedException)
                     }
                 }
                 HandshakeMessage.HELLO_ACK_IPC -> {
@@ -134,6 +137,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                                                                    kryoRegistrationDetails = regDetails)
                     } else {
                         failedException = ClientRejectedException("[$aeronLogInfo - ${message.connectKey}] canceled handshake for message without registration data")
+                        ListenerManager.cleanAllStackTrace(failedException)
                     }
                 }
                 HandshakeMessage.DONE_ACK -> {
@@ -142,6 +146,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 else -> {
                     val stateString = HandshakeMessage.toStateString(message.state)
                     failedException = ClientRejectedException("[$aeronLogInfo - ${message.connectKey}] cancelled handshake for message that is $stateString")
+                    ListenerManager.cleanAllStackTrace(failedException)
                 }
             }
         }
