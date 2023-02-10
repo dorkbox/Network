@@ -109,6 +109,8 @@ internal class ServerUdpPairedDriver(
             }
         }
 
+        val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
+
         val remoteAddressString = if (isRemoteIpv4) {
             IPv4.toString(remoteAddress as Inet4Address)
         } else {
@@ -119,6 +121,6 @@ internal class ServerUdpPairedDriver(
 
         this.success = true
         this.publication = publication
-        this.subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
+        this.subscription = subscription
     }
 }

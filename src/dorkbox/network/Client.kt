@@ -543,7 +543,7 @@ open class Client<CONNECTION : Connection>(
                 // want to have 1 in-flight handshake, per connection attempt, during the aeron connection timeout
 
                 // ALSO, we want to make sure we DO NOT approach the linger timeout!
-                sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs()*2)))
+                sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs() * 2)))
 
                 if (e.cause is ServerException) {
                     val cause = e.cause!!
@@ -565,7 +565,7 @@ open class Client<CONNECTION : Connection>(
                 // want to have 1 in-flight handshake, per connection attempt, during the aeron connection timeout
 
                 // ALSO, we want to make sure we DO NOT approach the linger timeout!
-                sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs()*2)))
+                sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs() * 2)))
 
                 listenerManager.notifyError(e)
                 throw e
@@ -644,7 +644,7 @@ open class Client<CONNECTION : Connection>(
             throw exception
         }
 
-        // every time we connect to a server, we have to reconfigure AND reassign the readKryo.
+        // every time we connect to a server, we have to reconfigure AND reassign the readKryos.
         readKryo = kryoConfiguredFromServer
         streamingReadKryo = serialization.initKryo()
 
