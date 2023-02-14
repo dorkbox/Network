@@ -25,10 +25,10 @@ import java.time.Instant
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "3.11"
-    id("com.dorkbox.Licensing") version "2.21"
-    id("com.dorkbox.VersionUpdate") version "2.6"
-    id("com.dorkbox.GradlePublish") version "1.17"
+    id("com.dorkbox.GradleUtils") version "3.13"
+    id("com.dorkbox.Licensing") version "2.22"
+    id("com.dorkbox.VersionUpdate") version "2.7"
+    id("com.dorkbox.GradlePublish") version "1.18"
 
     id("com.github.johnrengelman.shadow") version "7.1.2"
 
@@ -39,7 +39,7 @@ object Extras {
     // set for the project
     const val description = "High-performance, event-driven/reactive network stack for Java 11+"
     const val group = "com.dorkbox"
-    const val version = "6.3"
+    const val version = "6.4"
 
     // set as project.ext
     const val name = "Network"
@@ -63,7 +63,7 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
     freeCompilerArgs = listOf("-Xinline-classes")
 }
 //GradleUtils.jpms(JavaVersion.VERSION_11)
-//NOTE: we do not support JPMS yet, as there are some libraries missing support for it still
+//NOTE: we do not support JPMS yet, as there are some libraries missing support for it still, notably kotlin!
 
 
 // ratelimiter, "other" package
