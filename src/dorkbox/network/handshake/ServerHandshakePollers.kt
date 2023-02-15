@@ -45,13 +45,13 @@ internal object ServerHandshakePollers {
             // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
             val sessionId = header.sessionId()
             val streamId = header.streamId()
-            val aeronLogInfo = "$sessionId/$streamId"
+            val aeronLogInfo = "$streamId/$sessionId : IPC" // Server is the "source", client mirrors the server
 
             val message = server.readHandshakeMessage(buffer, offset, length, header, aeronLogInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
-                logger.error { "[$aeronLogInfo] Connection from IPC not allowed! Invalid connection request" }
+                logger.error { "[$aeronLogInfo] Connection not allowed! Invalid connection request" }
             } else {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
                 val publicationUri = uri("ipc", message.sessionId)
@@ -92,7 +92,7 @@ internal object ServerHandshakePollers {
         }
     }
 
-    class IpProc<CONNECTION : Connection>(
+    class UdpProc<CONNECTION : Connection>(
         val logger: KLogger,
         val server: Server<CONNECTION>,
         val driver: ServerUdpDriver,
@@ -113,7 +113,7 @@ internal object ServerHandshakePollers {
             // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
             val sessionId = header.sessionId()
             val streamId = header.streamId()
-            val aeronLogInfo = "$sessionId/$streamId"
+
 
             // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
             val remoteIpAndPort = (header.context() as Image).sourceIdentity()
@@ -122,34 +122,40 @@ internal object ServerHandshakePollers {
             val splitPoint = remoteIpAndPort.lastIndexOf(':')
             var clientAddressString = remoteIpAndPort.substring(0, splitPoint)
 
+            // this should never be null, because we are feeding it a valid IP address from aeron
+            val clientAddress = IP.toAddress(clientAddressString)
+            if (clientAddress == null) {
+                // Server is the "source", client mirrors the server
+                logger.error { "[$streamId/$sessionId] Connection from $clientAddressString not allowed! Invalid IP address!" }
+                return
+            }
+
+            val isRemoteIpv4 = clientAddress is Inet4Address
+            val type: String
+
+            if (isRemoteIpv4) {
+                type =  "IPv4"
+            } else {
+                // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
+                clientAddressString = IP.toString(clientAddress)
+                type = "IPv6"
+            }
+
+
+            // if we are listening on :: (ipv6), and a connection via ipv4 arrives, aeron MUST publish on the IPv4 version
+            val properPubAddress = EndPoint.getWildcard(listenAddress, listenAddressString, isRemoteIpv4)
+
+            // Server is the "source", client mirrors the server
+            val aeronLogInfo = "$streamId/$sessionId : $clientAddressString"
+
+
             val message = server.readHandshakeMessage(buffer, offset, length, header, aeronLogInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
-                logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Invalid connection request" }
+                logger.error { "[$aeronLogInfo] Connection not allowed! Invalid connection request" }
             } else {
-                // this should never be null, because we are feeding it a valid IP address from aeron
-                val clientAddress = IP.toAddress(clientAddressString)
-                if (clientAddress == null) {
-                    logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Invalid IP address!" }
-                    return
-                }
-
-                val isRemoteIpv4 = clientAddress is Inet4Address
-                val type: String
-
-                if (isRemoteIpv4) {
-                    type =  "IPv4"
-                } else {
-                    // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
-                    clientAddressString = IP.toString(clientAddress)
-                    type = "IPv6"
-                }
-
                 // NOTE: publications are REMOVED from Aeron clients when their linger timeout has expired!!!
-
-                // if we are listening on :: (ipv6), and a connection via ipv4 arrives, aeron MUST publish on the IPv4 version
-                val properPubAddress = EndPoint.getWildcard(listenAddress, listenAddressString, isRemoteIpv4)
 
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription CONTROL (which then goes to the proper endpoint)
                 val publicationUri = uri("udp", message.sessionId, isReliable)
@@ -162,9 +168,6 @@ internal object ServerHandshakePollers {
                     logger.error(e) { "Cannot create publication back to $clientAddressString" }
                     return
                 }
-
-
-
 
                 // we actually have to wait for it to connect before we continue
 
@@ -266,7 +269,7 @@ internal object ServerHandshakePollers {
             driver.build(aeronDriver, logger)
 
             val subscription = driver.subscription
-            val processor = IpProc(logger, server, driver, aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+            val processor = UdpProc(logger, server, driver, aeronDriver, handshake, connectionFunc, isReliable, pubPort)
 
             object : AeronPoller {
                 /**
@@ -321,7 +324,7 @@ internal object ServerHandshakePollers {
             driver.build(aeronDriver, logger)
 
             val subscription = driver.subscription
-            val processor = IpProc(logger, server, driver, aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+            val processor = UdpProc(logger, server, driver, aeronDriver, handshake, connectionFunc, isReliable, pubPort)
 
 
             object : AeronPoller {
@@ -376,7 +379,7 @@ internal object ServerHandshakePollers {
         driver.build(aeronDriver, logger)
 
         val subscription = driver.subscription
-        val processor = IpProc(logger, server, driver, aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+        val processor = UdpProc(logger, server, driver, aeronDriver, handshake, connectionFunc, isReliable, pubPort)
 
 
         val poller = object : AeronPoller {

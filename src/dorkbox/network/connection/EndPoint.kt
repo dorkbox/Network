@@ -482,7 +482,7 @@ internal constructor(val type: Class<*>,
     @Suppress("DuplicatedCode")
     internal fun writeHandshakeMessage(publication: Publication, aeronLogInfo: String, message: HandshakeMessage) {
         // The handshake sessionId IS NOT globally unique
-        logger.trace { "[$aeronLogInfo - ${message.connectKey}] send HS: $message" }
+        logger.trace { "[$aeronLogInfo] (${message.connectKey}) send HS: $message" }
 
         try {
             val buffer = handshakeWriteKryo.write(message)
@@ -592,12 +592,12 @@ internal constructor(val type: Class<*>,
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = handshakeReadKryo.read(buffer, offset, length) as HandshakeMessage
 
-            logger.trace { "[$aeronLogInfo - ${message.connectKey}] received HS: $message" }
+            logger.trace { "[$aeronLogInfo] (${message.connectKey}) received HS: $message" }
 
             message
         } catch (e: Exception) {
             // The handshake sessionId IS NOT globally unique
-            logger.error("[$aeronLogInfo] Error de-serializing handshake message on connection ${header.sessionId()}!", e)
+            logger.error(e) { "[$aeronLogInfo] Error de-serializing handshake message!!" }
             listenerManager.notifyError(e)
             null
         }
@@ -1020,7 +1020,9 @@ internal constructor(val type: Class<*>,
         // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
         val enableRemove = type == Client::class.java
         connections.forEach {
-            logger.info { "[${it.id}/${it.streamId}] Closing connection" }
+            logger.info {
+                val aeronLogInfo = "${it.id}/${it.streamId} : ${it.remoteAddressString}"
+                "[$aeronLogInfo] Closing connection" }
             it.close(enableRemove)
         }
 
