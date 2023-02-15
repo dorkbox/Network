@@ -14,6 +14,7 @@ import dorkbox.network.aeron.mediaDriver.controlEndpoint
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
+import io.aeron.CommonContext
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
@@ -54,10 +55,9 @@ internal object ServerHandshakePollers {
             } else {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
                 val publicationUri = uri("ipc", message.sessionId)
-                logger.trace { "Server IPC connection pub ${publicationUri.build()},stream-id=${message.streamId}" }
 
                 val publication = try {
-                    aeronDriver.addExclusivePublication(publicationUri, message.streamId)
+                    aeronDriver.addExclusivePublication(publicationUri, "IPC", message.streamId)
                 } catch (e: Exception) {
                     logger.error(e) { "Cannot create IPC publication back to remote" }
                     return
@@ -136,11 +136,15 @@ internal object ServerHandshakePollers {
                 }
 
                 val isRemoteIpv4 = clientAddress is Inet4Address
-                if (!isRemoteIpv4) {
+                val type: String
+
+                if (isRemoteIpv4) {
+                    type =  "IPv4"
+                } else {
                     // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
                     clientAddressString = IP.toString(clientAddress)
+                    type = "IPv6"
                 }
-
 
                 // NOTE: publications are REMOVED from Aeron clients when their linger timeout has expired!!!
 
@@ -149,17 +153,18 @@ internal object ServerHandshakePollers {
 
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription CONTROL (which then goes to the proper endpoint)
                 val publicationUri = uri("udp", message.sessionId, isReliable)
-                publicationUri.controlEndpoint(isRemoteIpv4, properPubAddress, port)
-
-                logger.trace { "Server connection pub $publicationUri,stream-id=${message.streamId}" }
-
+                    .controlEndpoint(isRemoteIpv4, properPubAddress, port)
+                    .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
                 val publication = try {
-                    aeronDriver.addExclusivePublication(publicationUri, message.streamId)
+                    aeronDriver.addExclusivePublication(publicationUri, type, message.streamId)
                 } catch (e: Exception) {
                     logger.error(e) { "Cannot create publication back to $clientAddressString" }
                     return
                 }
+
+
+
 
                 // we actually have to wait for it to connect before we continue
 
