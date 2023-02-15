@@ -148,7 +148,9 @@ internal object ServerHandshakePollers {
                 val properPubAddress = EndPoint.getWildcard(listenAddress, listenAddressString, isRemoteIpv4)
 
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription CONTROL (which then goes to the proper endpoint)
-                val publicationUri = uri("udp", message.sessionId, isReliable).controlEndpoint(isRemoteIpv4, properPubAddress, port)
+                val publicationUri = uri("udp", message.sessionId, isReliable)
+                publicationUri.controlEndpoint(isRemoteIpv4, properPubAddress, port)
+
                 logger.trace { "Server connection pub $publicationUri,stream-id=${message.streamId}" }
 
 
