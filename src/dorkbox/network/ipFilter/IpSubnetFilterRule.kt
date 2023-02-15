@@ -26,7 +26,7 @@ import java.net.InetAddress
  *
  * Supports both IPv4 and IPv6.
  */
-internal class IpSubnetFilterRule : IpFilterRule {
+class IpSubnetFilterRule : IpFilterRule {
     private val filterRule: IpFilterRule
 
     constructor(ipAddress: String, cidrPrefix: Int) {
