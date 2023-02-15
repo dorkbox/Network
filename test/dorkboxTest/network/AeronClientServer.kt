@@ -83,10 +83,12 @@ class AeronClientServer {
             encoder.context = context
             encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
             encoder.start()
+
             val consoleAppender = ConsoleAppender<ILoggingEvent>()
             consoleAppender.context = context
             consoleAppender.encoder = encoder
             consoleAppender.start()
+
             rootLogger.addAppender(consoleAppender)
         }
 
@@ -243,7 +245,7 @@ class AeronClientServer {
 
         server.bind()
 
+        @Suppress("UNCHECKED_CAST")
         return server as Server<Connection>
     }
-
 }
