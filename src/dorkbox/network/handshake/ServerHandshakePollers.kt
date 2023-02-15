@@ -177,11 +177,16 @@ internal object ServerHandshakePollers {
 
                 if (success) {
                     handshake.processUdpHandshakeMessageServer(
-                        server, driver, publication,
-                        clientAddress, clientAddressString, isReliable,
-                        message,
-                        aeronLogInfo, connectionFunc,
-                        logger
+                        server = server,
+                        driver = driver,
+                        handshakePublication = publication,
+                        clientAddress = clientAddress,
+                        clientAddressString = clientAddressString,
+                        isReliable = isReliable,
+                        message = message,
+                        aeronLogInfo = aeronLogInfo,
+                        connectionFunc = connectionFunc,
+                        logger = logger
                     )
                 } else {
                     logger.error { "Cannot create publication back to $clientAddressString" }

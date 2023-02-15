@@ -235,13 +235,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
         val connectionString = "IPC"
 
         if (!validateMessageTypeAndDoPending(
-                server,
-                server.actionDispatch,
-                handshakePublication,
-                message,
-                connectionString,
-                aeronLogInfo,
-                logger
+                server = server,
+                actionDispatch = server.actionDispatch,
+                handshakePublication = handshakePublication,
+                message = message,
+                connectionString = connectionString,
+                aeronLogInfo = aeronLogInfo,
+                logger = logger
             )) {
             return
         }
@@ -398,9 +398,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
     ) {
         // Manage the Handshake state. When done with a connection, this returns
         if (!validateMessageTypeAndDoPending(
-                server, server.actionDispatch, handshakePublication, message,
-                clientAddressString, aeronLogInfo, logger))
-        {
+                server = server,
+                actionDispatch = server.actionDispatch,
+                handshakePublication = handshakePublication,
+                message = message,
+                connectionString = clientAddressString,
+                aeronLogInfo = aeronLogInfo,
+                logger = logger
+            )) {
             return
         }
 
