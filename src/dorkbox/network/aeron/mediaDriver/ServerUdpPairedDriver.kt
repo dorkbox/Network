@@ -20,6 +20,7 @@ import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.EndPoint
+import io.aeron.CommonContext
 import io.aeron.Publication
 import mu.KLogger
 import java.net.Inet4Address
@@ -54,24 +55,23 @@ internal class ServerUdpPairedDriver(
         // connection timeout of 0 doesn't matter. it is not used by the server
         // the client address WILL BE either IPv4 or IPv6
         val isRemoteIpv4 = remoteAddress is Inet4Address
+        val type = if (isRemoteIpv4) {
+            "IPv4"
+        } else {
+            "IPv6"
+        }
 
         // if we are connecting to localhost IPv4 (but our server is IPv6+4), then aeron MUST publish on the IPv4 version
         val properPubAddress = EndPoint.getWildcard(listenAddress, listenAddressString, isRemoteIpv4)
 
         // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
-        val publicationUri = MediaDriverConnection.uri("udp", sessionId, isReliable).controlEndpoint(isRemoteIpv4, properPubAddress, port+1)
+        val publicationUri = MediaDriverConnection
+            .uri("udp", sessionId, isReliable)
+            .controlEndpoint(isRemoteIpv4, properPubAddress, port+1)
+            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
 
-        if (logger.isTraceEnabled) {
-            if (isRemoteIpv4) {
-                logger.trace("IPV4 server e-pub URI: ${publicationUri.build()},stream-id=$streamId")
-            } else {
-                logger.trace("IPV6 server e-pub URI: ${publicationUri.build()},stream-id=$streamId")
-            }
-        }
-
-        val publication = aeronDriver.addExclusivePublication(publicationUri, streamId)
-
+        val publication = aeronDriver.addExclusivePublication(publicationUri, type, streamId)
 
         // if we are IPv6 WILDCARD -- then our subscription must ALSO be IPv6, even if our connection is via IPv4
         var subShouldBeIpv4 = isRemoteIpv4
@@ -98,18 +98,12 @@ internal class ServerUdpPairedDriver(
 
 
         // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = MediaDriverConnection.uri("udp", sessionId, isReliable).endpoint(subShouldBeIpv4, properSubAddress, port)
+        val subscriptionUri = MediaDriverConnection
+            .uri("udp", sessionId, isReliable)
+            .endpoint(subShouldBeIpv4, properSubAddress, port)
 
 
-        if (logger.isTraceEnabled) {
-            if (isRemoteIpv4) {
-                logger.trace("IPV4 server sub URI: ${subscriptionUri.build()},stream-id=$streamId")
-            } else {
-                logger.trace("IPV6 server sub URI: ${subscriptionUri.build()},stream-id=$streamId")
-            }
-        }
-
-        val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
+        val subscription = aeronDriver.addSubscription(subscriptionUri, type, streamId)
 
         val remoteAddressString = if (isRemoteIpv4) {
             IPv4.toString(remoteAddress as Inet4Address)

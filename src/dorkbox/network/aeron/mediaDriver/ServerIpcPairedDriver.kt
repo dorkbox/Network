@@ -45,19 +45,8 @@ internal open class ServerIpcPairedDriver(streamId: Int,
         // Create a subscription at the given address and port, using the given stream ID.
         val subscriptionUri = uri("ipc", sessionId)
 
-
         // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
         val publicationUri = uri("ipc", port)
-//        val clientPublication = aeronDriver.addExclusivePublication(publicationUri, message.subscriptionPort)
-
-
-
-
-
-        if (logger.isTraceEnabled) {
-            logger.trace("IPC server ipc-pub URI: ${publicationUri.build()},stream-id=$streamId")
-            logger.trace("IPC server ipc-sub URI: ${subscriptionUri.build()},stream-id=$streamId")
-        }
 
         this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
                 "[$sessionId] IPC listening on [$streamId] [$sessionId]"
@@ -66,7 +55,7 @@ internal open class ServerIpcPairedDriver(streamId: Int,
             }
 
         this.success = true
-        this.subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
-        this.publication = aeronDriver.addExclusivePublication(publicationUri, streamId)
+        this.subscription = aeronDriver.addSubscription(subscriptionUri, "IPC", streamId)
+        this.publication = aeronDriver.addExclusivePublication(publicationUri, "IPC", streamId)
     }
 }

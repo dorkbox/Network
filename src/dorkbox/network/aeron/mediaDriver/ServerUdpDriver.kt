@@ -57,17 +57,15 @@ internal open class ServerUdpDriver(val listenAddress: InetAddress,
     }
 
     override fun build(aeronDriver: AeronDriver, logger: KLogger) {
+        val type = if (isListenIpv4) {
+            "IPv4"
+        } else {
+            "IPv6"
+        }
 
         // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = uri("udp", sessionId, isReliable).endpoint(isListenIpv4, listenAddressString, port)
-
-        if (logger.isTraceEnabled) {
-            if (isListenIpv4) {
-                logger.trace("IPV4 server sub URI: ${subscriptionUri.build()},stream-id=$streamId")
-            } else {
-                logger.trace("IPV6 server sub URI: ${subscriptionUri.build()},stream-id=$streamId")
-            }
-        }
+        val subscriptionUri = uri("udp", sessionId, isReliable)
+            .endpoint(isListenIpv4, listenAddressString, port)
 
         this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
             "Listening on $prettyAddressString [$port|${port+1}] [$streamId|$sessionId] (reliable:$isReliable)"
@@ -76,6 +74,6 @@ internal open class ServerUdpDriver(val listenAddress: InetAddress,
         }
 
         this.success = true
-        this.subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
+        this.subscription = aeronDriver.addSubscription(subscriptionUri, type, streamId)
     }
 }

@@ -386,9 +386,9 @@ class AeronDriver(
         return true
     }
 
-    fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
+    fun addPublication(publicationUri: ChannelUriStringBuilder, type: String, streamId: Int): Publication {
         val uri = publicationUri.build()
-        logger.trace { "${type.simpleName} pub URI: $uri,stream-id=$streamId" }
+        logger.trace { "${this.type.simpleName} $type pub URI: $uri,stream-id=$streamId" }
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
@@ -432,9 +432,9 @@ class AeronDriver(
     /**
      * This is not a thread-safe publication!
      */
-    fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, streamId: Int): Publication {
+    fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, type: String, streamId: Int): Publication {
         val uri = publicationUri.build()
-        logger.trace { "${type.simpleName} e-pub URI: $uri,stream-id=$streamId" }
+        logger.trace { "${this.type.simpleName} $type e-pub URI: $uri,stream-id=$streamId" }
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
@@ -476,9 +476,9 @@ class AeronDriver(
         return publication
     }
 
-    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int): Subscription {
+    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, type: String, streamId: Int): Subscription {
         val uri = subscriptionUri.build()
-        logger.trace { "${type.simpleName} sub URI: $uri,stream-id=$streamId" }
+        logger.trace { "${this.type.simpleName} $type sub URI: $uri,stream-id=$streamId" }
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed

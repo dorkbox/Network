@@ -41,10 +41,6 @@ internal open class ServerIpcDriver(streamId: Int,
         // Create a subscription at the given address and port, using the given stream ID.
         val subscriptionUri = uri("ipc", sessionId)
 
-        if (logger.isTraceEnabled) {
-            logger.trace("IPC server sub URI: ${subscriptionUri.build()},stream-id=$streamId")
-        }
-
         info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
                 "[$sessionId] IPC listening on [$streamId] [$sessionId]"
             } else {
@@ -53,6 +49,6 @@ internal open class ServerIpcDriver(streamId: Int,
 
 
         success = true
-        subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
+        subscription = aeronDriver.addSubscription(subscriptionUri, "IPC", streamId)
     }
 }

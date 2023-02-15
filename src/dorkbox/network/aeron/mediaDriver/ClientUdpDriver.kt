@@ -72,12 +72,13 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
 
         // Create a publication at the given address and port, using the given stream ID.
         // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-        val publicationUri = uri("udp", sessionId, isReliable).endpoint(isIpv4, addressString, port)
+        val publicationUri = uri("udp", sessionId, isReliable)
+            .endpoint(isIpv4, addressString, port)
 
 
         // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
         //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
-        val publication = aeronDriver.addExclusivePublication(publicationUri, streamId)
+        val publication = aeronDriver.addExclusivePublication(publicationUri, type, streamId)
 
 
         // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
@@ -95,19 +96,14 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
 
         // Create a subscription the given address and port, using the given stream ID.
         val subscriptionUri = uri("udp", sessionId, isReliable)
-        subscriptionUri.endpoint(isIpv4, localAddressString, 0)
-        subscriptionUri.controlEndpoint(isIpv4, addressString, port+1)
-        subscriptionUri.controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+            .endpoint(isIpv4, localAddressString, 0)
+            .controlEndpoint(isIpv4, addressString, port+1)
+            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+
+        val subscription = aeronDriver.addSubscription(subscriptionUri, type, streamId)
 
 
-        if (logger.isTraceEnabled) {
-            logger.trace("client e-pub URI: $type ${publicationUri.build()},stream-id=$streamId")
-            logger.trace("client sub URI: $type ${subscriptionUri.build()},stream-id=$streamId")
-        }
-
-        val subscription = aeronDriver.addSubscription(subscriptionUri, streamId)
-
-        // always include the linger timeout, so we don't accidentally kill ourself by taking too long
+        // always include the linger timeout, so we don't accidentally kill ourselves by taking too long
         val timeoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
         val startTime = System.nanoTime()
 
