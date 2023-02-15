@@ -274,7 +274,7 @@ open class Server<CONNECTION : Connection>(
                             pollCount += connection.poll()
                         } else {
                             // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                            logger.debug { "[${connection.id}/${connection.streamId}] connection expired" }
+                            logger.debug { "[${connection.id}/${connection.streamId}] connection from [${connection.remoteAddressString}] expired" }
 
                             removeConnection(connection)
 
@@ -311,7 +311,7 @@ open class Server<CONNECTION : Connection>(
                 connections.clear()
 
                 cons.forEach { connection ->
-                    logger.info { "[${connection.id}/${connection.streamId}] Connection cleanup and close" }
+                    logger.info { "[${connection.id}/${connection.streamId}] Connection from [${connection.remoteAddressString}] cleanup and close" }
 
                     // make sure the connection is closed (close can only happen once, so a duplicate call does nothing!)
                     connection.close()

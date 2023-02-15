@@ -178,7 +178,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         try {
             // VALIDATE:: Check to see if there are already too many clients connected.
             if (server.connections.size() >= config.maxClientCount) {
-                logger.error("[$aeronLogInfo] Connection from $clientAddressString not allowed! Server is full. Max allowed is ${config.maxClientCount}")
+                logger.error("[$aeronLogInfo] Connection from [$clientAddressString] not allowed! Server is full. Max allowed is ${config.maxClientCount}")
 
                 try {
                     server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
@@ -196,19 +196,19 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 // decrement it now, since we aren't going to permit this connection (take the extra decrement hit on failure, instead of always)
                 connectionsPerIpCounts.decrement(clientAddress, currentCountForIp)
 
-                logger.error { "[$aeronLogInfo] Too many connections for IP address $clientAddressString. Max allowed is ${config.maxConnectionsPerIpAddress}" }
+                logger.error { "[$aeronLogInfo] Too many connections for IP address [$clientAddressString]. Max allowed is ${config.maxConnectionsPerIpAddress}" }
 
                 try {
                     server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
                                                  HandshakeMessage.error("Too many connections for IP address"))
                 } catch (e: Exception) {
-                    logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+                    logger.error(e) { "[$aeronLogInfo] Handshake error with [$clientAddressString]!" }
                 }
                 return false
             }
             connectionsPerIpCounts.increment(clientAddress, currentCountForIp)
         } catch (e: Exception) {
-            logger.error(e) { "[$aeronLogInfo] Could not validate client message" }
+            logger.error(e) { "[$aeronLogInfo] Could not validate client message from [$clientAddressString]" }
 
             try {
                 server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
@@ -411,7 +411,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         // VALIDATE:: check to see if the remote connection's public key has changed!
         validateRemoteAddress = server.crypto.validateRemoteAddress(clientAddress, clientAddressString, clientPublicKeyBytes)
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
-            logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Public key mismatch." }
+            logger.error { "[$aeronLogInfo] Connection from [$clientAddressString] not allowed! Public key mismatch." }
             return
         }
 
@@ -438,7 +438,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
 
-            logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Unable to allocate a session ID for the client connection!" }
+            logger.error { "[$aeronLogInfo] Connection from [$clientAddressString] not allowed! Unable to allocate a session ID for the client connection!" }
 
             try {
                 server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
@@ -458,7 +458,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             connectionsPerIpCounts.decrementSlow(clientAddress)
             sessionIdAllocator.free(connectionSessionId)
 
-            logger.error { "[$aeronLogInfo] Connection from $clientAddressString not allowed! Unable to allocate a stream ID for the client connection!" }
+            logger.error { "[$aeronLogInfo] Connection from [$clientAddressString] not allowed! Unable to allocate a stream ID for the client connection!" }
 
             try {
                 server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
@@ -514,7 +514,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 streamIdAllocator.free(connectionStreamId)
                 connection.close()
 
-                logger.error { "[$aeronLogInfo] Connection $clientAddressString was not permitted!" }
+                logger.error { "[$aeronLogInfo] Connection from [$clientAddressString] was not permitted!" }
 
                 try {
                     server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
@@ -549,7 +549,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = connection
 
-            logger.debug { "[$aeronLogInfo - ${message.connectKey}] Connection (${connection.streamId}/${connection.id}) responding to handshake hello." }
+            logger.debug { "[$aeronLogInfo - ${message.connectKey}] Connection (${connection.streamId}/${connection.id}) [$clientAddressString] responding to handshake hello." }
 
             // this tells the client all the info to connect.
             server.writeHandshakeMessage(handshakePublication, aeronLogInfo, successMessage) // exception is already caught
@@ -559,7 +559,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             sessionIdAllocator.free(connectionSessionId)
             streamIdAllocator.free(connectionStreamId)
 
-            logger.error(e) { "[$aeronLogInfo - ${message.connectKey}] Connection (${connection?.streamId}/${connection?.id}) handshake from $clientAddressString crashed! Message $message" }
+            logger.error(e) { "[$aeronLogInfo - ${message.connectKey}] Connection (${connection?.streamId}/${connection?.id}) handshake from [$clientAddressString] crashed! Message $message" }
         }
     }
 

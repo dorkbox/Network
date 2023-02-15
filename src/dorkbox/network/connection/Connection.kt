@@ -404,7 +404,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (isClosed.compareAndSet(expect = false, update = true)) {
             val aeronLogInfo = "${id}/${streamId}"
-            logger.debug {"[$aeronLogInfo] connection closing"}
+            logger.debug {"[$aeronLogInfo] connection with [$remoteAddressString] closing"}
 
             subscription.close()
 
@@ -448,7 +448,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                 closeAction()
             }
 
-            logger.debug {"[$aeronLogInfo] connection closed"}
+            logger.debug {"[$aeronLogInfo] connection with [$remoteAddressString] closed"}
         }
     }
 

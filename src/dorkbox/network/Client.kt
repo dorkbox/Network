@@ -506,7 +506,7 @@ open class Client<CONNECTION : Connection>(
                     udpConnection
                 }
 
-                logger.info { handshakeConnection }
+                logger.info { "Connecting to $handshakeConnection" }
 
 
                 connect0(handshake, handshakeConnection, handshakeTimeoutSec)
@@ -612,7 +612,7 @@ open class Client<CONNECTION : Connection>(
             handshakeConnection.publication.close()
 
 
-            val exception = ClientRejectedException("Connection to $remoteAddressString not allowed! Public key mismatch.")
+            val exception = ClientRejectedException("Connection to [$remoteAddressString] not allowed! Public key mismatch.")
             logger.error(exception) { "Validation error" }
             throw exception
         }
@@ -638,7 +638,7 @@ open class Client<CONNECTION : Connection>(
             val exception = if (isUsingIPC) {
                 ClientRejectedException("[${handshake.connectKey}] Connection to IPC has incorrect class registration details!!")
             } else {
-                ClientRejectedException("[${handshake.connectKey}] Connection to $remoteAddressString has incorrect class registration details!!")
+                ClientRejectedException("[${handshake.connectKey}] Connection to [$remoteAddressString] has incorrect class registration details!!")
             }
             ListenerManager.cleanStackTraceInternal(exception)
             throw exception
@@ -734,13 +734,13 @@ open class Client<CONNECTION : Connection>(
                 handshakeConnection.subscription.close()
                 handshakeConnection.publication.close()
 
-                val exception = ClientRejectedException("[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString was not permitted!")
+                val exception = ClientRejectedException("[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to [$remoteAddressString] was not permitted!")
                 ListenerManager.cleanStackTrace(exception)
                 logger.error(exception) { "Permission error" }
                 throw exception
             }
 
-            logger.info { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) adding new signature for $remoteAddressString : ${connectionInfo.publicKey.toHexString()}" }
+            logger.info { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) adding new signature for [$remoteAddressString] : ${connectionInfo.publicKey.toHexString()}" }
             storage.addRegisteredServerKey(remoteAddress!!, connectionInfo.publicKey)
         }
 
@@ -783,7 +783,7 @@ open class Client<CONNECTION : Connection>(
         try {
             handshake.done(handshakeConnection, successAttemptTimeout)
         } catch (e: Exception) {
-            logger.error(e) { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString error during handshake" }
+            logger.error(e) { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to [$remoteAddressString] error during handshake" }
             throw e
         }
 
@@ -793,7 +793,7 @@ open class Client<CONNECTION : Connection>(
 
         isConnected = true
 
-        logger.debug { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to $remoteAddressString done with handshake." }
+        logger.debug { "[$aeronLogInfo - ${handshake.connectKey}] Connection (${newConnection.id}) to [$remoteAddressString] done with handshake." }
 
         // this forces the current thread to WAIT until the network poll system has started
         val pollStartupLatch = CountDownLatch(1)
@@ -815,7 +815,7 @@ open class Client<CONNECTION : Connection>(
                     pollIdleStrategy.idle(pollCount)
                 } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                    logger.debug { "[$aeronLogInfo] connection expired" }
+                    logger.debug { "[$aeronLogInfo] connection from [$remoteAddressString] expired" }
 
                     // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
                     newConnection.close()
