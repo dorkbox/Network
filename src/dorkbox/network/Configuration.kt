@@ -441,7 +441,7 @@ abstract class Configuration {
      *
      * A value of 0 will 'auto-configure' this setting
      */
-    var sendBufferSize = 2097152
+    var sendBufferSize = 1048576
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
