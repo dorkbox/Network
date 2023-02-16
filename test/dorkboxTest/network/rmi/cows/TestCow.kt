@@ -21,6 +21,7 @@ package dorkboxTest.network.rmi.cows
 interface TestCow : TestCowBase {
     fun moo()
     fun moo(value: String)
+    fun mooTwo(value: String): String
     suspend fun moo(value: String, delay: Long)
     fun id(): Int
     suspend fun slow(): Float
