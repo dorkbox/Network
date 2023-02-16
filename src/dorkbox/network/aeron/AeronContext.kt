@@ -30,7 +30,8 @@ class AeronContext(
 
         ): MediaDriver.Context {
             // LOW-LATENCY SETTINGS
-            // .termBufferSparseFile(false)
+            // MediaDriver.Context()
+            //             .termBufferSparseFile(false)
             //             .useWindowsHighResTimer(true)
             //             .threadingMode(ThreadingMode.DEDICATED)
             //             .conductorIdleStrategy(BusySpinIdleStrategy.INSTANCE)
@@ -44,8 +45,10 @@ class AeronContext(
 
             // driver context must happen in the initializer, because we have a Server.isRunning() method that uses the mediaDriverContext (without bind)
             val mediaDriverContext = MediaDriver.Context()
+                .termBufferSparseFile(false) // files occupy the same space virtually AND physically!
                 .publicationReservedSessionIdLow(AeronDriver.RESERVED_SESSION_ID_LOW)
                 .publicationReservedSessionIdHigh(AeronDriver.RESERVED_SESSION_ID_HIGH)
+
                 .threadingMode(config.threadingMode)
                 .mtuLength(config.networkMtuSize)
 
@@ -53,7 +56,6 @@ class AeronContext(
                 .socketSndbufLength(config.sendBufferSize)
                 .socketRcvbufLength(config.receiveBufferSize)
 
-            mediaDriverContext
                 .conductorThreadFactory(threadFactory)
                 .receiverThreadFactory(threadFactory)
                 .senderThreadFactory(threadFactory)
@@ -62,14 +64,12 @@ class AeronContext(
 
             mediaDriverContext.aeronDirectoryName(config.aeronDirectory!!.absolutePath)
 
-            if (mediaDriverContext.ipcTermBufferLength() != io.aeron.driver.Configuration.ipcTermBufferLength()) {
-                // default 64 megs each is HUGE
-                mediaDriverContext.ipcTermBufferLength(8 * 1024 * 1024)
+            if (config.ipcTermBufferLength > 0) {
+                mediaDriverContext.ipcTermBufferLength(config.ipcTermBufferLength)
             }
 
-            if (mediaDriverContext.publicationTermBufferLength() != io.aeron.driver.Configuration.termBufferLength()) {
-                // default 16 megs each is HUGE (we run out of space in production w/ lots of clients)
-                mediaDriverContext.publicationTermBufferLength(2 * 1024 * 1024)
+            if (config.publicationTermBufferLength > 0) {
+                mediaDriverContext.publicationTermBufferLength(config.publicationTermBufferLength)
             }
 
             // we DO NOT want to abort the JVM if there are errors.

@@ -466,6 +466,46 @@ abstract class Configuration {
 
 
     /**
+     * The "term" buffer is the size of EACH of the 3 (Active, Dirty, Clean) log files that are used to send/receive messages.
+     *  - the smallest term buffer length is 65536 bytes;
+     *  - the largest term buffer length is 1,073,741,824 bytes;
+     *  - the size must be a power of 2;
+     *  - maximum message length is the smallest value of 16 megabytes or (term buffer length) / 8;
+     *
+     * A value of 0 will 'auto-configure' this setting to use the default of 64 megs. Be wary, it is easy to run out of space w/ lots of clients
+     *
+     * @see [io.aeron.driver.Configuration.TERM_BUFFER_IPC_LENGTH_DEFAULT]
+     * @see [io.aeron.logbuffer.LogBufferDescriptor.TERM_MIN_LENGTH]
+     * @see [io.aeron.logbuffer.LogBufferDescriptor.TERM_MAX_LENGTH]
+     */
+    var ipcTermBufferLength = 8 * 1024 * 1024
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+
+    /**
+     * The "term" buffer is the size of EACH of the 3 (Active, Dirty, Clean) log files that are used to send/receive messages.
+     *  - the smallest term buffer length is 65536 bytes;
+     *  - the largest term buffer length is 1,073,741,824 bytes;
+     *  - the size must be a power of 2;
+     *  - maximum message length is the smallest value of 16 megabytes or (term buffer length) / 8;
+     *
+     * A value of 0 will 'auto-configure' this setting to use the default of 16 megs. Be wary, it is easy to run out of space w/ lots of clients
+     *
+     *  @see [io.aeron.driver.Configuration.TERM_BUFFER_LENGTH_DEFAULT]
+     *  @see [io.aeron.logbuffer.LogBufferDescriptor.TERM_MIN_LENGTH]
+     *  @see [io.aeron.logbuffer.LogBufferDescriptor.TERM_MAX_LENGTH]
+     */
+    var publicationTermBufferLength = 2 * 1024 * 1024
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+
+    /**
      * This allows the user to setup the error filter for Aeron *SPECIFIC* error messages.
      *
      * Aeron WILL report more errors than normal (which is where there are suppression statements), because we cannot manage
