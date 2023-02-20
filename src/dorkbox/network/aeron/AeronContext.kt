@@ -184,7 +184,7 @@ class AeronContext(
             }
         }
 
-        logger.info { "Aeron directory: '${context.aeronDirectory()}'" }
+        logger.debug { "Aeron directory: '${context.aeronDirectory()}'" }
 
         this.context = context
     }

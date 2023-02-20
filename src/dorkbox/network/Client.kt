@@ -515,6 +515,12 @@ open class Client<CONNECTION : Connection>(
                 // once we're done with the connection process, stop trying
                 break
             } catch (e: ClientRetryException) {
+                if (logger.isTraceEnabled) {
+                    logger.trace(e) { "Unable to connect to $type, retrying..." }
+                } else {
+                    logger.info { "Unable to connect to $type, retrying..." }
+                }
+
                 handshake.reset()
 
                 // maybe the aeron driver isn't running? (or isn't running correctly?)
@@ -528,12 +534,6 @@ open class Client<CONNECTION : Connection>(
 
                 // ALSO, we want to make sure we DO NOT approach the linger timeout!
                 sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs()*2)))
-
-                if (logger.isTraceEnabled) {
-                    logger.trace(e) { "Unable to connect to $type, retrying..." }
-                } else {
-                    logger.info { "Unable to connect to $type, retrying..." }
-                }
             } catch (e: ClientRejectedException) {
                 aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
 
@@ -582,7 +582,7 @@ open class Client<CONNECTION : Connection>(
             }
 
             // If we did not connect - throw an error. When `client.connect()` is called, either it connects or throws an error
-            val exception = ClientRejectedException("The server did not respond or permit the connection attempt")
+            val exception = ClientRejectedException("The server did not respond or permit the connection attempt within $connectionTimeoutSec seconds")
             ListenerManager.cleanStackTrace(exception)
 
             logger.error(exception) { "Aborting connection retry attempt to server." }
