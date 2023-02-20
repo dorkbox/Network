@@ -80,7 +80,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
     /**
      * Tells us to save an existing object in the CONNECTION scope, so a remote connection can get it via [Connection.rmi.get()]
      *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
+     * NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
@@ -108,7 +108,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
     /**
      * Tells us to save an existing object in the CONNECTION scope using the specified ID, so a remote connection can get it via [Connection.rmi.get()]
      *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
+     * NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
@@ -161,7 +161,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      *
      * The callback will be notified when the remote object has been created.
      *
-     * Methods that return a value will throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
+     * NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
@@ -204,6 +204,8 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
      *
+     *NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
+     *
      * If one wishes to change the remote object behavior, cast the object to a [RemoteObject] to access the different methods, for example:
      * ie:  `val remoteObject = test as RemoteObject`
      *
@@ -219,6 +221,8 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
 
     /**
      * Gets a GLOBAL scope object via the ID. Global remote objects share their state among all connections.
+     *
+     * NOTE:: Methods can throw [TimeoutException] if the response is not received with the response timeout [RemoteObject.responseTimeout].
      *
      * If a proxy returned from this method is part of an object graph sent over the network, the object graph on the receiving side
      * will have the proxy object replaced with the registered (non-proxy) object.
@@ -243,7 +247,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      * on the connection+client to get a connection-specific remote object (that exists on the server/client)
      */
     internal fun <Iface> getProxyObject(isGlobal: Boolean, connection: CONNECTION, rmiId: Int, interfaceClass: Class<Iface>): Iface {
-        require(interfaceClass.isInterface) { "iface must be an interface." }
+        require(interfaceClass.isInterface) { "'interfaceClass' must be an interface!" }
 
         // so we can just instantly create the proxy object (or get the cached one)
         var proxyObject = getProxyObject(rmiId)
@@ -269,7 +273,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
      * on the connection+client to get a connection-specific remote object (that exists on the server/client)
      */
     internal fun <Iface> getProxyObject(isGlobal: Boolean, connection: CONNECTION, kryoId: Int, rmiId: Int, interfaceClass: Class<Iface>): Iface {
-        require(interfaceClass.isInterface) { "iface must be an interface." }
+        require(interfaceClass.isInterface) { "'interfaceClass' must be an interface!" }
 
         // so we can just instantly create the proxy object (or get the cached one)
         @Suppress("UNCHECKED_CAST")
