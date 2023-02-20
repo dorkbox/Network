@@ -413,7 +413,7 @@ open class Client<CONNECTION : Connection>(
         val autoChangeToIpc =
             (config.enableIpc && (remoteAddress == null || remoteAddress.isLoopbackAddress)) || (!config.enableIpc && remoteAddress == null)
 
-        val handshake = ClientHandshake(crypto, this, logger)
+        val handshake = ClientHandshake(this, logger)
 
         var handshakeTimeoutSec = 5
         var timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())

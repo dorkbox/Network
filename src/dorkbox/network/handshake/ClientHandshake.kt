@@ -18,7 +18,6 @@ package dorkbox.network.handshake
 import dorkbox.network.Client
 import dorkbox.network.aeron.mediaDriver.MediaDriverClient
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientTimedOutException
@@ -33,7 +32,6 @@ import java.lang.Thread.sleep
 import java.util.concurrent.*
 
 internal class ClientHandshake<CONNECTION: Connection>(
-    private val crypto: CryptoManagement,
     private val endPoint: Client<CONNECTION>,
     private val logger: KLogger
 ) {
@@ -41,6 +39,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     // @Volatile is used BECAUSE suspension of coroutines can continue on a DIFFERENT thread. We want to make sure that thread visibility is
     // correct when this happens. There are no race-conditions to be wary of.
 
+    private val crypto = endPoint.crypto
     private val handler: FragmentHandler
 
     private val pollIdleStrategy = endPoint.config.pollIdleStrategy.cloneToNormal()
@@ -165,9 +164,9 @@ internal class ClientHandshake<CONNECTION: Connection>(
      * Make sure that NON-ZERO is returned
      */
     private fun getSafeConnectKey(): Long {
-        var key = endPoint.crypto.secureRandom.nextLong()
+        var key = crypto.secureRandom.nextLong()
         while (key == 0L) {
-            key = endPoint.crypto.secureRandom.nextLong()
+            key = crypto.secureRandom.nextLong()
         }
 
         return key
