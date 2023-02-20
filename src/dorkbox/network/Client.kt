@@ -384,14 +384,6 @@ open class Client<CONNECTION : Connection>(
         // if it's a DNS name, the name will be resolved, and it will be DNS (IP)
         this.remoteAddressString = remoteAddressString
 
-        // we are done with initial configuration, now initialize aeron and the general state of this endpoint
-        try {
-            startDriver()
-        } catch (e: Exception) {
-            logger.error(e) { "Unable to start the network driver" }
-            return
-        }
-
         // only try to connect via IPv4 if we have a network interface that supports it!
         if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
             require(false) { "Unable to connect to the IPv4 address $remoteAddressPrettyString, there are no IPv4 interfaces available!" }
@@ -404,6 +396,14 @@ open class Client<CONNECTION : Connection>(
 
         if (remoteAddress != null && remoteAddress.isAnyLocalAddress) {
             require(false) { "Cannot connect to $remoteAddressPrettyString It is an invalid address!" }
+        }
+
+        // we are done with initial configuration, now initialize aeron and the general state of this endpoint
+        try {
+            startDriver()
+        } catch (e: Exception) {
+            logger.error(e) { "Unable to start the network driver" }
+            return
         }
 
         // IPC can be enabled TWO ways!
@@ -439,6 +439,10 @@ open class Client<CONNECTION : Connection>(
             var type = ""
 
             try {
+                // always start the aeron driver inside the restart loop. If we've already started the driver (on the first "start"),
+                // then this does nothing
+                startDriver()
+
                 // the handshake connection is closed when the handshake has an error, or it is finished
                 val handshakeConnection = if (autoChangeToIpc) {
                     if (remoteAddress == null) {
@@ -525,7 +529,6 @@ open class Client<CONNECTION : Connection>(
 
                 // maybe the aeron driver isn't running? (or isn't running correctly?)
                 aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
-                aeronDriver.start()
 
                 // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
                 // we also want to go at SLIGHTLY slower that the aeron driver timeout frequency, this way - if there are connection or handshake issues, the server has the chance to expire the connections.
