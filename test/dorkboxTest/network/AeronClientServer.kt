@@ -203,7 +203,7 @@ class AeronClientServer {
 
         configuration.maxConnectionsPerIpAddress = 50
 
-        val server: Server<*> = Server<Connection>(configuration)
+        val server = Server<Connection>(configuration)
 
         // we must always make sure that aeron is shut-down before starting again.
         while (server.isRunning()) {
@@ -245,7 +245,6 @@ class AeronClientServer {
 
         server.bind()
 
-        @Suppress("UNCHECKED_CAST")
-        return server as Server<Connection>
+        return server
     }
 }
