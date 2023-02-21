@@ -42,7 +42,7 @@ package dorkbox.network.rmi
  */
 interface RemoteObject<T> {
     companion object {
-        fun <T> cast(remoteObject: Any): RemoteObject<T> {
+        fun <T> cast(remoteObject: T): RemoteObject<T> {
             @Suppress("UNCHECKED_CAST")
             return remoteObject as RemoteObject<T>
         }
