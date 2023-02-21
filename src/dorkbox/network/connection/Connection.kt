@@ -118,8 +118,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private var connectionTimeoutTimeNanos = 0L
 
     // always offset by the linger amount, since we cannot act faster than the linger for adding/removing publications
-    private val connectionCheckIntervalNanos = connectionParameters.endPoint.config.connectionCheckIntervalNanos + endPoint.aeronDriver.getLingerNs()
-    private val connectionExpirationTimoutNanos = connectionParameters.endPoint.config.connectionExpirationTimoutNanos + endPoint.aeronDriver.getLingerNs()
+    private val connectionCheckIntervalNanos = endPoint.config.connectionCheckIntervalNanos + endPoint.aeronDriver.getLingerNs()
+    private val connectionExpirationTimoutNanos = endPoint.config.connectionExpirationTimoutNanos + endPoint.aeronDriver.getLingerNs()
 
 
     // while on the CLIENT, if the SERVER's ecc key has changed, the client will abort and show an error.
@@ -149,9 +149,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         publication = connectionInfo.publication
 
         @Suppress("UNCHECKED_CAST")
-        writeKryo = connectionParameters.endPoint.serialization.initKryo() as KryoExtra<Connection>
+        writeKryo = endPoint.serialization.initKryo() as KryoExtra<Connection>
         @Suppress("UNCHECKED_CAST")
-        tempWriteKryo = connectionParameters.endPoint.serialization.initKryo() as KryoExtra<Connection>
+        tempWriteKryo = endPoint.serialization.initKryo() as KryoExtra<Connection>
 
 
         // can only get this AFTER we have built the sub/pub
@@ -164,7 +164,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         toString0 = "[${id}/${streamId}] $remoteAddressString [$publicationPort|$subscriptionPort]"
 
-        sendIdleStrategy = connectionParameters.endPoint.config.sendIdleStrategy.cloneToNormal()
+        sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
 
         messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
@@ -175,7 +175,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         @Suppress("LeakingThis")
-        rmi = connectionParameters.endPoint.rmiConnectionSupport.getNewRmiSupport(this)
+        rmi = endPoint.rmiConnectionSupport.getNewRmiSupport(this)
     }
 
     /**
