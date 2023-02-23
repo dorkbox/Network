@@ -33,15 +33,11 @@ import java.util.*
  * [StreamStat] counters.
  *
  *
- * Each stream managed by the [io.aeron.driver.MediaDriver] will be sampled and printed out on [System.out].
- */
-class BacklogStat
-/**
- * Construct by using a [CountersReader] which can be obtained from [Aeron.countersReader].
+ * Each stream managed by the [io.aeron.driver.MediaDriver] will be sampled
  *
  * @param counters to read for tracking positions.
  */
-    (private val counters: CountersReader) {
+class BacklogStat(private val counters: CountersReader) {
     /**
      * Take a snapshot of all the backlog information and group by stream.
      *
