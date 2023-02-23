@@ -112,6 +112,30 @@ class ServerConfiguration : dorkbox.network.Configuration() {
 
         require(listenIpAddress.isNotBlank()) { "Blank listen IP address, cannot continue." }
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is ServerConfiguration) return false
+        if (!super.equals(other)) return false
+
+        if (listenIpAddress != other.listenIpAddress) return false
+        if (maxClientCount != other.maxClientCount) return false
+        if (maxConnectionsPerIpAddress != other.maxConnectionsPerIpAddress) return false
+        if (ipcId != other.ipcId) return false
+        if (settingsStore != other.settingsStore) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = super.hashCode()
+        result = 31 * result + listenIpAddress.hashCode()
+        result = 31 * result + maxClientCount
+        result = 31 * result + maxConnectionsPerIpAddress
+        result = 31 * result + ipcId
+        result = 31 * result + settingsStore.hashCode()
+        return result
+    }
 }
 
 class ClientConfiguration : dorkbox.network.Configuration() {
@@ -122,6 +146,13 @@ class ClientConfiguration : dorkbox.network.Configuration() {
     override fun validate() {
         super.validate()
         // have to do some basic validation of our configuration
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is ClientConfiguration) return false
+        if (!super.equals(other)) return false
+        return true
     }
 }
 
@@ -605,5 +636,73 @@ abstract class Configuration {
 
         require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
         require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is dorkbox.network.Configuration) return false
+
+        if (networkInterfaceEventDispatcher != other.networkInterfaceEventDispatcher) return false
+        if (enableIPv4 != other.enableIPv4) return false
+        if (enableIPv6 != other.enableIPv6) return false
+        if (enableIpc != other.enableIpc) return false
+        if (enableRemoteSignatureValidation != other.enableRemoteSignatureValidation) return false
+        if (port != other.port) return false
+        if (controlPort != other.controlPort) return false
+        if (connectionCloseTimeoutInSeconds != other.connectionCloseTimeoutInSeconds) return false
+        if (connectionCheckIntervalNanos != other.connectionCheckIntervalNanos) return false
+        if (connectionExpirationTimoutNanos != other.connectionExpirationTimoutNanos) return false
+        if (isReliable != other.isReliable) return false
+        if (dispatch != other.dispatch) return false
+        if (settingsStore != other.settingsStore) return false
+        if (serialization != other.serialization) return false
+        if (pollIdleStrategy != other.pollIdleStrategy) return false
+        if (sendIdleStrategy != other.sendIdleStrategy) return false
+        if (threadingMode != other.threadingMode) return false
+        if (aeronDirectory != other.aeronDirectory) return false
+        if (uniqueAeronDirectory != other.uniqueAeronDirectory) return false
+        if (networkMtuSize != other.networkMtuSize) return false
+        if (initialWindowLength != other.initialWindowLength) return false
+        if (sendBufferSize != other.sendBufferSize) return false
+        if (receiveBufferSize != other.receiveBufferSize) return false
+        if (ipcTermBufferLength != other.ipcTermBufferLength) return false
+        if (publicationTermBufferLength != other.publicationTermBufferLength) return false
+        if (aeronErrorFilter != other.aeronErrorFilter) return false
+        if (contextDefined != other.contextDefined) return false
+        if (previouslyUsed != other.previouslyUsed) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = networkInterfaceEventDispatcher.hashCode()
+        result = 31 * result + enableIPv4.hashCode()
+        result = 31 * result + enableIPv6.hashCode()
+        result = 31 * result + enableIpc.hashCode()
+        result = 31 * result + enableRemoteSignatureValidation.hashCode()
+        result = 31 * result + port
+        result = 31 * result + controlPort
+        result = 31 * result + connectionCloseTimeoutInSeconds
+        result = 31 * result + connectionCheckIntervalNanos.hashCode()
+        result = 31 * result + connectionExpirationTimoutNanos.hashCode()
+        result = 31 * result + isReliable.hashCode()
+        result = 31 * result + dispatch.hashCode()
+        result = 31 * result + settingsStore.hashCode()
+        result = 31 * result + serialization.hashCode()
+        result = 31 * result + pollIdleStrategy.hashCode()
+        result = 31 * result + sendIdleStrategy.hashCode()
+        result = 31 * result + threadingMode.hashCode()
+        result = 31 * result + (aeronDirectory?.hashCode() ?: 0)
+        result = 31 * result + uniqueAeronDirectory.hashCode()
+        result = 31 * result + networkMtuSize
+        result = 31 * result + initialWindowLength
+        result = 31 * result + sendBufferSize
+        result = 31 * result + receiveBufferSize
+        result = 31 * result + ipcTermBufferLength
+        result = 31 * result + publicationTermBufferLength
+        result = 31 * result + aeronErrorFilter.hashCode() // lambda
+        result = 31 * result + contextDefined.hashCode()
+        result = 31 * result + previouslyUsed.hashCode()
+        return result
     }
 }

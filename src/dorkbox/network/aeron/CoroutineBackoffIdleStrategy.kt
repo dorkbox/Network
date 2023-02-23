@@ -21,70 +21,70 @@ import org.agrona.concurrent.BackoffIdleStrategy
 import org.agrona.hints.ThreadHints
 
 abstract class BackoffIdleStrategyPrePad {
-    var p000: Byte = 0
-    var p001: Byte = 0
-    var p002: Byte = 0
-    var p003: Byte = 0
-    var p004: Byte = 0
-    var p005: Byte = 0
-    var p006: Byte = 0
-    var p007: Byte = 0
-    var p008: Byte = 0
-    var p009: Byte = 0
-    var p010: Byte = 0
-    var p011: Byte = 0
-    var p012: Byte = 0
-    var p013: Byte = 0
-    var p014: Byte = 0
-    var p015: Byte = 0
-    var p016: Byte = 0
-    var p017: Byte = 0
-    var p018: Byte = 0
-    var p019: Byte = 0
-    var p020: Byte = 0
-    var p021: Byte = 0
-    var p022: Byte = 0
-    var p023: Byte = 0
-    var p024: Byte = 0
-    var p025: Byte = 0
-    var p026: Byte = 0
-    var p027: Byte = 0
-    var p028: Byte = 0
-    var p029: Byte = 0
-    var p030: Byte = 0
-    var p031: Byte = 0
-    var p032: Byte = 0
-    var p033: Byte = 0
-    var p034: Byte = 0
-    var p035: Byte = 0
-    var p036: Byte = 0
-    var p037: Byte = 0
-    var p038: Byte = 0
-    var p039: Byte = 0
-    var p040: Byte = 0
-    var p041: Byte = 0
-    var p042: Byte = 0
-    var p043: Byte = 0
-    var p044: Byte = 0
-    var p045: Byte = 0
-    var p046: Byte = 0
-    var p047: Byte = 0
-    var p048: Byte = 0
-    var p049: Byte = 0
-    var p050: Byte = 0
-    var p051: Byte = 0
-    var p052: Byte = 0
-    var p053: Byte = 0
-    var p054: Byte = 0
-    var p055: Byte = 0
-    var p056: Byte = 0
-    var p057: Byte = 0
-    var p058: Byte = 0
-    var p059: Byte = 0
-    var p060: Byte = 0
-    var p061: Byte = 0
-    var p062: Byte = 0
-    var p063: Byte = 0
+    val p000: Byte = 0
+    val p001: Byte = 0
+    val p002: Byte = 0
+    val p003: Byte = 0
+    val p004: Byte = 0
+    val p005: Byte = 0
+    val p006: Byte = 0
+    val p007: Byte = 0
+    val p008: Byte = 0
+    val p009: Byte = 0
+    val p010: Byte = 0
+    val p011: Byte = 0
+    val p012: Byte = 0
+    val p013: Byte = 0
+    val p014: Byte = 0
+    val p015: Byte = 0
+    val p016: Byte = 0
+    val p017: Byte = 0
+    val p018: Byte = 0
+    val p019: Byte = 0
+    val p020: Byte = 0
+    val p021: Byte = 0
+    val p022: Byte = 0
+    val p023: Byte = 0
+    val p024: Byte = 0
+    val p025: Byte = 0
+    val p026: Byte = 0
+    val p027: Byte = 0
+    val p028: Byte = 0
+    val p029: Byte = 0
+    val p030: Byte = 0
+    val p031: Byte = 0
+    val p032: Byte = 0
+    val p033: Byte = 0
+    val p034: Byte = 0
+    val p035: Byte = 0
+    val p036: Byte = 0
+    val p037: Byte = 0
+    val p038: Byte = 0
+    val p039: Byte = 0
+    val p040: Byte = 0
+    val p041: Byte = 0
+    val p042: Byte = 0
+    val p043: Byte = 0
+    val p044: Byte = 0
+    val p045: Byte = 0
+    val p046: Byte = 0
+    val p047: Byte = 0
+    val p048: Byte = 0
+    val p049: Byte = 0
+    val p050: Byte = 0
+    val p051: Byte = 0
+    val p052: Byte = 0
+    val p053: Byte = 0
+    val p054: Byte = 0
+    val p055: Byte = 0
+    val p056: Byte = 0
+    val p057: Byte = 0
+    val p058: Byte = 0
+    val p059: Byte = 0
+    val p060: Byte = 0
+    val p061: Byte = 0
+    val p062: Byte = 0
+    val p063: Byte = 0
 }
 
 abstract class BackoffIdleStrategyData(
@@ -94,6 +94,33 @@ abstract class BackoffIdleStrategyData(
     protected var spins: Long = 0
     protected var yields: Long = 0
     protected var parkPeriodMs: Long = 0
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is BackoffIdleStrategyData) return false
+
+        if (maxSpins != other.maxSpins) return false
+        if (maxYields != other.maxYields) return false
+        if (minParkPeriodMs != other.minParkPeriodMs) return false
+        if (maxParkPeriodMs != other.maxParkPeriodMs) return false
+        if (state != other.state) return false
+        if (spins != other.spins) return false
+        if (yields != other.yields) return false
+        if (parkPeriodMs != other.parkPeriodMs) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = maxSpins.hashCode()
+        result = 31 * result + maxYields.hashCode()
+        result = 31 * result + minParkPeriodMs.hashCode()
+        result = 31 * result + maxParkPeriodMs.hashCode()
+        result = 31 * result + state
+        result = 31 * result + spins.hashCode()
+        result = 31 * result + yields.hashCode()
+        result = 31 * result + parkPeriodMs.hashCode()
+        return result
+    }
 }
 
 /**
@@ -105,70 +132,70 @@ abstract class BackoffIdleStrategyData(
  */
 @Suppress("unused")
 class CoroutineBackoffIdleStrategy : BackoffIdleStrategyData, CoroutineIdleStrategy {
-    var p064: Byte = 0
-    var p065: Byte = 0
-    var p066: Byte = 0
-    var p067: Byte = 0
-    var p068: Byte = 0
-    var p069: Byte = 0
-    var p070: Byte = 0
-    var p071: Byte = 0
-    var p072: Byte = 0
-    var p073: Byte = 0
-    var p074: Byte = 0
-    var p075: Byte = 0
-    var p076: Byte = 0
-    var p077: Byte = 0
-    var p078: Byte = 0
-    var p079: Byte = 0
-    var p080: Byte = 0
-    var p081: Byte = 0
-    var p082: Byte = 0
-    var p083: Byte = 0
-    var p084: Byte = 0
-    var p085: Byte = 0
-    var p086: Byte = 0
-    var p087: Byte = 0
-    var p088: Byte = 0
-    var p089: Byte = 0
-    var p090: Byte = 0
-    var p091: Byte = 0
-    var p092: Byte = 0
-    var p093: Byte = 0
-    var p094: Byte = 0
-    var p095: Byte = 0
-    var p096: Byte = 0
-    var p097: Byte = 0
-    var p098: Byte = 0
-    var p099: Byte = 0
-    var p100: Byte = 0
-    var p101: Byte = 0
-    var p102: Byte = 0
-    var p103: Byte = 0
-    var p104: Byte = 0
-    var p105: Byte = 0
-    var p106: Byte = 0
-    var p107: Byte = 0
-    var p108: Byte = 0
-    var p109: Byte = 0
-    var p110: Byte = 0
-    var p111: Byte = 0
-    var p112: Byte = 0
-    var p113: Byte = 0
-    var p114: Byte = 0
-    var p115: Byte = 0
-    var p116: Byte = 0
-    var p117: Byte = 0
-    var p118: Byte = 0
-    var p119: Byte = 0
-    var p120: Byte = 0
-    var p121: Byte = 0
-    var p122: Byte = 0
-    var p123: Byte = 0
-    var p124: Byte = 0
-    var p125: Byte = 0
-    var p126: Byte = 0
-    var p127: Byte = 0
+    val p064: Byte = 0
+    val p065: Byte = 0
+    val p066: Byte = 0
+    val p067: Byte = 0
+    val p068: Byte = 0
+    val p069: Byte = 0
+    val p070: Byte = 0
+    val p071: Byte = 0
+    val p072: Byte = 0
+    val p073: Byte = 0
+    val p074: Byte = 0
+    val p075: Byte = 0
+    val p076: Byte = 0
+    val p077: Byte = 0
+    val p078: Byte = 0
+    val p079: Byte = 0
+    val p080: Byte = 0
+    val p081: Byte = 0
+    val p082: Byte = 0
+    val p083: Byte = 0
+    val p084: Byte = 0
+    val p085: Byte = 0
+    val p086: Byte = 0
+    val p087: Byte = 0
+    val p088: Byte = 0
+    val p089: Byte = 0
+    val p090: Byte = 0
+    val p091: Byte = 0
+    val p092: Byte = 0
+    val p093: Byte = 0
+    val p094: Byte = 0
+    val p095: Byte = 0
+    val p096: Byte = 0
+    val p097: Byte = 0
+    val p098: Byte = 0
+    val p099: Byte = 0
+    val p100: Byte = 0
+    val p101: Byte = 0
+    val p102: Byte = 0
+    val p103: Byte = 0
+    val p104: Byte = 0
+    val p105: Byte = 0
+    val p106: Byte = 0
+    val p107: Byte = 0
+    val p108: Byte = 0
+    val p109: Byte = 0
+    val p110: Byte = 0
+    val p111: Byte = 0
+    val p112: Byte = 0
+    val p113: Byte = 0
+    val p114: Byte = 0
+    val p115: Byte = 0
+    val p116: Byte = 0
+    val p117: Byte = 0
+    val p118: Byte = 0
+    val p119: Byte = 0
+    val p120: Byte = 0
+    val p121: Byte = 0
+    val p122: Byte = 0
+    val p123: Byte = 0
+    val p124: Byte = 0
+    val p125: Byte = 0
+    val p126: Byte = 0
+    val p127: Byte = 0
 
     companion object {
         private const val NOT_IDLE = 0
@@ -205,7 +232,7 @@ class CoroutineBackoffIdleStrategy : BackoffIdleStrategyData, CoroutineIdleStrat
     /**
      * Default constructor using [.DEFAULT_MAX_SPINS], [.DEFAULT_MAX_YIELDS], [.DEFAULT_MIN_PARK_PERIOD_MS], and [.DEFAULT_MAX_PARK_PERIOD_MS].
      */
-    constructor() : super(DEFAULT_MAX_SPINS, DEFAULT_MAX_YIELDS, DEFAULT_MIN_PARK_PERIOD_MS, DEFAULT_MAX_PARK_PERIOD_MS) {}
+    constructor() : super(DEFAULT_MAX_SPINS, DEFAULT_MAX_YIELDS, DEFAULT_MIN_PARK_PERIOD_MS, DEFAULT_MAX_PARK_PERIOD_MS)
 
     /**
      * Create a set of state tracking idle behavior
@@ -349,4 +376,6 @@ class CoroutineBackoffIdleStrategy : BackoffIdleStrategyData, CoroutineIdleStrat
                 ", maxParkPeriodMs=" + maxParkPeriodMs +
                 '}'
     }
+
+
 }

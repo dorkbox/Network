@@ -105,4 +105,17 @@ class CoroutineSleepingMillisIdleStrategy : CoroutineIdleStrategy {
                 ", sleepPeriodMs=" + sleepPeriodMs +
                 '}'
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is CoroutineSleepingMillisIdleStrategy) return false
+
+        if (sleepPeriodMs != other.sleepPeriodMs) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        return sleepPeriodMs.hashCode()
+    }
 }
