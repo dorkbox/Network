@@ -5,6 +5,7 @@ import dorkbox.util.NamedThreadFactory
 import io.aeron.driver.MediaDriver
 import io.aeron.exceptions.DriverTimeoutException
 import mu.KLogger
+import java.io.Closeable
 import java.io.File
 import java.util.concurrent.locks.*
 
@@ -13,15 +14,7 @@ class AeronContext(
     val type: Class<*> = AeronDriver::class.java,
     val logger: KLogger,
     aeronErrorHandler: (error: Throwable) -> Unit
-) {
-    fun close() {
-        context.close()
-
-        // Destroys this thread group and all of its subgroups.
-        // This thread group must be empty, indicating that all threads that had been in this thread group have since stopped.
-        threadFactory.group.destroy()
-    }
-
+) : Closeable {
     companion object {
         private fun create(
             config: Configuration,
@@ -184,12 +177,20 @@ class AeronContext(
             }
         }
 
-        logger.debug { "Aeron directory: '${context.aeronDirectory()}'" }
+        logger.debug { "Aeron context created. Directory: '${context.aeronDirectory()}'" }
 
         this.context = context
     }
 
     override fun toString(): String {
         return context.toString()
+    }
+
+    override fun close() {
+        context.close()
+
+        // Destroys this thread group and all of its subgroups.
+        // This thread group must be empty, indicating that all threads that had been in this thread group have since stopped.
+        threadFactory.group.destroy()
     }
 }
