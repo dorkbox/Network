@@ -67,9 +67,7 @@ class PingPongTest : BaseTest() {
             }
 
             server.onConnect {
-                server.forEachConnection { connection ->
-                    connection.logger.error("server connection: $connection")
-                }
+                this.logger.error("server connection: $this")
             }
 
             server.onMessage<Data> { message ->
