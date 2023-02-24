@@ -16,6 +16,7 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.rmi.messages.MethodRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asContextElement
@@ -25,6 +26,7 @@ import mu.KLogger
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.util.*
+import java.util.concurrent.*
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -173,7 +175,7 @@ internal class RmiClient(val isGlobal: Boolean,
     }
 
     @Volatile private var isAsync = false
-    @Volatile private var timeoutMillis: Long = 3_000L
+    @Volatile private var timeoutMillis: Long = if (EndPoint.DEBUG_CONNECTIONS) TimeUnit.HOURS.toMillis(2) else 3_000L
     @Volatile private var enableToString = false
     @Volatile private var enableHashCode = false
     @Volatile private var enableEquals = false
