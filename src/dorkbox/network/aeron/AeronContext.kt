@@ -39,6 +39,7 @@ class AeronContext(
             // driver context must happen in the initializer, because we have a Server.isRunning() method that uses the mediaDriverContext (without bind)
             val mediaDriverContext = MediaDriver.Context()
                 .termBufferSparseFile(false) // files occupy the same space virtually AND physically!
+                .useWindowsHighResTimer(true)
                 .publicationReservedSessionIdLow(AeronDriver.RESERVED_SESSION_ID_LOW)
                 .publicationReservedSessionIdHigh(AeronDriver.RESERVED_SESSION_ID_HIGH)
 
