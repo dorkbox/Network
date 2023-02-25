@@ -146,9 +146,20 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             // throw everything out
             throwable.stackTrace = stackTrace.copyOfRange(0, 1)
         }
+
+        internal inline fun <reified T> add(thing: T, array: Array<T>): Array<T> {
+            val currentLength: Int = array.size
+
+            // add the new subscription to the array
+            @Suppress("UNCHECKED_CAST")
+            val newMessageArray = array.copyOf(currentLength + 1) as Array<T>
+            newMessageArray[currentLength] = thing
+
+            return newMessageArray
+        }
     }
 
-    // initialize a emtpy arrays
+    // initialize emtpy arrays
     private val onConnectFilterList = atomic(Array<(CONNECTION.() -> Boolean)>(0) { { true } })
     private val onConnectFilterMutex = Mutex()
 
@@ -172,17 +183,6 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
 
     // used to keep a cache of class hierarchy for distributing messages
     private val classHierarchyCache = ClassHierarchy(LOAD_FACTOR)
-
-    private inline fun <reified T> add(thing: T, array: Array<T>): Array<T> {
-        val currentLength: Int = array.size
-
-        // add the new subscription to the array
-        @Suppress("UNCHECKED_CAST")
-        val newMessageArray = array.copyOf(currentLength + 1) as Array<T>
-        newMessageArray[currentLength] = thing
-
-        return newMessageArray
-    }
 
     /**
      * Adds an IP+subnet rule that defines if that IP+subnet is allowed or denied connectivity to this server.
@@ -423,23 +423,6 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                 cleanStackTrace(t)
                 logger.error("Connection ${connection.id} error", t)
-            }
-        }
-    }
-
-    /**
-     * Invoked when there is a global error (no connection information)
-     *
-     * The error is also sent to an error log before notifying callbacks
-     */
-    val notifyError: (exception: Throwable) -> Unit = { exception ->
-        onErrorGlobalList.value.forEach {
-            try {
-                it(exception)
-            } catch (t: Throwable) {
-                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
-                logger.error("Global error", t)
             }
         }
     }
