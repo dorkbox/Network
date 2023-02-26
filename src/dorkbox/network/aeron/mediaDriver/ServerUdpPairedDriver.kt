@@ -71,7 +71,7 @@ internal class ServerUdpPairedDriver(
             .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
 
-        val publication = aeronDriver.addExclusivePublication(publicationUri, type, streamId)
+        val publication = aeronDriver.addExclusivePublication(logger, publicationUri, type, streamId)
 
         // if we are IPv6 WILDCARD -- then our subscription must ALSO be IPv6, even if our connection is via IPv4
         var subShouldBeIpv4 = isRemoteIpv4
@@ -103,7 +103,7 @@ internal class ServerUdpPairedDriver(
             .endpoint(subShouldBeIpv4, properSubAddress, port)
 
 
-        val subscription = aeronDriver.addSubscription(subscriptionUri, type, streamId)
+        val subscription = aeronDriver.addSubscription(logger, subscriptionUri, type, streamId)
 
         val remoteAddressString = if (isRemoteIpv4) {
             IPv4.toString(remoteAddress as Inet4Address)

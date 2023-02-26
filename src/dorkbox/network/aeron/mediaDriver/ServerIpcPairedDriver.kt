@@ -55,7 +55,7 @@ internal open class ServerIpcPairedDriver(streamId: Int,
             }
 
         this.success = true
-        this.subscription = aeronDriver.addSubscription(subscriptionUri, "IPC", streamId)
-        this.publication = aeronDriver.addExclusivePublication(publicationUri, "IPC", streamId)
+        this.subscription = aeronDriver.addSubscription(logger, subscriptionUri, "IPC", streamId)
+        this.publication = aeronDriver.addExclusivePublication(logger, publicationUri, "IPC", streamId)
     }
 }

@@ -74,6 +74,6 @@ internal open class ServerUdpDriver(val listenAddress: InetAddress,
         }
 
         this.success = true
-        this.subscription = aeronDriver.addSubscription(subscriptionUri, type, streamId)
+        this.subscription = aeronDriver.addSubscription(logger, subscriptionUri, type, streamId)
     }
 }

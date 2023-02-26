@@ -78,7 +78,7 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
 
         // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
         //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
-        val publication = aeronDriver.addExclusivePublication(publicationUri, type, streamId)
+        val publication = aeronDriver.addExclusivePublication(logger, publicationUri, type, streamId)
 
 
         // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
@@ -100,7 +100,7 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
             .controlEndpoint(isIpv4, addressString, port+1)
             .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
-        val subscription = aeronDriver.addSubscription(subscriptionUri, type, streamId)
+        val subscription = aeronDriver.addSubscription(logger, subscriptionUri, type, streamId)
 
 
         // always include the linger timeout, so we don't accidentally kill ourselves by taking too long

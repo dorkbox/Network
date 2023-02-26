@@ -49,6 +49,6 @@ internal open class ServerIpcDriver(streamId: Int,
 
 
         success = true
-        subscription = aeronDriver.addSubscription(subscriptionUri, "IPC", streamId)
+        subscription = aeronDriver.addSubscription(logger, subscriptionUri, "IPC", streamId)
     }
 }

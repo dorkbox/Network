@@ -68,7 +68,7 @@ internal open class ClientIpcDriver(streamId: Int,
             //      ESPECIALLY if it is with the same streamID
             // this check is in the "reconnect" logic
 
-            val publication = aeronDriver.addExclusivePublication(publicationUri, "IPC", streamId)
+            val publication = aeronDriver.addExclusivePublication(logger, publicationUri, "IPC", streamId)
 
             // always include the linger timeout, so we don't accidentally kill ourself by taking too long
             val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
@@ -95,7 +95,7 @@ internal open class ClientIpcDriver(streamId: Int,
 
         // Create a subscription at the given address and port, using the given stream ID.
         val subscriptionUri = uri("ipc", sessionId)
-        val subscription = aeronDriver.addSubscription(subscriptionUri, "IPC", streamId)
+        val subscription = aeronDriver.addSubscription(logger, subscriptionUri, "IPC", streamId)
 
         this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
                 "[$sessionId] IPC connection established to [$streamId|$subscriptionPort]"
