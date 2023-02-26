@@ -23,6 +23,7 @@ import dorkbox.netUtil.IPv6
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.serializers.SerializationDefaults
 import dorkbox.storage.Storage
+import dorkbox.storage.serializer.SerializerBytes
 import mu.KLogger
 import java.net.Inet4Address
 import java.net.Inet6Address
@@ -55,8 +56,8 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
         store = storageBuilder.logger(logger).apply {
             if (isStringBased) {
                 // have to load/save keys+values as strings
-                onLoad { key, value, load ->
-                    // key/value will be strings for a string based storage system
+                onLoad { serializer, key, value, load ->
+                    // key/value will ALWAYS be strings for a string based storage system
                     key as String
                     value as String
 
@@ -75,7 +76,7 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
 
                     val xValue = value.decodeBase58()
                     load(xKey, xValue)
-                }.onSave { key, value, save ->
+                }.onSave { serializer, key, value, save ->
                     // we want the keys to be easy to read in case we are using string based storage
                     val xKey =  when (key) {
                         saltKey, privateKey, Storage.versionTag -> key
@@ -104,11 +105,11 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
                 }
             } else {
                 // everything is stored as bytes. We use a serializer instead to register types for easy serialization
-                onNewSerializer {
+                serializer(SerializerBytes {
                     register(ByteArray::class.java)
                     register(Inet4Address::class.java, SerializationDefaults.inet4AddressSerializer)
                     register(Inet6Address::class.java, SerializationDefaults.inet6AddressSerializer)
-                }
+                })
            }
        }.build()
 
