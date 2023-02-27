@@ -1,3 +1,19 @@
+/*
+ * Copyright 2023 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 @file:Suppress("MemberVisibilityCanBePrivate", "DuplicatedCode")
 
 package dorkbox.network.handshake
@@ -47,7 +63,7 @@ internal object ServerHandshakePollers {
             val streamId = header.streamId()
             val aeronLogInfo = "$streamId/$sessionId : IPC" // Server is the "source", client mirrors the server
 
-            val message = server.readHandshakeMessage(buffer, offset, length, header, aeronLogInfo)
+            val message = server.readHandshakeMessage(buffer, offset, length, aeronLogInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
@@ -57,7 +73,7 @@ internal object ServerHandshakePollers {
                 val publicationUri = uri("ipc", message.sessionId)
 
                 val publication = try {
-                    aeronDriver.addExclusivePublication(publicationUri, "IPC", message.streamId)
+                    aeronDriver.addExclusivePublication(logger, publicationUri, "IPC", message.streamId)
                 } catch (e: Exception) {
                     logger.error(e) { "Cannot create IPC publication back to remote" }
                     return
@@ -149,7 +165,7 @@ internal object ServerHandshakePollers {
             val aeronLogInfo = "$streamId/$sessionId : $clientAddressString"
 
 
-            val message = server.readHandshakeMessage(buffer, offset, length, header, aeronLogInfo)
+            val message = server.readHandshakeMessage(buffer, offset, length, aeronLogInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
@@ -163,7 +179,7 @@ internal object ServerHandshakePollers {
                     .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
                 val publication = try {
-                    aeronDriver.addExclusivePublication(publicationUri, type, message.streamId)
+                    aeronDriver.addExclusivePublication(logger, publicationUri, type, message.streamId)
                 } catch (e: Exception) {
                     logger.error(e) { "Cannot create publication back to $clientAddressString" }
                     return

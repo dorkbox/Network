@@ -83,7 +83,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
     private fun validateMessageTypeAndDoPending(
         server: Server<CONNECTION>,
-        actionDispatch: CoroutineScope,
+        eventDispatch: CoroutineScope,
         handshakePublication: Publication,
         message: HandshakeMessage,
         logger: KLogger
@@ -129,7 +129,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                     existingConnection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
 
                     // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    actionDispatch.launch {
+                    eventDispatch.launch {
                         existingConnection.doNotifyDisconnect()
                         listenerManager.notifyDisconnect(existingConnection)
                     }
@@ -147,7 +147,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                                                  HandshakeMessage.doneToClient(message.connectKey))
 
                     // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    actionDispatch.launch {
+                    eventDispatch.launch {
                         listenerManager.notifyConnect(existingConnection)
                     }
                 } catch (e: Exception) {
@@ -232,7 +232,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
     ) {
         if (!validateMessageTypeAndDoPending(
                 server = server,
-                actionDispatch = server.actionDispatch,
+                eventDispatch = server.eventDispatch,
                 handshakePublication = handshakePublication,
                 message = message,
                 logger = logger
@@ -393,7 +393,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         // Manage the Handshake state. When done with a connection, this returns
         if (!validateMessageTypeAndDoPending(
                 server = server,
-                actionDispatch = server.actionDispatch,
+                eventDispatch = server.eventDispatch,
                 handshakePublication = handshakePublication,
                 message = message,
                 logger = logger

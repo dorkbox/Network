@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,6 +44,7 @@ import io.aeron.Publication
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
@@ -54,6 +55,7 @@ import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
 import java.net.InetAddress
 import java.util.concurrent.*
+import java.util.concurrent.locks.*
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
 // it results in severe UDP packet loss and contention.
@@ -92,6 +94,9 @@ internal constructor(val type: Class<*>,
         internal const val DEBUG_CONNECTIONS = false
 
         internal const val IPC_NAME = "IPC"
+
+        internal val networkEventDispatcher = EventDispatcher()
+        internal val responseManager = ResponseManager()
 
         /**
          * @return the error code text for the specified number
@@ -186,7 +191,8 @@ internal constructor(val type: Class<*>,
         logger.error(exception) { "Uncaught Coroutine Error!" }
     }
 
-    internal val actionDispatch = config.dispatch + handler
+    internal val eventDispatch = config.eventDispatch + handler
+    private val messageDispatch = config.messageDispatch + handler
 
     internal val listenerManager = ListenerManager<CONNECTION>(logger)
 
@@ -224,11 +230,10 @@ internal constructor(val type: Class<*>,
      */
     val storage: SettingsStore
 
-    internal val responseManager = ResponseManager(logger, actionDispatch)
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
-    private val streamingManager = StreamingManager<CONNECTION>(logger, actionDispatch)
+    private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch)
 
     internal val pingManager = PingManager<CONNECTION>()
 
@@ -241,8 +246,11 @@ internal constructor(val type: Class<*>,
             logger.error { "DEBUG_CONNECTIONS is enabled. This should not happen in release!" }
         }
 
-        require(!config.previouslyUsed) { "${type.simpleName} configuration cannot be reused!" }
         config.validate() // this happens more than once! (this is ok)
+
+        // there are threading issues if there are client(s) and server's within the same JVM, where we have thread starvation
+        networkEventDispatcher.configure(config)
+
 
         // serialization stuff
         @Suppress("UNCHECKED_CAST")
@@ -251,7 +259,6 @@ internal constructor(val type: Class<*>,
         // we are done with initial configuration, now finish serialization
         val kryo = serialization.initGlobalKryo()
         serialization.finishInit(type, kryo)
-
 
 
         handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
@@ -270,13 +277,12 @@ internal constructor(val type: Class<*>,
         handshakeWriteKryo = serialization.newHandshakeKryo()
 
         // we have to be able to specify the property store
-        storage = SettingsStore(config.settingsStore.logger(logger), logger)
-
+        storage = SettingsStore(config.settingsStore, logger)
         crypto = CryptoManagement(logger, storage, type, config.enableRemoteSignatureValidation)
 
         // Only starts the media driver if we are NOT already running!
         try {
-            aeronDriver = AeronDriver(config, type, logger, listenerManager.notifyError)
+            aeronDriver = AeronDriver.getDriver(config, logger)
         } catch (e: Exception) {
             logger.error("Error initialize endpoint", e)
             throw e
@@ -300,7 +306,7 @@ internal constructor(val type: Class<*>,
      * @throws Exception if there is a problem starting the media driver
      */
     fun startDriver() {
-        aeronDriver.start()
+        aeronDriver.start(logger)
         shutdown.value = false
     }
 
@@ -365,7 +371,7 @@ internal constructor(val type: Class<*>,
      * This function will be called for **only** network clients (IPC client are excluded)
      */
     fun filter(ipFilterRule: IpFilterRule) {
-        actionDispatch.launch {
+        eventDispatch.launch {
             listenerManager.filter(ipFilterRule)
         }
     }
@@ -389,7 +395,7 @@ internal constructor(val type: Class<*>,
      * This function will be called for **only** network clients (IPC client are excluded)
      */
     fun filter(function: CONNECTION.() -> Boolean) {
-        actionDispatch.launch {
+        eventDispatch.launch {
             listenerManager.filter(function)
         }
     }
@@ -403,7 +409,7 @@ internal constructor(val type: Class<*>,
      * For a server, this function will be called for ALL client connections.
      */
     fun onInit(function: suspend CONNECTION.() -> Unit) {
-        actionDispatch.launch {
+        eventDispatch.launch {
             listenerManager.onInit(function)
         }
     }
@@ -413,7 +419,7 @@ internal constructor(val type: Class<*>,
      * 'onInit()' callbacks will execute for both the client and server before `onConnect()` will execute will "connects" with each other
      */
     fun onConnect(function: suspend CONNECTION.() -> Unit) {
-        actionDispatch.launch {
+        eventDispatch.launch {
             listenerManager.onConnect(function)
         }
     }
@@ -424,7 +430,7 @@ internal constructor(val type: Class<*>,
      * Do not try to send messages! The connection will already be closed, resulting in an error if you attempt to do so.
      */
     fun onDisconnect(function: suspend CONNECTION.() -> Unit) {
-        actionDispatch.launch {
+        eventDispatch.launch {
             listenerManager.onDisconnect(function)
         }
     }
@@ -435,7 +441,7 @@ internal constructor(val type: Class<*>,
      * The error is also sent to an error log before this method is called.
      */
     fun onError(function: CONNECTION.(Throwable) -> Unit) {
-        actionDispatch.launch {
+        eventDispatch.launch {
             listenerManager.onError(function)
         }
     }
@@ -446,7 +452,7 @@ internal constructor(val type: Class<*>,
      * The error is also sent to an error log before this method is called.
      */
     fun onErrorGlobal(function: (Throwable) -> Unit) {
-        actionDispatch.launch {
+        eventDispatch.launch {
             listenerManager.onError(function)
         }
     }
@@ -457,7 +463,7 @@ internal constructor(val type: Class<*>,
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
     fun <Message : Any> onMessage(function: suspend CONNECTION.(Message) -> Unit) {
-        actionDispatch.launch {
+        eventDispatch.launch {
             listenerManager.onMessage(function)
         }
     }
@@ -468,7 +474,7 @@ internal constructor(val type: Class<*>,
      * @return true if the message was successfully sent by aeron
      */
     internal suspend fun ping(connection: Connection, pingTimeoutMs: Int, function: suspend Ping.() -> Unit): Boolean {
-        return pingManager.ping(connection, pingTimeoutMs, actionDispatch, responseManager, logger, function)
+        return pingManager.ping(connection, pingTimeoutMs, eventDispatch, responseManager, logger, function)
     }
 
     /**
@@ -583,11 +589,10 @@ internal constructor(val type: Class<*>,
      * @param buffer The buffer
      * @param offset The offset from the start of the buffer
      * @param length The number of bytes to extract
-     * @param header The aeron header information
      *
      * @return the message
      */
-    internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, header: Header, aeronLogInfo: String): Any? {
+    internal fun readHandshakeMessage(buffer: DirectBuffer, offset: Int, length: Int, aeronLogInfo: String): Any? {
         return try {
             // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
             val message = handshakeReadKryo.read(buffer, offset, length) as HandshakeMessage
@@ -688,7 +693,7 @@ internal constructor(val type: Class<*>,
         when (message) {
             is Ping -> {
                 // NOTE: This MUST be on a new co-routine
-                actionDispatch.launch {
+                messageDispatch.launch {
                     try {
                         pingManager.manage(connection, responseManager, message, logger)
                     } catch (e: Exception) {
@@ -705,7 +710,7 @@ internal constructor(val type: Class<*>,
                 // if we are an RMI message/registration, we have very specific, defined behavior.
                 // We do not use the "normal" listener callback pattern because this requires special functionality
                 // NOTE: This MUST be on a new co-routine
-                actionDispatch.launch {
+                messageDispatch.launch {
                     try {
                         rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
                     } catch (e: Exception) {
@@ -742,7 +747,7 @@ internal constructor(val type: Class<*>,
 
             is Any -> {
                 // NOTE: This MUST be on a new co-routine
-                actionDispatch.launch {
+                messageDispatch.launch {
                     try {
                         var hasListeners = listenerManager.notifyOnMessage(connection, message)
 
@@ -1034,6 +1039,9 @@ internal constructor(val type: Class<*>,
         close0()
 
         aeronDriver.close()
+        // This closes the scope and all children in the scope
+        eventDispatch.cancel("${type.simpleName} shutting down")
+        messageDispatch.cancel("${type.simpleName} shutting down")
 
         shutdownLatch = CountDownLatch(1)
 

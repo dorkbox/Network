@@ -8,6 +8,7 @@ import dorkbox.network.rmi.RemoteObject
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
 import java.io.IOException
@@ -162,8 +163,7 @@ class DisconnectReconnectTest : BaseTest() {
                 val closerObject = rmi.get<CloseIface>(CLOSE_ID)
 
                 // the close operation will kill the connection, preventing the response from returning.
-                closerObject as RemoteObject<CloseIface>
-                closerObject.async = true
+                RemoteObject.cast(closerObject).async = true
 
                 closerObject.close()
             }
@@ -210,10 +210,11 @@ class DisconnectReconnectTest : BaseTest() {
 
     @Test
     fun manualMediaDriverAndReconnectClient() {
+        val log = KotlinLogging.logger("DCUnitTest")
         // NOTE: once a config is assigned to a driver, the config cannot be changed
-        val aeronDriver = AeronDriver(serverConfig())
+        val aeronDriver = AeronDriver.getDriver(serverConfig(), log)
         runBlocking {
-            aeronDriver.start()
+            aeronDriver.start(log)
         }
 
         run {

@@ -36,7 +36,7 @@ open class TestCowImpl(val id: Int) : TestCowBaseImpl(), TestCow {
     }
 
     override fun mooTwo(value: String): String {
-        println(value)
+//        println(value)
         return "moo-two: $value"
     }
 

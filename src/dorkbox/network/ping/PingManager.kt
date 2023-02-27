@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ internal class PingManager<CONNECTION : Connection> {
             // process the ping message so that our ping callback does something
 
             // this will be null if the ping took longer than XXX seconds and was cancelled
-            val result = responseManager.getWaiterCallback(rmiId, logger) as (suspend Ping.() -> Unit)?
+            val result = responseManager.getWaiterCallback<suspend Ping.() -> Unit>(rmiId, logger)
             if (result != null) {
                 result(ping)
             }
@@ -61,19 +61,19 @@ internal class PingManager<CONNECTION : Connection> {
     internal suspend fun ping(
         connection: Connection,
         pingTimeoutSeconds: Int,
-        actionDispatch: CoroutineScope,
+        eventDispatch: CoroutineScope,
         responseManager: ResponseManager,
         logger: KLogger,
         function: suspend Ping.() -> Unit
     ): Boolean {
-        val id = responseManager.prepWithCallback(function, logger)
+        val id = responseManager.prepWithCallback(logger, function)
 
         val ping = Ping()
         ping.packedId = id
         ping.pingTime = System.currentTimeMillis()
 
         // ALWAYS cancel the ping after XXX seconds
-        responseManager.cancelRequest(actionDispatch, TimeUnit.SECONDS.toMillis(pingTimeoutSeconds.toLong()), id, logger) {
+        responseManager.cancelRequest(eventDispatch, TimeUnit.SECONDS.toMillis(pingTimeoutSeconds.toLong()), id, logger) {
             // kill the callback, since we are now "cancelled". If there is a race here (and the response comes at the exact same time)
             // we don't care since either it will be null or it won't (if it's not null, it will run the callback)
             result = null

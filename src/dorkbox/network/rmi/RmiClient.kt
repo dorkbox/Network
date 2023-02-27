@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -181,7 +181,7 @@ internal class RmiClient(val isGlobal: Boolean,
     @Volatile private var enableEquals = false
 
     // if we are ASYNC, then this method immediately returns
-    private suspend fun sendRequest(isAsync: Boolean, actionDispatch: CoroutineScope, invokeMethod: MethodRequest, logger: KLogger): Any? {
+    private suspend fun sendRequest(isAsync: Boolean, eventDispatch: CoroutineScope, invokeMethod: MethodRequest, logger: KLogger): Any? {
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded
@@ -206,13 +206,13 @@ internal class RmiClient(val isGlobal: Boolean,
             connection.send(invokeMethod)
             null
         } else {
-            // The response, even if there is NOT one (ie: not void) will always return a thing (so our code execution is in lockstep
+            // The response, even if there is NOT one (ie: not void) will always return a thing (so our code execution is in lockstep -- unless it is ASYNC)
             val rmiWaiter = responseManager.prep(logger)
             invokeMethod.packedId = RmiUtils.packShorts(rmiObjectId, rmiWaiter.id)
 
             connection.send(invokeMethod)
 
-            responseManager.waitForReply(actionDispatch, rmiWaiter, timeoutMillis, logger, connection)
+            responseManager.waitForReply(eventDispatch, rmiWaiter, timeoutMillis, logger, connection)
         }
     }
 
@@ -318,7 +318,6 @@ internal class RmiClient(val isGlobal: Boolean,
         invokeMethod.cachedMethod = cachedMethods.first { it.method == method }
 
 
-
         // if a 'suspend' function is called, then our last argument is a 'Continuation' object
         // We will use this for our coroutine context instead of running on a new coroutine
         val suspendCoroutineArg = args?.lastOrNull()
@@ -328,7 +327,7 @@ internal class RmiClient(val isGlobal: Boolean,
             val continuation = suspendCoroutineArg as Continuation<Any?>
 
             val suspendFunction: suspend () -> Any? = {
-                sendRequest(localAsync, connection.endPoint.actionDispatch, invokeMethod, connection.logger)
+                sendRequest(localAsync, connection.endPoint.eventDispatch, invokeMethod, connection.logger)
             }
 
             // function suspension works differently !!
@@ -358,7 +357,7 @@ internal class RmiClient(val isGlobal: Boolean,
                 })
         } else {
             val any = runBlocking {
-                sendRequest(localAsync, connection.endPoint.actionDispatch, invokeMethod, connection.logger)
+                sendRequest(localAsync, connection.endPoint.eventDispatch, invokeMethod, connection.logger)
             }
 
             when (any) {
