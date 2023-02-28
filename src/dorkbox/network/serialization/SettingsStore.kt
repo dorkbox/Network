@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
         store = storageBuilder.logger(logger).apply {
             if (isStringBased) {
                 // have to load/save keys+values as strings
-                onLoad { serializer, key, value, load ->
+                onLoad { _, key, value, load ->
                     // key/value will ALWAYS be strings for a string based storage system
                     key as String
                     value as String
@@ -76,7 +76,7 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
 
                     val xValue = value.decodeBase58()
                     load(xKey, xValue)
-                }.onSave { serializer, key, value, save ->
+                }.onSave { _, key, value, save ->
                     // we want the keys to be easy to read in case we are using string based storage
                     val xKey =  when (key) {
                         saltKey, privateKey, Storage.versionTag -> key
