@@ -32,22 +32,23 @@ import kotlin.concurrent.write
 /**
  * Manages the "pending response" from method invocation.
  *
- * response ID's and the memory they hold will leak if the response never arrives!
+ *
+ * Response IDs are used for in-flight RMI on the network stack. and are limited to 65,535 TOTAL
+ *
+ *  - these are just looped around in a ring buffer.
+ *  - these are stored here as int, however these are REALLY shorts and are int-packed when transferring data on the wire
+ *
+ *  (By default, for RMI...)
+ *  - 0 is reserved for INVALID
+ *  - 1 is reserved for ASYNC (the response will never be sent back, and we don't wait for it)
+ *
  */
-internal class ResponseManager() {
+internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int = 2) {
     companion object {
         val TIMEOUT_EXCEPTION = Exception()
         private val logger: KLogger = KotlinLogging.logger(ResponseManager::class.java.simpleName)
     }
 
-
-    // Response ID's are for ALL in-flight RMI on the network stack. instead of limited to (originally) 64, we are now limited to 65,535
-    // these are just looped around in a ring buffer.
-    // These are stored here as int, however these are REALLY shorts and are int-packed when transferring data on the wire
-    // 65535 IN FLIGHT RMI method invocations is plenty
-    //   0 is reserved for INVALID
-    //   1 is reserved for ASYNC
-    private val maxValuesInCache = 65535
     private val rmiWaitersInUse = atomic(0)
     private val waiterCache = Channel<ResponseWaiter>(maxValuesInCache)
 
@@ -55,13 +56,16 @@ internal class ResponseManager() {
     private val pending = arrayOfNulls<Any?>(maxValuesInCache+1) // +1 because it's possible to have the value 65535 in the cache
 
     init {
+        require(maxValuesInCache <= 65535) { "The maximum size for the values in the response manager is 65535"}
+        require(maxValuesInCache > minimumValue) { "< $minimumValue (0 and 1 for RMI) are reserved"}
+        require(minimumValue > 0) { "The minimum value $minimumValue must be > 0"}
+
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
         val ids = mutableListOf<Int>()
 
-        // ZERO is special, and is never added!
-        // ONE is special, and is used for ASYNC (the response will never be sent back)
-
-        for (id in 2..maxValuesInCache) {
+        // 0 is special, and is never added!
+        // 1 is special, and is used for ASYNC (the response will never be sent back)
+        for (id in minimumValue..maxValuesInCache) {
             ids.add(id)
         }
         ids.shuffle()
