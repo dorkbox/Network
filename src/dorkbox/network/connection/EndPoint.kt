@@ -1039,9 +1039,14 @@ internal constructor(val type: Class<*>,
         close0()
 
         aeronDriver.close()
+
         // This closes the scope and all children in the scope
         eventDispatch.cancel("${type.simpleName} shutting down")
         messageDispatch.cancel("${type.simpleName} shutting down")
+
+        // this will ONLY close the event dispatcher if ALL endpoints have closed it.
+        // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
+        networkEventDispatcher.close()
 
         shutdownLatch = CountDownLatch(1)
 
