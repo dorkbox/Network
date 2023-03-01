@@ -167,7 +167,7 @@ abstract class BaseTest {
     private var isStopping = false
 
     init {
-        println("---- " + this.javaClass.simpleName)
+        System.err.println("---- " + this.javaClass.simpleName)
 
         // we must always make sure that aeron is shut-down before starting again.
         while (Server.isRunning(serverConfig())) {
