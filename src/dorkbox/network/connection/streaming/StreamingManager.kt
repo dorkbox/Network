@@ -37,7 +37,7 @@ import java.security.SecureRandom
 
 internal class StreamingManager<CONNECTION : Connection>(
     private val logger: KLogger,
-    private val actionDispatch: CoroutineScope
+    private val messageDispatch: CoroutineScope
 ) {
     private val streamingDataTarget = LockFreeHashMap<Long, StreamingControl>()
     private val streamingDataInMemory = LockFreeHashMap<Long, AeronOutput>()
@@ -164,7 +164,7 @@ internal class StreamingManager<CONNECTION : Connection>(
 
                         if (streamedMessage != null) {
                             // NOTE: This MUST be on a new co-routine
-                            actionDispatch.launch {
+                            messageDispatch.launch {
                                 val listenerManager = endPoint.listenerManager
 
                                 try {
