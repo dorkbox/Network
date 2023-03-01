@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-package dorkbox.network.connection
+package dorkbox.network.aeron
 
 import dorkbox.collections.ConcurrentIterator
 import dorkbox.network.Configuration
-import dorkbox.network.aeron.CoroutineIdleStrategy
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.concurrent.IdleStrategy
