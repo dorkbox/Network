@@ -218,9 +218,6 @@ open class Server<CONNECTION : Connection>(
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
 
-        // this forces the current thread to WAIT until poll system has started
-        val pollStartupLatch = CountDownLatch(1)
-
         val server = this@Server
         val handshake = ServerHandshake(logger, config, listenerManager, aeronDriver)
         val ipcPoller: AeronPoller = ServerHandshakePollers.ipc(aeronDriver, config, server, handshake)
@@ -246,70 +243,70 @@ open class Server<CONNECTION : Connection>(
         }
 
 
-        val networkEventProcessor = Runnable {
-            pollStartupLatch.countDown()
+        // additionally, if we have MULTIPLE clients on the same machine, we are limited by the CPU core count. Ideally we want to share this among ALL clients within the same JVM so that we can support multiple clients/servers
+        networkEventPoller.submit(
+        {
+            if (!isShutdown()) {
+                var pollCount = 0
 
-            val pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
-            try {
-                var pollCount: Int
+                // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
+                //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
 
-                while (!isShutdown()) {
-                    pollCount = 0
+                // this checks to see if there are NEW clients on the handshake ports
+                pollCount += ipv4Poller.poll()
+                pollCount += ipv6Poller.poll()
 
-                    // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
-                    //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
+                // this checks to see if there are NEW clients via IPC
+                pollCount += ipcPoller.poll()
 
-                    // this checks to see if there are NEW clients on the handshake ports
-                    pollCount += ipv4Poller.poll()
-                    pollCount += ipv6Poller.poll()
+                // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
+                // so we can modify this as we go
+                connections.forEach { connection ->
+                    if (!connection.isClosedViaAeron()) {
+                        // Otherwise, poll the connection for messages
+                        pollCount += connection.poll()
+                    } else {
+                        // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
+                        logger.debug { "[${connection.id}/${connection.streamId} : ${connection.remoteAddressString}] connection expired" }
 
-                    // this checks to see if there are NEW clients via IPC
-                    pollCount += ipcPoller.poll()
+                        removeConnection(connection)
 
-                    // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
-                    // so we can modify this as we go
-                    connections.forEach { connection ->
-                        if (!connection.isClosedViaAeron()) {
-                            // Otherwise, poll the connection for messages
-                            pollCount += connection.poll()
-                        } else {
-                            // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                            logger.debug { "[${connection.id}/${connection.streamId} : ${connection.remoteAddressString}] connection expired" }
+                        // this will call removeConnection again, but that is ok
+                        // this is blocking, because the connection MUST be removed in the same thread that is processing events
+                        connection.close()
 
-                            removeConnection(connection)
+                        // have to manually notify the server-listenerManager that this connection was closed
+                        // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listener-manager is
+                        // instantly notified and on cleanup, the server-listener-manager is called
 
-                            // this will call removeConnection again, but that is ok
-                            // this is blocking, because the connection MUST be removed in the same thread that is processing events
-                            connection.close()
-
-                            // have to manually notify the server-listenerManager that this connection was closed
-                            // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
-                            // instantly notified and on cleanup, the server-listenermanager is called
-
-                            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                            actionDispatch.launch {
-                                listenerManager.notifyDisconnect(connection)
-                            }
+                        // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                        eventDispatch.launch {
+                            listenerManager.notifyDisconnect(connection)
                         }
                     }
-
-                    // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
-                    pollIdleStrategy.idle(pollCount)
                 }
 
-                logger.debug { "Network event dispatch closing..." }
+                pollCount
+            } else {
+                // remove ourselves from processing
+                -1
+            }
+        },
+        {
+            logger.debug { "Network event dispatch closing..." }
 
-                // we want to process **actual** close cleanup events on this thread as well, otherwise we will have threading problems
-                shutdownPollLatch.await()
+            // we want to process **actual** close cleanup events on this thread as well, otherwise we will have threading problems
+            shutdownPollLatch.await()
 
-                // we have to manually cleanup the connections and call server-notifyDisconnect because otherwise this will never get called
-                val jobs = mutableListOf<Job>()
+            // we have to manually cleanup the connections and call server-notifyDisconnect because otherwise this will never get called
+            val jobs = mutableListOf<Job>()
 
-                // we want to clear all the connections FIRST (since we are shutting down)
-                val cons = mutableListOf<CONNECTION>()
-                connections.forEach { cons.add(it) }
-                connections.clear()
+            // we want to clear all the connections FIRST (since we are shutting down)
+            val cons = mutableListOf<CONNECTION>()
+            connections.forEach { cons.add(it) }
+            connections.clear()
 
+            try {
                 cons.forEach { connection ->
                     logger.info { "[${connection.id}/${connection.streamId}] Connection from [${connection.remoteAddressString}] cleanup and close" }
 
@@ -333,8 +330,6 @@ open class Server<CONNECTION : Connection>(
                 runBlocking {
                     jobs.forEach { it.join() }
                 }
-            } catch (e: Exception) {
-                logger.error(e) { "Unexpected error during server message polling!" }
             } finally {
                 ipv4Poller.close()
                 ipv6Poller.close()
@@ -355,11 +350,7 @@ open class Server<CONNECTION : Connection>(
                     shutdownEventLatch.countDown()
                 } catch (ignored: Exception) {}
             }
-        }
-        config.networkInterfaceEventDispatcher.submit(networkEventProcessor)
-
-        // wait for the polling thread to startup before letting bind() return
-        pollStartupLatch.await()
+        })
     }
 
     /**

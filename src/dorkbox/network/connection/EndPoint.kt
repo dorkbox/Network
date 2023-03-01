@@ -95,7 +95,7 @@ internal constructor(val type: Class<*>,
 
         internal const val IPC_NAME = "IPC"
 
-        internal val networkEventDispatcher = EventDispatcher()
+        internal val networkEventPoller = EventPoller()
         internal val responseManager = ResponseManager()
 
         /**
@@ -249,7 +249,7 @@ internal constructor(val type: Class<*>,
         config.validate() // this happens more than once! (this is ok)
 
         // there are threading issues if there are client(s) and server's within the same JVM, where we have thread starvation
-        networkEventDispatcher.configure(config)
+        networkEventPoller.configure(config)
 
 
         // serialization stuff
@@ -1046,7 +1046,7 @@ internal constructor(val type: Class<*>,
 
         // this will ONLY close the event dispatcher if ALL endpoints have closed it.
         // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
-        networkEventDispatcher.close()
+        networkEventPoller.close()
 
         shutdownLatch = CountDownLatch(1)
 

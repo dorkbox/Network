@@ -797,37 +797,33 @@ open class Client<CONNECTION : Connection>(
 
         logger.debug { "[$aeronLogInfo] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] done with handshake." }
 
-        // this forces the current thread to WAIT until the network poll system has started
-        val pollStartupLatch = CountDownLatch(1)
+
 
         // have to make a new thread to listen for incoming data!
         // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
 
-        val networkEventProcessor = Runnable {
-            pollStartupLatch.countDown()
-
-            val pollIdleStrategy = config.pollIdleStrategy.cloneToNormal()
-
-            while (!isShutdown()) {
+        // additionally, if we have MULTIPLE clients on the same machine, we are limited by the CPU core count. Ideally we want to share this among ALL clients within the same JVM so that we can support multiple clients/servers
+        networkEventPoller.submit(
+        {
+            if (!isShutdown()) {
                 if (!newConnection.isClosedViaAeron()) {
-                    //  Polls the AERON media driver subscription channel for incoming messages
-                    val pollCount = newConnection.poll()
-
-                    // 0 means we idle. >0 means reset and don't idle (because there are likely more poll events)
-                    pollIdleStrategy.idle(pollCount)
+                    // Polls the AERON media driver subscription channel for incoming messages
+                    newConnection.poll()
                 } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                     logger.debug { "[$aeronLogInfo] connection from expired" }
 
                     // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
                     newConnection.close()
-                    return@Runnable
-                }
-            }
-        }
-        config.networkInterfaceEventDispatcher.submit(networkEventProcessor)
 
-        pollStartupLatch.await()
+                    // remove ourselves from processing
+                    -1
+                }
+            } else {
+                // remove ourselves from processing
+                -1
+            }
+        })
 
         // these have to be in two SEPARATE "runnables" otherwise...
         // if something inside-of listenerManager.notifyConnect is blocking or suspends, then polling will never happen!
