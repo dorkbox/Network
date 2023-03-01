@@ -85,7 +85,7 @@ open class Server<CONNECTION : Connection>(
      * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
      * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
      *
-     * To put it bluntly, ONLY have the server do work inside of a listener!
+     * To put it bluntly, ONLY have the server do work inside a listener!
      *
      * @param config these are the specific connection options
      * @param loggerName allows for a custom logger name for this endpoint (for when there are multiple endpoints)
@@ -103,7 +103,7 @@ open class Server<CONNECTION : Connection>(
      * The server can only be accessed in an ASYNC manner. This means that the server can only be used in RESPONSE to events. If you access the
      * server OUTSIDE of events, you will get inaccurate information from the server (such as getConnections())
      *
-     * To put it bluntly, ONLY have the server do work inside of a listener!
+     * To put it bluntly, ONLY have the server do work inside a listener!
      *
      * @param config these are the specific connection options
      */
