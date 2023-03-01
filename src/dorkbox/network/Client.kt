@@ -911,7 +911,7 @@ open class Client<CONNECTION : Connection>(
         val c = connection0
 
         if (c != null) {
-            return pingManager.ping(c, pingTimeoutSeconds, actionDispatch, responseManager, logger, function)
+            return super.ping(c, pingTimeoutSeconds, function)
         } else {
             logger.error(ClientException("Cannot send a ping when there is no connection!")) { "No connection!" }
         }

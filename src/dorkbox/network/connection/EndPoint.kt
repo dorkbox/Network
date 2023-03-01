@@ -235,7 +235,7 @@ internal constructor(val type: Class<*>,
 
     private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch)
 
-    internal val pingManager = PingManager<CONNECTION>()
+    private val pingManager = PingManager<CONNECTION>()
 
 
 
