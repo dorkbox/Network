@@ -137,7 +137,10 @@ open class Client<CONNECTION : Connection>(
          * This method should only be used to check if a client is running for a DIFFERENT configuration than the currently running client
          */
         fun isRunning(configuration: Configuration): Boolean {
-            return AeronDriver(configuration).isRunning()
+            return AeronDriver.getDriver(
+                configuration,
+                KotlinLogging.logger(Client::class.java.simpleName),
+                true).use { it.isRunning() }
         }
 
         init {
@@ -827,7 +830,7 @@ open class Client<CONNECTION : Connection>(
 
         // these have to be in two SEPARATE "runnables" otherwise...
         // if something inside-of listenerManager.notifyConnect is blocking or suspends, then polling will never happen!
-        actionDispatch.launch {
+        eventDispatch.launch {
             lockStepForConnect.getAndSet(null)?.withLock {  }
             listenerManager.notifyConnect(newConnection)
         }

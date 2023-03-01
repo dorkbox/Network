@@ -32,6 +32,7 @@ import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import mu.KotlinLogging
 import java.net.InetAddress
 import java.util.concurrent.*
 
@@ -128,7 +129,10 @@ open class Server<CONNECTION : Connection>(
          * This method should only be used to check if a server is running for a DIFFERENT configuration than the currently running server
          */
         fun isRunning(configuration: ServerConfiguration): Boolean {
-            return AeronDriver(configuration).isRunning()
+            return AeronDriver.getDriver(
+                configuration,
+                KotlinLogging.logger(Server::class.java.simpleName),
+                true).use { it.isRunning() }
         }
 
         init {
@@ -319,7 +323,7 @@ open class Server<CONNECTION : Connection>(
                     // NOTE: this must be the LAST thing happening!
 
                     // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    val job = actionDispatch.launch {
+                    val job = eventDispatch.launch {
                         listenerManager.notifyDisconnect(connection)
                     }
                     jobs.add(job)

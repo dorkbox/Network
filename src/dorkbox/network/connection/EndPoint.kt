@@ -242,6 +242,10 @@ internal constructor(val type: Class<*>,
 
 
     init {
+        require(eventDispatch.isActive) { "The Event Dispatch is no longer active. It has been shutdown" }
+        require(messageDispatch.isActive) { "The Message Dispatch is no longer active. It has been shutdown" }
+
+
         if (DEBUG_CONNECTIONS) {
             logger.error { "DEBUG_CONNECTIONS is enabled. This should not happen in release!" }
         }
