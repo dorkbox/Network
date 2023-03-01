@@ -36,6 +36,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import mu.KLogger
 import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
+import org.slf4j.helpers.NOPLogger
 import java.io.File
 import java.net.BindException
 import java.nio.channels.ClosedByInterruptException
@@ -616,10 +617,13 @@ abstract class Configuration {
                     suggestedLocation
                 }
                 else {
-                    if (!alreadyShownTempFsTips) {
-                        alreadyShownTempFsTips = true
-                        logger.info("It is recommended to create a RAM drive for best performance. For example\n" +
-                                            "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`")
+                    if (logger !== NOPLogger.NOP_LOGGER) {
+                        if (!alreadyShownTempFsTips) {
+                            alreadyShownTempFsTips = true
+                            logger.info(
+                                "It is recommended to create a RAM drive for best performance. For example\n" + "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`"
+                            )
+                        }
                     }
 
                     OS.TEMP_DIR
