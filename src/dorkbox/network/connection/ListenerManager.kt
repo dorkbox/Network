@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -150,12 +150,17 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
         internal inline fun <reified T> add(thing: T, array: Array<T>): Array<T> {
             val currentLength: Int = array.size
 
-            // add the new subscription to the array
+            // add the new subscription to the END of the array
             @Suppress("UNCHECKED_CAST")
             val newMessageArray = array.copyOf(currentLength + 1) as Array<T>
             newMessageArray[currentLength] = thing
 
             return newMessageArray
+        }
+
+        internal inline fun <reified T> remove(thing: T, array: Array<T>): Array<T> {
+            // remove the subscription form the array
+            return array.filter { it !== thing }.toTypedArray()
         }
     }
 
@@ -418,11 +423,30 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     fun notifyError(connection: CONNECTION, exception: Throwable) {
         onErrorList.value.forEach {
             try {
+                logger.error("Error with connection $connection", exception)
                 it(connection, exception)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
                 cleanStackTrace(t)
                 logger.error("Connection ${connection.id} error", t)
+            }
+        }
+    }
+
+    /**
+     * Invoked when there is a global error (no connection information)
+     *
+     * The error is also sent to an error log before notifying callbacks
+     */
+    fun notifyError(exception: Throwable) {
+        onErrorGlobalList.value.forEach {
+            try {
+                logger.error("Global error", exception)
+                it(exception)
+            } catch (t: Throwable) {
+                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                cleanStackTrace(t)
+                logger.error("Global error", t)
             }
         }
     }
