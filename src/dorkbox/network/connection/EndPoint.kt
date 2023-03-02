@@ -24,6 +24,7 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
+import dorkbox.network.aeron.EventPoller
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -44,10 +45,10 @@ import io.aeron.Publication
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.plus
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
@@ -187,12 +188,14 @@ internal constructor(val type: Class<*>,
 
     val logger: KLogger = KotlinLogging.logger(loggerName)
 
-    private val handler = CoroutineExceptionHandler { _, exception ->
+    // this is rather silly, BUT if there are more complex errors WITH the coroutine that occur, a regular try/catch WILL NOT catch it.
+    // ADDITIONALLY, an error handler is ONLY effective at the first, top-level `launch`. IT WILL NOT WORK ANY OTHER WAY.
+    private val errorHandler = CoroutineExceptionHandler { _, exception ->
         logger.error(exception) { "Uncaught Coroutine Error!" }
     }
 
-    internal val eventDispatch = config.eventDispatch + handler
-    private val messageDispatch = config.messageDispatch + handler
+    internal val eventDispatch = EventDispatcher()
+    private val messageDispatch = CoroutineScope(config.messageDispatch)
 
     internal val listenerManager = ListenerManager<CONNECTION>(logger)
 
@@ -1024,7 +1027,7 @@ internal constructor(val type: Class<*>,
         }
     }
 
-    private fun closeAction(extraActions: suspend () -> Unit = {}) {
+    private fun closeAction(extraActions: () -> Unit = {}) {
         // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
         // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
         val enableRemove = type == Client::class.java
@@ -1036,9 +1039,7 @@ internal constructor(val type: Class<*>,
         }
 
         // must run after connections have been closed, but before anything else
-        runBlocking {
-            extraActions()
-        }
+        extraActions()
 
         close0()
 
@@ -1056,6 +1057,8 @@ internal constructor(val type: Class<*>,
 
         // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
         shutdownLatch.countDown()
+
+        logger.info { "${type.simpleName} finished shutting down."}
     }
 
 
