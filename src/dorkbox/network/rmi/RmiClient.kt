@@ -17,8 +17,8 @@ package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.rmi.messages.MethodRequest
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -181,7 +181,7 @@ internal class RmiClient(val isGlobal: Boolean,
     @Volatile private var enableEquals = false
 
     // if we are ASYNC, then this method immediately returns
-    private suspend fun sendRequest(isAsync: Boolean, eventDispatch: CoroutineScope, invokeMethod: MethodRequest, logger: KLogger): Any? {
+    private suspend fun sendRequest(isAsync: Boolean, eventDispatch: EventDispatcher, invokeMethod: MethodRequest, logger: KLogger): Any? {
         // there is a STRANGE problem, where if we DO NOT respond/reply to method invocation, and immediate invoke multiple methods --
         // the "server" side can have out-of-order method invocation. There are 2 ways to solve this
         //  1) make the "server" side single threaded

@@ -82,7 +82,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
     private fun validateMessageTypeAndDoPending(
         server: Server<CONNECTION>,
-        eventDispatch: CoroutineScope,
+        eventDispatch: EventDispatcher,
         handshakePublication: Publication,
         message: HandshakeMessage,
         logger: KLogger

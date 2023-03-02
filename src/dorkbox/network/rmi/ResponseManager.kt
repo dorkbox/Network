@@ -16,12 +16,11 @@
 package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.EventDispatcher
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
@@ -184,7 +183,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
     /**
      * Cancels the RMI request in the given timeout, the callback is executed inside the read lock
      */
-    fun cancelRequest(eventDispatch: CoroutineScope, timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
+    fun cancelRequest(eventDispatch: EventDispatcher, timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
         eventDispatch.launch {
             delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
@@ -209,7 +208,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
      * @return the result (can be null) or timeout exception
      */
     suspend fun waitForReply(
-        eventDispatch: CoroutineScope,
+        eventDispatch: EventDispatcher,
         responseWaiter: ResponseWaiter,
         timeoutMillis: Long,
         logger: KLogger,

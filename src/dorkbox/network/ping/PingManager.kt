@@ -20,8 +20,8 @@
 package dorkbox.network.ping
 
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.rmi.ResponseManager
-import kotlinx.coroutines.CoroutineScope
 import mu.KLogger
 import java.util.concurrent.*
 
@@ -61,7 +61,7 @@ internal class PingManager<CONNECTION : Connection> {
     internal suspend fun ping(
         connection: Connection,
         pingTimeoutSeconds: Int,
-        eventDispatch: CoroutineScope,
+        eventDispatch: EventDispatcher,
         responseManager: ResponseManager,
         logger: KLogger,
         function: suspend Ping.() -> Unit
