@@ -281,10 +281,10 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
         return resultOrWaiter
     }
 
-    suspend fun close() {
+    fun close() {
         // wait for responses, or wait for timeouts!
         while (rmiWaitersInUse.value > 0) {
-            delay(100)
+            Thread.sleep(100)
         }
 
         waiterCache.close()
