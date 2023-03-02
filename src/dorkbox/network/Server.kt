@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,9 +29,6 @@ import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
 import dorkbox.network.rmi.RmiSupportServer
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import java.net.InetAddress
 import java.util.concurrent.*
@@ -297,23 +294,24 @@ open class Server<CONNECTION : Connection>(
             }
         },
         {
-            logger.debug { "Network event dispatch closing..." }
+            logger.debug { "Server event dispatch closing..." }
 
             // we want to process **actual** close cleanup events on this thread as well, otherwise we will have threading problems
             shutdownPollLatch.await()
-
-            // we have to manually cleanup the connections and call server-notifyDisconnect because otherwise this will never get called
-            val jobs = mutableListOf<Job>()
 
             // we want to clear all the connections FIRST (since we are shutting down)
             val cons = mutableListOf<CONNECTION>()
             connections.forEach { cons.add(it) }
             connections.clear()
 
+
+            // when we close a client or a server, we want to make sure that ALL notifications are finished.
+            // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
+
+            // we have to manually cleanup the connections and call server-notifyDisconnect because otherwise this will never get called
             try {
                 cons.forEach { connection ->
                     logger.info { "[${connection.id}/${connection.streamId}] Connection from [${connection.remoteAddressString}] cleanup and close" }
-
                     // make sure the connection is closed (close can only happen once, so a duplicate call does nothing!)
                     connection.close()
 
@@ -322,17 +320,8 @@ open class Server<CONNECTION : Connection>(
                     // instantly notified and on cleanup, the server-listenermanager is called
                     // NOTE: this must be the LAST thing happening!
 
-                    // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    val job = eventDispatch.launch {
-                        listenerManager.notifyDisconnect(connection)
-                    }
-                    jobs.add(job)
-                }
-
-                // when we close a client or a server, we want to make sure that ALL notifications are finished.
-                // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
-                runBlocking {
-                    jobs.forEach { it.join() }
+                    // the SERVER cannot re-connect to clients, only clients can call 'connect'.
+                    listenerManager.notifyDisconnect(connection)
                 }
             } finally {
                 ipv4Poller.close()
@@ -388,7 +377,7 @@ open class Server<CONNECTION : Connection>(
      * Closes the server and all it's connections. After a close, you may call 'bind' again.
      */
     final override fun close0() {
-        // when we call close, it will shut-down the polling mechanism, then wait for us to tell it to clean-up connections.
+        // when we call close, it will shutdown the polling mechanism, then wait for us to tell it to clean-up connections.
         //
         // Aeron + the Media Driver will have already been shutdown at this point.
         if (bindAlreadyCalled.getAndSet(false)) {
