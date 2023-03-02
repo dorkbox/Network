@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,10 +41,10 @@ import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import mu.KotlinLogging
 import java.lang.Thread.sleep
 import java.net.Inet4Address
 import java.net.Inet6Address
@@ -178,7 +178,7 @@ open class Client<CONNECTION : Connection>(
     private var connection0: CONNECTION? = null
 
 
-    // This is set by the client so if there is a "connect()" call in the the disconnect callback, we can have proper
+    // This is set by the client so if there is a "connect()" call in the disconnect callback, we can have proper
     // lock-stop ordering for how disconnect and connect work with each-other
     // GUARANTEE that the callbacks for 'onDisconnect' happens-before the 'onConnect'.
     private val lockStepForConnect = atomic<Mutex?>(null)
@@ -767,14 +767,16 @@ open class Client<CONNECTION : Connection>(
             // make sure to call our client.notifyDisconnect() callbacks
 
             // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            actionDispatch.launch {
-                listenerManager.notifyDisconnect(connection)
+            eventDispatch.launch {
                 lockStepForConnect.getAndSet(null)?.unlock()
+                listenerManager.notifyDisconnect(connection)
             }
         }
 
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
-        listenerManager.notifyInit(newConnection)
+        runBlocking {
+            listenerManager.notifyInit(newConnection)
+        }
 
         connection0 = newConnection
         addConnection(newConnection)
