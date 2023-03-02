@@ -366,6 +366,21 @@ open class Client<CONNECTION : Connection>(
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true)
     {
+        // NOTE: We CAN have a 'connect' inside the 'disconnect' callback (as a reconnect feature). THIS WILL CAUSE PROBLEMS!
+        // there can ALSO be recursion problems, so we must address that.
+        if (eventDispatch.isCurrent && !eventDispatch.wasForced) {
+            logger.trace { "Redispatching a connect request!" }
+            eventDispatch.forceLaunch {
+                connect(remoteAddress,
+                        remoteAddressString,
+                        remoteAddressPrettyString,
+                        ipcId,
+                        connectionTimeoutSec,
+                        reliable)
+            }
+            return
+        }
+
         // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
         config as ClientConfiguration
 
