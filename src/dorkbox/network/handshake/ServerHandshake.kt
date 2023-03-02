@@ -25,12 +25,11 @@ import dorkbox.network.aeron.mediaDriver.ServerUdpPairedDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.AllocationException
 import io.aeron.Publication
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
@@ -136,7 +135,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 }
 
                 // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
-                listenerManager.notifyInit(existingConnection)
+                runBlocking {
+                    listenerManager.notifyInit(existingConnection)
+                }
 
                 // this enables the connection to start polling for messages
                 server.addConnection(existingConnection)
