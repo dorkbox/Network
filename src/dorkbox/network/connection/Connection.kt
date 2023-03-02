@@ -423,12 +423,12 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             }
 
             // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
-
             // NOTE: notifyDisconnect() is called inside closeAction()!!
 
             // This is set by the client/server so if there is a "connect()" call in the disconnect callback, we can have proper
             // lock-stop ordering for how disconnect and connect work with each-other
-            runBlocking {
+
+            endPoint.eventDispatch.runBlocking {
                 closeAction()
             }
 
