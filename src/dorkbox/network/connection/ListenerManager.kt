@@ -418,9 +418,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * The error is also sent to an error log before notifying callbacks
      */
     fun notifyError(connection: CONNECTION, exception: Throwable) {
+        logger.error("Error with connection $connection", exception)
+
         onErrorList.value.forEach {
             try {
-                logger.error("Error with connection $connection", exception)
                 it(connection, exception)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
@@ -436,9 +437,10 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * The error is also sent to an error log before notifying callbacks
      */
     fun notifyError(exception: Throwable) {
+        logger.error("Global error", exception)
+
         onErrorGlobalList.value.forEach {
             try {
-                logger.error("Global error", exception)
                 it(exception)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
