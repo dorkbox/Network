@@ -1,4 +1,20 @@
 /*
+ * Copyright 2023 dorkbox, llc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
  * Copyright 2014-2022 Real Logic Limited.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,7 +60,8 @@ class BacklogStat(private val counters: CountersReader) {
      * @return a snapshot of all the backlog information and group by stream.
      */
     fun snapshot(): Map<StreamCompositeKey, StreamBacklog> {
-        val streams: MutableMap<StreamCompositeKey, StreamBacklog> = HashMap()
+        val streams = mutableMapOf<StreamCompositeKey, StreamBacklog>()
+
         counters.forEach { counterId: Int, typeId: Int, keyBuffer: DirectBuffer, _: String? ->
             if (typeId >= PublisherLimit.PUBLISHER_LIMIT_TYPE_ID && typeId <= ReceiverPos.RECEIVER_POS_TYPE_ID || typeId == SenderLimit.SENDER_LIMIT_TYPE_ID || typeId == PerImageIndicator.PER_IMAGE_TYPE_ID || typeId == PublisherPos.PUBLISHER_POS_TYPE_ID) {
                 val key = StreamCompositeKey(
