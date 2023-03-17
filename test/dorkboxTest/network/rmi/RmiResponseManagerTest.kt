@@ -31,7 +31,7 @@ import org.junit.Test
 
 class RmiResponseManagerTest: BaseTest() {
     companion object {
-        val logger =  KotlinLogging.logger("RmiResponseManagerTest")
+        private val logger =  KotlinLogging.logger("RmiResponseManagerTest")
     }
 
     @Test
