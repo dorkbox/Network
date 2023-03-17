@@ -183,8 +183,8 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
     /**
      * Cancels the RMI request in the given timeout, the callback is executed inside the read lock
      */
-    fun cancelRequest(eventDispatch: EventDispatcher, timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
-        eventDispatch.launch {
+    suspend fun cancelRequest(eventDispatch: EventDispatcher, timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
+        eventDispatch.send {
             delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
             // check if we have a result or not
