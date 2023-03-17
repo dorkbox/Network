@@ -27,6 +27,7 @@ import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
+import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiSupportServer
 import kotlinx.atomicfu.atomic
 import mu.KotlinLogging
@@ -362,6 +363,42 @@ open class Server<CONNECTION : Connection>(
      */
     fun addConnectionRules(vararg rules: ConnectionRule) {
         connectionRules.addAll(listOf(*rules))
+    }
+
+    /**
+     * Adds an IP+subnet rule that defines if that IP+subnet is allowed/denied connectivity to this server.
+     *
+     * By default, if there are no filter rules, then all connections are allowed to connect
+     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
+     *
+     * If ANY filter rule that is applied returns true, then the connection is permitted
+     *
+     * This function will be called for **only** network clients (IPC client are excluded)
+     */
+    fun filter(ipFilterRule: IpFilterRule) = runBlocking {
+        listenerManager.filter(ipFilterRule)
+    }
+
+    /**
+     * Adds a function that will be called BEFORE a client/server "connects" with each other, and used to determine if a connection
+     * should be allowed
+     *
+     * By default, if there are no filter rules, then all connections are allowed to connect
+     * If there are filter rules - then ONLY connections for the filter that returns true are allowed to connect (all else are denied)
+     *
+     * It is the responsibility of the custom filter to write the error, if there is one
+     *
+     * If the function returns TRUE, then the connection will continue to connect.
+     * If the function returns FALSE, then the other end of the connection will
+     *   receive a connection error
+     *
+     *
+     * If ANY filter rule that is applied returns true, then the connection is permitted
+     *
+     * This function will be called for **only** network clients (IPC client are excluded)
+     */
+    fun filter(function: CONNECTION.() -> Boolean) = runBlocking {
+        listenerManager.filter(function)
     }
 
     /**
