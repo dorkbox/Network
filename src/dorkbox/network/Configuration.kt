@@ -417,7 +417,7 @@ abstract class Configuration {
     var aeronDirectory: File? = null
         set(value) {
             require(!contextDefined) { errorMessage }
-            field = value
+            field = value?.absoluteFile ?: value
         }
 
     /**
