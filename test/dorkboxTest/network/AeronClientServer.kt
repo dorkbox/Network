@@ -29,6 +29,7 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
 import dorkbox.network.ipFilter.IpSubnetFilterRule
 import dorkbox.storage.Storage
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
@@ -108,7 +109,9 @@ class AeronClientServer {
                 acs.client("172.31.79.129")
             } else if (args.contains("server")) {
                 val server = acs.server()
-                server.waitForClose()
+                runBlocking {
+                    server.waitForClose()
+                }
             } else {
                 acs.server()
                 acs.client("localhost")
@@ -129,13 +132,6 @@ class AeronClientServer {
 //            configuration.uniqueAeronDirectory = true
 
         val client = Client<Connection>(configuration)
-
-        client.filter(IpSubnetFilterRule(IPv4.LOCALHOST, 32))
-
-        client.filter {
-            println("should this connection be allowed?")
-            true
-        }
 
         client.onInit {
             logger.error("initialized")
@@ -206,10 +202,13 @@ class AeronClientServer {
         val server = Server<Connection>(configuration)
 
         // we must always make sure that aeron is shut-down before starting again.
-        while (server.isRunning()) {
-            server.logger.error("Aeron was still running. Waiting for it to stop...")
-            Thread.sleep(2000)
+        runBlocking {
+            if (!server.ensureStopped()) {
+                throw IllegalStateException("Aeron was unable to shut down in a timely manner.")
+            }
         }
+
+        server.filter(IpSubnetFilterRule(IPv4.LOCALHOST, 32))
 
         server.filter {
             println("should the connection $this be allowed?")

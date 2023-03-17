@@ -21,11 +21,9 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
-import dorkbox.netUtil.IPv4
 import dorkbox.network.Client
 import dorkbox.network.ClientConfiguration
 import dorkbox.network.connection.Connection
-import dorkbox.network.ipFilter.IpSubnetFilterRule
 import dorkbox.storage.Storage
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
@@ -117,13 +115,6 @@ object AeronClient {
         configuration.uniqueAeronDirectory = true
 
         val client = Client<Connection>(configuration)
-
-        client.filter(IpSubnetFilterRule(IPv4.LOCALHOST, 32))
-
-        client.filter {
-            println("should this connection be allowed?")
-            true
-        }
 
         client.onInit {
             logger.error("initialized")

@@ -45,7 +45,7 @@ class ErrorLoggerTest : BaseTest() {
             }
 
             server.onErrorGlobal { throwable ->
-                println("Global error")
+                println("Global error!!!!")
                 throwable.printStackTrace()
             }
 
@@ -68,7 +68,7 @@ class ErrorLoggerTest : BaseTest() {
             client.onConnect {
                 // can be any message, we just want the error-log to log something
                 send(TestObj())
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             client.connect(LOCALHOST)

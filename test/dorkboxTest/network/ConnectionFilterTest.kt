@@ -16,6 +16,7 @@
 
 package dorkboxTest.network
 
+import ch.qos.logback.classic.Level
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
@@ -57,7 +58,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
@@ -106,7 +107,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
@@ -154,7 +155,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
@@ -181,13 +182,14 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.filter(IpSubnetFilterRule(IPv4.WILDCARD, 0))
+            server.filter(IpSubnetFilterRule(IPv6.WILDCARD, 0))
 
             server.onConnect {
                 serverConnectSuccess.value = true
-                println("Closing server connection")
                 close()
             }
+            server.bind()
         }
 
         run {
@@ -195,16 +197,14 @@ class ConnectionFilterTest : BaseTest() {
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
-            client.filter(IpSubnetFilterRule(IPv4.WILDCARD, 0))
-            client.filter(IpSubnetFilterRule(IPv6.WILDCARD, 0))
+
 
             client.onConnect {
                 clientConnectSuccess.value = true
             }
 
             client.onDisconnect {
-                println("**************************** CLOSE")
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
@@ -230,12 +230,13 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
             server.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
 
             server.onConnect {
                 close()
             }
+
+            server.bind()
         }
 
         run {
@@ -245,23 +246,24 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(client)
 
             client.onDisconnect {
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                e.printStackTrace()
                 stopEndPoints()
                 throw e
             }
         }
 
-        waitForThreads()
+        // fail, since we should have thrown an exception
+        Assert.assertFalse(true)
     }
 
     @Test
     fun rejectServerIpc() {
+        setLogLevel(Level.TRACE)
         // we do not want to limit loopback addresses! Even with filtering, IPC is always allowed to connect
 
         val serverConnectSuccess = atomic(false)
@@ -274,13 +276,14 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
             server.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
 
             server.onConnect {
-                serverConnectSuccess.lazySet(true)
+                serverConnectSuccess.value = true
                 close()
             }
+
+            server.bind()
         }
 
         run {
@@ -296,7 +299,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
@@ -321,11 +324,12 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
-
+            server.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
             server.onConnect {
                 close()
             }
+
+            server.bind()
         }
 
         run {
@@ -333,10 +337,10 @@ class ConnectionFilterTest : BaseTest() {
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
-            client.filter(IpSubnetFilterRule("1.1.1.1", 32)) // this address will NEVER actually connect. we just use it for testing
+
 
             client.onDisconnect {
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
@@ -360,7 +364,6 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
             server.filter {
                 true
             }
@@ -369,6 +372,8 @@ class ConnectionFilterTest : BaseTest() {
                 serverConnectSuccess.value = true
                 close()
             }
+
+            server.bind()
         }
 
         run {
@@ -382,7 +387,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
@@ -410,13 +415,11 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
-
             server.onConnect {
                 serverConnectSuccess.value = true
-                logger.error { "closing" }
                 close()
             }
+            server.bind()
         }
 
         run {
@@ -424,17 +427,14 @@ class ConnectionFilterTest : BaseTest() {
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
-            client.filter {
-                true
-            }
+
 
             client.onConnect {
                 clientConnectSuccess.value = true
             }
 
             client.onDisconnect {
-                logger.error { "on close" }
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
@@ -477,7 +477,7 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(client)
 
             client.onDisconnect {
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {
@@ -498,6 +498,9 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
+            server.filter {
+                false
+            }
             server.bind()
 
             server.onConnect {
@@ -510,12 +513,10 @@ class ConnectionFilterTest : BaseTest() {
 
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
-            client.filter {
-                false
-            }
+
 
             client.onDisconnect {
-                stopEndPoints()
+                stopEndPointsSuspending()
             }
 
             try {

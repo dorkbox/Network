@@ -98,7 +98,7 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
         run {
-            val config = clientConfig() {
+            val config = clientConfig {
                 uniqueAeronDirectory = true
             }
 
@@ -117,17 +117,12 @@ class DisconnectReconnectTest : BaseTest() {
                 logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
-                if (count == 3) {
+                if (count < 3) {
+                    logger.error("Reconnecting: $count")
+                    client.connect(LOCALHOST)
+                } else {
                     logger.error("Shutting down")
                     stopEndPoints()
-                }
-                else {
-                    logger.error("Reconnecting: $count")
-                    try {
-                        client.connect(LOCALHOST)
-                    } catch (e: IOException) {
-                        e.printStackTrace()
-                    }
                 }
             }
 
@@ -151,8 +146,9 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
         fun close(connection: Connection) {
-            connection.logger.error { "PRE CLOSE MESSAGE!" }
-            connection.close()
+            runBlocking {
+                connection.close()
+            }
         }
     }
 
@@ -228,9 +224,10 @@ class DisconnectReconnectTest : BaseTest() {
     fun manualMediaDriverAndReconnectClient() {
         val log = KotlinLogging.logger("DCUnitTest")
         // NOTE: once a config is assigned to a driver, the config cannot be changed
-        val aeronDriver = AeronDriver.getDriver(serverConfig(), log)
-        runBlocking {
-            aeronDriver.start(log)
+        val aeronDriver = runBlocking {
+            val driver = AeronDriver(serverConfig(), log)
+            driver.start()
+            driver
         }
 
         run {

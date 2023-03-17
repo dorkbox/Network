@@ -31,6 +31,10 @@ import dorkbox.util.async
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import sun.misc.Unsafe
 import java.lang.reflect.Field
@@ -122,11 +126,16 @@ class AeronRmiClientServer {
                 if (args.contains("client")) {
                     val client = acs.client(0, configuration)
                     client.connect("172.31.73.222") // UDP connection via loopback
-                    Thread.sleep(Long.MAX_VALUE)
+
+                    runBlocking {
+                        delay(Long.MAX_VALUE)
+                    }
                     client.close()
                 } else if (args.contains("server")) {
                     val server = acs.server()
-                    server.waitForClose()
+                    runBlocking {
+                        server.waitForClose()
+                    }
                 } else {
     //                acs.server()
     //                acs.client("localhost")

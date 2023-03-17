@@ -130,7 +130,7 @@ abstract class BaseTest {
 
             val encoder = PatternLayoutEncoder()
             encoder.context = context
-            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] %msg%n"
+            encoder.pattern = "%date{HH:mm:ss.SSS}  %-5level [%logger{35}] [%t] %msg%n"
             encoder.start()
 
             val consoleAppender = ConsoleAppender<ILoggingEvent>()
