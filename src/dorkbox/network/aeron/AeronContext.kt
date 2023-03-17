@@ -84,9 +84,7 @@ class AeronContext(
 
             // we DO NOT want to abort the JVM if there are errors.
             // this replaces the default handler with one that doesn't abort the JVM
-            mediaDriverContext.errorHandler { error ->
-                aeronErrorHandler(error)
-            }
+            mediaDriverContext.errorHandler(aeronErrorHandler)
 
             return mediaDriverContext
         }
