@@ -24,20 +24,26 @@ import mu.KLogger
  * For a client, the streamId specified here MUST be manually flipped because they are in the perspective of the SERVER
  * NOTE: IPC connection will ALWAYS have a timeout of 10 second to connect. This is IPC, it should connect fast
  */
-internal open class ServerIpcDriver(streamId: Int,
+internal open class ServerIpcDriver(aeronDriver: AeronDriver,
+                                    streamId: Int,
                                     sessionId: Int) :
-    MediaDriverServer(port = 0, streamId = streamId, sessionId = sessionId, connectionTimeoutSec = 10, isReliable = true) {
+    MediaDriverServer(aeronDriver = aeronDriver,
+                      port = 0,
+                      streamId = streamId,
+                      sessionId = sessionId,
+                      connectionTimeoutSec = 10,
+                      isReliable = true,
+                      "IPC") {
 
 
     var success: Boolean = false
-    override val type = "ipc"
 
     /**
      * Setup the subscription + publication channels on the server.
      *
      * serverAddress is ignored for IPC
      */
-     override fun build(aeronDriver: AeronDriver, logger: KLogger) {
+     override suspend fun build(logger: KLogger) {
         // Create a subscription at the given address and port, using the given stream ID.
         val subscriptionUri = uri("ipc", sessionId)
 
@@ -49,6 +55,6 @@ internal open class ServerIpcDriver(streamId: Int,
 
 
         success = true
-        subscription = aeronDriver.addSubscription(logger, subscriptionUri, "IPC", streamId)
+        subscription = aeronDriver.addSubscription(subscriptionUri, listenType, streamId)
     }
 }

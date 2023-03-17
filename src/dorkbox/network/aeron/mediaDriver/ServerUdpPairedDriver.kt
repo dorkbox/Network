@@ -32,34 +32,34 @@ import java.net.InetAddress
  * A connection timeout of 0, means to wait forever
  */
 internal class ServerUdpPairedDriver(
+    aeronDriver: AeronDriver,
     listenAddress: InetAddress,
     val remoteAddress: InetAddress,
     port: Int,
     streamId: Int,
     sessionId: Int,
     connectionTimeoutSec: Int,
-    isReliable: Boolean
+    isReliable: Boolean,
+    listenType: String
 ) :
     ServerUdpDriver(
+        aeronDriver = aeronDriver,
         listenAddress = listenAddress,
         port = port,
         streamId = streamId,
         sessionId = sessionId,
         connectionTimeoutSec = connectionTimeoutSec,
-        isReliable = isReliable
+        isReliable = isReliable,
+        listenType = listenType
     ) {
 
     lateinit var publication: Publication
 
-    override fun build(aeronDriver: AeronDriver, logger: KLogger) {
+    override suspend fun build(logger: KLogger) {
         // connection timeout of 0 doesn't matter. it is not used by the server
         // the client address WILL BE either IPv4 or IPv6
         val isRemoteIpv4 = remoteAddress is Inet4Address
-        val type = if (isRemoteIpv4) {
-            "IPv4"
-        } else {
-            "IPv6"
-        }
+
 
         // if we are connecting to localhost IPv4 (but our server is IPv6+4), then aeron MUST publish on the IPv4 version
         val properPubAddress = EndPoint.getWildcard(listenAddress, listenAddressString, isRemoteIpv4)
@@ -71,7 +71,7 @@ internal class ServerUdpPairedDriver(
             .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
 
-        val publication = aeronDriver.addExclusivePublication(logger, publicationUri, type, streamId)
+        val publication = aeronDriver.addExclusivePublication(publicationUri, listenType, streamId)
 
         // if we are IPv6 WILDCARD -- then our subscription must ALSO be IPv6, even if our connection is via IPv4
         var subShouldBeIpv4 = isRemoteIpv4
@@ -103,7 +103,7 @@ internal class ServerUdpPairedDriver(
             .endpoint(subShouldBeIpv4, properSubAddress, port)
 
 
-        val subscription = aeronDriver.addSubscription(logger, subscriptionUri, type, streamId)
+        val subscription = aeronDriver.addSubscription(subscriptionUri, listenType, streamId)
 
         val remoteAddressString = if (isRemoteIpv4) {
             IPv4.toString(remoteAddress as Inet4Address)

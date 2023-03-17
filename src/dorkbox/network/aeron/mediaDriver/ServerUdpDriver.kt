@@ -29,23 +29,28 @@ import java.net.InetAddress
  * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER.
  * A connection timeout of 0, means to wait forever
  */
-internal open class ServerUdpDriver(val listenAddress: InetAddress,
-                                    port: Int,
-                                    streamId: Int,
-                                    sessionId: Int,
-                                    connectionTimeoutSec: Int,
-                                    isReliable: Boolean) :
+internal open class ServerUdpDriver(
+    aeronDriver: AeronDriver,
+    val listenAddress: InetAddress,
+    port: Int,
+    streamId: Int,
+    sessionId: Int,
+    connectionTimeoutSec: Int,
+    isReliable: Boolean,
+    listenType: String
+) :
     MediaDriverServer(
+        aeronDriver = aeronDriver,
         port = port,
         streamId = streamId,
         sessionId = sessionId,
         connectionTimeoutSec = connectionTimeoutSec,
-        isReliable = isReliable
+        isReliable = isReliable,
+        listenType = listenType
     ) {
 
 
     var success: Boolean = false
-    override val type = "udp"
 
     private val isListenIpv4 = listenAddress is Inet4Address
     protected val listenAddressString = IP.toString(listenAddress)
@@ -56,13 +61,7 @@ internal open class ServerUdpDriver(val listenAddress: InetAddress,
         else -> listenAddressString
     }
 
-    override fun build(aeronDriver: AeronDriver, logger: KLogger) {
-        val type = if (isListenIpv4) {
-            "IPv4"
-        } else {
-            "IPv6"
-        }
-
+    override suspend fun build(logger: KLogger) {
         // Create a subscription at the given address and port, using the given stream ID.
         val subscriptionUri = uri("udp", sessionId, isReliable)
             .endpoint(isListenIpv4, listenAddressString, port)
@@ -74,6 +73,6 @@ internal open class ServerUdpDriver(val listenAddress: InetAddress,
         }
 
         this.success = true
-        this.subscription = aeronDriver.addSubscription(logger, subscriptionUri, type, streamId)
+        this.subscription = aeronDriver.addSubscription(subscriptionUri, listenType, streamId)
     }
 }

@@ -34,9 +34,9 @@ fun ChannelUriStringBuilder.controlEndpoint(isIpv4: Boolean, addressString: Stri
 // the potential for a live-lock due to coroutine scheduling
 interface MediaDriverConnection {
 
-    val type: String
+    suspend fun build(logger: KLogger)
 
-    fun build(aeronDriver: AeronDriver, logger: KLogger)
+    suspend fun close(logger: KLogger)
 
     companion object {
         fun uri(type: String, sessionId: Int = AeronDriver.RESERVED_SESSION_ID_INVALID, isReliable: Boolean? = null): ChannelUriStringBuilder {

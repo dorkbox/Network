@@ -23,8 +23,8 @@ import dorkbox.network.connection.ListenerManager
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.CommonContext
+import kotlinx.coroutines.delay
 import mu.KLogger
-import java.lang.Thread.sleep
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.*
@@ -32,35 +32,32 @@ import java.util.concurrent.*
 /**
  * A connection timeout of 0, means to wait forever
  */
-internal class ClientUdpDriver(val address: InetAddress, val addressString: String,
+internal class ClientUdpDriver(aeronDriver: AeronDriver,
+                               val address: InetAddress, val addressString: String,
                                port: Int,
                                streamId: Int,
                                sessionId: Int,
                                connectionTimeoutSec: Int = 0,
-                               isReliable: Boolean) :
+                               isReliable: Boolean,
+                               listenType: String) :
     MediaDriverClient(
+        aeronDriver = aeronDriver,
         port = port,
         streamId = streamId,
         sessionId = sessionId,
         connectionTimeoutSec = connectionTimeoutSec,
-        isReliable = isReliable
+        isReliable = isReliable,
+        listenType = listenType
     ) {
 
     var success: Boolean = false
-    override val type: String by lazy {
-        if (address is Inet4Address) {
-            "IPv4"
-        } else {
-            "IPv6"
-        }
-    }
 
     /**
      * @throws ClientRetryException if we need to retry to connect
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
     @Suppress("DuplicatedCode")
-    override fun build(aeronDriver: AeronDriver, logger: KLogger) {
+    override suspend fun build(logger: KLogger) {
         var success = false
 
         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
@@ -78,7 +75,7 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
 
         // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
         //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
-        val publication = aeronDriver.addExclusivePublication(logger, publicationUri, type, streamId)
+        val publication = aeronDriver.addExclusivePublication(publicationUri, listenType, streamId)
 
 
         // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
@@ -100,7 +97,7 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
             .controlEndpoint(isIpv4, addressString, port+1)
             .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
-        val subscription = aeronDriver.addSubscription(logger, subscriptionUri, type, streamId)
+        val subscription = aeronDriver.addSubscription(subscriptionUri, listenType, streamId)
 
 
         // always include the linger timeout, so we don't accidentally kill ourselves by taking too long
@@ -113,14 +110,14 @@ internal class ClientUdpDriver(val address: InetAddress, val addressString: Stri
                 break
             }
 
-            sleep(500L)
+            delay(500L)
         }
 
         if (!success) {
-            subscription.close()
-            publication.close()
+            aeronDriver.closeAndDeleteSubscription(subscription, "ClientUDP")
+            aeronDriver.closeAndDeletePublication(publication, "ClientUDP")
 
-            val ex = ClientTimedOutException("Cannot create publication to $type $addressString in $connectionTimeoutSec seconds")
+            val ex = ClientTimedOutException("Cannot create publication to $listenType $addressString in $connectionTimeoutSec seconds")
             ListenerManager.cleanAllStackTrace(ex)
             throw ex
         }
