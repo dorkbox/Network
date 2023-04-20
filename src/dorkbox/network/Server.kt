@@ -274,16 +274,18 @@ open class Server<CONNECTION : Connection>(
                         removeConnection(connection)
 
                         // this will call removeConnection again, but that is ok
-                        // this is blocking, because the connection MUST be removed in the same thread that is processing events
-                        connection.close()
+                        EventDispatcher.launch(EVENT.CLOSE) {
+                            // we already removed the connection
+                            connection.close(enableRemove = false)
 
-                        // have to manually notify the server-listenerManager that this connection was closed
-                        // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listener-manager is
-                        // instantly notified and on cleanup, the server-listener-manager is called
+                            // have to manually notify the server-listenerManager that this connection was closed
+                            // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listener-manager is
+                            // instantly notified and on cleanup, the server-listener-manager is called
 
-                        // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                        eventDispatch.launch {
-                            listenerManager.notifyDisconnect(connection)
+                            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                            EventDispatcher.launch(EVENT.DISCONNECT) {
+                                listenerManager.notifyDisconnect(connection)
+                            }
                         }
                     }
                 }
@@ -309,20 +311,25 @@ open class Server<CONNECTION : Connection>(
             // when we close a client or a server, we want to make sure that ALL notifications are finished.
             // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
 
-            // we have to manually cleanup the connections and call server-notifyDisconnect because otherwise this will never get called
+            // we have to manually clean-up the connections and call server-notifyDisconnect because otherwise this will never get called
             try {
                 cons.forEach { connection ->
                     logger.info { "[${connection.id}/${connection.streamId}] Connection from [${connection.remoteAddressString}] cleanup and close" }
                     // make sure the connection is closed (close can only happen once, so a duplicate call does nothing!)
-                    connection.close()
 
-                    // have to manually notify the server-listenerManager that this connection was closed
-                    // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
-                    // instantly notified and on cleanup, the server-listenermanager is called
-                    // NOTE: this must be the LAST thing happening!
+                    EventDispatcher.launch(EVENT.CLOSE) {
+                        connection.close(enableRemove = true)
 
-                    // the SERVER cannot re-connect to clients, only clients can call 'connect'.
-                    listenerManager.notifyDisconnect(connection)
+                        // have to manually notify the server-listenerManager that this connection was closed
+                        // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
+                        // instantly notified and on cleanup, the server-listenermanager is called
+                        // NOTE: this must be the LAST thing happening!
+
+                        // the SERVER cannot re-connect to clients, only clients can call 'connect'.
+                        EventDispatcher.launch(EVENT.DISCONNECT) {
+                            listenerManager.notifyDisconnect(connection)
+                        }
+                    }
                 }
             } finally {
                 ipv4Poller.close()
