@@ -748,17 +748,7 @@ open class Client<CONNECTION : Connection>(
             newConnection = connectionFunc(ConnectionParams(this, clientConnection, validateRemoteAddress))
             remoteAddress!!
 
-            // VALIDATE are we allowed to connect to this server (now that we have the initial server information)
-            val permitConnection = listenerManager.notifyFilter(newConnection)
-            if (!permitConnection) {
-                handshakeConnection.subscription.close()
-                handshakeConnection.publication.close()
-
-                val exception = ClientRejectedException("[$aeronLogInfo] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] was not permitted!")
-                ListenerManager.cleanStackTrace(exception)
-                logger.error(exception) { "Permission error" }
-                throw exception
-            }
+            // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
 
             logger.info { "[$aeronLogInfo] (${handshake.connectKey}) Connection (${newConnection.id}) adding new signature for [$remoteAddressString] : ${connectionInfo.publicKey.toHexString()}" }
             storage.addRegisteredServerKey(remoteAddress!!, connectionInfo.publicKey)
