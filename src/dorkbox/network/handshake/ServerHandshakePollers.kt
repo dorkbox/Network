@@ -42,7 +42,7 @@ internal object ServerHandshakePollers {
     fun disabled(serverInfo: String): AeronPoller {
         return object : AeronPoller {
             override fun poll(): Int { return 0 }
-            override fun close() {}
+            override suspend fun close() {}
             override val info = serverInfo
         }
     }
