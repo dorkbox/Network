@@ -781,15 +781,16 @@ open class Client<CONNECTION : Connection>(
 
             // make sure to call our client.notifyDisconnect() callbacks
 
-            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-            eventDispatch.launch {
-                lockStepForConnect.getAndSet(null)?.unlock()
+            // force us to wait until AFTER the connect logic has run. we MUST use a CDL. A mutex doesn't work properly
+            lockStepForConnect.await(connectWaitTimeout, TimeUnit.SECONDS)
+
+            EventDispatcher.launch(EVENT.DISCONNECT) {
                 listenerManager.notifyDisconnect(connection)
             }
         }
 
-        // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
-        runBlocking {
+        // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
+        EventDispatcher.launch(EVENT.INIT) {
             listenerManager.notifyInit(newConnection)
         }
 
@@ -818,7 +819,6 @@ open class Client<CONNECTION : Connection>(
         logger.debug { "[$aeronLogInfo] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] done with handshake." }
 
 
-
         // have to make a new thread to listen for incoming data!
         // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
 
@@ -833,7 +833,9 @@ open class Client<CONNECTION : Connection>(
                     logger.debug { "[$aeronLogInfo] connection expired" }
 
                     // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
-                    newConnection.close()
+                    EventDispatcher.launch(EVENT.CLOSE) {
+                        newConnection.close(enableRemove = true)
+                    }
 
                     // remove ourselves from processing
                     EventPoller.REMOVE
@@ -844,11 +846,15 @@ open class Client<CONNECTION : Connection>(
             }
         }
 
-        // these have to be in two SEPARATE "runnables" otherwise...
         // if something inside-of listenerManager.notifyConnect is blocking or suspends, then polling will never happen!
-        eventDispatch.launch {
-            lockStepForConnect.getAndSet(null)?.withLock {  }
+        // This must be on a different thread
+        EventDispatcher.launch(EVENT.CONNECT) {
+            // what happens if the disconnect runs INSIDE the connect?
+
             listenerManager.notifyConnect(newConnection)
+
+            // now the disconnect logic can run because we are done with the connect logic.
+            lockStepForConnect.countDown()
         }
     }
 
