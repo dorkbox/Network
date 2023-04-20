@@ -244,7 +244,7 @@ internal constructor(val type: Class<*>,
 
 
     init {
-        require(eventDispatch.isActive) { "The Event Dispatch is no longer active. It has been shutdown" }
+        require(EventDispatcher.isActive) { "The Event Dispatch is no longer active. It has been shutdown" }
         require(messageDispatch.isActive) { "The Message Dispatch is no longer active. It has been shutdown" }
 
 
@@ -428,7 +428,7 @@ internal constructor(val type: Class<*>,
      * @return true if the message was successfully sent by aeron
      */
     internal suspend fun ping(connection: Connection, pingTimeoutMs: Int, function: suspend Ping.() -> Unit): Boolean {
-        return pingManager.ping(connection, pingTimeoutMs, eventDispatch, responseManager, logger, function)
+        return pingManager.ping(connection, pingTimeoutMs, responseManager, logger, function)
     }
 
     /**
@@ -965,12 +965,14 @@ internal constructor(val type: Class<*>,
      *  - storage
      */
     fun closeForRestart() {
-        if (shutdown.compareAndSet(expect = false, update = true)) {
-            logger.info { "Shutting down for restart..." }
+        EventDispatcher.launch(EVENT.CLOSE) {
+            if (shutdown.compareAndSet(expect = false, update = true)) {
+                logger.info { "Shutting down for restart..." }
 
-            closeAction()
+                closeAction()
 
-            logger.info { "Done shutting down for restart..." }
+                logger.info { "Done shutting down for restart..." }
+            }
         }
     }
 

@@ -30,7 +30,7 @@ import io.aeron.Subscription
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -371,14 +371,16 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    fun close() {
-        close(enableRemove = true)
+    suspend fun close() {
+        EventDispatcher.launch(EVENT.CLOSE) {
+            close(enableRemove = true)
+        }
     }
 
     /**
      * Closes the connection, and removes all connection specific listeners
      */
-    internal fun close(enableRemove: Boolean) {
+    internal suspend fun close(enableRemove: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
@@ -387,8 +389,13 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
         if (isClosed.compareAndSet(expect = false, update = true)) {
-            val aeronLogInfo = "${id}/${streamId} : $remoteAddressString"
-            logger.debug {"[$aeronLogInfo] connection closing"}
+            closeAndCleanup(enableRemove)
+        }
+    }
+
+    private suspend fun closeAndCleanup(enableRemove: Boolean) {
+        val aeronLogInfo = "${id}/${streamId} : $remoteAddressString"
+        logger.debug {"[$aeronLogInfo] connection closing"}
 
             subscription.close()
 

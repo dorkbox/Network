@@ -18,102 +18,44 @@ package dorkbox.network.connection
 
 import dorkbox.network.Configuration
 import dorkbox.util.NamedThreadFactory
-import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.*
 
+/**
+ * This MUST be run on multiple coroutines! There are deadlock issues if it is only one.
+ */
 class EventDispatcher {
     companion object {
-        // It CANNOT be the default dispatch because there will be thread starvation
-        // NOTE: THIS CANNOT CHANGE!! IT WILL BREAK EVERYTHING
-        private val defaultEventDispatcher = Executors.newSingleThreadExecutor(
-            NamedThreadFactory("Event Dispatcher", Configuration.networkThreadGroup, Thread.NORM_PRIORITY, true)
-        )
-
-        private val asDispatcher = defaultEventDispatcher.asCoroutineDispatcher()
-
-        private val instances = atomic(0)
-    }
-
-    @Volatile
-    private var dispatchThreadId = 0L
-
-    @Volatile
-    private var forceLaunch = false
-
-
-    val wasForced: Boolean
-        get() = forceLaunch
-
-
-    private val eventDispatch = CoroutineScope(asDispatcher + CoroutineName("asdfasdfasdfasdf"))
-
-    val isActive: Boolean
-        get() = eventDispatch.isActive
-
-    val isCurrent: Boolean
-        get() = dispatchThreadId == Thread.currentThread().id
-
-    init {
-        instances.getAndIncrement()
-        eventDispatch.launch {
-            dispatchThreadId = Thread.currentThread().id
+        enum class EVENT {
+            INIT, CONNECT, DISCONNECT, CLOSE, RMI
         }
-    }
 
+        private val eventData = Array(EVENT.values().size) {
+            // It CANNOT be the default dispatch because there will be thread starvation
+            // NOTE: THIS CANNOT CHANGE!! IT WILL BREAK EVERYTHING IF IT CHANGES!
+            val executor = Executors.newSingleThreadExecutor(
+                NamedThreadFactory("Event Dispatcher-${EVENT.values()[it].name}", Configuration.networkThreadGroup, Thread.NORM_PRIORITY, true)
+            ).asCoroutineDispatcher()
 
-    /**
-     * When this method is called, it can be called from different 'threads'
-     *  - from a different thread
-     *  - from a different coroutine
-     *  - from the "same" coroutine
-     *
-     *  When it is from the same coroutine or from *something* whose thread originated from us, we DO NOT want to re-dispatch the event,
-     *  we want to immediately execute it (via runBlocking)
-     */
-    fun launch(function: suspend () -> Unit): Job {
-        return if (dispatchThreadId == Thread.currentThread().id) {
-            kotlinx.coroutines.runBlocking {
-                function()
-            }
-            // this job cannot be cancelled, because it will have already run by now
-            Job()
-        } else {
-            eventDispatch.launch {
-                function()
-            }
+            CoroutineScope(executor + SupervisorJob())
         }
-    }
 
-    /**
-     * Force launching the function on the event dispatch. This is for the RARE occasion that we want to make sure (that when running inside
-     * our current dispatch) to FINISH running the current logic before executing the NEW logic...
-     */
-    fun forceLaunch(function: suspend () -> Unit): Job {
-        forceLaunch = true
-        return eventDispatch.launch {
-            function()
-            forceLaunch = false
-        }
-    }
+        val isActive: Boolean
+            get() = eventData.all { it.isActive }
 
-    fun cancel(cause: String) {
-        // because we have a SHARED thread executor-as-a-coroutine-dispatcher, if we CANCEL on one instance, it will cancel ALL instances.
-        val count = instances.decrementAndGet()
-        if (count == 0) {
-            eventDispatch.cancel(cause)
-        }
-    }
-
-    fun runBlocking(function: suspend () -> Unit) {
-        kotlinx.coroutines.runBlocking {
-            function()
+        /**
+         * Each event type runs inside its own coroutine dispatcher.
+         *
+         * We want EACH event type to run in its own dispatcher... on its OWN thread, in order to prevent deadlocks
+         * This is because there are blocking dependencies: DISCONNECT -> CONNECT.
+         */
+        fun launch(event: EVENT, function: suspend CoroutineScope.() -> Unit): Job {
+            return eventData[event.ordinal].launch(block = function)
         }
     }
 }

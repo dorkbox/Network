@@ -20,7 +20,6 @@
 package dorkbox.network.ping
 
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.rmi.ResponseManager
 import mu.KLogger
 import java.util.concurrent.*
@@ -61,7 +60,6 @@ internal class PingManager<CONNECTION : Connection> {
     internal suspend fun ping(
         connection: Connection,
         pingTimeoutSeconds: Int,
-        eventDispatch: EventDispatcher,
         responseManager: ResponseManager,
         logger: KLogger,
         function: suspend Ping.() -> Unit
@@ -73,7 +71,7 @@ internal class PingManager<CONNECTION : Connection> {
         ping.pingTime = System.currentTimeMillis()
 
         // ALWAYS cancel the ping after XXX seconds
-        responseManager.cancelRequest(eventDispatch, TimeUnit.SECONDS.toMillis(pingTimeoutSeconds.toLong()), id, logger) {
+        responseManager.cancelRequest(TimeUnit.SECONDS.toMillis(pingTimeoutSeconds.toLong()), id, logger) {
             // kill the callback, since we are now "cancelled". If there is a race here (and the response comes at the exact same time)
             // we don't care since either it will be null or it won't (if it's not null, it will run the callback)
             result = null
