@@ -34,12 +34,14 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import mu.KLogger
+import mu.KotlinLogging
 import org.agrona.SystemUtil
 import org.agrona.concurrent.AgentTerminationException
 import org.slf4j.helpers.NOPLogger
 import java.io.File
 import java.net.BindException
 import java.nio.channels.ClosedByInterruptException
+import java.security.SecureRandom
 import java.util.concurrent.*
 
 class ServerConfiguration : dorkbox.network.Configuration() {
@@ -165,6 +167,8 @@ class ClientConfiguration : dorkbox.network.Configuration() {
 
 abstract class Configuration {
     companion object {
+        internal val NOP_LOGGER = KotlinLogging.logger(NOPLogger.NOP_LOGGER)
+
         internal const val errorMessage = "Cannot set a property after the configuration context has been created!"
 
         @Volatile
@@ -420,6 +424,8 @@ abstract class Configuration {
             field = value?.absoluteFile ?: value
         }
 
+
+    internal var uniqueAeronDirectoryID = 0
     /**
      * Should we force the Aeron location to be unique for every instance? This is mutually exclusive with IPC.
      */
@@ -427,6 +433,12 @@ abstract class Configuration {
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
+            uniqueAeronDirectoryID = SecureRandom().let {
+                // make sure it's not 0, because 0 is special
+                var id = 0
+                while (id == 0) id = it.nextInt()
+                id
+            }
         }
 
     /**
@@ -597,7 +609,7 @@ abstract class Configuration {
                     suggestedLocation
                 }
                 else {
-                    if (logger !== NOPLogger.NOP_LOGGER) {
+                    if (logger !== NOP_LOGGER) {
                         if (!alreadyShownTempFsTips) {
                             alreadyShownTempFsTips = true
                             logger.info(
@@ -655,7 +667,7 @@ abstract class Configuration {
         require(publicationTermBufferLength < 1_073_741_824) { "configuration publication term buffer must be < 1,073,741,824"}
     }
 
-    internal fun setDefaults(logger: KLogger) {
+    internal fun initialize(logger: KLogger) {
         // explicitly don't set defaults if we already have the context defined!
         if (contextDefined) {
             return
@@ -717,13 +729,22 @@ abstract class Configuration {
          *
          * After this command is executed the new disk will be mounted under /Volumes/DevShm.
          */
-        if (aeronDirectory == null) {
+        var dir = aeronDirectory
+        if (dir == null) {
             val baseFileLocation = suggestAeronLogLocation(logger)
-            val aeronLogDirectory = File(baseFileLocation, "aeron")
-            aeronDirectory = aeronLogDirectory
+            val aeronLogDirectory = if (uniqueAeronDirectory) {
+                // this is incompatible with IPC, and will not be set if IPC is enabled (error will be thrown on validate)
+                File(baseFileLocation, "aeron_$uniqueAeronDirectoryID")
+            } else {
+                File(baseFileLocation, "aeron")
+            }
+            dir = aeronLogDirectory
         }
 
-        aeronDirectory = aeronDirectory!!.absoluteFile
+        aeronDirectory = dir.absoluteFile
+
+        // cannot make any more changes to the configuration!
+        contextDefined = true
     }
 
 
@@ -734,16 +755,25 @@ abstract class Configuration {
          */
         @Suppress("DuplicatedCode")
         override fun validate() {
-            // have to do some basic validation of our configuration
+            require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
+            require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }
+
             require(sendBufferSize > 0) { "configuration socket send buffer must be > 0"}
             require(receiveBufferSize > 0) { "configuration socket receive buffer must be > 0"}
             require(ipcTermBufferLength > 65535) { "configuration IPC term buffer must be > 65535"}
             require(ipcTermBufferLength < 1_073_741_824) { "configuration IPC term buffer must be < 1,073,741,824"}
             require(publicationTermBufferLength > 65535) { "configuration publication term buffer must be > 65535"}
             require(publicationTermBufferLength < 1_073_741_824) { "configuration publication term buffer must be < 1,073,741,824"}
+        }
 
-            require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
-            require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }
+        /**
+         * Normally, the hashCode MAY be duplicate for entities that are similar, but not the same identity (via .equals). In the case
+         * of the MediaDriver config, the ID is used to uniquely identify a config that has the same VALUES, but is not the same REFERENCE.
+         *
+         * This is because configs that are DIFFERENT, but have the same values MUST use the same aeron driver.
+         */
+        val id: Int get() {
+            return mediaDriverId()
         }
 
         override fun equals(other: Any?): Boolean {
@@ -754,21 +784,25 @@ abstract class Configuration {
         }
 
         override fun hashCode(): Int {
-            return mediaDriverHash()
+            return mediaDriverId()
         }
     }
     internal fun asMediaDriverConfig(): MediaDriverConfig {
         val newConfig = MediaDriverConfig()
 
-        threadingMode = newConfig.threadingMode
-        networkMtuSize = newConfig.networkMtuSize
-        initialWindowLength = newConfig.initialWindowLength
-        sendBufferSize = newConfig.sendBufferSize
-        receiveBufferSize = newConfig.receiveBufferSize
-        aeronDirectory = newConfig.aeronDirectory
-        ipcTermBufferLength = newConfig.ipcTermBufferLength
-        publicationTermBufferLength = newConfig.publicationTermBufferLength
-        aeronErrorFilter = newConfig.aeronErrorFilter
+        newConfig.threadingMode = threadingMode
+        newConfig.networkMtuSize = networkMtuSize
+        newConfig.initialWindowLength = initialWindowLength
+        newConfig.sendBufferSize = sendBufferSize
+        newConfig.receiveBufferSize = receiveBufferSize
+
+        newConfig.aeronDirectory = aeronDirectory
+        newConfig.uniqueAeronDirectory = uniqueAeronDirectory
+        newConfig.uniqueAeronDirectoryID = uniqueAeronDirectoryID
+
+        newConfig.ipcTermBufferLength = ipcTermBufferLength
+        newConfig.publicationTermBufferLength = publicationTermBufferLength
+        newConfig.aeronErrorFilter = aeronErrorFilter
 
         return newConfig
     }
@@ -778,7 +812,11 @@ abstract class Configuration {
         if (initialWindowLength != other.initialWindowLength) return false
         if (sendBufferSize != other.sendBufferSize) return false
         if (receiveBufferSize != other.receiveBufferSize) return false
+
         if (aeronDirectory != other.aeronDirectory) return false
+        if (uniqueAeronDirectory != other.uniqueAeronDirectory) return false
+        if (uniqueAeronDirectoryID != other.uniqueAeronDirectoryID) return false
+
         if (ipcTermBufferLength != other.ipcTermBufferLength) return false
         if (publicationTermBufferLength != other.publicationTermBufferLength) return false
         if (aeronErrorFilter != other.aeronErrorFilter) return false
@@ -786,16 +824,19 @@ abstract class Configuration {
         return true
     }
 
-    fun mediaDriverHash(): Int {
+    fun mediaDriverId(): Int {
         var result = threadingMode.hashCode()
         result = 31 * result + networkMtuSize
         result = 31 * result + initialWindowLength
         result = 31 * result + sendBufferSize
         result = 31 * result + receiveBufferSize
+
+        result = 31 * result + (aeronDirectory?.hashCode() ?: 0)
+        result = 31 * result + uniqueAeronDirectory.hashCode()
+        result = 31 * result + uniqueAeronDirectoryID
+
         result = 31 * result + ipcTermBufferLength
         result = 31 * result + publicationTermBufferLength
-        result = 31 * result + aeronErrorFilter.hashCode() // lambda
-        result = 31 * result + (aeronDirectory?.hashCode() ?: 0)
 
         return result
     }
@@ -823,6 +864,7 @@ abstract class Configuration {
         if (sendIdleStrategy != other.sendIdleStrategy) return false
 
         if (uniqueAeronDirectory != other.uniqueAeronDirectory) return false
+        if (uniqueAeronDirectoryID != other.uniqueAeronDirectoryID) return false
         if (ipcTermBufferLength != other.ipcTermBufferLength) return false
         if (contextDefined != other.contextDefined) return false
 
@@ -830,7 +872,7 @@ abstract class Configuration {
     }
 
     override fun hashCode(): Int {
-        var result = mediaDriverHash()
+        var result = mediaDriverId()
         result = 31 * result + networkEventPoll.hashCode()
         result = 31 * result + enableIPv4.hashCode()
         result = 31 * result + enableIPv6.hashCode()
@@ -847,6 +889,7 @@ abstract class Configuration {
         result = 31 * result + pollIdleStrategy.hashCode()
         result = 31 * result + sendIdleStrategy.hashCode()
         result = 31 * result + uniqueAeronDirectory.hashCode()
+        result = 31 * result + uniqueAeronDirectoryID
         result = 31 * result + contextDefined.hashCode()
         return result
     }
