@@ -246,7 +246,7 @@ open class Server<CONNECTION : Connection>(
 
 
         // additionally, if we have MULTIPLE clients on the same machine, we are limited by the CPU core count. Ideally we want to share this among ALL clients within the same JVM so that we can support multiple clients/servers
-        networkEventPoller.submit(
+        networkEventPoller.submit(logger,
         {
             if (!isShutdown()) {
                 var pollCount = 0
@@ -271,6 +271,7 @@ open class Server<CONNECTION : Connection>(
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
                         logger.debug { "[${connection.id}/${connection.streamId} : ${connection.remoteAddressString}] connection expired" }
 
+                        // the connection MUST be removed in the same thread that is processing events
                         removeConnection(connection)
 
                         // this will call removeConnection again, but that is ok
@@ -293,7 +294,7 @@ open class Server<CONNECTION : Connection>(
                 pollCount
             } else {
                 // remove ourselves from processing
-                -1
+                EventPoller.REMOVE
             }
         },
         {

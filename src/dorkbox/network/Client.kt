@@ -823,27 +823,26 @@ open class Client<CONNECTION : Connection>(
         // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
 
         // additionally, if we have MULTIPLE clients on the same machine, we are limited by the CPU core count. Ideally we want to share this among ALL clients within the same JVM so that we can support multiple clients/servers
-        networkEventPoller.submit(
-        {
+        networkEventPoller.submit(logger) {
             if (!isShutdown()) {
                 if (!newConnection.isClosedViaAeron()) {
                     // Polls the AERON media driver subscription channel for incoming messages
                     newConnection.poll()
                 } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                    logger.debug { "[$aeronLogInfo] connection from expired" }
+                    logger.debug { "[$aeronLogInfo] connection expired" }
 
                     // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
                     newConnection.close()
 
                     // remove ourselves from processing
-                    -1
+                    EventPoller.REMOVE
                 }
             } else {
                 // remove ourselves from processing
-                -1
+                EventPoller.REMOVE
             }
-        })
+        }
 
         // these have to be in two SEPARATE "runnables" otherwise...
         // if something inside-of listenerManager.notifyConnect is blocking or suspends, then polling will never happen!
