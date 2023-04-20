@@ -453,13 +453,25 @@ open class Client<CONNECTION : Connection>(
                 throw exception
             }
 
+            if (slowDownForException) {
+                // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
+                // we also want to go at SLIGHTLY slower that the aeron driver timeout frequency, this way - if there are connection or handshake issues, the server has the chance to expire the connections.
+                // If we go TOO FAST, then the server will EVENTUALLY have aeron errors (since it can't keep up per client). We literally
+                // want to have 1 in-flight handshake, per connection attempt, during the aeron connection timeout
+
+                // ALSO, we want to make sure we DO NOT approach the linger timeout!
+                aeronDriver.delayLingerTimeout(2)
+            }
+
             // we have to pre-set the type (which will ultimately get set to the correct type on success)
             var type = ""
 
             try {
-                // always start the aeron driver inside the restart loop. If we've already started the driver (on the first "start"),
-                // then this does nothing
-                startDriver()
+                // always start the aeron driver inside the restart loop.
+                // If we've already started the driver (on the first "start"), then this does nothing (slowDownForException also make this not "double check")
+                if (slowDownForException) {
+                    startDriver()
+                }
 
                 // the handshake connection is closed when the handshake has an error, or it is finished
                 val handshakeConnection = if (autoChangeToIpc) {
@@ -533,6 +545,7 @@ open class Client<CONNECTION : Connection>(
 
                 connect0(handshake, handshakeConnection, handshakeTimeoutSec)
                 success = true
+                slowDownForException = false
 
                 // once we're done with the connection process, stop trying
                 break
@@ -548,23 +561,11 @@ open class Client<CONNECTION : Connection>(
                 // maybe the aeron driver isn't running? (or isn't running correctly?)
                 aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
 
-                // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
-                // we also want to go at SLIGHTLY slower that the aeron driver timeout frequency, this way - if there are connection or handshake issues, the server has the chance to expire the connections.
-                // If we go TOO FAST, then the server will EVENTUALLY have aeron errors (since it can't keep up per client). We literally
-                // want to have 1 in-flight handshake, per connection attempt, during the aeron connection timeout
-
-                // ALSO, we want to make sure we DO NOT approach the linger timeout!
-                sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs()*2)))
+                slowDownForException = true
             } catch (e: ClientRejectedException) {
                 aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
 
-                // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
-                // we also want to go at SLIGHTLY slower that the aeron driver timeout frequency, this way - if there are connection or handshake issues, the server has the chance to expire the connections.
-                // If we go TOO FAST, then the server will EVENTUALLY have aeron errors (since it can't keep up per client). We literally
-                // want to have 1 in-flight handshake, per connection attempt, during the aeron connection timeout
-
-                // ALSO, we want to make sure we DO NOT approach the linger timeout!
-                sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs() * 2)))
+                slowDownForException = true
 
                 if (e.cause is ServerException) {
                     val cause = e.cause!!
@@ -579,14 +580,6 @@ open class Client<CONNECTION : Connection>(
                 logger.error(e) { "[${handshake.connectKey}] : Un-recoverable error during handshake with $type. Aborting." }
 
                 aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
-
-                // short delay, since it failed we want to limit the retry rate to something slower than "as fast as the CPU can do it"
-                // we also want to go at SLIGHTLY slower that the aeron driver timeout frequency, this way - if there are connection or handshake issues, the server has the chance to expire the connections.
-                // If we go TOO FAST, then the server will EVENTUALLY have aeron errors (since it can't keep up per client). We literally
-                // want to have 1 in-flight handshake, per connection attempt, during the aeron connection timeout
-
-                // ALSO, we want to make sure we DO NOT approach the linger timeout!
-                sleep(aeronDriver.driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds(aeronDriver.getLingerNs() * 2)))
 
                 listenerManager.notifyError(e)
                 throw e
