@@ -80,13 +80,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
      * @return true if we should continue parsing the incoming message, false if we should abort (as we are DONE processing data)
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
-    private fun validateMessageTypeAndDoPending(
-        server: Server<CONNECTION>,
-        eventDispatch: EventDispatcher,
-        handshakePublication: Publication,
-        message: HandshakeMessage,
-        logger: KLogger
-    ): Boolean {
+    private fun validateMessageTypeAndDoPending(server: Server<CONNECTION>, handshakePublication: Publication, message: HandshakeMessage, logger: KLogger): Boolean {
         // check to see if this sessionId is ALREADY in use by another connection!
         // this can happen if there are multiple connections from the SAME ip address (ie: localhost)
         if (message.state == HandshakeMessage.HELLO) {
@@ -225,18 +219,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
     /**
      * @return true if the handshake poller is to close the publication, false will keep the publication (as we are DONE processing data)
      */
-    fun processIpcHandshakeMessageServer(
+    suspend fun processIpcHandshakeMessageServer(
         server: Server<CONNECTION>, handshakePublication: Publication, message: HandshakeMessage,
         aeronDriver: AeronDriver, aeronLogInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ) {
         if (!validateMessageTypeAndDoPending(
-                server = server,
-                eventDispatch = server.eventDispatch,
-                handshakePublication = handshakePublication,
-                message = message,
-                logger = logger
+                server = server, handshakePublication = handshakePublication, message = message, logger = logger
             )) {
             return
         }
@@ -307,11 +297,12 @@ internal class ServerHandshake<CONNECTION : Connection>(
         // create a new connection. The session ID is encrypted.
         try {
             // Create a subscription at the given address and port, using the given stream ID.
-            val driver = ServerIpcPairedDriver(streamId = connectionStreamId,
+            val driver = ServerIpcPairedDriver(aeronDriver = aeronDriver,
+                                               streamId = connectionStreamId,
                                                sessionId = connectionSessionSubId,
                                                remoteSessionId = connectionSessionPubId)
 
-            driver.build(aeronDriver, logger)
+            driver.build(logger)
 
             val clientConnection = MediaDriverConnectInfo(
                 publication = driver.publication,
@@ -326,7 +317,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             )
 
 
-            logger.info { "[$aeronLogInfo] Creating new connection from $driver" }
+            logger.info { "[$aeronLogInfo] Creating new IPC connection from $driver" }
 
             val connection = connectionFunc(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
 
@@ -379,7 +370,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
      * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      * @return true if the handshake poller is to close the publication, false will keep the publication
      */
-    fun processUdpHandshakeMessageServer(
+    suspend fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
         driver: ServerUdpDriver,
         handshakePublication: Publication,
@@ -393,11 +384,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
     ) {
         // Manage the Handshake state. When done with a connection, this returns
         if (!validateMessageTypeAndDoPending(
-                server = server,
-                eventDispatch = server.eventDispatch,
-                handshakePublication = handshakePublication,
-                message = message,
-                logger = logger
+                server = server, handshakePublication = handshakePublication, message = message, logger = logger
             )) {
             return
         }
@@ -476,18 +463,20 @@ internal class ServerHandshake<CONNECTION : Connection>(
         var connection: CONNECTION? = null
         try {
             val newDriver = ServerUdpPairedDriver(
+                aeronDriver = driver.aeronDriver,
                 listenAddress = driver.listenAddress,
                 remoteAddress = clientAddress,
                 port = subscriptionPort,
                 streamId = connectionStreamId,
                 sessionId = connectionSessionId,
                 connectionTimeoutSec = 0,
-                isReliable = isReliable
+                isReliable = isReliable,
+                listenType = driver.listenType
             )
 
-            newDriver.build(aeronDriver, logger)
+            newDriver.build(logger)
 
-            logger.info { "[$aeronLogInfo] Creating new connection from $newDriver" }
+            logger.info { "[$aeronLogInfo] Creating new UDP connection from $newDriver" }
 
             val clientConnection = MediaDriverConnectInfo(
                 publication = newDriver.publication,
@@ -583,13 +572,18 @@ internal class ServerHandshake<CONNECTION : Connection>(
      *
      * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      */
-    fun clear() {
-        runBlocking {
-            pendingConnections.forEach { (_, v) ->
-                v.close()
-            }
+    suspend fun clear() {
+        val connections = pendingConnections
+        val latch = CountDownLatch(connections.size)
 
-            pendingConnections.clear()
+        EventDispatcher.launch(EVENT.CLOSE) {
+            connections.forEach { (_, v) ->
+                v.close(enableRemove = true)
+                latch.countDown()
+            }
         }
+
+        latch.await(config.connectionCloseTimeoutInSeconds.toLong() * connections.size)
+        connections.clear()
     }
 }

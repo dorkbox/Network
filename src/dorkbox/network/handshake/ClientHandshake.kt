@@ -16,6 +16,7 @@
 package dorkbox.network.handshake
 
 import dorkbox.network.Client
+import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.mediaDriver.MediaDriverClient
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager
@@ -26,9 +27,9 @@ import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
+import kotlinx.coroutines.delay
 import mu.KLogger
 import org.agrona.DirectBuffer
-import java.lang.Thread.sleep
 import java.util.concurrent.*
 
 internal class ClientHandshake<CONNECTION: Connection>(
@@ -42,7 +43,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     private val crypto = endPoint.crypto
     private val handler: FragmentHandler
 
-    private val pollIdleStrategy = endPoint.config.pollIdleStrategy.cloneToNormal()
+    private val pollIdleStrategy = endPoint.config.pollIdleStrategy.clone()
 
     // used to keep track and associate UDP/IPC handshakes between client/server
     @Volatile
@@ -174,7 +175,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    fun hello(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) : ClientConnectionInfo {
+    suspend fun hello(aeronDriver: AeronDriver, handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) : ClientConnectionInfo {
         failedException = null
         connectKey = getSafeConnectKey()
         val publicKey = endPoint.storage.getPublicKey()!!
@@ -190,8 +191,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
                                                                             handshakeConnection.subscriptionPort,
                                                                             handshakeConnection.subscription.streamId()))
         } catch (e: Exception) {
-            subscription.close()
-            publication.close()
+            aeronDriver.closeAndDeleteSubscription(subscription, "ClientHandshake")
+            aeronDriver.closeAndDeletePublication(publication, "ClientHandshake")
 
             logger.error("$handshakeConnection Handshake error!", e)
             throw e
@@ -218,16 +219,16 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
-            subscription.close()
-            publication.close()
+            aeronDriver.closeAndDeleteSubscription(subscription, "ClientHandshake")
+            aeronDriver.closeAndDeletePublication(publication, "ClientHandshake")
 
             ListenerManager.cleanStackTraceInternal(failedEx)
             throw failedEx
         }
 
         if (connectionHelloInfo == null) {
-            subscription.close()
-            publication.close()
+            aeronDriver.closeAndDeleteSubscription(subscription, "ClientHandshake")
+            aeronDriver.closeAndDeletePublication(publication, "ClientHandshake")
 
             val exception = ClientTimedOutException("$handshakeConnection Waiting for registration response from server")
             ListenerManager.cleanStackTraceInternal(exception)
@@ -239,7 +240,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    fun done(handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int, aeronLogInfo: String) {
+    suspend fun done(aeronDriver: AeronDriver, handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int, aeronLogInfo: String) {
         val registrationMessage = HandshakeMessage.doneFromClient(connectKey,
                                                                   handshakeConnection.port+1,
                                                                   handshakeConnection.subscription.streamId(),
@@ -249,8 +250,9 @@ internal class ClientHandshake<CONNECTION: Connection>(
         try {
             endPoint.writeHandshakeMessage(handshakeConnection.publication, aeronLogInfo, registrationMessage)
         } catch (e: Exception) {
-            handshakeConnection.subscription.close()
-            handshakeConnection.publication.close()
+            aeronDriver.closeAndDeleteSubscription(handshakeConnection.subscription, "ClientHandshake")
+            aeronDriver.closeAndDeletePublication(handshakeConnection.publication, "ClientHandshake")
+
             throw e
         }
 
@@ -261,14 +263,12 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         var pollCount: Int
 
-        val subscription = handshakeConnection.subscription
-
         val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
         var startTime = System.nanoTime()
         while (System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pollCount = subscription.poll(handler, 1)
+            pollCount = handshakeConnection.subscription.poll(handler, 1)
 
             if (failedException != null || connectionDone) {
                 break
@@ -281,7 +281,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 startTime = System.nanoTime()
             }
 
-            sleep(100L)
+            delay(100L)
 
             // 0 means we idle. >0 means reset and don't idle (because there are likely more)
             pollIdleStrategy.idle(pollCount)
@@ -289,15 +289,16 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
-            handshakeConnection.subscription.close()
-            handshakeConnection.publication.close()
+            aeronDriver.closeAndDeleteSubscription(handshakeConnection.subscription, "ClientHandshake")
+            aeronDriver.closeAndDeletePublication(handshakeConnection.publication, "ClientHandshake")
+
             throw failedEx
         }
 
         if (!connectionDone) {
             // since this failed, close everything
-            handshakeConnection.subscription.close()
-            handshakeConnection.publication.close()
+            aeronDriver.closeAndDeleteSubscription(handshakeConnection.subscription, "ClientHandshake")
+            aeronDriver.closeAndDeletePublication(handshakeConnection.publication, "ClientHandshake")
 
             val exception = ClientTimedOutException("Waiting for registration response from server")
             ListenerManager.cleanStackTraceInternal(exception)

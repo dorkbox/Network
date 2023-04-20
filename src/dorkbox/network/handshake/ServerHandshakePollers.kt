@@ -34,6 +34,8 @@ import io.aeron.CommonContext
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import org.agrona.DirectBuffer
 import java.net.Inet4Address
@@ -54,7 +56,7 @@ internal object ServerHandshakePollers {
         val handshake: ServerHandshake<CONNECTION>,
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION
     ) {
-        fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
+        suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
             // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
@@ -73,7 +75,7 @@ internal object ServerHandshakePollers {
                 val publicationUri = uri("ipc", message.sessionId)
 
                 val publication = try {
-                    aeronDriver.addExclusivePublication(logger, publicationUri, "IPC", message.streamId)
+                    aeronDriver.addExclusivePublication(publicationUri, "IPC", message.streamId)
                 } catch (e: Exception) {
                     logger.error(e) { "Cannot create IPC publication back to remote" }
                     return
@@ -103,7 +105,8 @@ internal object ServerHandshakePollers {
                     logger.error { "Cannot create IPC publication back to remote process" }
                 }
 
-                publication.close()
+
+                aeronDriver.closeAndDeletePublication(publication, "ServerIPC")
             }
         }
     }
@@ -122,7 +125,7 @@ internal object ServerHandshakePollers {
         val listenAddressString = IP.toString(listenAddress)
         val timoutInNanos = aeronDriver.getLingerNs()
 
-        fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
+        suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
             // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
@@ -179,7 +182,7 @@ internal object ServerHandshakePollers {
                     .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
                 val publication = try {
-                    aeronDriver.addExclusivePublication(logger, publicationUri, type, message.streamId)
+                    aeronDriver.addExclusivePublication(publicationUri, type, message.streamId)
                 } catch (e: Exception) {
                     logger.error(e) { "Cannot create publication back to $clientAddressString" }
                     return
@@ -217,39 +220,41 @@ internal object ServerHandshakePollers {
                 }
 
                 // publications are REMOVED from Aeron clients when their linger timeout has expired!!!
-                publication.close()
+                aeronDriver.closeAndDeletePublication(publication, "ServerProc")
             }
         }
     }
 
-    fun <CONNECTION : Connection> ipc(
-        aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>
-    ): AeronPoller
+    suspend fun <CONNECTION : Connection> ipc(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller
     {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
+        val config = server.config as ServerConfiguration
 
         val poller = if (config.enableIpc) {
             val driver = ServerIpcDriver(
+                aeronDriver = server.aeronDriver,
                 streamId = config.ipcId,
                 sessionId = AeronDriver.IPC_HANDSHAKE_SESSION_ID
             )
-            driver.build(aeronDriver, logger)
+            driver.build(logger)
 
             val subscription = driver.subscription
-            val processor = IpcProc(logger, server, aeronDriver, handshake, connectionFunc)
+            val processor = IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc)
 
             object : AeronPoller {
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    processor.process(header, buffer, offset, length)
+                    runBlocking {
+                        processor.process(header, buffer, offset, length)
+                    }
                 }
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
                 }
 
-                override fun close() {
-                    subscription.close()
+                override suspend fun close() {
+                    driver.close(logger)
                 }
 
                 override val info = "IPC $driver"
@@ -264,28 +269,29 @@ internal object ServerHandshakePollers {
 
 
 
-    fun <CONNECTION : Connection> ip4(
-        aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>
-    ): AeronPoller {
+    suspend fun <CONNECTION : Connection> ip4(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
+        val config = server.config
         val isReliable = config.isReliable
         val pubPort = config.port + 1
 
         val poller = if (server.canUseIPv4) {
             val driver = ServerUdpDriver(
+                aeronDriver = server.aeronDriver,
                 listenAddress = server.listenIPv4Address!!,
                 port = config.port,
                 streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
                 connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
-                isReliable = isReliable
+                isReliable = isReliable,
+                "IPv4"
             )
 
-            driver.build(aeronDriver, logger)
+            driver.build(logger)
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, driver, aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
 
             object : AeronPoller {
                 /**
@@ -298,15 +304,17 @@ internal object ServerHandshakePollers {
                  * properties from failure and streams with mechanical sympathy.
                  */
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    processor.process(header, buffer, offset, length)
+                    runBlocking {
+                        processor.process(header, buffer, offset, length)
+                    }
                 }
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
                 }
 
-                override fun close() {
-                    subscription.close()
+                override suspend fun close() {
+                    driver.close(logger)
                 }
 
                 override val info = "IPv4 $driver"
@@ -319,28 +327,29 @@ internal object ServerHandshakePollers {
         return poller
     }
 
-    fun <CONNECTION : Connection> ip6(
-        aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>
-    ): AeronPoller {
+    suspend fun <CONNECTION : Connection> ip6(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
+        val config = server.config
         val isReliable = config.isReliable
         val pubPort = config.port + 1
 
         val poller = if (server.canUseIPv6) {
             val driver = ServerUdpDriver(
+                aeronDriver = server.aeronDriver,
                 listenAddress = server.listenIPv6Address!!,
                 port = config.port,
                 streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
                 connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
-                isReliable = isReliable
+                isReliable = isReliable,
+                "IPv6"
             )
 
-            driver.build(aeronDriver, logger)
+            driver.build(logger)
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, driver, aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
 
 
             object : AeronPoller {
@@ -354,15 +363,17 @@ internal object ServerHandshakePollers {
                  * properties from failure and streams with mechanical sympathy.
                  */
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    processor.process(header, buffer, offset, length)
+                    runBlocking {
+                        processor.process(header, buffer, offset, length)
+                    }
                 }
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
                 }
 
-                override fun close() {
-                    subscription.close()
+                override suspend fun close() {
+                    driver.close(logger)
                 }
 
                 override val info = "IPv6 $driver"
@@ -375,27 +386,28 @@ internal object ServerHandshakePollers {
         return poller
     }
 
-    fun <CONNECTION : Connection> ip6Wildcard(
-        aeronDriver: AeronDriver, config: ServerConfiguration, server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>
-    ): AeronPoller {
+    suspend fun <CONNECTION : Connection> ip6Wildcard(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
+        val config = server.config
         val isReliable = config.isReliable
         val pubPort = config.port + 1
 
         val driver = ServerUdpDriver(
+            aeronDriver = server.aeronDriver,
             listenAddress = server.listenIPv6Address!!,
             port = config.port,
             streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
             sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
             connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
-            isReliable = isReliable
+            isReliable = isReliable,
+            "IPv4+6"
         )
 
-        driver.build(aeronDriver, logger)
+        driver.build(logger)
 
         val subscription = driver.subscription
-        val processor = UdpProc(logger, server, driver, aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+        val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
 
 
         val poller = object : AeronPoller {
@@ -409,15 +421,17 @@ internal object ServerHandshakePollers {
              * properties from failure and streams with mechanical sympathy.
              */
             val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                processor.process(header, buffer, offset, length)
+                runBlocking {
+                    processor.process(header, buffer, offset, length)
+                }
             }
 
             override fun poll(): Int {
                 return subscription.poll(handler, 1)
             }
 
-            override fun close() {
-                subscription.close()
+            override suspend fun close() {
+                driver.close(logger)
             }
 
             override val info = "IPv4+6 $driver"

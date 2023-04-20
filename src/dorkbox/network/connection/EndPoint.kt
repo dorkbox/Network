@@ -25,6 +25,7 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
 import dorkbox.network.aeron.EventPoller
+import dorkbox.network.connection.EventDispatcher.Companion.EVENT
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -45,9 +46,11 @@ import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
@@ -55,7 +58,6 @@ import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
 import java.net.InetAddress
 import java.util.concurrent.*
-import java.util.concurrent.locks.*
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
 // it results in severe UDP packet loss and contention.
@@ -77,7 +79,7 @@ internal constructor(val type: Class<*>,
                      internal val config: Configuration,
                      internal val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                      loggerName: String)
-             : AutoCloseable {
+    {
 
     protected constructor(config: Configuration,
                           connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
@@ -193,14 +195,14 @@ internal constructor(val type: Class<*>,
         logger.error(exception) { "Uncaught Coroutine Error!" }
     }
 
-    internal val eventDispatch = EventDispatcher()
-    private val messageDispatch = CoroutineScope(config.messageDispatch)
+    private val messageDispatch = CoroutineScope(config.messageDispatch + SupervisorJob())
 
     internal val listenerManager = ListenerManager<CONNECTION>(logger)
 
     val connections = ConcurrentIterator<CONNECTION>()
 
-    internal val aeronDriver: AeronDriver
+    @Volatile
+    internal var aeronDriver: AeronDriver
 
     /**
      * Returns the serialization wrapper if there is an object type that needs to be added in addition to the basic types.
@@ -288,9 +290,10 @@ internal constructor(val type: Class<*>,
 
         // Only starts the media driver if we are NOT already running!
         try {
-            aeronDriver = AeronDriver.getDriver(config, logger)
+            @Suppress("LeakingThis")
+            aeronDriver = AeronDriver(this)
         } catch (e: Exception) {
-            logger.error("Error initialize endpoint", e)
+            logger.error("Error initializing endpoint", e)
             throw e
         }
 
@@ -309,10 +312,24 @@ internal constructor(val type: Class<*>,
     /**
      * Only starts the media driver if we are NOT already running!
      *
+     * If we were previously closed, we will start a new again. This is concurrent safe!
+     *
      * @throws Exception if there is a problem starting the media driver
      */
-    fun startDriver() {
-        aeronDriver.start(logger)
+    suspend fun startDriver() {
+        if (aeronDriver.closed()) {
+            // Only starts the media driver if we are NOT already running!
+            try {
+                logger.error { "STARTING NEW DRIVER BECAUSE THE PREVIOUS ONE WAS CLOSED!" }
+                @Suppress("LeakingThis")
+                aeronDriver = AeronDriver(this)
+            } catch (e: Exception) {
+                logger.error("Error initializing endpoint", e)
+                throw e
+            }
+        }
+
+        aeronDriver.start()
         shutdown.value = false
     }
 
@@ -323,7 +340,7 @@ internal constructor(val type: Class<*>,
      * the same driver will probably crash (unless they have been appropriately stopped). If false (the default), then the Aeron driver is
      * only stopped if it is safe to do so
      */
-    fun stopDriver(forceTerminate: Boolean = false) {
+    suspend fun stopDriver(forceTerminate: Boolean = false) {
         if (forceTerminate) {
             aeronDriver.close()
         } else {
@@ -607,7 +624,7 @@ internal constructor(val type: Class<*>,
                 connection = connection
             )
         } else {
-            dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection)
+            dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection, abortEarly)
         }
     }
 
@@ -630,7 +647,7 @@ internal constructor(val type: Class<*>,
         val objectSize = buffer.position()
         val internalBuffer = buffer.internalBuffer
 
-        return dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection)
+        return dataSend(publication, internalBuffer, 0, objectSize, sendIdleStrategy, connection, false)
     }
 
     /**
@@ -791,6 +808,11 @@ internal constructor(val type: Class<*>,
              * don't "loop forever" if a publication is ACTUALLY closed, like on purpose.
              */
             if (result == Publication.NOT_CONNECTED) {
+                if (abortEarly) {
+                    logger.error { "[${publication.sessionId()}] Error sending message. (Connection in non-connected state, aborted attempt! ${errorCodeName(result)})" }
+                    return false
+                }
+
                 if (timeoutInNanos == 0L) {
                     timeoutInNanos = (aeronDriver.getLingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
                     startTime = System.nanoTime()
@@ -856,6 +878,20 @@ internal constructor(val type: Class<*>,
             ListenerManager.cleanStackTrace(exception, 5)
             return false
         }
+    }
+
+    /**
+     * Ensures that an endpoint (using the specified configuration) is NO LONGER running.
+     *
+     * By default, we will wait the [Configuration.connectionCloseTimeoutInSeconds] * 2 amount of time before returning, and
+     * 50ms between checks of the endpoint running
+     *
+     * @return true if the media driver is STOPPED.
+     */
+    suspend fun ensureStopped(timeoutMS: Long = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong() * 2),
+                              intervalTimeoutMS: Long = 500): Boolean {
+
+        return aeronDriver.ensureStopped(timeoutMS, intervalTimeoutMS)
     }
 
     /**
@@ -983,7 +1019,9 @@ internal constructor(val type: Class<*>,
         connections.forEach {
             logger.info {
                 val aeronLogInfo = "${it.id}/${it.streamId} : ${it.remoteAddressString}"
-                "[$aeronLogInfo] Closing connection" }
+                "[$aeronLogInfo] Closing connection"
+            }
+
             it.close(enableRemove)
         }
 
@@ -1000,18 +1038,18 @@ internal constructor(val type: Class<*>,
 
         // this will ONLY close the event dispatcher if ALL endpoints have closed it.
         // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
-        networkEventPoller.close()
+        networkEventPoller.close(logger)
 
-        shutdownLatch = CountDownLatch(1)
+        aeronDriver.close()
+
+        messageDispatch.cancel("${type.simpleName} shutting down")
 
         // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
         shutdownLatch.countDown()
-
-        logger.info { "${type.simpleName} finished shutting down."}
     }
 
 
-    internal open fun close0() {}
+    internal open suspend fun close0() {}
 
 
     override fun toString(): String {
