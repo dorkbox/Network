@@ -263,7 +263,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         val controlMessage = streamingDataTarget[streamId]
         if (controlMessage != null) {
             synchronized(streamingDataInMemory) {
-                streamingDataInMemory.getOrPut(streamId) { AeronOutput() }!!.writeBytes(message.payload!!)
+                streamingDataInMemory.getOrPut(streamId) { AeronOutput() }.writeBytes(message.payload!!)
             }
         } else {
             // something SUPER wrong!
