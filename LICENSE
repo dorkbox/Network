@@ -303,7 +303,7 @@
      - NetworkDNS - 
        [The Apache Software License, Version 2.0]
        https://git.dorkbox.com/dorkbox/NetworkDNS
-       Copyright 2022
+       Copyright 2023
          Dorkbox LLC
        High-performance and event-driven/reactive DNS stack for Java 8+
 
@@ -317,14 +317,14 @@
          - Netty - An event-driven asynchronous network application framework
            [The Apache Software License, Version 2.0]
            https://netty.io
-           Copyright 2022
+           Copyright 2023
              The Netty Project
              Contributors. See source NOTICE
 
          - SLF4J - Simple facade or abstraction for various logging frameworks
            [MIT License]
-           http://www.slf4j.org
-           Copyright 2022
+           https://www.slf4j.org
+           Copyright 2023
              QOS.ch
 
          - Kotlin - 
@@ -501,7 +501,7 @@
          - OS - Information about the system, Java runtime, OS, Window Manager, and Desktop Environment.
            [The Apache Software License, Version 2.0]
            https://git.dorkbox.com/dorkbox/OS
-           Copyright 2022
+           Copyright 2023
              Dorkbox LLC
 
            Extra license information
@@ -531,7 +531,7 @@
          - Utilities - Utilities for use within Java projects
            [The Apache Software License, Version 2.0]
            https://git.dorkbox.com/dorkbox/Utilities
-           Copyright 2022
+           Copyright 2023
              Dorkbox LLC
 
            Extra license information
@@ -618,32 +618,26 @@
              - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
                [The Apache Software License, Version 2.0]
                https://github.com/Kotlin/kotlinx.coroutines
-               Copyright 2022
+               Copyright 2023
                  JetBrains s.r.o.
 
              - Java Uuid Generator - A set of Java classes for working with UUIDs
                [The Apache Software License, Version 2.0]
                https://github.com/cowtowncoder/java-uuid-generator
-               Copyright 2022
+               Copyright 2023
                  Tatu Saloranta (tatu.saloranta@iki.fi)
                  Contributors. See source release-notes/CREDITS
 
-             - kotlin-logging - Lightweight logging framework for Kotlin
-               [The Apache Software License, Version 2.0]
-               https://github.com/MicroUtils/kotlin-logging
-               Copyright 2022
-                 Ohad Shai
-
              - SLF4J - Simple facade or abstraction for various logging frameworks
                [MIT License]
-               http://www.slf4j.org
-               Copyright 2022
+               https://www.slf4j.org
+               Copyright 2023
                  QOS.ch
 
              - XZ for Java - Complete implementation of XZ data compression in pure Java
                [Public Domain, per Creative Commons CC0]
                https://tukaani.org/xz/java.html
-               Copyright 2022
+               Copyright 2023
                  Lasse Collin
                  Igor Pavlov
 
@@ -655,56 +649,38 @@
                Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
                See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
-             - JNA - Simplified native library access for Java.
-               [The Apache Software License, Version 2.0]
-               https://github.com/twall/jna
-               Copyright 2022
-                 Timothy Wall
-
-             - JNA-Platform - Mappings for a number of commonly used platform functions
-               [The Apache Software License, Version 2.0]
-               https://github.com/twall/jna
-               Copyright 2022
-                 Timothy Wall
-
              - Netty - An event-driven asynchronous network application framework
                [The Apache Software License, Version 2.0]
                https://netty.io
-               Copyright 2022
+               Copyright 2023
                  The Netty Project
                  Contributors. See source NOTICE
 
              - Bouncy Castle Crypto - Lightweight cryptography API and JCE Extension
                [The Apache Software License, Version 2.0]
-               http://www.bouncycastle.org
-               Copyright 2022
+               https://www.bouncycastle.org
+               Copyright 2023
                  The Legion of the Bouncy Castle Inc
 
              - Lightweight Java Game Library - Java library that enables cross-platform access to popular native APIs
                [BSD 3-Clause License]
                https://github.com/LWJGL/lwjgl3
-               Copyright 2022
+               Copyright 2023
                  Lightweight Java Game Library
 
              - TypeTools - A simple, zero-dependency library for working with types. Supports Java 1.6+ and Android.
                [The Apache Software License, Version 2.0]
                https://github.com/jhalterman/typetools
-               Copyright 2022
+               Copyright 2023
                  Jonathan Halterman and friends
 
              - Collections - Niche collections to augment what is already available.
                [The Apache Software License, Version 2.0]
                https://git.dorkbox.com/dorkbox/Collections
-               Copyright 2022
+               Copyright 2023
                  Dorkbox LLC
 
                Extra license information
-                 - AhoCorasickDoubleArrayTrie - Niche collections to augment what is already available.
-                   [The Apache Software License, Version 2.0]
-                   https://github.com/hankcs/AhoCorasickDoubleArrayTrie
-                   Copyright 2018
-                     hankcs <me@hankcs.com>
-
                  - Bias, BinarySearch - 
                    [MIT License]
                    https://git.dorkbox.com/dorkbox/Collections
@@ -787,7 +763,7 @@
              - Executor - Shell, JVM, and SSH command execution on Linux, MacOS, or Windows for Java 8+
                [The Apache Software License, Version 2.0]
                https://git.dorkbox.com/dorkbox/Executor
-               Copyright 2022
+               Copyright 2023
                  Dorkbox LLC
 
                Extra license information
@@ -814,25 +790,25 @@
                  - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
                    [The Apache Software License, Version 2.0]
                    https://github.com/Kotlin/kotlinx.coroutines
-                   Copyright 2022
+                   Copyright 2023
                      JetBrains s.r.o.
 
                  - SLF4J - Simple facade or abstraction for various logging frameworks
                    [MIT License]
                    http://www.slf4j.org
-                   Copyright 2022
+                   Copyright 2023
                      QOS.ch
 
                  - Logback - Logback is a logging framework for Java applications
                    [The Apache Software License, Version 2.0]
                    http://logback.qos.ch
-                   Copyright 2022
+                   Copyright 2023
                      QOS.ch
 
                  - SSHJ - SSHv2 library for Java
                    [The Apache Software License, Version 2.0]
                    https://github.com/hierynomus/sshj
-                   Copyright 2022
+                   Copyright 2023
                      Jeroen van Erp
                      SSHJ Contributors
 
@@ -1044,7 +1020,7 @@
              - OS - Information about the system, Java runtime, OS, Window Manager, and Desktop Environment.
                [The Apache Software License, Version 2.0]
                https://git.dorkbox.com/dorkbox/OS
-               Copyright 2022
+               Copyright 2023
                  Dorkbox LLC
 
                Extra license information
@@ -1673,7 +1649,7 @@
          - FileUtil (code from FilenameUtils.java for normalize + dependencies) - 
            [The Apache Software License, Version 2.0]
            https://git.dorkbox.com/dorkbox/Utilities
-           http://commons.apache.org/proper/commons-io/
+           https://commons.apache.org/proper/commons-io/
            Copyright 2013
              The Apache Software Foundation
              Kevin A. Burton
@@ -1699,14 +1675,14 @@
          - Base64Fast - 
            [BSD 3-Clause License]
            https://git.dorkbox.com/dorkbox/Utilities
-           http://migbase64.sourceforge.net/
+           https://migbase64.sourceforge.net/
            Copyright 2004
              Mikael Grev, MiG InfoCom AB. (base64@miginfocom.com)
 
          - BCrypt - 
            [BSD 2-Clause "Simplified" or "FreeBSD" license]
            https://git.dorkbox.com/dorkbox/Utilities
-           http://www.mindrot.org/projects/jBCrypt
+           https://www.mindrot.org/projects/jBCrypt
            Copyright 2006
              Damien Miller (djm@mindrot.org)
            GWT modified version
@@ -1726,7 +1702,7 @@
 
          - Resource Listing - Listing the contents of a resource directory
            [The Apache Software License, Version 2.0]
-           http://www.uofr.net/~greg/java/get-resource-listing.html
+           https://www.uofr.net/~greg/java/get-resource-listing.html
            Copyright 2017
              Greg Briggs
 
@@ -1742,6 +1718,13 @@
            https://github.com/paultuckey/urlrewritefilter
            Copyright 2022
              Paul Tuckey
+
+         - Kotlin Coroutine CountDownLatch - 
+           [The Apache Software License, Version 2.0]
+           https://github.com/Kotlin/kotlinx.coroutines/issues/59
+           https://github.com/venkatperi/kotlin-coroutines-lib
+           Copyright 2018
+             Venkat Peri
 
          - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
            [The Apache Software License, Version 2.0]
