@@ -26,11 +26,12 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.EventDispatcher
+import dorkbox.network.connection.EventDispatcher.Companion.EVENT
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.AllocationException
+import dorkbox.util.sync.CountDownLatch
 import io.aeron.Publication
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
@@ -64,7 +65,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
         .expirationListener<Long, CONNECTION> { clientConnectKey, connection ->
             // this blocks until it fully runs (which is ok. this is fast)
             logger.error { "[${clientConnectKey} Connection (${connection.id}) Timed out waiting for registration response from client" }
-            connection.close()
+            EventDispatcher.launch(EVENT.CLOSE) {
+                connection.close(enableRemove = true)
+            }
         }
         .build<Long, CONNECTION>()
 
@@ -109,48 +112,49 @@ internal class ServerHandshake<CONNECTION : Connection>(
             if (existingConnection == null) {
                 logger.error { "[?????] (${message.connectKey}) Error! Pending connection from client was null, and cannot complete handshake!" }
                 return true
-            } else {
-                // Server is the "source", client mirrors the server
-                val aeronLogInfo = "${existingConnection.id}/${existingConnection.streamId} : ${existingConnection.remoteAddressString}"
-
-                logger.debug { "[$aeronLogInfo] (${message.connectKey}) Connection done with handshake." }
-
-                // called on connection.close()
-                existingConnection.closeAction = {
-                    // clean up the resources associated with this connection when it's closed
-                    logger.debug { "[$aeronLogInfo] freeing resources" }
-                    existingConnection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
-
-                    // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    eventDispatch.launch {
-                        existingConnection.doNotifyDisconnect()
-                        listenerManager.notifyDisconnect(existingConnection)
-                    }
-                }
-
-                // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
-                runBlocking {
-                    listenerManager.notifyInit(existingConnection)
-                }
-
-                // this enables the connection to start polling for messages
-                server.addConnection(existingConnection)
-
-                // now tell the client we are done
-                try {
-                    server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
-                                                 HandshakeMessage.doneToClient(message.connectKey))
-
-                    // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                    eventDispatch.launch {
-                        listenerManager.notifyConnect(existingConnection)
-                    }
-                } catch (e: Exception) {
-                    logger.error(e) { "[$aeronLogInfo] Handshake error!" }
-                }
-
-                return false
             }
+
+
+            // Server is the "source", client mirrors the server
+            val aeronLogInfo = "${existingConnection.id}/${existingConnection.streamId} : ${existingConnection.remoteAddressString}"
+
+            logger.debug { "[$aeronLogInfo] (${message.connectKey}) Connection done with handshake." }
+
+            // NOTE: This is called on connection.close()
+            existingConnection.closeAction = {
+                // clean up the resources associated with this connection when it's closed
+                logger.debug { "[$aeronLogInfo] freeing resources" }
+                existingConnection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
+
+                // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                EventDispatcher.launch(EVENT.DISCONNECT) {
+                    existingConnection.doNotifyDisconnect()
+                    listenerManager.notifyDisconnect(existingConnection)
+                }
+            }
+
+            // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
+            EventDispatcher.launch(EVENT.INIT) {
+                listenerManager.notifyInit(existingConnection)
+            }
+
+            // this enables the connection to start polling for messages
+            server.addConnection(existingConnection)
+
+            // now tell the client we are done
+            try {
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.doneToClient(message.connectKey))
+
+                // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
+                EventDispatcher.launch(EVENT.CONNECT) {
+                    listenerManager.notifyConnect(existingConnection)
+                }
+            } catch (e: Exception) {
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+            }
+
+            return false
         }
 
         return true
@@ -499,7 +503,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 connectionsPerIpCounts.decrementSlow(clientAddress)
                 sessionIdAllocator.free(connectionSessionId)
                 streamIdAllocator.free(connectionStreamId)
-                connection.close()
+
+                EventDispatcher.launch(EVENT.CLOSE) {
+                    connection.close(enableRemove = true)
+                }
 
                 logger.error { "[$aeronLogInfo] Connection was not permitted!" }
 

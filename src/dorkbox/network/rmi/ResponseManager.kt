@@ -17,6 +17,7 @@ package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EventDispatcher
+import dorkbox.network.connection.EventDispatcher.Companion.EVENT
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
@@ -183,8 +184,8 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
     /**
      * Cancels the RMI request in the given timeout, the callback is executed inside the read lock
      */
-    suspend fun cancelRequest(eventDispatch: EventDispatcher, timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
-        eventDispatch.send {
+    suspend fun cancelRequest(timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
+        EventDispatcher.launch(EVENT.RMI) {
             delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
             // check if we have a result or not
@@ -208,7 +209,6 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
      * @return the result (can be null) or timeout exception
      */
     suspend fun waitForReply(
-        eventDispatch: EventDispatcher,
         responseWaiter: ResponseWaiter,
         timeoutMillis: Long,
         logger: KLogger,
@@ -224,7 +224,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
         // 'timeout > 0' -> WAIT w/ TIMEOUT
         // 'timeout == 0' -> WAIT FOREVER
         if (timeoutMillis > 0) {
-            val responseTimeoutJob = eventDispatch.launch {
+            val responseTimeoutJob = EventDispatcher.launch(EVENT.RMI) {
                 delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
                 // check if we have a result or not
