@@ -224,14 +224,20 @@ internal class ServerHandshake<CONNECTION : Connection>(
      * @return true if the handshake poller is to close the publication, false will keep the publication (as we are DONE processing data)
      */
     suspend fun processIpcHandshakeMessageServer(
-        server: Server<CONNECTION>, handshakePublication: Publication, message: HandshakeMessage,
-        aeronDriver: AeronDriver, aeronLogInfo: String,
+        server: Server<CONNECTION>,
+        aeronDriver: AeronDriver,
+        handshakePublication: Publication,
+        message: HandshakeMessage,
+        aeronLogInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ) {
+        // Manage the Handshake state. When done with a connection, this returns
         if (!validateMessageTypeAndDoPending(
-                server = server, handshakePublication = handshakePublication, message = message, logger = logger
-            )) {
+                server = server,
+                handshakePublication = handshakePublication,
+                message = message,
+                logger = logger)) {
             return
         }
 
@@ -299,31 +305,31 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
         // create a new connection. The session ID is encrypted.
+        var connection: CONNECTION? = null
         try {
             // Create a subscription at the given address and port, using the given stream ID.
-            val driver = ServerIpcPairedDriver(aeronDriver = aeronDriver,
-                                               streamId = connectionStreamId,
-                                               sessionId = connectionSessionSubId,
-                                               remoteSessionId = connectionSessionPubId)
+            val newMediaDriver = ServerIpcPairedDriver(aeronDriver = aeronDriver,
+                                                       streamId = connectionStreamId,
+                                                       sessionId = connectionSessionSubId,
+                                                       remoteSessionId = connectionSessionPubId)
 
-            driver.build(logger)
+            newMediaDriver.build(logger)
 
             val clientConnection = MediaDriverConnectInfo(
-                publication = driver.publication,
-                subscription = driver.subscription,
-                subscriptionPort = driver.streamId,
+                publication = newMediaDriver.publication,
+                subscription = newMediaDriver.subscription,
+                subscriptionPort = newMediaDriver.streamId,
                 publicationPort = message.subscriptionPort,
                 streamId = 0, // this is because with IPC, we have stream sub/pub (which are replaced as port sub/pub)
-                sessionId = driver.sessionId,
-                isReliable = driver.isReliable,
+                sessionId = newMediaDriver.sessionId,
+                isReliable = newMediaDriver.isReliable,
                 remoteAddress = null,
                 remoteAddressString = "ipc"
             )
 
+            logger.info { "[$aeronLogInfo] Creating new IPC connection from $newMediaDriver" }
 
-            logger.info { "[$aeronLogInfo] Creating new IPC connection from $driver" }
-
-            val connection = connectionFunc(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
+            connection = connectionFunc(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
@@ -334,30 +340,24 @@ internal class ServerHandshake<CONNECTION : Connection>(
             ///////////////
 
 
-
             // The one-time pad is used to encrypt the session ID, so that ONLY the correct client knows what it is!
             val successMessage = HandshakeMessage.helloAckIpcToClient(message.connectKey)
 
 
-            // if necessary, we also send the kryo RMI id's that are registered as RMI on this endpoint, but maybe not on the other endpoint
+            // Also send the RMI registration data to the client (so the client doesn't register anything)
 
             // now create the encrypted payload, using ECDH
-            val cryptOutput = server.crypto.cryptOutput
-            cryptOutput.reset()
-            cryptOutput.writeInt(connectionSessionSubId) // port (local ID that we are listening on - server sub)
-            cryptOutput.writeInt(connectionSessionPubId) // session id (local ID that we are sending data to -- the client must sub to this)
-            cryptOutput.writeInt(connectionStreamId)     // stream id
-
-            val regDetails = serialization.getKryoRegistrationDetails()
-            cryptOutput.writeInt(regDetails.size)
-            cryptOutput.writeBytes(regDetails)
-
-            successMessage.registrationData = cryptOutput.toBytes()
+            successMessage.registrationData = server.crypto.nocrypt(connectionStreamId,
+                                                                    connectionSessionSubId,
+                                                                    connectionSessionPubId,
+                                                                    serialization.getKryoRegistrationDetails())
 
             successMessage.publicKey = server.crypto.publicKeyBytes
 
             // before we notify connect, we have to wait for the client to tell us that they can receive data
             pendingConnections[message.connectKey] = connection
+
+            logger.debug { "[$aeronLogInfo] (${message.connectKey}) Connection (${connection.id}) responding to handshake hello." }
 
             // this tells the client all the info to connect.
             server.writeHandshakeMessage(handshakePublication, aeronLogInfo, successMessage) // exception is already caught!
@@ -366,7 +366,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             sessionIdAllocator.free(connectionSessionSubId)
             sessionIdAllocator.free(connectionSessionPubId)
 
-            logger.error(e) { "[$aeronLogInfo] Connection handshake crashed! Message $message" }
+            logger.error(e) { "[$aeronLogInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message" }
         }
     }
 
@@ -376,7 +376,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
      */
     suspend fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
-        driver: ServerUdpDriver,
+        mediaDriver: ServerUdpDriver,
+        driver: AeronDriver,
         handshakePublication: Publication,
         clientAddress: InetAddress,
         clientAddressString: String,
@@ -384,18 +385,23 @@ internal class ServerHandshake<CONNECTION : Connection>(
         message: HandshakeMessage,
         aeronLogInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
-        logger: KLogger
+        logger: KLogger,
+        listenType: String
     ) {
         // Manage the Handshake state. When done with a connection, this returns
         if (!validateMessageTypeAndDoPending(
-                server = server, handshakePublication = handshakePublication, message = message, logger = logger
-            )) {
+                server = server,
+                handshakePublication = handshakePublication,
+                message = message,
+                logger = logger)) {
             return
         }
 
+        val serialization = config.serialization
+
+        // UDP ONLY
         val clientPublicKeyBytes = message.publicKey
         val validateRemoteAddress: PublicKeyValidationState
-        val serialization = config.serialization
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
         validateRemoteAddress = server.crypto.validateRemoteAddress(clientAddress, clientAddressString, clientPublicKeyBytes)
@@ -466,30 +472,30 @@ internal class ServerHandshake<CONNECTION : Connection>(
         // create a new connection. The session ID is encrypted.
         var connection: CONNECTION? = null
         try {
-            val newDriver = ServerUdpPairedDriver(
-                aeronDriver = driver.aeronDriver,
-                listenAddress = driver.listenAddress,
+            val newMediaDriver = ServerUdpPairedDriver(
+                driver = driver,
+                listenAddress = mediaDriver.listenAddress,
                 remoteAddress = clientAddress,
                 port = subscriptionPort,
                 streamId = connectionStreamId,
                 sessionId = connectionSessionId,
                 connectionTimeoutSec = 0,
                 isReliable = isReliable,
-                listenType = driver.listenType
+                listenType = listenType
             )
 
-            newDriver.build(logger)
+            newMediaDriver.build(logger)
 
-            logger.info { "[$aeronLogInfo] Creating new UDP connection from $newDriver" }
+            logger.info { "[$aeronLogInfo] Creating new UDP connection from $newMediaDriver" }
 
             val clientConnection = MediaDriverConnectInfo(
-                publication = newDriver.publication,
-                subscription = newDriver.subscription,
-                subscriptionPort = newDriver.port,
+                publication = newMediaDriver.publication,
+                subscription = newMediaDriver.subscription,
+                subscriptionPort = newMediaDriver.port,
                 publicationPort = publicationPort,
-                streamId = newDriver.streamId,
-                sessionId = newDriver.sessionId,
-                isReliable = newDriver.isReliable,
+                streamId = newMediaDriver.streamId,
+                sessionId = newMediaDriver.sessionId,
+                isReliable = newMediaDriver.isReliable,
                 remoteAddress = clientAddress,
                 remoteAddressString = clientAddressString
             )
