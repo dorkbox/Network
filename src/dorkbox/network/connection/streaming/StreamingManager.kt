@@ -158,7 +158,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                             // +2 because we do not want to see the stack for the abstract `newException`
                             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                             // where we see who is calling "send()"
-                            ListenerManager.cleanStackTrace(exception, 2)
+                            exception.cleanStackTrace(2)
                             throw exception
                         }
 
@@ -192,7 +192,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                             // +2 because we do not want to see the stack for the abstract `newException`
                             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                             // where we see who is calling "send()"
-                            ListenerManager.cleanStackTrace(exception, 2)
+                            exception.cleanStackTrace(2)
                             throw exception
                         }
                     } else {
@@ -206,7 +206,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                         // +2 because we do not want to see the stack for the abstract `newException`
                         // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                         // where we see who is calling "send()"
-                        ListenerManager.cleanStackTrace(exception, 2)
+                        exception.cleanStackTrace(2)
                         throw exception
                     }
                 } else {
@@ -228,7 +228,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                 // +2 because we do not want to see the stack for the abstract `newException`
                 // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                 // where we see who is calling "send()"
-                ListenerManager.cleanStackTrace(exception, 2)
+                exception.cleanStackTrace(2)
                 throw exception
             }
             StreamingState.UNKNOWN ->  {
@@ -242,7 +242,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                 // +2 because we do not want to see the stack for the abstract `newException`
                 // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                 // where we see who is calling "send()"
-                ListenerManager.cleanStackTrace(exception, 2)
+                exception.cleanStackTrace(2)
                 throw exception
             }
         }
@@ -276,7 +276,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             // +2 because we do not want to see the stack for the abstract `newException`
             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"
-            ListenerManager.cleanStackTrace(exception, 5)
+            exception.cleanStackTrace(5)
             throw exception
         }
     }
@@ -304,7 +304,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             // +2 because we do not want to see the stack for the abstract `newException`
             // +4 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"
-            ListenerManager.cleanStackTrace(exception, 6)
+            exception.cleanStackTrace(6)
             throw exception
         } else {
             // send it up!
@@ -355,7 +355,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             // +2 because we do not want to see the stack for the abstract `newException`
             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"
-            ListenerManager.cleanStackTrace(exception, 5)
+            exception.cleanStackTrace(5)
             throw exception
         }
 
@@ -420,7 +420,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                 // +2 because we do not want to see the stack for the abstract `newException`
                 // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                 // where we see who is calling "send()"
-                ListenerManager.cleanStackTrace(exception, 5)
+                exception.cleanStackTrace(5)
                 throw exception
             }
         } catch (e: Exception) {
@@ -482,7 +482,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                     // +2 because we do not want to see the stack for the abstract `newException`
                     // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                     // where we see who is calling "send()"
-                    ListenerManager.cleanStackTrace(exception, 5)
+                    exception.cleanStackTrace(5)
                     throw exception
                 } else {
                     // send it up!

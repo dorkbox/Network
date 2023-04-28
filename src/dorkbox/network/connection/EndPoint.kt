@@ -26,6 +26,8 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
 import dorkbox.network.aeron.EventPoller
 import dorkbox.network.connection.EventDispatcher.Companion.EVENT
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
@@ -506,7 +508,7 @@ internal constructor(val type: Class<*>,
                         val exception = newException(
                             "[$aeronLogInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})"
                         )
-                        ListenerManager.cleanStackTraceInternal(exception)
+                        exception.cleanStackTraceInternal()
                         listenerManager.notifyError(exception)
                         throw exception
                     }
@@ -536,7 +538,7 @@ internal constructor(val type: Class<*>,
                 // more critical error sending the message. we shouldn't retry or anything.
                 // this exception will be a ClientException or a ServerException
                 val exception = newException("[$aeronLogInfo] Error sending handshake message. $message (${errorCodeName(result)})")
-                ListenerManager.cleanStackTraceInternal(exception)
+                exception.cleanStackTraceInternal()
                 listenerManager.notifyError(exception)
                 throw exception
             }
@@ -545,7 +547,7 @@ internal constructor(val type: Class<*>,
                 throw e
             } else {
                 val exception = newException("[$aeronLogInfo] Error serializing handshake message $message", e)
-                ListenerManager.cleanStackTrace(exception, 2) // 2 because we do not want to see the stack for the abstract `newException`
+                exception.cleanStackTrace(2) // 2 because we do not want to see the stack for the abstract `newException`
                 listenerManager.notifyError(exception)
                 throw exception
             }
@@ -832,7 +834,7 @@ internal constructor(val type: Class<*>,
                     // +2 because we do not want to see the stack for the abstract `newException`
                     // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                     // where we see who is calling "send()"
-                    ListenerManager.cleanStackTrace(exception, 5)
+                    exception.cleanStackTrace(5)
                     return false
                 } else {
                     // publication was actually closed, so no bother throwing an error
@@ -875,7 +877,7 @@ internal constructor(val type: Class<*>,
             // +2 because we do not want to see the stack for the abstract `newException`
             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"
-            ListenerManager.cleanStackTrace(exception, 5)
+            exception.cleanStackTrace(5)
             return false
         }
     }

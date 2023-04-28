@@ -19,6 +19,9 @@ package dorkbox.network.aeron
 import dorkbox.network.Configuration
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.AeronDriverException
 import dorkbox.network.exceptions.ClientRetryException
 import io.aeron.Aeron
@@ -78,7 +81,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
                     it(exception)
                 } catch (t: Throwable) {
                     // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                    ListenerManager.cleanStackTrace(t)
+                    t.cleanStackTrace()
                     driverLogger.error("Global error with Aeron", t)
                 }
             }
@@ -117,7 +120,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val filter = config.aeronErrorFilter
         aeronErrorHandler = { error ->
             if (filter(error)) {
-                ListenerManager.cleanStackTrace(error)
+                error.cleanStackTrace()
                 // send this out to the listener-manager so we can be notified of global errors
                 notifyError(AeronDriverException(error))
             }
@@ -187,14 +190,12 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             }
 
             if (!running) {
-                logger.debug { "Starting Aeron Media driver [$driverId]" }
-
                 // try to start. If we start/stop too quickly, it's a problem
                 var count = 10
                 while (count-- > 0) {
                     try {
                         mediaDriver = MediaDriver.launch(context.context)
-                        logger.debug { "Started the Aeron Media driver [$driverId]" }
+                        logger.debug { "Successfully started the Aeron Media driver [$driverId]" }
                         break
                     } catch (e: Exception) {
                         logger.warn(e) { "Unable to start the Aeron Media driver [$driverId] at ${context.directory}. Retrying $count more times..." }
@@ -258,7 +259,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         if (aeron1 == null || aeron1.isClosed) {
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Error adding a publication to aeron")
-            ListenerManager.cleanAllStackTrace(ex)
+            ex.cleanAllStackTrace()
             throw ex
         }
 
@@ -266,9 +267,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             aeron1.addPublication(uri, streamId)
         } catch (e: Exception) {
             // this happens if the aeron media driver cannot actually establish connection
-            ListenerManager.cleanAllStackTrace(e)
+            e.cleanAllStackTrace()
             val ex = ClientRetryException("Error adding a publication", e)
-            ListenerManager.cleanAllStackTrace(ex)
+            ex.cleanAllStackTrace()
             throw ex
         }
 
@@ -306,7 +307,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         if (aeron1 == null || aeron1.isClosed) {
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Error adding a publication to aeron")
-            ListenerManager.cleanAllStackTrace(ex)
+            ex.cleanAllStackTrace()
             throw ex
         }
 
@@ -314,17 +315,17 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             aeron1.addExclusivePublication(uri, streamId)
         } catch (e: Exception) {
             // this happens if the aeron media driver cannot actually establish connection
-            ListenerManager.cleanAllStackTrace(e)
-            ListenerManager.cleanAllStackTrace(e.cause)
+            e.cleanStackTraceInternal()
+            e.cause?.cleanStackTraceInternal()
             val ex = ClientRetryException("Error adding a publication", e)
-            ListenerManager.cleanAllStackTrace(ex)
+            ex.cleanAllStackTrace()
             throw ex
         }
 
         if (publication == null) {
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Error adding a publication")
-            ListenerManager.cleanAllStackTrace(ex)
+            ex.cleanAllStackTrace()
             throw ex
         }
 
@@ -356,7 +357,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         if (aeron1 == null || aeron1.isClosed) {
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Error adding a subscription to aeron")
-            ListenerManager.cleanAllStackTrace(ex)
+            ex.cleanAllStackTrace()
             throw ex
         }
 

@@ -41,9 +41,9 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
-        fun cleanStackTrace(throwable: Throwable, adjustedStartOfStack: Int = 0) {
+        fun Throwable.cleanStackTrace(adjustedStartOfStack: Int = 0) {
             // we never care about coroutine stacks, so filter then to start with.
-            val origStackTrace = throwable.stackTrace
+            val origStackTrace = this.stackTrace
             val size = origStackTrace.size
 
             if (size == 0) {
@@ -84,14 +84,14 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             if (newEndIndex > 0) {
                 if (savedFirstStack != null) {
                     // we want to save the FIRST stack frame also, maybe
-                    throwable.stackTrace = savedFirstStack + stackTrace.copyOfRange(newStartIndex, newEndIndex)
+                    this.stackTrace = savedFirstStack + stackTrace.copyOfRange(newStartIndex, newEndIndex)
                 } else {
-                    throwable.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
+                    this.stackTrace = stackTrace.copyOfRange(newStartIndex, newEndIndex)
                 }
 
             } else {
                 // keep just one, since it's a stack frame INSIDE our network library, and we need that!
-                throwable.stackTrace = stackTrace.copyOfRange(0, 1)
+                this.stackTrace = stackTrace.copyOfRange(0, 1)
             }
         }
 
@@ -100,9 +100,9 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          *
          * Neither of these are useful in resolving exception handling from a users perspective, and only clutter the stacktrace.
          */
-        fun cleanStackTraceInternal(throwable: Throwable) {
+        fun Throwable.cleanStackTraceInternal() {
             // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-            val stackTrace = throwable.stackTrace
+            val stackTrace = this.stackTrace
             val size = stackTrace.size
 
             if (size == 0) {
@@ -113,7 +113,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             val firstDorkboxIndex = stackTrace.indexOfFirst { it.className.startsWith("dorkbox.network.") }
             val lastDorkboxIndex = stackTrace.indexOfLast { it.className.startsWith("dorkbox.network.") }
 
-            throwable.stackTrace = stackTrace.filterIndexed { index, element ->
+            this.stackTrace = stackTrace.filterIndexed { index, element ->
                 val stackName = element.className
                 if (index <= firstDorkboxIndex && index >= lastDorkboxIndex) {
                     false
@@ -130,12 +130,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
          *
          * We only want the error message, because we do something based on it (and the full stack trace is meaningless)
          */
-        fun cleanAllStackTrace(throwable: Throwable?) {
-            if (throwable == null) {
-                return
-            }
-
-            val stackTrace = throwable.stackTrace
+        fun Throwable.cleanAllStackTrace() {
+            val stackTrace = this.stackTrace
             val size = stackTrace.size
 
             if (size == 0) {
@@ -143,7 +139,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
             }
 
             // throw everything out
-            throwable.stackTrace = stackTrace.copyOfRange(0, 1)
+            this.stackTrace = stackTrace.copyOfRange(0, 1)
         }
 
         internal inline fun <reified T> add(thing: T, array: Array<T>): Array<T> {
@@ -376,7 +372,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 it(connection)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
+                t.cleanStackTrace()
                 logger.error("Connection ${connection.id} error", t)
             }
         }
@@ -391,7 +387,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 it(connection)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
+                t.cleanStackTrace()
                 logger.error("Connection ${connection.id} error", t)
             }
         }
@@ -406,7 +402,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 it(connection)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
+                t.cleanStackTrace()
                 logger.error("Connection ${connection.id} error", t)
             }
         }
@@ -425,7 +421,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 it(connection, exception)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
+                t.cleanStackTrace()
                 logger.error("Connection ${connection.id} error", t)
             }
         }
@@ -444,7 +440,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                 it(exception)
             } catch (t: Throwable) {
                 // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                cleanStackTrace(t)
+                t.cleanStackTrace()
                 logger.error("Global error", t)
             }
         }
@@ -486,7 +482,7 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
                     try {
                         func(connection, message)
                     } catch (t: Throwable) {
-                        cleanStackTrace(t)
+                        t.cleanStackTrace()
                         logger.error("Connection ${connection.id} error", t)
                         notifyError(connection, t)
                     }

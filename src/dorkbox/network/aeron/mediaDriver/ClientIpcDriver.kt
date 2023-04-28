@@ -18,7 +18,7 @@ package dorkbox.network.aeron.mediaDriver
 
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
-import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import kotlinx.coroutines.delay
@@ -69,7 +69,7 @@ internal open class ClientIpcDriver(aeronDriver: AeronDriver,
             //      ESPECIALLY if it is with the same streamID
             // this check is in the "reconnect" logic
 
-            val publication = aeronDriver.addExclusivePublication(publicationUri, "IPC", streamId)
+        val publication = aeronDriver.addExclusivePublication(publicationUri, logInfo, streamId)
 
             // always include the linger timeout, so we don't accidentally kill ourself by taking too long
             val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
@@ -86,10 +86,10 @@ internal open class ClientIpcDriver(aeronDriver: AeronDriver,
             if (!success) {
                 aeronDriver.closeAndDeletePublication(publication, listenType)
 
-                val clientTimedOutException = ClientTimedOutException("Cannot create publication IPC connection to server")
-                ListenerManager.cleanAllStackTrace(clientTimedOutException)
-                throw clientTimedOutException
-            }
+            val clientTimedOutException = ClientTimedOutException("Cannot create publication IPC connection to server")
+            clientTimedOutException.cleanAllStackTrace()
+            throw clientTimedOutException
+        }
 
             this.publication = publication
         }

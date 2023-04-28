@@ -19,7 +19,7 @@ package dorkbox.network.aeron.mediaDriver
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
-import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.CommonContext
@@ -39,7 +39,7 @@ internal class ClientUdpDriver(aeronDriver: AeronDriver,
                                sessionId: Int,
                                connectionTimeoutSec: Int = 0,
                                isReliable: Boolean,
-                               listenType: String) :
+                               logInfo: String) :
     MediaDriverClient(
         aeronDriver = aeronDriver,
         port = port,
@@ -47,7 +47,7 @@ internal class ClientUdpDriver(aeronDriver: AeronDriver,
         sessionId = sessionId,
         connectionTimeoutSec = connectionTimeoutSec,
         isReliable = isReliable,
-        listenType = listenType
+        logInfo = logInfo
     ) {
 
     var success: Boolean = false
@@ -75,7 +75,7 @@ internal class ClientUdpDriver(aeronDriver: AeronDriver,
 
         // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
         //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
-        val publication = aeronDriver.addExclusivePublication(publicationUri, listenType, streamId)
+        val publication = aeronDriver.addExclusivePublication(publicationUri, logInfo, streamId)
 
 
         // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
@@ -97,7 +97,7 @@ internal class ClientUdpDriver(aeronDriver: AeronDriver,
             .controlEndpoint(isIpv4, addressString, port+1)
             .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
-        val subscription = aeronDriver.addSubscription(subscriptionUri, listenType, streamId)
+        val subscription = aeronDriver.addSubscription(subscriptionUri, logInfo, streamId)
 
 
         // always include the linger timeout, so we don't accidentally kill ourselves by taking too long
@@ -117,8 +117,10 @@ internal class ClientUdpDriver(aeronDriver: AeronDriver,
             aeronDriver.closeAndDeleteSubscription(subscription, "ClientUDP")
             aeronDriver.closeAndDeletePublication(publication, "ClientUDP")
 
-            val ex = ClientTimedOutException("Cannot create publication to $listenType $addressString in $connectionTimeoutSec seconds")
-            ListenerManager.cleanAllStackTrace(ex)
+            sessionIdAllocator.free(sessionId)
+
+            val ex = ClientTimedOutException("Cannot create publication $logInfo $addressString in $connectionTimeoutSec seconds")
+            ex.cleanAllStackTrace()
             throw ex
         }
 
