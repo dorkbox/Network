@@ -1080,7 +1080,7 @@
      - NetworkUtils - Utilities for managing network configurations, IP/MAC address conversion, and ping (via OS native commands)
        [The Apache Software License, Version 2.0]
        https://git.dorkbox.com/dorkbox/NetworkUtils
-       Copyright 2022
+       Copyright 2023
          Dorkbox LLC
 
        Extra license information
@@ -1108,19 +1108,19 @@
          - SLF4J - Simple facade or abstraction for various logging frameworks
            [MIT License]
            http://www.slf4j.org
-           Copyright 2022
+           Copyright 2023
              QOS.ch
 
          - JNA - Simplified native library access for Java.
            [The Apache Software License, Version 2.0]
            https://github.com/twall/jna
-           Copyright 2022
+           Copyright 2023
              Timothy Wall
 
          - JNA-Platform - Mappings for a number of commonly used platform functions
            [The Apache Software License, Version 2.0]
            https://github.com/twall/jna
-           Copyright 2022
+           Copyright 2023
              Timothy Wall
 
          - Kotlin - 
