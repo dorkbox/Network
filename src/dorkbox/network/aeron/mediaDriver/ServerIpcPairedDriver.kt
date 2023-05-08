@@ -28,7 +28,8 @@ import mu.KLogger
 internal open class ServerIpcPairedDriver(aeronDriver: AeronDriver,
                                           streamId: Int,
                                           sessionId: Int,
-                                          remoteSessionId: Int) :
+                                          remoteSessionId: Int,
+                                          logInfo: String) :
     MediaDriverServer(
         aeronDriver = aeronDriver,
         port = remoteSessionId,
@@ -36,7 +37,7 @@ internal open class ServerIpcPairedDriver(aeronDriver: AeronDriver,
         sessionId = sessionId,
         connectionTimeoutSec = 10,
         isReliable = true,
-        "IPC"
+        logInfo = logInfo
     ) {
 
 
@@ -51,10 +52,10 @@ internal open class ServerIpcPairedDriver(aeronDriver: AeronDriver,
      */
      override suspend fun build(logger: KLogger) {
         // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = uri("ipc", sessionId)
+        val subscriptionUri = uri("ipc", sessionId, isReliable)
 
         // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
-        val publicationUri = uri("ipc", port)
+        val publicationUri = uri("ipc", sessionId, isReliable)
 
         this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
                 "[$sessionId] IPC listening on [$streamId] [$sessionId]"
@@ -62,8 +63,14 @@ internal open class ServerIpcPairedDriver(aeronDriver: AeronDriver,
                 "Listening handshake on IPC [$streamId] [$sessionId]"
             }
 
+        logger.error { "\n" +
+                "SUB: stream: $streamId session: $sessionId\n" +
+                "PUB: stream: ${streamId+1} session: $sessionId\n" }
+
+
+
         this.success = true
-        this.subscription = aeronDriver.addSubscription(subscriptionUri, listenType, streamId)
-        this.publication = aeronDriver.addExclusivePublication(publicationUri, listenType, streamId)
+        this.subscription = aeronDriver.addSubscription(subscriptionUri, logInfo, streamId)
+        this.publication = aeronDriver.addPublication(publicationUri, logInfo, streamId+1)
     }
 }

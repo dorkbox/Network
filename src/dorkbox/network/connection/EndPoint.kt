@@ -16,6 +16,7 @@
 package dorkbox.network.connection
 
 import dorkbox.collections.ConcurrentIterator
+import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
@@ -95,12 +96,14 @@ internal constructor(val type: Class<*>,
 
     companion object {
         // connections are extremely difficult to diagnose when the connection timeout is short
-        internal const val DEBUG_CONNECTIONS = false
+        internal const val DEBUG_CONNECTIONS = true
 
         internal const val IPC_NAME = "IPC"
 
         internal val networkEventPoller = EventPoller()
         internal val responseManager = ResponseManager()
+
+        internal val lanAddress = IP.lanAddress()
 
         /**
          * @return the error code text for the specified number
@@ -227,7 +230,7 @@ internal constructor(val type: Class<*>,
     private val shutdown = atomic(false)
 
     @Volatile
-    private var shutdownLatch = CountDownLatch(1)
+    private var shutdownLatch: dorkbox.util.sync.CountDownLatch
 
     /**
      * Returns the storage used by this endpoint. This is the backing data structure for key/value pairs, and can be a database, file, etc
@@ -259,7 +262,7 @@ internal constructor(val type: Class<*>,
         config.validate() // this happens more than once! (this is ok)
 
         // there are threading issues if there are client(s) and server's within the same JVM, where we have thread starvation
-        networkEventPoller.configure(config)
+        networkEventPoller.configure(logger, config)
 
 
         // serialization stuff
@@ -309,6 +312,8 @@ internal constructor(val type: Class<*>,
                 return@RmiManagerConnections rmiGlobalSupport.getGlobalRemoteObject(connection, objectId, interfaceClass)
             }
         }
+
+        shutdownLatch = dorkbox.util.sync.CountDownLatch(1)
     }
 
     /**
@@ -598,7 +603,8 @@ internal constructor(val type: Class<*>,
         message: Any,
         publication: Publication,
         sendIdleStrategy: IdleStrategy,
-        connection: Connection
+        connection: Connection,
+        abortEarly: Boolean
     ): Boolean {
         // NOTE: A kryo instance CANNOT be re-used until after it's buffer is flushed to the network!
 
@@ -664,8 +670,18 @@ internal constructor(val type: Class<*>,
     open fun processMessage(message: Any?, connection: CONNECTION) {
         // the REPEATED usage of wrapping methods below is because Streaming messages have to intercept data BEFORE it goes to a coroutine
         when (message) {
+            // the remote endPoint will send this message if it is closing the connection.
+            // IF we get this message in time, then we do not have to wait for the connection to expire before closing it
+            is DisconnectMessage -> {
+                // NOTE: This MUST be on a new co-routine
+                EventDispatcher.launch(EVENT.CLOSE) {
+                    connection.close(enableRemove = true)
+                }
+            }
+
             is Ping -> {
                 // NOTE: This MUST be on a new co-routine
+                // PING will also measure APP latency, not just NETWORK PIPE latency
                 messageDispatch.launch {
                     try {
                         pingManager.manage(connection, responseManager, message, logger)
@@ -789,7 +805,8 @@ internal constructor(val type: Class<*>,
         offset: Int,
         objectSize: Int,
         sendIdleStrategy: IdleStrategy,
-        connection: Connection
+        connection: Connection,
+        abortEarly: Boolean
     ): Boolean {
         var timeoutInNanos = 0L
         var startTime = 0L
@@ -969,30 +986,38 @@ internal constructor(val type: Class<*>,
     /**
      * Waits for this endpoint to be closed
      */
-    fun waitForClose() {
-        var latch: CountDownLatch? = null
+    suspend fun waitForClose() {
+        var latch: dorkbox.util.sync.CountDownLatch? = null
 
         while (latch !== shutdownLatch) {
             latch = shutdownLatch
             // if we are restarting the network state, we want to continue to wait for a proper close event. Because we RESET the latch,
             // we must continue to check
+
+            logger.error { "waiting for close event to finish" }
             latch.await()
         }
     }
 
-    final override fun close() {
-        if (shutdown.compareAndSet(expect = false, update = true)) {
-            logger.info { "Shutting down..." }
+    fun close(onCloseFunction: () -> Unit = {}) {
+        logger.error { "Submitting close event" }
 
-            closeAction {
-                // Connections MUST be closed first, because we want to make sure that no RMI messages can be received
-                // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
-                // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via an RMI method)
-                responseManager.close()
+        EventDispatcher.launch(EVENT.CLOSE) {
+            if (shutdown.compareAndSet(expect = false, update = true)) {
+                logger.info { "Shutting down..." }
 
-                // the storage is closed via this as well.
-                storage.close()
+                closeAction {
+                    // Connections MUST be closed first, because we want to make sure that no RMI messages can be received
+                    // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
+                    // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via an RMI method)
+                    responseManager.close()
+
+                    // the storage is closed via this as well.
+                    storage.close()
+                }
             }
+
+            onCloseFunction()
 
             logger.info { "Done shutting down..." }
         }
@@ -1014,30 +1039,22 @@ internal constructor(val type: Class<*>,
         }
     }
 
-    private fun closeAction(extraActions: () -> Unit = {}) {
+    private suspend fun closeAction(extraActions: () -> Unit = {}) {
+logger.error { "CLOSE ACTION 1" }
         // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
         // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
         val enableRemove = type == Client::class.java
         connections.forEach {
-            logger.info {
-                val aeronLogInfo = "${it.id}/${it.streamId} : ${it.remoteAddressString}"
-                "[$aeronLogInfo] Closing connection"
-            }
-
+            logger.info { "[${it.details}] Closing connection" }
             it.close(enableRemove)
         }
 
-        // must run after connections have been closed, but before anything else
+        logger.error { "CLOSE ACTION 2" }
+        // must run after connections have been closed, but before anything else happens
         extraActions()
-
+        logger.error { "CLOSE ACTION 3" }
         close0()
-
-        aeronDriver.close()
-
-        // This closes the scope and all children in the scope
-        eventDispatch.cancel("${type.simpleName} shutting down")
-        messageDispatch.cancel("${type.simpleName} shutting down")
-
+        logger.error { "CLOSE ACTION 4" }
         // this will ONLY close the event dispatcher if ALL endpoints have closed it.
         // when an endpoint closes, the poll-loop shuts down, and removes itself from the list of poll actions that need to be performed.
         networkEventPoller.close(logger)

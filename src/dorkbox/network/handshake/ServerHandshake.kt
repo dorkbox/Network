@@ -18,25 +18,22 @@ package dorkbox.network.handshake
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.mediaDriver.MediaDriverConnectInfo
-import dorkbox.network.aeron.mediaDriver.ServerIpcPairedDriver
-import dorkbox.network.aeron.mediaDriver.ServerUdpDriver
-import dorkbox.network.aeron.mediaDriver.ServerUdpPairedDriver
-import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.EventDispatcher
+import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
+import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
+import dorkbox.network.aeron.mediaDriver.ServerIpcConnectionDriver
+import dorkbox.network.aeron.mediaDriver.ServerUdpConnectionDriver
+import dorkbox.network.aeron.mediaDriver.ServerUdpHandshakeDriver
+import dorkbox.network.connection.*
 import dorkbox.network.connection.EventDispatcher.Companion.EVENT
-import dorkbox.network.connection.ListenerManager
-import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.util.sync.CountDownLatch
 import io.aeron.Publication
 import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
+import java.net.Inet4Address
 import java.net.InetAddress
-import java.util.concurrent.*
+import java.util.concurrent.TimeUnit
 
 
 /**
@@ -74,16 +71,11 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
     private val connectionsPerIpCounts = ConnectionCounts()
 
-    // guarantee that session/stream ID's will ALWAYS be unique! (there can NEVER be a collision!)
-    private val sessionIdAllocator = RandomId65kAllocator(AeronDriver.RESERVED_SESSION_ID_LOW, AeronDriver.RESERVED_SESSION_ID_HIGH)
-    private val streamIdAllocator = RandomId65kAllocator(Short.MAX_VALUE * 2) // this is 65k
-
-
     /**
      * @return true if we should continue parsing the incoming message, false if we should abort (as we are DONE processing data)
      */
     // note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD. ONLY RESPONSES ARE ON ACTION DISPATCH!
-    private fun validateMessageTypeAndDoPending(server: Server<CONNECTION>, handshakePublication: Publication, message: HandshakeMessage, logger: KLogger): Boolean {
+    fun validateMessageTypeAndDoPending(server: Server<CONNECTION>, handshakePublication: Publication, message: HandshakeMessage, logger: KLogger): Boolean {
         // check to see if this sessionId is ALREADY in use by another connection!
         // this can happen if there are multiple connections from the SAME ip address (ie: localhost)
         if (message.state == HandshakeMessage.HELLO) {
@@ -92,15 +84,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
             val existingConnection = pendingConnections[message.connectKey]
             if (existingConnection != null) {
                 // Server is the "source", client mirrors the server
-                val aeronLogInfo = "${existingConnection.streamId}/${existingConnection.id} : ${existingConnection.remoteAddressString}"
 
                 // WHOOPS! tell the client that it needs to retry, since a DIFFERENT client has a handshake in progress with the same sessionId
                 logger.error { "[$existingConnection] (${message.connectKey}) Connection had an in-use session ID! Telling client to retry." }
 
                 try {
-                    server.writeHandshakeMessage(handshakePublication, aeronLogInfo, HandshakeMessage.retry("Handshake already in progress for sessionID!"))
+                    server.writeHandshakeMessage(handshakePublication, existingConnection.details, HandshakeMessage.retry("Handshake already in progress for sessionID!"))
                 } catch (e: Error) {
-                    logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+                    logger.error(e) { "[${existingConnection.details}] Handshake error!" }
                 }
                 return false
             }
@@ -116,15 +107,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
             // Server is the "source", client mirrors the server
-            val aeronLogInfo = "${existingConnection.id}/${existingConnection.streamId} : ${existingConnection.remoteAddressString}"
-
-            logger.debug { "[$aeronLogInfo] (${message.connectKey}) Connection done with handshake." }
+            logger.debug { "[${existingConnection.details}] (${message.connectKey}) Connection done with handshake." }
 
             // NOTE: This is called on connection.close()
             existingConnection.closeAction = {
                 // clean up the resources associated with this connection when it's closed
-                logger.debug { "[$aeronLogInfo] freeing resources" }
-                existingConnection.cleanup(connectionsPerIpCounts, sessionIdAllocator, streamIdAllocator)
+                logger.debug { "[${existingConnection.details}] freeing resources" }
+                existingConnection.cleanup(connectionsPerIpCounts)
 
                 // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
                 EventDispatcher.launch(EVENT.DISCONNECT) {
@@ -143,7 +132,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             // now tell the client we are done
             try {
-                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                server.writeHandshakeMessage(handshakePublication, existingConnection.details,
                                              HandshakeMessage.doneToClient(message.connectKey))
 
                 // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
@@ -151,7 +140,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                     listenerManager.notifyConnect(existingConnection)
                 }
             } catch (e: Exception) {
-                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+                logger.error(e) { "[${existingConnection.details}] Handshake error!" }
             }
 
             return false
@@ -232,15 +221,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
     ) {
-        // Manage the Handshake state. When done with a connection, this returns
-        if (!validateMessageTypeAndDoPending(
-                server = server,
-                handshakePublication = handshakePublication,
-                message = message,
-                logger = logger)) {
-            return
-        }
-
         val serialization = config.serialization
 
         /////
@@ -251,27 +231,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
         // allocate session/stream id's
-        val connectionSessionSubId: Int
+        val connectionSessionIdPub: Int
         try {
-            connectionSessionSubId = sessionIdAllocator.allocate()
+            connectionSessionIdPub = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
-            logger.error { "[$aeronLogInfo] Connection not allowed! Unable to allocate a session sub ID for the client connection!" }
-
-            try {
-                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
-                                             HandshakeMessage.error("Connection error!"))
-            } catch (e: Exception) {
-                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
-            }
-            return
-        }
-
-        val connectionSessionPubId: Int
-        try {
-            connectionSessionPubId = sessionIdAllocator.allocate()
-        } catch (e: AllocationException) {
-            sessionIdAllocator.free(connectionSessionSubId)
-
             logger.error { "[$aeronLogInfo] Connection not allowed! Unable to allocate a session pub ID for the client connection!" }
 
             try {
@@ -283,16 +246,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
             return
         }
 
-
-        val connectionStreamId: Int
+        val connectionSessionIdSub: Int
         try {
-            connectionStreamId = streamIdAllocator.allocate()
+            connectionSessionIdSub = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
             // have to unwind actions!
-            sessionIdAllocator.free(connectionSessionSubId)
-            sessionIdAllocator.free(connectionSessionPubId)
+            sessionIdAllocator.free(connectionSessionIdPub)
 
-            logger.error { "[$aeronLogInfo] Connection not allowed! Unable to allocate a stream ID for the client connection!" }
+            logger.error { "[$aeronLogInfo] Connection not allowed! Unable to allocate a session sub ID for the client connection!" }
 
             try {
                 server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
@@ -304,32 +265,65 @@ internal class ServerHandshake<CONNECTION : Connection>(
         }
 
 
+        val connectionStreamIdPub: Int
+        try {
+            connectionStreamIdPub = streamIdAllocator.allocate()
+        } catch (e: AllocationException) {
+            // have to unwind actions!
+            sessionIdAllocator.free(connectionSessionIdPub)
+            sessionIdAllocator.free(connectionSessionIdSub)
+
+            logger.error { "[$aeronLogInfo] Connection not allowed! Unable to allocate a stream publication ID for the client connection!" }
+
+            try {
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+            }
+            return
+        }
+
+        val connectionStreamIdSub: Int
+        try {
+            connectionStreamIdSub = streamIdAllocator.allocate()
+        } catch (e: AllocationException) {
+            // have to unwind actions!
+            sessionIdAllocator.free(connectionSessionIdPub)
+            sessionIdAllocator.free(connectionSessionIdSub)
+            streamIdAllocator.free(connectionStreamIdPub)
+
+            logger.error { "[$aeronLogInfo] Connection not allowed! Unable to allocate a stream subscription ID for the client connection!" }
+
+            try {
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+            }
+            return
+        }
+
+
+
+
+
         // create a new connection. The session ID is encrypted.
         var connection: CONNECTION? = null
         try {
-            // Create a subscription at the given address and port, using the given stream ID.
-            val newMediaDriver = ServerIpcPairedDriver(aeronDriver = aeronDriver,
-                                                       streamId = connectionStreamId,
-                                                       sessionId = connectionSessionSubId,
-                                                       remoteSessionId = connectionSessionPubId)
-
-            newMediaDriver.build(logger)
-
-            val clientConnection = MediaDriverConnectInfo(
-                publication = newMediaDriver.publication,
-                subscription = newMediaDriver.subscription,
-                subscriptionPort = newMediaDriver.streamId,
-                publicationPort = message.subscriptionPort,
-                streamId = 0, // this is because with IPC, we have stream sub/pub (which are replaced as port sub/pub)
-                sessionId = newMediaDriver.sessionId,
-                isReliable = newMediaDriver.isReliable,
-                remoteAddress = null,
-                remoteAddressString = "ipc"
+            // Create a pub/sub at the given address and port, using the given stream ID.
+            val newConnectionDriver = ServerIpcConnectionDriver(
+                aeronDriver = aeronDriver,
+                sessionIdPub = connectionSessionIdPub,
+                sessionIdSub = connectionSessionIdSub,
+                streamIdPub = connectionStreamIdPub,
+                streamIdSub = connectionStreamIdSub,
+                logInfo = "IPC",
+                isReliable = true,
+                logger = logger
             )
 
-            logger.info { "[$aeronLogInfo] Creating new IPC connection from $newMediaDriver" }
-
-            connection = connectionFunc(ConnectionParams(server, clientConnection, PublicKeyValidationState.VALID))
+            connection = connectionFunc(ConnectionParams(server, newConnectionDriver.connectionInfo(), PublicKeyValidationState.VALID))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
@@ -346,11 +340,13 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             // Also send the RMI registration data to the client (so the client doesn't register anything)
 
-            // now create the encrypted payload, using ECDH
-            successMessage.registrationData = server.crypto.nocrypt(connectionStreamId,
-                                                                    connectionSessionSubId,
-                                                                    connectionSessionPubId,
-                                                                    serialization.getKryoRegistrationDetails())
+            // now create the encrypted payload, using no crypto
+            successMessage.registrationData = server.crypto.nocrypt(
+                connectionSessionIdPub,
+                connectionSessionIdSub,
+                connectionStreamIdPub,
+                connectionStreamIdSub,
+                serialization.getKryoRegistrationDetails())
 
             successMessage.publicKey = server.crypto.publicKeyBytes
 
@@ -363,8 +359,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
             server.writeHandshakeMessage(handshakePublication, aeronLogInfo, successMessage) // exception is already caught!
         } catch (e: Exception) {
             // have to unwind actions!
-            sessionIdAllocator.free(connectionSessionSubId)
-            sessionIdAllocator.free(connectionSessionPubId)
+            sessionIdAllocator.free(connectionSessionIdPub)
+            sessionIdAllocator.free(connectionSessionIdSub)
+            streamIdAllocator.free(connectionStreamIdSub)
+            streamIdAllocator.free(connectionStreamIdPub)
 
             logger.error(e) { "[$aeronLogInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message" }
         }
@@ -376,7 +374,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
      */
     suspend fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
-        mediaDriver: ServerUdpDriver,
+        mediaDriver: ServerUdpHandshakeDriver,
         driver: AeronDriver,
         handshakePublication: Publication,
         clientAddress: InetAddress,
@@ -385,18 +383,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
         message: HandshakeMessage,
         aeronLogInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
-        logger: KLogger,
-        listenType: String
+        logger: KLogger
     ) {
-        // Manage the Handshake state. When done with a connection, this returns
-        if (!validateMessageTypeAndDoPending(
-                server = server,
-                handshakePublication = handshakePublication,
-                message = message,
-                logger = logger)) {
-            return
-        }
-
         val serialization = config.serialization
 
         // UDP ONLY
@@ -410,8 +398,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
             return
         }
 
+        val isSelfMachine = clientAddress.isLoopbackAddress || clientAddress == EndPoint.lanAddress
 
-        if (!clientAddress.isLoopbackAddress &&
+        if (!isSelfMachine &&
             !validateUdpConnectionInfo(server, handshakePublication, config, clientAddress, aeronLogInfo, logger)) {
             // we do not want to limit the loopback addresses!
             return
@@ -426,9 +415,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
         // allocate session/stream id's
-        val connectionSessionId: Int
+        val connectionSessionIdPub: Int
         try {
-            connectionSessionId = sessionIdAllocator.allocate()
+            connectionSessionIdPub = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
@@ -445,13 +434,34 @@ internal class ServerHandshake<CONNECTION : Connection>(
         }
 
 
-        val connectionStreamId: Int
+        val connectionSessionIdSub: Int
         try {
-            connectionStreamId = streamIdAllocator.allocate()
+            connectionSessionIdSub = sessionIdAllocator.allocate()
         } catch (e: AllocationException) {
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
-            sessionIdAllocator.free(connectionSessionId)
+            sessionIdAllocator.free(connectionSessionIdPub)
+
+            logger.error { "[$aeronLogInfo] Connection not allowed! Unable to allocate a session ID for the client connection!" }
+
+            try {
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+            }
+            return
+        }
+
+
+        val connectionStreamIdPub: Int
+        try {
+            connectionStreamIdPub = streamIdAllocator.allocate()
+        } catch (e: AllocationException) {
+            // have to unwind actions!
+            connectionsPerIpCounts.decrementSlow(clientAddress)
+            sessionIdAllocator.free(connectionSessionIdPub)
+            sessionIdAllocator.free(connectionSessionIdSub)
 
             logger.error { "[$aeronLogInfo] Connection not allowed! Unable to allocate a stream ID for the client connection!" }
 
@@ -464,51 +474,84 @@ internal class ServerHandshake<CONNECTION : Connection>(
             return
         }
 
-        // the pub/sub do not necessarily have to be the same. They can be ANY port
-        val publicationPort = message.subscriptionPort
-        val subscriptionPort = config.port
+        val connectionStreamIdSub: Int
+        try {
+            connectionStreamIdSub = streamIdAllocator.allocate()
+        } catch (e: AllocationException) {
+            // have to unwind actions!
+            connectionsPerIpCounts.decrementSlow(clientAddress)
+            sessionIdAllocator.free(connectionSessionIdPub)
+            sessionIdAllocator.free(connectionSessionIdSub)
+            streamIdAllocator.free(connectionStreamIdPub)
 
+            logger.error { "[$aeronLogInfo] Connection not allowed! Unable to allocate a stream ID for the client connection!" }
+
+            try {
+                server.writeHandshakeMessage(handshakePublication, aeronLogInfo,
+                                             HandshakeMessage.error("Connection error!"))
+            } catch (e: Exception) {
+                logger.error(e) { "[$aeronLogInfo] Handshake error!" }
+            }
+            return
+        }
+
+
+
+        // the pub/sub do not necessarily have to be the same. They can be ANY port
+        val portPub = message.port
+        val portSub = config.port
+
+        val logType = if (clientAddress is Inet4Address) {
+            "IPv4"
+        } else {
+            "IPv6"
+        }
 
         // create a new connection. The session ID is encrypted.
         var connection: CONNECTION? = null
         try {
-            val newMediaDriver = ServerUdpPairedDriver(
-                driver = driver,
+            // Create a pub/sub at the given address and port, using the given stream ID.
+            val newConnectionDriver = ServerUdpConnectionDriver(
+                aeronDriver = aeronDriver,
+                sessionIdPub = connectionSessionIdPub,
+                sessionIdSub = connectionSessionIdSub,
+                streamIdPub = connectionStreamIdPub,
+                streamIdSub = connectionStreamIdSub,
+
                 listenAddress = mediaDriver.listenAddress,
                 remoteAddress = clientAddress,
-                port = subscriptionPort,
-                streamId = connectionStreamId,
-                sessionId = connectionSessionId,
-                connectionTimeoutSec = 0,
+                remoteAddressString = clientAddressString,
+                portPub = portPub,
+                portSub = portSub,
+                logInfo = logType,
                 isReliable = isReliable,
-                listenType = listenType
+                logger = logger
             )
 
-            newMediaDriver.build(logger)
 
-            logger.info { "[$aeronLogInfo] Creating new UDP connection from $newMediaDriver" }
+            logger.error {
+                "SERVER INFO:\n" +
+                "sessionId PUB: $connectionSessionIdPub\n" +
+                "sessionId SUB: $connectionSessionIdSub\n" +
+                "streamId PUB: $connectionStreamIdPub\n" +
+                "streamId SUB: $connectionStreamIdSub\n" +
 
-            val clientConnection = MediaDriverConnectInfo(
-                publication = newMediaDriver.publication,
-                subscription = newMediaDriver.subscription,
-                subscriptionPort = newMediaDriver.port,
-                publicationPort = publicationPort,
-                streamId = newMediaDriver.streamId,
-                sessionId = newMediaDriver.sessionId,
-                isReliable = newMediaDriver.isReliable,
-                remoteAddress = clientAddress,
-                remoteAddressString = clientAddressString
-            )
+                "port PUB: $portPub\n" +
+                "port SUB: $portSub\n" +
+                ""
+            }
 
-            connection = connectionFunc(ConnectionParams(server, clientConnection, validateRemoteAddress))
+            connection = connectionFunc(ConnectionParams(server, newConnectionDriver.connectionInfo(), validateRemoteAddress))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)
             if (!permitConnection) {
                 // have to unwind actions!
                 connectionsPerIpCounts.decrementSlow(clientAddress)
-                sessionIdAllocator.free(connectionSessionId)
-                streamIdAllocator.free(connectionStreamId)
+                sessionIdAllocator.free(connectionSessionIdPub)
+                sessionIdAllocator.free(connectionSessionIdSub)
+                streamIdAllocator.free(connectionStreamIdPub)
+                streamIdAllocator.free(connectionStreamIdSub)
 
                 EventDispatcher.launch(EVENT.CLOSE) {
                     connection.close(enableRemove = true)
@@ -538,11 +581,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // Also send the RMI registration data to the client (so the client doesn't register anything)
 
             // now create the encrypted payload, using ECDH
-            successMessage.registrationData = server.crypto.encrypt(clientPublicKeyBytes!!,
-                                                                    subscriptionPort,
-                                                                    connectionSessionId,
-                                                                    connectionStreamId,
-                                                                    serialization.getKryoRegistrationDetails())
+            successMessage.registrationData = server.crypto.encrypt(
+                clientPublicKeyBytes = clientPublicKeyBytes!!,
+                sessionIdPub = connectionSessionIdPub,
+                sessionIdSub = connectionSessionIdSub,
+                streamIdPub = connectionStreamIdPub,
+                streamIdSub = connectionStreamIdSub,
+                kryoRegDetails = serialization.getKryoRegistrationDetails()
+            )
 
             successMessage.publicKey = server.crypto.publicKeyBytes
 
@@ -556,8 +602,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
         } catch (e: Exception) {
             // have to unwind actions!
             connectionsPerIpCounts.decrementSlow(clientAddress)
-            sessionIdAllocator.free(connectionSessionId)
-            streamIdAllocator.free(connectionStreamId)
+            sessionIdAllocator.free(connectionSessionIdPub)
+            sessionIdAllocator.free(connectionSessionIdSub)
+            streamIdAllocator.free(connectionStreamIdPub)
+            streamIdAllocator.free(connectionStreamIdSub)
 
             logger.error(e) { "[$aeronLogInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message" }
         }
@@ -569,13 +617,11 @@ internal class ServerHandshake<CONNECTION : Connection>(
      * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      */
     fun checkForMemoryLeaks() {
-        val noAllocations = connectionsPerIpCounts.isEmpty() && sessionIdAllocator.isEmpty() && streamIdAllocator.isEmpty()
+        val noAllocations = connectionsPerIpCounts.isEmpty()
 
         if (!noAllocations) {
             throw AllocationException("Unequal allocate/free method calls for validation. \n" +
-                                      "connectionsPerIpCounts: '$connectionsPerIpCounts' \n" +
-                                      "sessionIdAllocator: $sessionIdAllocator \n" +
-                                      "streamIdAllocator: $streamIdAllocator")
+                                      "connectionsPerIpCounts: '$connectionsPerIpCounts'")
 
         }
     }

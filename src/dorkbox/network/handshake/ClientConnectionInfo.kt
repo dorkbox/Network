@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,10 @@
  */
 package dorkbox.network.handshake
 
-internal class ClientConnectionInfo(val port: Int = 0,
-                                    val sessionId: Int,
-                                    val streamId: Int = 0,
+internal class ClientConnectionInfo(val sessionIdPub: Int = 0,
+                                    val sessionIdSub: Int = 0,
+                                    val streamIdPub: Int,
+                                    val streamIdSub: Int = 0,
                                     val publicKey: ByteArray = ByteArray(0),
                                     val kryoRegistrationDetails: ByteArray) {
 }

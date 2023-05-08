@@ -55,7 +55,8 @@ import org.objenesis.strategy.StdInstantiatorStrategy
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationHandler
 import kotlin.coroutines.Continuation
-
+// Observability issues: make sure that we know WHAT connection is causing serialization errors when they occur!
+// ASYC isues: RMI can timeout when OTHER rmi connections happen! EACH RMI NEEDS TO BE SEPARATE IN THE IO DISPATCHER
 
 /**
  * Threads reading/writing at the same time a single instance of kryo. it is possible to use a single kryo with the use of

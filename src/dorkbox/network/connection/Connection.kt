@@ -15,10 +15,12 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
+import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
+import dorkbox.network.connection.EventDispatcher.Companion.EVENT
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ConnectionCounts
-import dorkbox.network.handshake.RandomId65kAllocator
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.RmiSupportConnection
@@ -34,12 +36,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.IdleStrategy
-import java.lang.Thread.sleep
 import java.net.InetAddress
-import java.util.concurrent.*
+import java.util.concurrent.TimeUnit
 
 /**
  * This connection is established once the registration information is validated, and the various connect/filter checks have passed
@@ -48,12 +48,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private var messageHandler: FragmentAssembler
     private val subscription: Subscription
     private val publication: Publication
-
-    /**
-     * The publication port (used by aeron) for this connection. This is from the perspective of the server!
-     */
-    private val subscriptionPort: Int
-    private val publicationPort: Int
 
     /**
      * When publishing data, we cannot have concurrent publications for a single connection (per Aeron publication)
@@ -70,9 +64,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val tempWriteKryo: KryoExtra<Connection>
 
     /**
+     * Log details
+     */
+    val details: String
+
+    /**
      * the stream id of this connection. Can be 0 for IPC connections
      */
-    val streamId: Int
+    val streamIdPub: Int
+    val streamIdSub: Int
 
     /**
      * the session id of this connection. This value is UNIQUE
@@ -117,7 +117,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private var connectionLastCheckTimeNanos = 0L
     private var connectionTimeoutTimeNanos = 0L
 
-    // always offset by the linger amount, since we cannot act faster than the linger for adding/removing publications
+    // always offset by the linger amount, since we cannot act faster than the linger timeout for adding/removing publications
     private val connectionCheckIntervalNanos = endPoint.config.connectionCheckIntervalNanos + endPoint.aeronDriver.getLingerNs()
     private val connectionExpirationTimoutNanos = endPoint.config.connectionExpirationTimoutNanos + endPoint.aeronDriver.getLingerNs()
 
@@ -141,28 +141,26 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
     init {
-        val connectionInfo = connectionParameters.connectionInfo
-
-        id = connectionInfo.sessionId // NOTE: this is UNIQUE per server!
-
-        subscription = connectionInfo.subscription
-        publication = connectionInfo.publication
-
         @Suppress("UNCHECKED_CAST")
         writeKryo = endPoint.serialization.initKryo() as KryoExtra<Connection>
         @Suppress("UNCHECKED_CAST")
         tempWriteKryo = endPoint.serialization.initKryo() as KryoExtra<Connection>
 
+        val connectionInfo = connectionParameters.connectionInfo
 
-        // can only get this AFTER we have built the sub/pub
-        streamId = connectionInfo.streamId // NOTE: this is UNIQUE per server!
-        subscriptionPort = connectionInfo.subscriptionPort
-        publicationPort = connectionInfo.publicationPort
+        id = connectionInfo.sessionIdPub // NOTE: this is UNIQUE per server!
+
+        subscription = connectionInfo.subscription
+        publication = connectionInfo.publication
+
+        // can only get this AFTER we have built the sub/pub. THESE ARE UNIQUE PER PUB/SUB!
+        streamIdPub = connectionInfo.streamIdPub
+        streamIdSub = connectionInfo.streamIdSub
 
         remoteAddress = connectionInfo.remoteAddress
         remoteAddressString = connectionInfo.remoteAddressString
 
-        toString0 = "[${id}/${streamId}] $remoteAddressString [$publicationPort|$subscriptionPort]"
+
 
         sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
 
@@ -176,6 +174,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         @Suppress("LeakingThis")
         rmi = endPoint.rmiConnectionSupport.getNewRmiSupport(this)
+
+        details = if (isIpc) "${id}|${streamIdPub}|$streamIdSub" else "${id}|${streamIdPub}|$streamIdSub:${remoteAddressString}"
+        toString0 = if (isIpc) "[IPC ${details}]" else "[UDP ${details}]"
     }
 
     /**
@@ -217,6 +218,47 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
+     * Safely sends objects to a destination, if `abortEarly` is true, there are no retries if sending the message fails.
+     *
+     * NOTE: this is dispatched to the IO context!! (since network calls are IO/blocking calls)
+     *
+     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
+     */
+    internal suspend fun send(message: Any, abortEarly: Boolean): Boolean {
+        // we use a mutex because we do NOT want different threads/coroutines to be able to send data over the SAME connections at the SAME time.
+        // NOTE: additionally we want to propagate back-pressure to the calling coroutines, PER CONNECTION!
+
+        val success = writeMutex.withLock {
+            // we reset the sending timeout strategy when a message was successfully sent.
+            sendIdleStrategy.reset()
+
+            try {
+                // The handshake sessionId IS NOT globally unique
+                logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
+                endPoint.write(writeKryo, tempWriteKryo, message, publication, sendIdleStrategy, this@Connection, abortEarly)
+            } catch (e: Exception) {
+                val listenerManager = listenerManager.value!!
+
+                if (message is MethodResponse && message.result is Exception) {
+                    val result = message.result as Exception
+                    logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
+                    listenerManager.notifyError(this@Connection, result)
+                } else if (message is ClientException || message is ServerException) {
+                    logger.error("[${publication.sessionId()}] Error for message '$message'", e)
+                    listenerManager.notifyError(this@Connection, e)
+                } else {
+                    logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
+                    listenerManager.notifyError(this@Connection, e)
+                }
+
+                false
+            }
+        }
+
+        return success
+    }
+
+    /**
      * Safely sends objects to a destination.
      *
      * NOTE: this is dispatched to the IO context!! (since network calls are IO/blocking calls)
@@ -224,40 +266,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
      */
     suspend fun send(message: Any): Boolean {
-        // we use a mutex because we do NOT want different threads/coroutines to be able to send data over the SAME connections at the SAME time.
-        // NOTE: additionally we want to propagate back-pressure to the calling coroutines, PER CONNECTION!
-
-        val success = writeMutex.withLock {
-            // dispatched to the IO context!! (since network calls are IO/blocking calls)
-            withContext(Dispatchers.IO) {
-                // we reset the sending timeout strategy when a message was successfully sent.
-                sendIdleStrategy.reset()
-
-                try {
-                    // The handshake sessionId IS NOT globally unique
-                    logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
-                    endPoint.write(writeKryo, tempWriteKryo, message, publication, sendIdleStrategy, this@Connection)
-                } catch (e: Exception) {
-                    val listenerManager = listenerManager.value!!
-
-                    if (message is MethodResponse && message.result is Exception) {
-                        val result = message.result as Exception
-                        logger.error("[${publication.sessionId()}] Error serializing message '$message'", result)
-                        listenerManager.notifyError(this@Connection, result)
-                    } else if (message is ClientException || message is ServerException) {
-                        logger.error("[${publication.sessionId()}] Error for message '$message'", e)
-                        listenerManager.notifyError(this@Connection, e)
-                    } else {
-                        logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
-                        listenerManager.notifyError(this@Connection, e)
-                    }
-
-                    false
-                }
-            }
-        }
-
-        return success
+        return send(message, false)
     }
 
     /**
@@ -394,54 +403,43 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     private suspend fun closeAndCleanup(enableRemove: Boolean) {
-        val aeronLogInfo = "${id}/${streamId} : $remoteAddressString"
-        logger.debug {"[$aeronLogInfo] connection closing"}
+        logger.debug {"[$details] connection closing"}
 
-            subscription.close()
+        // on close, we want to make sure this file is DELETED!
+        endPoint.aeronDriver.closeAndDeleteSubscription(subscription, details)
 
-            val timoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
-            var closeTimeoutTime = System.nanoTime()
+        // notify the remote endPoint that we are closing
+        // we send this AFTER we close our subscription (so that no more messages will be received, when the remote end ping-pong's this message back)
+        send(DisconnectMessage.INSTANCE, true)
 
-            // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
-            // we want a timeout-check, otherwise this will run forever
-            while (writeMutex.isLocked && System.nanoTime() - closeTimeoutTime < timoutInNanos) {
-                sleep(50)
-            }
+        val timeoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
+        val closeTimeoutTime = System.nanoTime()
 
-            // on close, we want to make sure this file is DELETED!
-            val logFile = endPoint.aeronDriver.getMediaDriverPublicationFile(publication.registrationId())
-            publication.close()
-
-
-            closeTimeoutTime = System.nanoTime()
-            while (logFile.exists() && System.nanoTime() - closeTimeoutTime < timoutInNanos) {
-                if (logFile.delete()) {
-                    break
-                }
-                sleep(100)
-            }
-
-            if (logFile.exists()) {
-                logger.error("[$aeronLogInfo] Unable to delete aeron publication log on close: $logFile")
-            }
-
-            if (enableRemove) {
-                endPoint.removeConnection(this)
-            }
-
-            // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
-            // NOTE: notifyDisconnect() is called inside closeAction()!!
-
-            // This is set by the client/server so if there is a "connect()" call in the disconnect callback, we can have proper
-            // lock-stop ordering for how disconnect and connect work with each-other
-
-            endPoint.eventDispatch.runBlocking {
-                closeAction()
-            }
-
-            logger.debug {"[$aeronLogInfo] connection closed"}
+        // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
+        // we want a timeout-check, otherwise this will run forever
+        while (writeMutex.isLocked && System.nanoTime() - closeTimeoutTime < timeoutInNanos) {
+            logger.error { "WAITING: ${writeMutex.isLocked}" }
+            delay(500)
         }
+
+        // on close, we want to make sure this file is DELETED!
+        endPoint.aeronDriver.closeAndDeletePublication(publication, details)
+
+        if (enableRemove) {
+            endPoint.removeConnection(this)
+        }
+
+        // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
+        // NOTE: notifyDisconnect() is called inside closeAction()!!
+
+        // This is set by the client/server so if there is a "connect()" call in the disconnect callback, we can have proper
+        // lock-stop ordering for how disconnect and connect work with each-other
+
+        logger.debug {"[$details] connection closed"}
+
+        closeAction()
     }
+
 
     // called in postCloseAction(), so we don't expose our internal listenerManager
     internal suspend fun doNotifyDisconnect() {
@@ -479,16 +477,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     // cleans up the connection information
-    internal fun cleanup(connectionsPerIpCounts: ConnectionCounts, sessionIdAllocator: RandomId65kAllocator, streamIdAllocator: RandomId65kAllocator) {
+    internal fun cleanup(connectionsPerIpCounts: ConnectionCounts) {
         sessionIdAllocator.free(id)
+        streamIdAllocator.free(streamIdPub)
+        streamIdAllocator.free(streamIdSub)
 
-        if (isIpc) {
-            streamIdAllocator.free(publicationPort)
-            sessionIdAllocator.free(subscriptionPort)
-        } else {
+        if (!isIpc) {
             // unique for UDP endpoints
             connectionsPerIpCounts.decrementSlow(remoteAddress!!)
-            streamIdAllocator.free(streamId)
         }
     }
 }

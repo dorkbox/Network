@@ -18,11 +18,11 @@ package dorkbox.network.aeron.mediaDriver
 
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
-import io.aeron.CommonContext
 import kotlinx.coroutines.delay
 import mu.KLogger
 import java.net.Inet4Address
@@ -32,11 +32,12 @@ import java.util.concurrent.*
 /**
  * A connection timeout of 0, means to wait forever
  */
+@Deprecated("to delete")
 internal class ClientUdpDriver(aeronDriver: AeronDriver,
                                val address: InetAddress, val addressString: String,
                                port: Int,
                                streamId: Int,
-                               sessionId: Int,
+                               sessionId: Int = sessionIdAllocator.allocate(),
                                connectionTimeoutSec: Int = 0,
                                isReliable: Boolean,
                                logInfo: String) :
@@ -75,7 +76,7 @@ internal class ClientUdpDriver(aeronDriver: AeronDriver,
 
         // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
         //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
-        val publication = aeronDriver.addExclusivePublication(publicationUri, logInfo, streamId)
+        val publication = aeronDriver.addPublication(publicationUri, logInfo, streamId)
 
 
         // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
@@ -94,8 +95,8 @@ internal class ClientUdpDriver(aeronDriver: AeronDriver,
         // Create a subscription the given address and port, using the given stream ID.
         val subscriptionUri = uri("udp", sessionId, isReliable)
             .endpoint(isIpv4, localAddressString, 0)
-            .controlEndpoint(isIpv4, addressString, port+1)
-            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+//            .controlEndpoint(isIpv4, addressString, port+1)
+//            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
         val subscription = aeronDriver.addSubscription(subscriptionUri, logInfo, streamId)
 
@@ -114,8 +115,8 @@ internal class ClientUdpDriver(aeronDriver: AeronDriver,
         }
 
         if (!success) {
-            aeronDriver.closeAndDeleteSubscription(subscription, "ClientUDP")
-            aeronDriver.closeAndDeletePublication(publication, "ClientUDP")
+            aeronDriver.closeAndDeleteSubscription(subscription, logInfo)
+            aeronDriver.closeAndDeletePublication(publication, logInfo)
 
             sessionIdAllocator.free(sessionId)
 

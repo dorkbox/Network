@@ -18,21 +18,22 @@
 
 package dorkbox.network.handshake
 
+import dorkbox.collections.LockFreeIntMap
 import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
-import dorkbox.network.aeron.mediaDriver.ServerIpcDriver
-import dorkbox.network.aeron.mediaDriver.ServerUdpDriver
-import dorkbox.network.aeron.mediaDriver.controlEndpoint
+import dorkbox.network.aeron.mediaDriver.ServerIpcHandshakeDriver
+import dorkbox.network.aeron.mediaDriver.ServerUdpHandshakeDriver
+import dorkbox.network.aeron.mediaDriver.endpoint
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
-import io.aeron.CommonContext
 import io.aeron.FragmentAssembler
 import io.aeron.Image
+import io.aeron.Publication
 import io.aeron.logbuffer.Header
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -41,6 +42,9 @@ import org.agrona.DirectBuffer
 import java.net.Inet4Address
 
 internal object ServerHandshakePollers {
+    // session IDs are unique for a entire driver!
+    val sessionIdMap = LockFreeIntMap<Publication>()
+
     fun disabled(serverInfo: String): AeronPoller {
         return object : AeronPoller {
             override fun poll(): Int { return 0 }
@@ -52,7 +56,7 @@ internal object ServerHandshakePollers {
     class IpcProc<CONNECTION : Connection>(
         val logger: KLogger,
         val server: Server<CONNECTION>,
-        val aeronDriver: AeronDriver,
+        val driver: AeronDriver,
         val handshake: ServerHandshake<CONNECTION>,
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION
     ) {
@@ -71,18 +75,25 @@ internal object ServerHandshakePollers {
             if (message !is HandshakeMessage) {
                 logger.error { "[$aeronLogInfo] Connection not allowed! Invalid connection request" }
             } else {
-                // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-                val publicationUri = uri("ipc", message.sessionId)
+                var publication: Publication? = sessionIdMap[message.sessionId]
+                if (publication == null) {
+                    // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
+                    val publicationUri = uri("ipc", message.sessionId, true)
 
-                val publication = try {
-                    aeronDriver.addExclusivePublication(publicationUri, "IPC", message.streamId)
-                } catch (e: Exception) {
-                    logger.error(e) { "Cannot create IPC publication back to remote" }
+                    publication = try {
+                        driver.addPublication(publicationUri, "HANDSHAKE-IPC", message.streamId)
+                    } catch (e: Exception) {
+                        logger.error(e) { "Cannot create IPC publication back to remote process" }
+                        null
+                    }
+                }
+
+                if (publication == null) {
                     return
                 }
 
                 // we actually have to wait for it to connect before we continue
-                val timoutInNanos = aeronDriver.getLingerNs()
+                val timoutInNanos = driver.getLingerNs()
                 val startTime = System.nanoTime()
                 var success = false
 
@@ -92,21 +103,34 @@ internal object ServerHandshakePollers {
                         break
                     }
 
-                    Thread.sleep(10L)
+                    delay(50L)
                 }
 
                 if (success) {
+                    // Manage the Handshake state. When done with a connection, this returns false
+                    if (!handshake.validateMessageTypeAndDoPending(
+                                    server = server,
+                                    handshakePublication = publication,
+                                    message = message,
+                                    logger = logger)) {
+
+                        driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
+                        sessionIdMap.remove(message.sessionId)
+                        return
+                    }
+
                     handshake.processIpcHandshakeMessageServer(
-                        server, publication, message,
-                        aeronDriver, aeronLogInfo,
-                        connectionFunc, logger
+                            server = server,
+                            aeronDriver = driver,
+                            handshakePublication = publication,
+                            message = message,
+                            aeronLogInfo = aeronLogInfo,
+                            connectionFunc = connectionFunc,
+                            logger = logger
                     )
                 } else {
-                    logger.error { "Cannot create IPC publication back to remote process" }
+                    logger.error { "Cannot comm back to remote process" }
                 }
-
-
-                aeronDriver.closeAndDeletePublication(publication, "ServerIPC")
             }
         }
     }
@@ -114,16 +138,16 @@ internal object ServerHandshakePollers {
     class UdpProc<CONNECTION : Connection>(
         val logger: KLogger,
         val server: Server<CONNECTION>,
-        val driver: ServerUdpDriver,
-        val aeronDriver: AeronDriver,
+        val mediaDriver: ServerUdpHandshakeDriver,
+        val driver: AeronDriver,
         val handshake: ServerHandshake<CONNECTION>,
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         val isReliable: Boolean,
         val port: Int
     ) {
-        val listenAddress = driver.listenAddress
+        val listenAddress = mediaDriver.listenAddress
         val listenAddressString = IP.toString(listenAddress)
-        val timoutInNanos = aeronDriver.getLingerNs()
+        val timoutInNanos = driver.getLingerNs()
 
         suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
@@ -178,11 +202,12 @@ internal object ServerHandshakePollers {
 
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription CONTROL (which then goes to the proper endpoint)
                 val publicationUri = uri("udp", message.sessionId, isReliable)
-                    .controlEndpoint(isRemoteIpv4, properPubAddress, port)
-                    .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+//                    .controlEndpoint(isRemoteIpv4, properPubAddress, port)
+//                    .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+                    .endpoint(isRemoteIpv4, properPubAddress, message.port)
 
                 val publication = try {
-                    aeronDriver.addExclusivePublication(publicationUri, type, message.streamId)
+                    driver.addPublication(publicationUri, type, message.streamId)
                 } catch (e: Exception) {
                     logger.error(e) { "Cannot create publication back to $clientAddressString" }
                     return
@@ -198,66 +223,78 @@ internal object ServerHandshakePollers {
                         success = true
                         break
                     }
-
-                    Thread.sleep(10L)
+                    delay(50L)
                 }
 
                 if (success) {
+                    // Manage the Handshake state. When done with a connection, this returns
+                    if (!handshake.validateMessageTypeAndDoPending(
+                                    server = server,
+                                    handshakePublication = publication,
+                                    message = message,
+                                    logger = logger)) {
+                        return
+                    }
+
                     handshake.processUdpHandshakeMessageServer(
-                        server = server,
-                        driver = driver,
-                        handshakePublication = publication,
-                        clientAddress = clientAddress,
-                        clientAddressString = clientAddressString,
-                        isReliable = isReliable,
-                        message = message,
-                        aeronLogInfo = aeronLogInfo,
-                        connectionFunc = connectionFunc,
-                        logger = logger
+                            server = server,
+                            mediaDriver = mediaDriver,
+                            driver = driver,
+                            handshakePublication = publication,
+                            clientAddress = clientAddress,
+                            clientAddressString = clientAddressString,
+                            isReliable = isReliable,
+                            message = message,
+                            aeronLogInfo = aeronLogInfo,
+                            connectionFunc = connectionFunc,
+                            logger = logger
                     )
                 } else {
-                    logger.error { "Cannot create publication back to $clientAddressString" }
+                    logger.error { "Cannot create publication back to '$clientAddressString'" }
                 }
 
                 // publications are REMOVED from Aeron clients when their linger timeout has expired!!!
-                aeronDriver.closeAndDeletePublication(publication, "ServerProc")
+                driver.closeAndDeletePublication(publication, "HANDSHAKE-$type")
             }
         }
     }
 
-    suspend fun <CONNECTION : Connection> ipc(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller
-    {
+    suspend fun <CONNECTION : Connection> ipc(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
         val logger = server.logger
         val connectionFunc = server.connectionFunc
         val config = server.config as ServerConfiguration
 
         val poller = if (config.enableIpc) {
-            val driver = ServerIpcDriver(
-                aeronDriver = server.aeronDriver,
-                streamId = config.ipcId,
-                sessionId = AeronDriver.IPC_HANDSHAKE_SESSION_ID
-            )
-            driver.build(logger)
+            try {
+                val driver = ServerIpcHandshakeDriver(
+                    aeronDriver = server.aeronDriver,
+                    streamIdSub = config.ipcId,
+                    sessionIdSub = AeronDriver.HANDSHAKE_SESSION_ID,
+                    logger = logger
+                )
 
-            val subscription = driver.subscription
-            val processor = IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc)
+                val subscription = driver.subscription
+                val processor = IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc)
 
-            object : AeronPoller {
-                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    runBlocking {
-                        processor.process(header, buffer, offset, length)
+                object : AeronPoller {
+                    val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+                        runBlocking {
+                            processor.process(header, buffer, offset, length)
+                        }
                     }
-                }
 
-                override fun poll(): Int {
-                    return subscription.poll(handler, 1)
-                }
+                    override fun poll(): Int {
+                        return subscription.poll(handler, 1)
+                    }
 
-                override suspend fun close() {
-                    driver.close(logger)
-                }
+                    override suspend fun close() {
+                        driver.close()
+                    }
 
-                override val info = "IPC $driver"
+                    override val info = "IPC $driver"
+                }
+            } catch (e: Exception) {
+                disabled("IPC Disabled")
             }
         } else {
             disabled("IPC Disabled")
@@ -277,18 +314,17 @@ internal object ServerHandshakePollers {
         val pubPort = config.port + 1
 
         val poller = if (server.canUseIPv4) {
-            val driver = ServerUdpDriver(
+            val driver = ServerUdpHandshakeDriver(
                 aeronDriver = server.aeronDriver,
-                listenAddress = server.listenIPv4Address!!,
+                listenAddress = server.listenIPv6Address!!,
                 port = config.port,
                 streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
+                sessionId = AeronDriver.HANDSHAKE_SESSION_ID,
                 connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
                 isReliable = isReliable,
-                "IPv4"
+                logInfo = "HANDSHAKE-IPv4",
+                logger = logger
             )
-
-            driver.build(logger)
 
             val subscription = driver.subscription
             val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
@@ -314,7 +350,7 @@ internal object ServerHandshakePollers {
                 }
 
                 override suspend fun close() {
-                    driver.close(logger)
+                    driver.close()
                 }
 
                 override val info = "IPv4 $driver"
@@ -335,18 +371,17 @@ internal object ServerHandshakePollers {
         val pubPort = config.port + 1
 
         val poller = if (server.canUseIPv6) {
-            val driver = ServerUdpDriver(
+            val driver = ServerUdpHandshakeDriver(
                 aeronDriver = server.aeronDriver,
                 listenAddress = server.listenIPv6Address!!,
                 port = config.port,
                 streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
+                sessionId = AeronDriver.HANDSHAKE_SESSION_ID,
                 connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
                 isReliable = isReliable,
-                "IPv6"
+                logInfo = "HANDSHAKE-IPv6",
+                logger = logger
             )
-
-            driver.build(logger)
 
             val subscription = driver.subscription
             val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
@@ -373,7 +408,7 @@ internal object ServerHandshakePollers {
                 }
 
                 override suspend fun close() {
-                    driver.close(logger)
+                    driver.close()
                 }
 
                 override val info = "IPv6 $driver"
@@ -393,48 +428,52 @@ internal object ServerHandshakePollers {
         val isReliable = config.isReliable
         val pubPort = config.port + 1
 
-        val driver = ServerUdpDriver(
-            aeronDriver = server.aeronDriver,
-            listenAddress = server.listenIPv6Address!!,
-            port = config.port,
-            streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-            sessionId = AeronDriver.RESERVED_SESSION_ID_INVALID,
-            connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
-            isReliable = isReliable,
-            "IPv4+6"
-        )
-
-        driver.build(logger)
-
-        val subscription = driver.subscription
-        val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+        val poller = try {
+            val driver = ServerUdpHandshakeDriver(
+                aeronDriver = server.aeronDriver,
+                listenAddress = server.listenIPv6Address!!,
+                port = config.port,
+                streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                sessionId = AeronDriver.HANDSHAKE_SESSION_ID,
+                connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
+                isReliable = isReliable,
+                logInfo = "HANDSHAKE-IPv4+6",
+                logger = logger
+            )
 
 
-        val poller = object : AeronPoller {
-            /**
-             * Note:
-             * Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is
-             * desired, then limiting message sizes to MTU size is a good practice.
-             *
-             * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
-             * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
-             * properties from failure and streams with mechanical sympathy.
-             */
-            val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                runBlocking {
-                    processor.process(header, buffer, offset, length)
+            val subscription = driver.subscription
+            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+
+            object : AeronPoller {
+                /**
+                 * Note:
+                 * Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is
+                 * desired, then limiting message sizes to MTU size is a good practice.
+                 *
+                 * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
+                 * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
+                 * properties from failure and streams with mechanical sympathy.
+                 */
+                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+                    runBlocking {
+                        processor.process(header, buffer, offset, length)
+                    }
                 }
-            }
 
-            override fun poll(): Int {
-                return subscription.poll(handler, 1)
-            }
+                override fun poll(): Int {
+                    return subscription.poll(handler, 1)
+                }
 
-            override suspend fun close() {
-                driver.close(logger)
-            }
+                override suspend fun close() {
+                    driver.close()
+                }
 
-            override val info = "IPv4+6 $driver"
+                override val info = "IPv4+6 $driver"
+            }
+        } catch (e: Exception) {
+            logger.error(e) { "Unable to create IPv4+6 listeners." }
+            disabled("IPv4+6 Disabled")
         }
 
         logger.info { poller.info }

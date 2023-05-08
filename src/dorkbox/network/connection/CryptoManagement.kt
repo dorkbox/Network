@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -167,6 +167,62 @@ internal class CryptoManagement(val logger: KLogger,
         return PublicKeyValidationState.VALID
     }
 
+    private fun makeInfo(serverPublicKeyBytes: ByteArray): ClientConnectionInfo {
+        val sessionIdPub = cryptInput.readInt()
+        val sessionIdSub = cryptInput.readInt()
+        val streamIdPub = cryptInput.readInt()
+        val streamIdSub = cryptInput.readInt()
+        val regDetailsSize = cryptInput.readInt()
+        val regDetails = cryptInput.readBytes(regDetailsSize)
+
+        // now save data off
+        return ClientConnectionInfo(
+            sessionIdPub = sessionIdPub,
+            sessionIdSub = sessionIdSub,
+            streamIdPub = streamIdPub,
+            streamIdSub = streamIdSub,
+            publicKey = serverPublicKeyBytes,
+            kryoRegistrationDetails = regDetails)
+    }
+
+    // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the server, mutually exclusive calls to decrypt)
+    fun nocrypt(sessionIdPub: Int,
+                sessionIdSub: Int,
+                streamIdPub: Int,
+                streamIdSub: Int,
+                kryoRegDetails: ByteArray): ByteArray {
+
+        return try {
+            // now create the byte array that holds all our data
+            cryptOutput.reset()
+            cryptOutput.writeInt(sessionIdPub)
+            cryptOutput.writeInt(sessionIdSub)
+            cryptOutput.writeInt(streamIdPub)
+            cryptOutput.writeInt(streamIdSub)
+            cryptOutput.writeInt(kryoRegDetails.size)
+            cryptOutput.writeBytes(kryoRegDetails)
+
+            cryptOutput.toBytes()
+        } catch (e: Exception) {
+            logger.error("Error during AES encrypt", e)
+            ByteArray(0)
+        }
+    }
+
+    // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the client, mutually exclusive calls to encrypt)
+    fun nocrypt(registrationData: ByteArray, serverPublicKeyBytes: ByteArray): ClientConnectionInfo? {
+        return try {
+            // The message was intended for this client. Try to parse it as one of the available message types.
+            // this message is NOT-ENCRYPTED!
+            cryptInput.buffer = registrationData
+
+            makeInfo(serverPublicKeyBytes)
+        } catch (e: Exception) {
+            logger.error("Error during IPC decrypt!", e)
+            null
+        }
+    }
+
     /**
      * Generate the AES key based on ECDH
      */
@@ -188,9 +244,10 @@ internal class CryptoManagement(val logger: KLogger,
 
     // NOTE: ALWAYS CALLED ON THE SAME THREAD! (from the server, mutually exclusive calls to decrypt)
     fun encrypt(clientPublicKeyBytes: ByteArray,
-                port: Int,
-                sessionId: Int,
-                streamId: Int,
+                sessionIdPub: Int,
+                sessionIdSub: Int,
+                streamIdPub: Int,
+                streamIdSub: Int,
                 kryoRegDetails: ByteArray): ByteArray {
 
         try {
@@ -202,9 +259,10 @@ internal class CryptoManagement(val logger: KLogger,
 
             // now create the byte array that holds all our data
             cryptOutput.reset()
-            cryptOutput.writeInt(sessionId)
-            cryptOutput.writeInt(streamId)
-            cryptOutput.writeInt(port)
+            cryptOutput.writeInt(sessionIdPub)
+            cryptOutput.writeInt(sessionIdSub)
+            cryptOutput.writeInt(streamIdPub)
+            cryptOutput.writeInt(streamIdSub)
             cryptOutput.writeInt(kryoRegDetails.size)
             cryptOutput.writeBytes(kryoRegDetails)
 
@@ -226,18 +284,8 @@ internal class CryptoManagement(val logger: KLogger,
 
             cryptInput.buffer = aesCipher.doFinal(registrationData, GCM_IV_LENGTH_BYTES, registrationData.size - GCM_IV_LENGTH_BYTES)
 
-            val sessionId = cryptInput.readInt()
-            val streamId = cryptInput.readInt()
-            val subscriptionPort = cryptInput.readInt()
-            val regDetailsSize = cryptInput.readInt()
-            val regDetails = cryptInput.readBytes(regDetailsSize)
+            return makeInfo(serverPublicKeyBytes)
 
-            // now read data off
-            return ClientConnectionInfo(sessionId = sessionId,
-                                        streamId = streamId,
-                                        port = subscriptionPort,
-                                        publicKey = serverPublicKeyBytes,
-                                        kryoRegistrationDetails = regDetails)
         } catch (e: Exception) {
             logger.error("Error during AES decrypt!", e)
             return null

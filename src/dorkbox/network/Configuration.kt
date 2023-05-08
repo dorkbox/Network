@@ -181,7 +181,7 @@ abstract class Configuration {
             NamedThreadFactory( "Poll Dispatcher", networkThreadGroup, Thread.NORM_PRIORITY, true)
         ).asCoroutineDispatcher()
 
-        private val defaultMessageCoroutineScope = Dispatchers.Default
+        private val defaultMessageCoroutineScope = Dispatchers.IO.limitedParallelism(4)
 
         private val defaultAeronFilter: (error: Throwable) -> Boolean = { error ->
             // we suppress these because they are already handled
@@ -244,11 +244,12 @@ abstract class Configuration {
      * When used for the server, this is the subscription port, which will be listening for incoming connections
      * When used for the client, this is the publication port, which is what port to connect to when establishing a connection
      *
+     * When the client/server are the SAME machine (by checking if it's loopback, or if the remote address is the lan address), then
+     * the client will auto-select a random port.
+     *
      * This means that client-pub -> {{network}} -> server-sub
      *
-     * Must be the value of an unsigned short and greater than 0
-     *
-     * In order to bypass issues with NAT, one EXTRA port is used - by default it is this port + 1
+     * Must be the value of an unsigned short and greater than 0.
      */
     var port: Int = 0
         set(value) {

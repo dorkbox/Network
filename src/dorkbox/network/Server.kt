@@ -19,9 +19,12 @@ import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
+import dorkbox.network.aeron.EventPoller
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.EventDispatcher
+import dorkbox.network.connection.EventDispatcher.Companion.EVENT
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerException
@@ -30,6 +33,7 @@ import dorkbox.network.handshake.ServerHandshakePollers
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiSupportServer
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import java.net.InetAddress
 import java.util.concurrent.*
@@ -122,15 +126,35 @@ open class Server<CONNECTION : Connection>(
         const val version = "6.4"
 
         /**
+         * Ensures that an endpoint (using the specified configuration) is NO LONGER running.
+         *
+         * NOTE: This method should only be used to check if a server is running for a DIFFERENT configuration than the currently running server
+         *
+         * By default, we will wait the [Configuration.connectionCloseTimeoutInSeconds] * 2 amount of time before returning.
+         *
+         * @return true if the media driver is STOPPED.
+         */
+        fun ensureStopped(configuration: ServerConfiguration): Boolean = runBlocking {
+            val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
+
+            val logger = KotlinLogging.logger(Server::class.java.simpleName)
+            AeronDriver(configuration, logger).use {
+                it.ensureStopped(timeout, 500)
+            }
+        }
+
+        /**
          * Checks to see if a server (using the specified configuration) is running.
          *
-         * This method should only be used to check if a server is running for a DIFFERENT configuration than the currently running server
+         * NOTE: This method should only be used to check if a server is running for a DIFFERENT configuration than the currently running server
+         *
+         * @return true if the media driver is active and running
          */
-        fun isRunning(configuration: ServerConfiguration): Boolean {
-            return AeronDriver.getDriver(
-                configuration,
-                KotlinLogging.logger(Server::class.java.simpleName),
-                true).use { it.isRunning() }
+        fun isRunning(configuration: ServerConfiguration): Boolean = runBlocking {
+            val logger = KotlinLogging.logger(Server::class.java.simpleName)
+            AeronDriver(configuration, logger).use {
+                it.isRunning()
+            }
         }
 
         init {
@@ -153,10 +177,10 @@ open class Server<CONNECTION : Connection>(
      * These are run in lock-step to shutdown/close the server. Afterwards, bind() can be called again
      */
     @Volatile
-    private var shutdownPollLatch = CountDownLatch(1)
+    private var shutdownPollLatch = dorkbox.util.sync.CountDownLatch(0 )
 
     @Volatile
-    private var shutdownEventLatch = CountDownLatch(1)
+    private var shutdownEventLatch = dorkbox.util.sync.CountDownLatch(0)
 
     /**
      * Maintains a thread-safe collection of rules used to define the connection type with this server.
@@ -197,23 +221,23 @@ open class Server<CONNECTION : Connection>(
      * Binds the server to AERON configuration
      */
     @Suppress("DuplicatedCode")
-    fun bind() {
+    fun bind()  = runBlocking {
         // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
 
         if (bindAlreadyCalled.getAndSet(true)) {
             logger.error { "Unable to bind when the server is already running!" }
-            return
+            return@runBlocking
         }
 
         try {
             startDriver()
         } catch (e: Exception) {
             logger.error(e) { "Unable to start the network driver" }
-            return
+            return@runBlocking
         }
 
-        shutdownPollLatch = CountDownLatch(1)
-        shutdownEventLatch = CountDownLatch(1)
+        shutdownPollLatch = dorkbox.util.sync.CountDownLatch(1)
+        shutdownEventLatch = dorkbox.util.sync.CountDownLatch(1)
 
         config as ServerConfiguration
 
@@ -222,7 +246,7 @@ open class Server<CONNECTION : Connection>(
 
         val server = this@Server
         val handshake = ServerHandshake(logger, config, listenerManager, aeronDriver)
-        val ipcPoller: AeronPoller = ServerHandshakePollers.ipc(aeronDriver, config, server, handshake)
+        val ipcPoller: AeronPoller = ServerHandshakePollers.ipc(server, handshake)
 
         // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
         val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address == IPv6.WILDCARD
@@ -233,15 +257,15 @@ open class Server<CONNECTION : Connection>(
             if (canUseIPv4 && canUseIPv6) {
                 // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
                 ipv4Poller = ServerHandshakePollers.disabled("IPv4 Disabled")
-                ipv6Poller = ServerHandshakePollers.ip6Wildcard(aeronDriver, config, server, handshake)
+                ipv6Poller = ServerHandshakePollers.ip6Wildcard(server, handshake)
             } else {
                 // only 1 will be a real poller
-                ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server, handshake)
-                ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server, handshake)
+                ipv4Poller = ServerHandshakePollers.ip4(server, handshake)
+                ipv6Poller = ServerHandshakePollers.ip6(server, handshake)
             }
         } else {
-            ipv4Poller = ServerHandshakePollers.ip4(aeronDriver, config, server, handshake)
-            ipv6Poller = ServerHandshakePollers.ip6(aeronDriver, config, server, handshake)
+            ipv4Poller = ServerHandshakePollers.ip4(server, handshake)
+            ipv6Poller = ServerHandshakePollers.ip6(server, handshake)
         }
 
 
@@ -269,7 +293,7 @@ open class Server<CONNECTION : Connection>(
                         pollCount += connection.poll()
                     } else {
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                        logger.debug { "[${connection.id}/${connection.streamId} : ${connection.remoteAddressString}] connection expired" }
+                        logger.debug { "[${connection.details}] connection expired" }
 
                         // the connection MUST be removed in the same thread that is processing events
                         removeConnection(connection)
@@ -315,7 +339,7 @@ open class Server<CONNECTION : Connection>(
             // we have to manually clean-up the connections and call server-notifyDisconnect because otherwise this will never get called
             try {
                 cons.forEach { connection ->
-                    logger.info { "[${connection.id}/${connection.streamId}] Connection from [${connection.remoteAddressString}] cleanup and close" }
+                    logger.info { "[${connection.details}] Connection cleanup and close" }
                     // make sure the connection is closed (close can only happen once, so a duplicate call does nothing!)
 
                     EventDispatcher.launch(EVENT.CLOSE) {
@@ -341,6 +365,8 @@ open class Server<CONNECTION : Connection>(
                 handshake.clear()
 
                 try {
+                    AeronDriver.checkForMemoryLeaks()
+
                     // make sure that we have de-allocated all connection data
                     handshake.checkForMemoryLeaks()
                 } catch (e: AllocationException) {
@@ -421,7 +447,7 @@ open class Server<CONNECTION : Connection>(
     /**
      * Closes the server and all it's connections. After a close, you may call 'bind' again.
      */
-    final override fun close0() {
+    final override suspend fun close0() {
         // when we call close, it will shutdown the polling mechanism, then wait for us to tell it to clean-up connections.
         //
         // Aeron + the Media Driver will have already been shutdown at this point.
@@ -432,7 +458,21 @@ open class Server<CONNECTION : Connection>(
         }
     }
 
+    /**
+     * Enable
+     */
+    fun <R> use(block: (Server<CONNECTION>) -> R): R {
+        return try {
+            block(this)
+        } finally {
+            close()
 
+            runBlocking {
+                waitForClose()
+                logger.error { "finished close event" }
+            }
+        }
+    }
 
 //    /**
 //     * Only called by the server!

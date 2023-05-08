@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ internal class HandshakeMessage private constructor() {
 
     var errorMessage: String? = null
 
-    var subscriptionPort = 0
+    var port = 0
     var streamId = 0
     var sessionId = 0
 
@@ -56,13 +56,13 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 3
         const val DONE_ACK = 4
 
-        fun helloFromClient(connectKey: Long, publicKey: ByteArray, sessionId: Int, subscriptionPort: Int, streamId: Int): HandshakeMessage {
+        fun helloFromClient(connectKey: Long, publicKey: ByteArray, sessionId: Int, streamId: Int, portSub: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
             hello.connectKey = connectKey // this is 'bounced back' by the server, so the client knows if it's the correct connection message
             hello.publicKey = publicKey
             hello.sessionId = sessionId
-            hello.subscriptionPort = subscriptionPort
+            hello.port = portSub
             hello.streamId = streamId
             return hello
         }
@@ -86,7 +86,7 @@ internal class HandshakeMessage private constructor() {
             hello.state = DONE
             hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
             hello.sessionId = sessionId
-            hello.subscriptionPort = subscriptionPort
+            hello.port = subscriptionPort
             hello.streamId = streamId
             return hello
         }

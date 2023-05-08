@@ -23,7 +23,7 @@ import dorkbox.bytes.OptimizeUtilsByteBuf
 import dorkbox.collections.LockFreeHashMap
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
 import dorkbox.network.serialization.KryoExtra
@@ -106,6 +106,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                     streamingDataInMemory[streamId] = AeronOutput()
                 } else {
                     // write the file to disk
+
                 }
             }
             StreamingState.FINISHED -> {
@@ -126,6 +127,7 @@ internal class StreamingManager<CONNECTION : Connection>(
 //                                endPoint.serialization.logKryoMessages()
 //
 //
+
 //                                val failSent = endPoint.writeUnsafe(tempWriteKryo, failMessage, publication, sendIdleStrategy, connection)
 //                                if (!failSent) {
 //                                    // something SUPER wrong!
@@ -213,6 +215,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                     // we are a file, so process accordingly
                     println("processing file")
                     // we should save it WHERE exactly?
+
 
                 }
             }
@@ -407,7 +410,8 @@ internal class StreamingManager<CONNECTION : Connection>(
                 0,
                 headerSize + varIntSize + sizeOfPayload,
                 sendIdleStrategy,
-                connection
+                connection,
+                false
             )
             if (!success) {
                 // something SUPER wrong!
@@ -463,7 +467,8 @@ internal class StreamingManager<CONNECTION : Connection>(
                     writeIndex,
                     headerSize + varIntSize + amountToSend,
                     sendIdleStrategy,
-                    connection
+                    connection,
+                    false
                 )
 
                 payloadSent += amountToSend

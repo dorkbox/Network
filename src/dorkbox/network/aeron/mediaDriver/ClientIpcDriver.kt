@@ -17,21 +17,25 @@
 package dorkbox.network.aeron.mediaDriver
 
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
+import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import kotlinx.coroutines.delay
 import mu.KLogger
-import java.util.concurrent.*
+import java.util.concurrent.TimeUnit
 
 /**
  * NOTE: IPC connection will ALWAYS have a timeout of 10 second to connect. This is IPC, it should connect fast
  */
+@Deprecated("to delete")
 internal open class ClientIpcDriver(aeronDriver: AeronDriver,
                                     streamId: Int,
-                                    sessionId: Int,
-                                    remoteSessionId: Int) :
+                                    sessionId: Int = sessionIdAllocator.allocate(),
+                                    remoteSessionId: Int,
+                                    logInfo: String) :
     MediaDriverClient(
         aeronDriver = aeronDriver,
         port = remoteSessionId,
@@ -39,12 +43,10 @@ internal open class ClientIpcDriver(aeronDriver: AeronDriver,
         sessionId = sessionId,
         connectionTimeoutSec = 10,
         isReliable = true,
-        "IPC"
+        logInfo = logInfo
     ) {
 
     var success: Boolean = false
-
-    private var alreadyBuilt = false
 
     /**
      * Set up the subscription + publication channels to the server
@@ -53,50 +55,51 @@ internal open class ClientIpcDriver(aeronDriver: AeronDriver,
      * @throws ClientTimedOutException if we cannot connect to the server in the designated time
      */
     override suspend fun build(logger: KLogger) {
-        // only rebuild the subscription.
-        if (!alreadyBuilt) {
-            alreadyBuilt = true
-            // Create a publication at the given address and port, using the given stream ID.
-            // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-            val publicationUri = uri("ipc", port)
+        // Create a publication at the given address and port, using the given stream ID.
+        // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
+        val publicationUri = uri("ipc", port, true)
 
-            var success = false
+        var success = false
 
-            // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
-            //  publication of any state to other threads and not be long running or re-entrant with the client.
+        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+        //  publication of any state to other threads and not be long running or re-entrant with the client.
 
-            // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
-            //      ESPECIALLY if it is with the same streamID
-            // this check is in the "reconnect" logic
+        // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
+        //      ESPECIALLY if it is with the same streamID
+        // this check is in the "reconnect" logic
 
-        val publication = aeronDriver.addExclusivePublication(publicationUri, logInfo, streamId)
+        val publication = aeronDriver.addPublication(publicationUri, logInfo, streamId)
 
-            // always include the linger timeout, so we don't accidentally kill ourself by taking too long
-            val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
-            val startTime = System.nanoTime()
+        // always include the linger timeout, so we don't accidentally kill ourself by taking too long
+        var timeoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + aeronDriver.getLingerNs()
+        val startTime = System.nanoTime()
 
-            while (System.nanoTime() - startTime < timoutInNanos) {
-                if (publication.isConnected) {
-                    success = true
-                    break
-                }
+        if (EndPoint.DEBUG_CONNECTIONS) {
+            timeoutInNanos = 0L
+        }
 
-                delay(500L)
+        while (timeoutInNanos == 0L || System.nanoTime() - startTime < timeoutInNanos) {
+            if (publication.isConnected) {
+                success = true
+                break
             }
-            if (!success) {
-                aeronDriver.closeAndDeletePublication(publication, listenType)
+
+            delay(500L)
+        }
+        if (!success) {
+            aeronDriver.closeAndDeletePublication(publication, logInfo)
+            sessionIdAllocator.free(sessionId)
 
             val clientTimedOutException = ClientTimedOutException("Cannot create publication IPC connection to server")
             clientTimedOutException.cleanAllStackTrace()
             throw clientTimedOutException
         }
 
-            this.publication = publication
-        }
+        this.publication = publication
 
         // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = uri("ipc", sessionId)
-        val subscription = aeronDriver.addSubscription(subscriptionUri, listenType, streamId)
+        val subscriptionUri = uri("ipc", sessionId, true)
+        val subscription = aeronDriver.addSubscription(subscriptionUri, logInfo, streamId)
 
         this.info = if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
                 "[$sessionId] IPC connection established to [$streamId|$subscriptionPort]"

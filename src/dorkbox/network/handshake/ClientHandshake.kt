@@ -17,7 +17,8 @@ package dorkbox.network.handshake
 
 import dorkbox.network.Client
 import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.mediaDriver.MediaDriverClient
+import dorkbox.network.aeron.mediaDriver.ClientConnectionDriver
+import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
@@ -31,7 +32,7 @@ import io.aeron.logbuffer.Header
 import kotlinx.coroutines.delay
 import mu.KLogger
 import org.agrona.DirectBuffer
-import java.util.concurrent.*
+import java.util.concurrent.TimeUnit
 
 internal class ClientHandshake<CONNECTION: Connection>(
     private val endPoint: Client<CONNECTION>,
@@ -129,25 +130,13 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 HandshakeMessage.HELLO_ACK_IPC -> {
                     // The message was intended for this client. Try to parse it as one of the available message types.
                     // this message is NOT-ENCRYPTED!
-                    val cryptInput = crypto.cryptInput
+                    val serverPublicKeyBytes = message.publicKey
 
-                    if (registrationData != null) {
-                        cryptInput.buffer = registrationData
-
-                        val port = cryptInput.readInt()
-                        val ackSessionId = cryptInput.readInt()
-                        val ackStreamId = cryptInput.readInt()
-                        val regDetailsSize = cryptInput.readInt()
-                        val regDetails = cryptInput.readBytes(regDetailsSize)
-
-                        // now read data off
-                        connectionHelloInfo = ClientConnectionInfo(streamId = ackStreamId,
-                                                                   sessionId = ackSessionId,
-                                                                   port = port,
-                                                                   kryoRegistrationDetails = regDetails)
+                    if (registrationData != null && serverPublicKeyBytes != null) {
+                        connectionHelloInfo = crypto.nocrypt(registrationData, serverPublicKeyBytes)
                     } else {
-                        failedException = ClientRejectedException("[$aeronLogInfo] (${message.connectKey}) canceled handshake for message without registration data")
-                            .apply { cleanAllStackTrace() }
+                        failedException = ClientRejectedException("[$aeronLogInfo}] (${message.connectKey}) canceled handshake for message without registration and/or public key info")
+                                .apply { cleanAllStackTrace() }
                     }
                 }
                 HandshakeMessage.DONE_ACK -> {
@@ -176,7 +165,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    suspend fun hello(aeronDriver: AeronDriver, handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) : ClientConnectionInfo {
+    suspend fun hello(aeronDriver: AeronDriver, handshakeConnection: ClientHandshakeDriver, connectionTimeoutSec: Int) : ClientConnectionInfo {
         failedException = null
         connectKey = getSafeConnectKey()
         val publicKey = endPoint.storage.getPublicKey()!!
@@ -186,14 +175,16 @@ internal class ClientHandshake<CONNECTION: Connection>(
         val subscription = handshakeConnection.subscription
 
         try {
-            endPoint.writeHandshakeMessage(publication, handshakeConnection.info,
-                                           HandshakeMessage.helloFromClient(connectKey, publicKey,
-                                                                            handshakeConnection.sessionId,
-                                                                            handshakeConnection.subscriptionPort,
-                                                                            handshakeConnection.subscription.streamId()))
+            endPoint.writeHandshakeMessage(publication, handshakeConnection.details,
+                                           HandshakeMessage.helloFromClient(
+                                               connectKey = connectKey,
+                                               publicKey = publicKey,
+                                               sessionId = handshakeConnection.sessionIdSub,
+                                               streamId = handshakeConnection.streamIdSub,
+                                               portSub = handshakeConnection.portSub
+                                           ))
         } catch (e: Exception) {
-            aeronDriver.closeAndDeleteSubscription(subscription, "ClientHandshake")
-            aeronDriver.closeAndDeletePublication(publication, "ClientHandshake")
+            handshakeConnection.close()
 
             logger.error("$handshakeConnection Handshake error!", e)
             throw e
@@ -220,19 +211,17 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
-            aeronDriver.closeAndDeleteSubscription(subscription, "ClientHandshake")
-            aeronDriver.closeAndDeletePublication(publication, "ClientHandshake")
+            handshakeConnection.close()
 
-            ListenerManager.cleanStackTraceInternal(failedEx)
+            failedEx.cleanStackTraceInternal()
             throw failedEx
         }
 
         if (connectionHelloInfo == null) {
-            aeronDriver.closeAndDeleteSubscription(subscription, "ClientHandshake")
-            aeronDriver.closeAndDeletePublication(publication, "ClientHandshake")
+            handshakeConnection.close()
 
             val exception = ClientTimedOutException("$handshakeConnection Waiting for registration response from server")
-            ListenerManager.cleanStackTraceInternal(exception)
+            exception.cleanStackTraceInternal()
             throw exception
         }
 
@@ -241,18 +230,23 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    suspend fun done(aeronDriver: AeronDriver, handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int, aeronLogInfo: String) {
+    suspend fun done(
+        aeronDriver: AeronDriver,
+        handshakeConnection: ClientHandshakeDriver,
+        clientConnection: ClientConnectionDriver,
+        connectionTimeoutSec: Int,
+        aeronLogInfo: String
+    ) {
         val registrationMessage = HandshakeMessage.doneFromClient(connectKey,
-                                                                  handshakeConnection.port+1,
-                                                                  handshakeConnection.subscription.streamId(),
-                                                                  handshakeConnection.sessionId)
+                                                                  handshakeConnection.portSub,
+                                                                  clientConnection.streamIdSub,
+                                                                  clientConnection.sessionIdSub)
 
         // Send the done message to the server.
         try {
             endPoint.writeHandshakeMessage(handshakeConnection.publication, aeronLogInfo, registrationMessage)
         } catch (e: Exception) {
-            aeronDriver.closeAndDeleteSubscription(handshakeConnection.subscription, "ClientHandshake")
-            aeronDriver.closeAndDeletePublication(handshakeConnection.publication, "ClientHandshake")
+            handshakeConnection.close()
 
             throw e
         }
@@ -269,7 +263,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         while (System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pollCount = handshakeConnection.subscription.poll(handler, 1)
+            pollCount = clientConnection.subscription.poll(handler, 1)
 
             if (failedException != null || connectionDone) {
                 break
@@ -290,16 +284,14 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         val failedEx = failedException
         if (failedEx != null) {
-            aeronDriver.closeAndDeleteSubscription(handshakeConnection.subscription, "ClientHandshake")
-            aeronDriver.closeAndDeletePublication(handshakeConnection.publication, "ClientHandshake")
+            handshakeConnection.close()
 
             throw failedEx
         }
 
         if (!connectionDone) {
             // since this failed, close everything
-            aeronDriver.closeAndDeleteSubscription(handshakeConnection.subscription, "ClientHandshake")
-            aeronDriver.closeAndDeletePublication(handshakeConnection.publication, "ClientHandshake")
+            handshakeConnection.close()
 
             val exception = ClientTimedOutException("Waiting for registration response from server")
             exception.cleanStackTraceInternal()

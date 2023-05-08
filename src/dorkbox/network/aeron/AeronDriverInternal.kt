@@ -38,7 +38,7 @@ import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.BackoffIdleStrategy
 import java.io.File
-import java.util.concurrent.*
+import java.util.concurrent.TimeUnit
 
 internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: Configuration.MediaDriverConfig) {
     companion object {
@@ -240,9 +240,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     }
 
 
-    fun addPublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, type: String, streamId: Int): Publication {
+    fun addPublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication {
         val uri = publicationUri.build()
-        logger.trace { "$type pub URI: $uri,stream-id=$streamId" }
+        logger.trace { "$aeronLogInfo pub URI: $uri,stream-id=$streamId" }
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
@@ -266,7 +266,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val publication = try {
             aeron1.addPublication(uri, streamId)
         } catch (e: Exception) {
-            // this happens if the aeron media driver cannot actually establish connection
+            // this happens if the aeron media driver cannot actually establish connection... OR IF IT IS TOO FAST BETWEEN ADD AND REMOVE FOR THE SAME SESSION/STREAM ID!
             e.cleanAllStackTrace()
             val ex = ClientRetryException("Error adding a publication", e)
             ex.cleanAllStackTrace()
@@ -276,21 +276,21 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         if (publication == null) {
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Error adding a publication")
-            ListenerManager.cleanAllStackTrace(ex)
+            ex.cleanAllStackTrace()
             throw ex
         }
 
         pubSubs.incrementAndGet()
-        logger.trace { "Creating publication ${publication.registrationId()}" }
+//        logger.trace { "Creating publication ${publication.registrationId()}" }
+        logger.trace { "Creating publication $aeronLogInfo :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
         return publication
     }
 
     /**
      * This is not a thread-safe publication!
      */
-    fun addExclusivePublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, type: String, streamId: Int): Publication {
+    fun addExclusivePublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication {
         val uri = publicationUri.build()
-        logger.trace { "$type e-pub URI: $uri,stream-id=$streamId" }
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
@@ -314,12 +314,22 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val publication = try {
             aeron1.addExclusivePublication(uri, streamId)
         } catch (e: Exception) {
-            // this happens if the aeron media driver cannot actually establish connection
-            e.cleanStackTraceInternal()
-            e.cause?.cleanStackTraceInternal()
-            val ex = ClientRetryException("Error adding a publication", e)
-            ex.cleanAllStackTrace()
-            throw ex
+            // this happens if the aeron media driver cannot actually establish connection... OR IF IT IS TOO FAST BETWEEN ADD AND REMOVE FOR THE SAME SESSION/STREAM ID!
+            Thread.sleep(10000)
+            try {
+                println()
+                println("HAD TO WAIT FOR PUBLICATION!")
+                println()
+                println()
+
+                aeron1.addExclusivePublication(uri, streamId)
+            } catch (e: Exception) {
+                e.cleanStackTraceInternal()
+                e.cause?.cleanStackTraceInternal()
+                val ex = ClientRetryException("Error adding a publication", e)
+                ex.cleanAllStackTrace()
+                throw ex
+            }
         }
 
         if (publication == null) {
@@ -330,13 +340,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         pubSubs.incrementAndGet()
-        logger.trace { "Creating ex-publication ${publication.registrationId()}" }
+//        logger.trace { "Creating ex-publication ${publication.registrationId()} :: $type e-pub URI: $uri,stream-id=$streamId" }
+        logger.trace { "Creating ex-publication $aeronLogInfo :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
         return publication
     }
 
-    fun addSubscription(logger: KLogger, subscriptionUri: ChannelUriStringBuilder, type: String, streamId: Int): Subscription {
+    fun addSubscription(logger: KLogger, subscriptionUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Subscription {
         val uri = subscriptionUri.build()
-        logger.trace { "$type sub URI: $uri,stream-id=$streamId" }
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
@@ -364,21 +374,22 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val subscription = try {
             aeron1.addSubscription(uri, streamId)
         } catch (e: Exception) {
-            ListenerManager.cleanAllStackTrace(e)
+            e.cleanAllStackTrace()
             val ex = ClientRetryException("Error adding a subscription", e)
-            ListenerManager.cleanAllStackTrace(ex)
+            ex.cleanAllStackTrace()
             throw ex
         }
 
         if (subscription == null) {
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Error adding a subscription")
-            ListenerManager.cleanAllStackTrace(ex)
+            ex.cleanAllStackTrace()
             throw ex
         }
 
         pubSubs.incrementAndGet()
-        logger.trace { "Creating subscription ${subscription.registrationId()}" }
+//        logger.trace { "Creating subscription ${subscription.registrationId()} :: $type sub URI: $uri,stream-id=$streamId" }
+        logger.trace { "Creating subscription [$aeronLogInfo] :: regId=${subscription.registrationId()}, sessionId=${subscriptionUri.sessionId()}, streamId=${subscription.streamId()}" }
         return subscription
     }
 
@@ -386,8 +397,14 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * Guarantee that the publication is closed AND the backing file is removed
      */
     suspend fun closeAndDeletePublication(publication: Publication, aeronLogInfo: String, logger: KLogger) {
-        logger.trace { "Closing publication ${publication.registrationId()}" }
-        publication.close()
+        logger.trace { "Closing publication [$aeronLogInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
+
+        try {
+            // This can throw exceptions!
+            publication.close()
+        } catch (e: Exception) {
+            logger.error(e) { "Unable to close [$aeronLogInfo] publication $publication" }
+        }
 
         ensureLogfileDeleted("publication", getMediaDriverFile(publication), aeronLogInfo, logger)
     }
@@ -396,8 +413,20 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * Guarantee that the publication is closed AND the backing file is removed
      */
     suspend fun closeAndDeleteSubscription(subscription: Subscription, aeronLogInfo: String, logger: KLogger) {
-        logger.trace { "Closing subscription ${subscription.registrationId()}" }
-        subscription.close()
+        logger.trace { "Closing subscription [$aeronLogInfo] ::regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
+
+        try {
+            // This can throw exceptions!
+            subscription.close()
+        } catch (e: Exception) {
+            // wait 3 seconds and try again!
+//
+//            try {
+//                subscription.close()
+//            } catch (e: Exception) {
+                logger.error(e) { "Unable to close [$aeronLogInfo] subscription $subscription" }
+//            }
+        }
 
         ensureLogfileDeleted("subscription", getMediaDriverFile(subscription), aeronLogInfo, logger)
     }

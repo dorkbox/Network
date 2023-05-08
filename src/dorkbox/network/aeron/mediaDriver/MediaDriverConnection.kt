@@ -39,11 +39,9 @@ interface MediaDriverConnection {
     suspend fun close(logger: KLogger)
 
     companion object {
-        fun uri(type: String, sessionId: Int = AeronDriver.RESERVED_SESSION_ID_INVALID, isReliable: Boolean? = null): ChannelUriStringBuilder {
+        fun uri(type: String, sessionId: Int = AeronDriver.RESERVED_SESSION_ID_INVALID, isReliable: Boolean): ChannelUriStringBuilder {
             val builder = ChannelUriStringBuilder().media(type)
-            if (isReliable != null) {
-                builder.reliable(isReliable)
-            }
+            builder.reliable(isReliable)
 
             if (sessionId != AeronDriver.RESERVED_SESSION_ID_INVALID) {
                 builder.sessionId(sessionId)

@@ -42,6 +42,11 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
     private val assigned = atomic(0)
 
 
+    // DEBUGGING
+    private val debugChecks = mutableListOf<Int>()
+
+
+
     init {
         // IllegalArgumentException
         require(max >= min) {
@@ -76,7 +81,9 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
         }
 
         assigned.getAndIncrement()
-        return cache.take()
+        val id = cache.take()
+        debugChecks.add(id)
+        return id
     }
 
     /**
@@ -90,6 +97,7 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
             throw AllocationException("Unequal allocate/free method calls.")
         }
         cache.put(id)
+        debugChecks.remove(id)
     }
 
     fun isEmpty(): Boolean {
@@ -97,6 +105,6 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
     }
 
     override fun toString(): String {
-        return "$assigned"
+        return "$assigned (${debugChecks.joinToString()})"
     }
 }

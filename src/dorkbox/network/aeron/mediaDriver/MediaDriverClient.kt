@@ -18,19 +18,31 @@
 package dorkbox.network.aeron.mediaDriver
 
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import io.aeron.Publication
 import io.aeron.Subscription
 import mu.KLogger
 
+@Deprecated("to delete")
 abstract class MediaDriverClient(val aeronDriver: AeronDriver,
                                  val port: Int,
                                  val streamId: Int,
                                  sessionId: Int,
                                  val connectionTimeoutSec: Int,
                                  val isReliable: Boolean,
-                                 val listenType: String) : MediaDriverConnection {
+                                 val logInfo: String) : MediaDriverConnection {
 
     var sessionId: Int
+
+    suspend fun resetSession(logger: KLogger) {
+        aeronDriver.closeAndDeleteSubscription(subscription, logInfo)
+        aeronDriver.closeAndDeletePublication(publication, logInfo)
+
+        sessionIdAllocator.free(sessionId)
+        sessionId = sessionIdAllocator.allocate()
+
+        build(logger)
+    }
 
     @Volatile
     lateinit var subscription: Subscription
@@ -48,9 +60,11 @@ abstract class MediaDriverClient(val aeronDriver: AeronDriver,
     }
 
     override suspend fun close(logger: KLogger) {
+        sessionIdAllocator.free(sessionId)
+
         // on close, we want to make sure this file is DELETED!
-        aeronDriver.closeAndDeleteSubscription(subscription, listenType)
-        aeronDriver.closeAndDeletePublication(publication, listenType)
+        aeronDriver.closeAndDeleteSubscription(subscription, logInfo)
+        aeronDriver.closeAndDeletePublication(publication, logInfo)
     }
 
     override fun toString(): String {

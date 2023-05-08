@@ -22,34 +22,24 @@ import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.netUtil.dnsUtils.ResolvedAddressTypes
 import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.mediaDriver.ClientIpcDriver
-import dorkbox.network.aeron.mediaDriver.ClientUdpDriver
-import dorkbox.network.aeron.mediaDriver.MediaDriverClient
-import dorkbox.network.aeron.mediaDriver.MediaDriverConnectInfo
-import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.ListenerManager
-import dorkbox.network.connection.PublicKeyValidationState
-import dorkbox.network.exceptions.ClientException
-import dorkbox.network.exceptions.ClientRejectedException
-import dorkbox.network.exceptions.ClientRetryException
-import dorkbox.network.exceptions.ClientShutdownException
-import dorkbox.network.exceptions.ClientTimedOutException
-import dorkbox.network.exceptions.ServerException
+import dorkbox.network.aeron.EventPoller
+import dorkbox.network.aeron.mediaDriver.ClientConnectionDriver
+import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
+import dorkbox.network.connection.*
+import dorkbox.network.connection.EventDispatcher.Companion.EVENT
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
+import dorkbox.network.exceptions.*
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import mu.KotlinLogging
-import java.lang.Thread.sleep
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
-import java.util.concurrent.*
+import java.util.concurrent.TimeUnit
 
 /**
  * The client is both SYNC and ASYNC. It starts off SYNC (blocks thread until it's done), then once it's connected to the server, it's
@@ -132,15 +122,35 @@ open class Client<CONNECTION : Connection>(
         const val version = "6.4"
 
         /**
+         * Ensures that the client (using the specified configuration) is NO LONGER running.
+         *
+         * NOTE: This method should only be used to check if a client is running for a DIFFERENT configuration than the currently running client
+         *
+         * By default, we will wait the [Configuration.connectionCloseTimeoutInSeconds] * 2 amount of time before returning.
+         *
+         * @return true if the media driver is STOPPED.
+         */
+        fun ensureStopped(configuration: Configuration): Boolean = runBlocking {
+            val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
+
+            val logger = KotlinLogging.logger(Client::class.java.simpleName)
+            AeronDriver(configuration, logger).use {
+                it.ensureStopped(timeout, 500)
+            }
+        }
+
+        /**
          * Checks to see if a client (using the specified configuration) is running.
          *
-         * This method should only be used to check if a client is running for a DIFFERENT configuration than the currently running client
+         * NOTE: This method should only be used to check if a client is running for a DIFFERENT configuration than the currently running client
+         *
+         * @return true if the media driver is active and running
          */
-        fun isRunning(configuration: Configuration): Boolean {
-            return AeronDriver.getDriver(
-                configuration,
-                KotlinLogging.logger(Client::class.java.simpleName),
-                true).use { it.isRunning() }
+        fun isRunning(configuration: Configuration): Boolean = runBlocking {
+            val logger = KotlinLogging.logger(Client::class.java.simpleName)
+            AeronDriver(configuration, logger).use {
+                it.isRunning()
+            }
         }
 
         init {
@@ -170,6 +180,8 @@ open class Client<CONNECTION : Connection>(
     var remoteAddressString: String = "UNKNOWN"
         private set
 
+    @Volatile
+    private var slowDownForException = false
 
     @Volatile
     private var isConnected = false
@@ -177,11 +189,11 @@ open class Client<CONNECTION : Connection>(
     // is valid when there is a connection to the server, otherwise it is null
     private var connection0: CONNECTION? = null
 
-
     // This is set by the client so if there is a "connect()" call in the disconnect callback, we can have proper
     // lock-stop ordering for how disconnect and connect work with each-other
-    // GUARANTEE that the callbacks for 'onDisconnect' happens-before the 'onConnect'.
-    private val lockStepForConnect = atomic<Mutex?>(null)
+    // GUARANTEE that the callbacks for a NEW connect happen AFTER the previous 'onDisconnect' is finished.
+    // a CDL is used because it doesn't matter the order in which it's called (as it will always ensure it's correct)
+    private val disconnectInProgress = atomic<dorkbox.util.sync.CountDownLatch?>(null)
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ClientException(message, cause)
@@ -215,8 +227,8 @@ open class Client<CONNECTION : Connection>(
      fun connect(
         remoteAddress: InetAddress,
         connectionTimeoutSec: Int = 30,
-        reliable: Boolean = true)
-     {
+        reliable: Boolean = true) = runBlocking {
+
         val remoteAddressString = when (remoteAddress) {
             is Inet4Address -> IPv4.toString(remoteAddress)
             is Inet6Address -> IPv6.toString(remoteAddress, true)
@@ -245,8 +257,8 @@ open class Client<CONNECTION : Connection>(
     @Suppress("DuplicatedCode")
     fun connectIpc(
         ipcId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID,
-        connectionTimeoutSec: Int = 30)
-     {
+        connectionTimeoutSec: Int = 30) = runBlocking {
+
         connect(remoteAddress = null, // required!
                 remoteAddressString = IPC_NAME,
                 remoteAddressPrettyString = IPC_NAME,
@@ -283,9 +295,8 @@ open class Client<CONNECTION : Connection>(
     fun connect(
         remoteAddress: String = "",
         connectionTimeoutSec: Int = 30,
-        reliable: Boolean = true)
-        {
-            fun connect(dnsResolveType: ResolvedAddressTypes) {
+        reliable: Boolean = true) {
+            fun connect(dnsResolveType: ResolvedAddressTypes) = runBlocking {
                 val ipv4Requested = dnsResolveType == ResolvedAddressTypes.IPV4_ONLY || dnsResolveType == ResolvedAddressTypes.IPV4_PREFERRED
 
                 val inetAddress = formatCommonAddress(remoteAddress, ipv4Requested) {
@@ -357,7 +368,7 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientException if there are misc errors
      */
     @Suppress("DuplicatedCode")
-    private fun connect(
+    private suspend fun connect(
         remoteAddress: InetAddress? = null,
         remoteAddressString: String,
         remoteAddressPrettyString: String,
@@ -366,11 +377,15 @@ open class Client<CONNECTION : Connection>(
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true)
     {
-        // NOTE: We CAN have a 'connect' inside the 'disconnect' callback (as a reconnect feature). THIS WILL CAUSE PROBLEMS!
-        // there can ALSO be recursion problems, so we must address that.
-        if (eventDispatch.isCurrent && !eventDispatch.wasForced) {
-            logger.trace { "Redispatching a connect request!" }
-            eventDispatch.forceLaunch {
+        // on the client, we must GUARANTEE that the disconnect completes before NEW connect begins.
+        if (!disconnectInProgress.compareAndSet(null, dorkbox.util.sync.CountDownLatch(1))) {
+            val disconnectCDL = disconnectInProgress.value!!
+
+            logger.debug { "Redispatching connect request!" }
+
+            EventDispatcher.launch(EVENT.CONNECT) {
+                logger.debug { "Redispatch connect request started!" }
+                disconnectCDL.await(config.connectionCloseTimeoutInSeconds.toLong(), TimeUnit.SECONDS)
                 connect(remoteAddress,
                         remoteAddressString,
                         remoteAddressPrettyString,
@@ -424,12 +439,15 @@ open class Client<CONNECTION : Connection>(
             return
         }
 
+        val isSelfMachine = remoteAddress?.isLoopbackAddress == true || remoteAddress == lanAddress
+
+
         // IPC can be enabled TWO ways!
         // - config.enableIpc
         // - NULL remoteAddress
         // It is entirely possible that the server does not have IPC enabled!
         val autoChangeToIpc =
-            (config.enableIpc && (remoteAddress == null || remoteAddress.isLoopbackAddress)) || (!config.enableIpc && remoteAddress == null)
+            (config.enableIpc && (remoteAddress == null || isSelfMachine)) || (!config.enableIpc && remoteAddress == null)
 
         val handshake = ClientHandshake(this, logger)
 
@@ -438,7 +456,7 @@ open class Client<CONNECTION : Connection>(
 
         if (DEBUG_CONNECTIONS) {
             // connections are extremely difficult to diagnose when the connection timeout is short
-            timoutInNanos += TimeUnit.HOURS.toNanos(1).toInt()
+            timoutInNanos = 0 // no timeout!
             handshakeTimeoutSec += TimeUnit.HOURS.toSeconds(1).toInt()
         }
 
@@ -466,6 +484,9 @@ open class Client<CONNECTION : Connection>(
             // we have to pre-set the type (which will ultimately get set to the correct type on success)
             var type = ""
 
+            // the handshake connection is closed when the handshake has an error, or it is finished
+            var handshakeConnection: ClientHandshakeDriver? = null
+
             try {
                 // always start the aeron driver inside the restart loop.
                 // If we've already started the driver (on the first "start"), then this does nothing (slowDownForException also make this not "double check")
@@ -473,75 +494,25 @@ open class Client<CONNECTION : Connection>(
                     startDriver()
                 }
 
-                // the handshake connection is closed when the handshake has an error, or it is finished
-                val handshakeConnection = if (autoChangeToIpc) {
-                    if (remoteAddress == null) {
-                        logger.info { "IPC enabled" }
-                    } else {
-                        logger.warn { "IPC for loopback enabled and aeron is already running. Auto-changing network connection from " +
-                                "'$remoteAddressString' -> IPC" }
-                    }
+                // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
+                handshakeConnection = ClientHandshakeDriver(
+                    aeronDriver = aeronDriver,
+                    autoChangeToIpc = autoChangeToIpc,
+                    remoteAddress = remoteAddress,
+                    remoteAddressString = remoteAddressString,
+                    ipcId = ipcId,
+                    config = config,
+                    handshakeTimeoutSec = handshakeTimeoutSec,
+                    reliable = reliable,
+                    logger = logger
+                )
 
-                    // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
-                    val ipcConnection = ClientIpcDriver(
-                        streamId = ipcId,
-                        sessionId = crypto.secureRandom.nextInt() + 1, // this helps prevent handshake collisions
-                        remoteSessionId = AeronDriver.IPC_HANDSHAKE_SESSION_ID
-                    )
-
-                    type = "${ipcConnection.type} '$ipcId'"
-
-                    // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
-                    try {
-                        ipcConnection.build(aeronDriver, logger)
-                        ipcConnection
-                    } catch (e: Exception) {
-                        if (remoteAddress == null) {
-                            // if we specified that we MUST use IPC, then we have to throw the exception, because there is no IPC
-                            val clientException = ClientException("Unable to connect via IPC to server. No address specified so fallback is unavailable", e)
-                            ListenerManager.cleanStackTraceInternal(clientException)
-                            throw clientException
-                        }
-
-                        logger.info { "IPC for loopback enabled, but unable to connect. Retrying with address $remoteAddressString" }
-
-                        // try a UDP connection instead
-                        val udpConnection = ClientUdpDriver(
-                            address = remoteAddress,
-                            addressString = remoteAddressString,
-                            port = config.port,
-                            streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                            sessionId = crypto.secureRandom.nextInt() + 1, // this helps prevent handshake collisions
-                            connectionTimeoutSec = handshakeTimeoutSec,
-                            isReliable = reliable
-                        )
-
-                        type = "${udpConnection.type} '$remoteAddressPrettyString:${config.port}'"
-
-                        // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
-                        udpConnection.build(aeronDriver, logger)
-                        udpConnection
-                    }
-                } else {
-                    val udpConnection = ClientUdpDriver(
-                        address = remoteAddress!!,
-                        addressString = remoteAddressString,
-                        port = config.port,
-                        streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                        sessionId = crypto.secureRandom.nextInt() + 1, // this helps prevent handshake collisions
-                        connectionTimeoutSec = handshakeTimeoutSec,
-                        isReliable = reliable
-                    )
-
-                    type = "${udpConnection.type} '$remoteAddressPrettyString:${config.port}'"
-
-                    // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
-                    udpConnection.build(aeronDriver, logger)
-                    udpConnection
-                }
-
-                logger.info { "Connecting to $handshakeConnection" }
-
+                logger.info("")
+                logger.info("")
+                logger.info { "Connecting to ${handshakeConnection.infoPub}" }
+                logger.info { "Connecting to ${handshakeConnection.infoSub}" }
+                logger.info("")
+                logger.info("")
 
                 connect0(handshake, handshakeConnection, handshakeTimeoutSec)
                 success = true
@@ -597,7 +568,7 @@ open class Client<CONNECTION : Connection>(
 
             // If we did not connect - throw an error. When `client.connect()` is called, either it connects or throws an error
             val exception = ClientRejectedException("The server did not respond or permit the connection attempt within $connectionTimeoutSec seconds")
-            ListenerManager.cleanStackTrace(exception)
+            exception.cleanStackTrace()
 
             logger.error(exception) { "Aborting connection retry attempt to server." }
             listenerManager.notifyError(exception)
@@ -606,27 +577,21 @@ open class Client<CONNECTION : Connection>(
     }
 
     // the handshake process might have to restart this connection process.
-    private fun connect0(handshake: ClientHandshake<CONNECTION>, handshakeConnection: MediaDriverClient, connectionTimeoutSec: Int) {
+    private suspend fun connect0(handshake: ClientHandshake<CONNECTION>, handshakeConnection: ClientHandshakeDriver, connectionTimeoutSec: Int) {
         // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
 
-        val aeronLogInfo = "${handshakeConnection.streamId}/${handshakeConnection.sessionId} : $remoteAddressString"
-
-        val isUsingIPC: Boolean = handshakeConnection is ClientIpcDriver
-
         // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
-        val connectionInfo = handshake.hello(handshakeConnection, connectionTimeoutSec)
+        val connectionInfo = handshake.hello(aeronDriver, handshakeConnection, connectionTimeoutSec)
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
-        val validateRemoteAddress = if (isUsingIPC) {
+        val validateRemoteAddress = if (handshakeConnection.isUsingIPC) {
             PublicKeyValidationState.VALID
         } else {
             crypto.validateRemoteAddress(remoteAddress!!, remoteAddressString, connectionInfo.publicKey)
         }
 
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
-            handshakeConnection.subscription.close()
-            handshakeConnection.publication.close()
-
+            handshakeConnection.close()
 
             val exception = ClientRejectedException("Connection to [$remoteAddressString] not allowed! Public key mismatch.")
             logger.error(exception) { "Validation error" }
@@ -646,17 +611,16 @@ open class Client<CONNECTION : Connection>(
         // we set up our kryo information once we connect to a server (using the server's kryo registration details)
         val kryoConfiguredFromServer = serialization.finishClientConnect(connectionInfo.kryoRegistrationDetails)
         if (kryoConfiguredFromServer == null) {
-            handshakeConnection.subscription.close()
-            handshakeConnection.publication.close()
+            handshakeConnection.close()
 
             // because we are getting the class registration details from the SERVER, this should never be the case.
             // It is still and edge case where the reconstruction of the registration details fails (maybe because of custom serializers)
-            val exception = if (isUsingIPC) {
+            val exception = if (handshakeConnection.isUsingIPC) {
                 ClientRejectedException("[${handshake.connectKey}] Connection to IPC has incorrect class registration details!!")
             } else {
                 ClientRejectedException("[${handshake.connectKey}] Connection to [$remoteAddressString] has incorrect class registration details!!")
             }
-            ListenerManager.cleanStackTraceInternal(exception)
+            exception.cleanStackTraceInternal()
             throw exception
         }
 
@@ -671,81 +635,34 @@ open class Client<CONNECTION : Connection>(
 
 
         // we are now connected, so we can connect to the NEW client-specific ports
-        val clientConnection = if (isUsingIPC) {
-            // Create a subscription at the given address and port, using the given stream ID.
-            val driver = ClientIpcDriver(
-                streamId = connectionInfo.streamId,
-                sessionId = connectionInfo.sessionId,
-                remoteSessionId = connectionInfo.port
-            )
-
-            driver.build(aeronDriver, logger)
-
-            logger.info { "Creating new IPC connection to $driver" }
-
-
-            MediaDriverConnectInfo(
-                subscription = driver.subscription,
-                publication = driver.publication,
-                subscriptionPort = connectionInfo.sessionId,
-                publicationPort = driver.streamId,
-                streamId = 0, // this is because with IPC, we have stream sub/pub (which are replaced as port sub/pub)
-                sessionId = driver.sessionId,
-                isReliable = driver.isReliable,
-                remoteAddress = null,
-                remoteAddressString = "ipc"
-            )
-        }
-        else {
-            val driver = ClientUdpDriver(
-                address = (handshakeConnection as ClientUdpDriver).address,
-                addressString = handshakeConnection.addressString,
-                port = connectionInfo.port, // this is the port that we connect to
-                streamId = connectionInfo.streamId,
-                sessionId = connectionInfo.sessionId,
-                connectionTimeoutSec = connectionTimeoutSec,
-                isReliable = handshakeConnection.isReliable)
-
-            // we have to construct how the connection will communicate!
-            // we don't care about the subscription, only the publication
-            driver.build(aeronDriver, logger)
-
-            logger.info { "Creating new connection to $driver" }
-
-            MediaDriverConnectInfo(
-                subscription = driver.subscription,
-                publication = driver.publication,
-                subscriptionPort = driver.subscriptionPort,
-                publicationPort = driver.port,
-                streamId = driver.streamId,
-                sessionId = driver.sessionId,
-                isReliable = driver.isReliable,
-                remoteAddress = driver.address,
-                remoteAddressString = IP.toString(driver.address)
-            )
-        }
-
+        val clientConnection = ClientConnectionDriver(handshakeConnection, connectionInfo)
 
         // have to rebuild the client pub/sub for the next part of the handshake (since it's a 1-shot deal for the server per session)
-        handshakeConnection.subscription.close()
-        if (handshakeConnection is ClientUdpDriver) {
-            handshakeConnection.publication.close()
-        }
-        handshakeConnection.sessionId = crypto.secureRandom.nextInt() + 1 // this helps prevent handshake collisions
-        handshakeConnection.build(aeronDriver, logger)
+        // if we go SLOWLY (slower than the linger timeout), it will work. if we go quickly, this it will have problems (so we must do this!)
+//        handshakeConnection.resetSession(logger)
+
 
         val newConnection: CONNECTION
-        if (isUsingIPC) {
-            newConnection = connectionFunc(ConnectionParams(this, clientConnection, PublicKeyValidationState.VALID))
+        if (handshakeConnection.isUsingIPC) {
+            newConnection = connectionFunc(ConnectionParams(this, clientConnection.connectionInfo(), PublicKeyValidationState.VALID))
         } else {
-            newConnection = connectionFunc(ConnectionParams(this, clientConnection, validateRemoteAddress))
+            newConnection = connectionFunc(ConnectionParams(this, clientConnection.connectionInfo(), validateRemoteAddress))
             remoteAddress!!
 
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
 
-            logger.info { "[$aeronLogInfo] (${handshake.connectKey}) Connection (${newConnection.id}) adding new signature for [$remoteAddressString] : ${connectionInfo.publicKey.toHexString()}" }
+            logger.info { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) adding new signature for [$remoteAddressString] : ${connectionInfo.publicKey.toHexString()}" }
+
             storage.addRegisteredServerKey(remoteAddress!!, connectionInfo.publicKey)
         }
+
+        // This is set by the client so if there is a "connect()" call in the disconnect callback, we can have proper
+        // lock-stop ordering for how disconnect and connect work with each-other
+        // GUARANTEE that the callbacks for 'onDisconnect' happens-before the 'onConnect'.
+        // a CDL is used because it doesn't matter the order in which it's called (as it will always ensure it's correct)
+        val lockStepForConnect = dorkbox.util.sync.CountDownLatch(1)
+
+        val connectWaitTimeout = if (EventPoller.DEBUG) 99999999L else config.connectionCloseTimeoutInSeconds.toLong()
 
 
         //////////////
@@ -753,16 +670,9 @@ open class Client<CONNECTION : Connection>(
         //////////////
         newConnection.closeAction = {
             // this is called whenever connection.close() is called by the framework or via client.close()
-
-            // on the client, we want to GUARANTEE that the disconnect happens-before connect.
-            if (!lockStepForConnect.compareAndSet(null, Mutex(locked = true))) {
-                logger.error { "[$aeronLogInfo] (${handshake.connectKey}) Connection ${newConnection.id} : close lockStep for disconnect was in the wrong state!" }
-            }
-
             isConnected = false
-            // this is called whenever connection.close() is called by the framework or via client.close()
 
-            // make sure to call our client.notifyDisconnect() callbacks
+            // make sure to call our client.notifyConnect() callbacks execute
 
             // force us to wait until AFTER the connect logic has run. we MUST use a CDL. A mutex doesn't work properly
             lockStepForConnect.await(connectWaitTimeout, TimeUnit.SECONDS)
@@ -770,6 +680,10 @@ open class Client<CONNECTION : Connection>(
             EventDispatcher.launch(EVENT.DISCONNECT) {
                 listenerManager.notifyDisconnect(connection)
             }
+
+            // we must reset the disconnect-in-progress latch AND count down, so that reconnects can successfully reconnect
+            val disconnectCDL = disconnectInProgress.getAndSet(null)!!
+            disconnectCDL.countDown()
         }
 
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
@@ -783,23 +697,19 @@ open class Client<CONNECTION : Connection>(
         // tell the server our connection handshake is done, and the connection can now listen for data.
         // also closes the handshake (will also throw connect timeout exception)
 
-        // this value matches the server, and allows for a more robust connection attempt
-        val successAttemptTimeout = config.connectionCloseTimeoutInSeconds * 2
-
         try {
-            handshake.done(handshakeConnection, successAttemptTimeout, aeronLogInfo)
+            handshake.done(aeronDriver, handshakeConnection, clientConnection, connectionTimeoutSec, handshakeConnection.details)
         } catch (e: Exception) {
-            logger.error(e) { "[$aeronLogInfo] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] error during handshake" }
+            logger.error(e) { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] error during handshake" }
             throw e
         }
 
-        // finished with the handshake, so always close the connection publication
-        // The subscription is RE-USED, so we don't close that!
-        handshakeConnection.publication.close()
+        // finished with the handshake, so always close these!
+        handshakeConnection.close()
 
         isConnected = true
 
-        logger.debug { "[$aeronLogInfo] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] done with handshake." }
+        logger.debug { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] done with handshake." }
 
 
         // have to make a new thread to listen for incoming data!
@@ -813,7 +723,7 @@ open class Client<CONNECTION : Connection>(
                     newConnection.poll()
                 } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                    logger.debug { "[$aeronLogInfo] connection expired" }
+                    logger.debug { "[${handshakeConnection.details}] connection expired" }
 
                     // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
                     EventDispatcher.launch(EVENT.CLOSE) {
@@ -949,7 +859,19 @@ open class Client<CONNECTION : Connection>(
         }
     }
 
-    final override fun close0() {
+    final override suspend fun close0() {
         // no impl
+    }
+
+    fun <R> use(block: (Client<CONNECTION>) -> R): R {
+        return try {
+            block(this)
+        } finally {
+            close()
+            runBlocking {
+                waitForClose()
+                logger.error { "finished close event" }
+            }
+        }
     }
 }

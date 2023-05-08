@@ -20,7 +20,10 @@ package dorkbox.network.aeron
 
 import dorkbox.collections.IntMap
 import dorkbox.network.Configuration
+import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.exceptions.AllocationException
+import dorkbox.network.handshake.RandomId65kAllocator
 import io.aeron.ChannelUriStringBuilder
 import io.aeron.CncFileDescriptor
 import io.aeron.CommonContext
@@ -67,9 +70,14 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
          */
         internal const val RESERVED_SESSION_ID_HIGH = Integer.MAX_VALUE
 
-        const val UDP_HANDSHAKE_STREAM_ID: Int = 0x1337cafe
-        const val IPC_HANDSHAKE_STREAM_ID: Int = 0x1337c0de
-        const val IPC_HANDSHAKE_SESSION_ID: Int = 0x1337c0d3
+        const val UDP_HANDSHAKE_STREAM_ID: Int = 0x1337cafe  // 322423550
+        const val IPC_HANDSHAKE_STREAM_ID: Int = 0x1337c0de  // 322420958
+        const val HANDSHAKE_SESSION_ID: Int    = 0x1337c0d3  // 322420947
+
+        // guarantee that session/stream ID's will ALWAYS be unique! (there can NEVER be a collision!)
+        val sessionIdAllocator = RandomId65kAllocator(AeronDriver.RESERVED_SESSION_ID_LOW, AeronDriver.RESERVED_SESSION_ID_HIGH)
+        val streamIdAllocator = RandomId65kAllocator(Short.MAX_VALUE * 2) // this is 65k
+
 
         // prevents multiple instances, within the same JVM, from starting at the exact same time.
         private val lock = Mutex()
@@ -185,6 +193,22 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
             return cncSemanticVersion
         }
+
+        /**
+         * Validates that all the resources have been freed (for all connections)
+         *
+         * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
+         */
+        fun checkForMemoryLeaks() {
+            val noAllocations = sessionIdAllocator.isEmpty() && streamIdAllocator.isEmpty()
+
+            if (!noAllocations) {
+                throw AllocationException("Unequal allocate/free method calls for session/stream allocation: \n" +
+                                                  "\tsession: $sessionIdAllocator \n" +
+                                                  "\tstream :$streamIdAllocator"
+                )
+            }
+        }
     }
 
 
@@ -253,29 +277,51 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
     }
 
 
-    fun addPublication(publicationUri: ChannelUriStringBuilder, type: String, streamId: Int): Publication =
-        internal.addPublication(logger, publicationUri, type, streamId)
+    fun addPublication(publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication =
+        internal.addPublication(logger, publicationUri, aeronLogInfo, streamId)
 
     /**
      * This is not a thread-safe publication!
      */
-    fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, type: String, streamId: Int): Publication =
-        internal.addExclusivePublication(logger, publicationUri, type, streamId)
+    fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication =
+        internal.addExclusivePublication(logger, publicationUri, aeronLogInfo, streamId)
 
-    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, type: String, streamId: Int): Subscription =
-        internal.addSubscription(logger, subscriptionUri, type, streamId)
+    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Subscription =
+        internal.addSubscription(logger, subscriptionUri, aeronLogInfo, streamId)
 
     /**
      * Guarantee that the publication is closed AND the backing file is removed
+     *
+     * This can throw exceptions!
      */
     suspend fun closeAndDeletePublication(publication: Publication, aeronLogInfo: String) =
         internal.closeAndDeletePublication(publication, aeronLogInfo, logger)
 
     /**
      * Guarantee that the publication is closed AND the backing file is removed
+     *
+     * This can throw exceptions!
+     */
+    internal suspend fun closeAndDeletePublication(connection: ClientHandshakeDriver) =
+        internal.closeAndDeletePublication(connection.publication, connection.logInfo, logger)
+
+
+    /**
+     * Guarantee that the publication is closed AND the backing file is removed
+     *
+     * This can throw exceptions!
+     */
+    internal suspend fun closeAndDeleteSubscription(connection: ClientHandshakeDriver) =
+        internal.closeAndDeleteSubscription(connection.subscription, connection.logInfo, logger)
+
+    /**
+     * Guarantee that the publication is closed AND the backing file is removed
+     *
+     * This can throw exceptions!
      */
     suspend fun closeAndDeleteSubscription(subscription: Subscription, aeronLogInfo: String) =
         internal.closeAndDeleteSubscription(subscription, aeronLogInfo, logger)
+
 
     /**
      * Ensures that an endpoint (using the specified configuration) is NO LONGER running.

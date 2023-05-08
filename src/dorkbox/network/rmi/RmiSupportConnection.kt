@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package dorkbox.network.rmi
 
 import dorkbox.collections.LockFreeIntMap
 import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
 import dorkbox.network.serialization.Serialization
@@ -98,7 +98,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
         val rmiId = saveImplObject(`object`)
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
+            exception.cleanStackTrace()
             logger.error("RMI error connection ${connection.id}", exception)
         }
 
@@ -125,7 +125,7 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
         val success = saveImplObject(`object`, objectId)
         if (!success) {
             val exception = Exception("RMI implementation '${`object`::class.java}' could not be saved! No more RMI id's could be generated")
-            ListenerManager.cleanStackTrace(exception)
+            exception.cleanStackTrace()
             logger.error("RMI error connection ${connection.id}", exception)
         }
         return success
@@ -188,8 +188,8 @@ class RmiSupportConnection<CONNECTION: Connection> internal constructor(
     suspend fun delete(rmiObjectId: Int) {
         // we only create the proxy + execute the callback if the RMI id is valid!
         if (rmiObjectId == RemoteObjectStorage.INVALID_RMI) {
-            val exception = Exception("RMI ID '${rmiObjectId}' is invalid. Unable to delete RMI object!")
-            ListenerManager.cleanStackTrace(exception)
+            val exception = Exception("Unable to delete RMI object!")
+            exception.cleanStackTrace()
             logger.error("RMI error connection ${connection.id}", exception)
             return
         }

@@ -20,7 +20,6 @@ import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.EndPoint
-import io.aeron.CommonContext
 import io.aeron.Publication
 import mu.KLogger
 import java.net.Inet4Address
@@ -32,7 +31,7 @@ import java.net.InetAddress
  * A connection timeout of 0, means to wait forever
  */
 internal class ServerUdpPairedDriver(
-    aeronDriver: AeronDriver,
+    driver: AeronDriver,
     listenAddress: InetAddress,
     val remoteAddress: InetAddress,
     port: Int,
@@ -40,17 +39,17 @@ internal class ServerUdpPairedDriver(
     sessionId: Int,
     connectionTimeoutSec: Int,
     isReliable: Boolean,
-    listenType: String
+    logInfo: String
 ) :
     ServerUdpDriver(
-        aeronDriver = aeronDriver,
+        aeronDriver = driver,
         listenAddress = listenAddress,
         port = port,
         streamId = streamId,
         sessionId = sessionId,
         connectionTimeoutSec = connectionTimeoutSec,
         isReliable = isReliable,
-        listenType = listenType
+        logInfo = logInfo
     ) {
 
     lateinit var publication: Publication
@@ -67,11 +66,12 @@ internal class ServerUdpPairedDriver(
         // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
         val publicationUri = MediaDriverConnection
             .uri("udp", sessionId, isReliable)
-            .controlEndpoint(isRemoteIpv4, properPubAddress, port+1)
-            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+            .endpoint(isRemoteIpv4, properPubAddress, port)
+//            .controlEndpoint(isRemoteIpv4, properPubAddress, port+1)
+//            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
 
-        val publication = aeronDriver.addExclusivePublication(publicationUri, listenType, streamId)
+        val publication = aeronDriver.addPublication(publicationUri, logInfo, streamId)
 
         // if we are IPv6 WILDCARD -- then our subscription must ALSO be IPv6, even if our connection is via IPv4
         var subShouldBeIpv4 = isRemoteIpv4
@@ -103,7 +103,7 @@ internal class ServerUdpPairedDriver(
             .endpoint(subShouldBeIpv4, properSubAddress, port)
 
 
-        val subscription = aeronDriver.addSubscription(subscriptionUri, listenType, streamId)
+        val subscription = aeronDriver.addSubscription(subscriptionUri, logInfo, streamId)
 
         val remoteAddressString = if (isRemoteIpv4) {
             IPv4.toString(remoteAddress as Inet4Address)
