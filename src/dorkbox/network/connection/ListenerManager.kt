@@ -492,4 +492,33 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
 
         return hasListeners
     }
+
+    /**
+     * This will remove all listeners that have been registered!
+     */
+    suspend fun close() {
+        // we have to follow the single-writer principle!
+
+        onConnectFilterMutex.withLock {
+            onConnectFilterList.lazySet(Array(0) { { true } })
+        }
+        onInitMutex.withLock {
+            onInitList.lazySet(Array(0) { { } })
+        }
+        onConnectMutex.withLock {
+            onConnectList.lazySet(Array(0) { { } })
+        }
+        onDisconnectMutex.withLock {
+            onDisconnectList.lazySet(Array(0) { { } })
+        }
+        onErrorMutex.withLock {
+            onErrorList.lazySet(Array(0) { {  } })
+        }
+        onErrorGlobalMutex.withLock {
+            onErrorGlobalList.lazySet(Array(0) { { } })
+        }
+        onMessageMutex.withLock {
+            onMessageMap.lazySet(IdentityMap<Class<*>, Array<suspend CONNECTION.(Any) -> Unit>>(32, LOAD_FACTOR))
+        }
+    }
 }
