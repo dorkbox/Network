@@ -148,6 +148,7 @@ internal object ServerHandshakePollers {
         val listenAddress = mediaDriver.listenAddress
         val listenAddressString = IP.toString(listenAddress)
         val timoutInNanos = driver.getLingerNs()
+        val logInfo = mediaDriver.logInfo
 
         suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
@@ -250,11 +251,11 @@ internal object ServerHandshakePollers {
                             logger = logger
                     )
                 } else {
-                    logger.error { "Cannot create publication back to '$clientAddressString'" }
+                    logger.error { "Cannot create $logInfo publication back to '$clientAddressString'" }
                 }
 
                 // publications are REMOVED from Aeron clients when their linger timeout has expired!!!
-                driver.closeAndDeletePublication(publication, "HANDSHAKE-$type")
+                driver.closeAndDeletePublication(publication, logInfo)
             }
         }
     }

@@ -521,10 +521,16 @@ open class Client<CONNECTION : Connection>(
                 // once we're done with the connection process, stop trying
                 break
             } catch (e: ClientRetryException) {
-                if (logger.isTraceEnabled) {
-                    logger.trace(e) { "Unable to connect to $type, retrying..." }
+                val message = if (isIPC) {
+                    "Unable to connect to IPC $ipcId, retrying..."
                 } else {
-                    logger.info { "Unable to connect to $type, retrying..." }
+                    "Unable to connect to UDP $remoteAddressPrettyString, retrying..."
+                }
+
+                if (logger.isTraceEnabled) {
+                    logger.trace(e) { message }
+                } else {
+                    logger.info { message }
                 }
 
                 handshake.reset()
@@ -548,7 +554,7 @@ open class Client<CONNECTION : Connection>(
                     throw e
                 }
             } catch (e: Exception) {
-                logger.error(e) { "[${handshake.connectKey}] : Un-recoverable error during handshake with $type. Aborting." }
+                logger.error(e) { "[${handshake.connectKey}] : Un-recoverable error during handshake with $handshakeConnection. Aborting." }
 
                 aeronDriver.closeIfSingle() // if we are the ONLY instance using the media driver, restart it
 
@@ -559,6 +565,11 @@ open class Client<CONNECTION : Connection>(
 
         if (!success) {
             if (System.nanoTime() - startTime < timoutInNanos) {
+                val type = if (isIPC) {
+                    "IPC $ipcId"
+                } else {
+                    remoteAddressPrettyString + ":" + config.port
+                }
                 // we timed out. Throw the appropriate exception
                 val exception = ClientTimedOutException("Unable to connect to the server at $type in $connectionTimeoutSec seconds")
                 logger.error(exception) { "Aborting connection attempt to server." }

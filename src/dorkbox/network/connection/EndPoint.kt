@@ -331,7 +331,7 @@ internal constructor(val type: Class<*>,
                 @Suppress("LeakingThis")
                 aeronDriver = AeronDriver(this)
             } catch (e: Exception) {
-                logger.error("Error initializing endpoint", e)
+                logger.error("Error initializing aeron driver", e)
                 throw e
             }
         }

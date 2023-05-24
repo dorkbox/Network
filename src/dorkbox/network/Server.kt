@@ -293,7 +293,7 @@ open class Server<CONNECTION : Connection>(
                         pollCount += connection.poll()
                     } else {
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                        logger.debug { "[${connection.details}] connection expired" }
+                        logger.debug { "[${connection.details}] connection expired (cleanup)" }
 
                         // the connection MUST be removed in the same thread that is processing events
                         removeConnection(connection)

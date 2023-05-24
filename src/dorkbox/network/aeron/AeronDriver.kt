@@ -423,6 +423,9 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         }
     }
 
+    override fun toString(): String {
+        return internal.toString()
+    }
 
     /**
      * A safer way to try to close the media driver

@@ -94,7 +94,7 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
     fun free(id: Int) {
         val assigned = assigned.decrementAndGet()
         if (assigned < 0) {
-            throw AllocationException("Unequal allocate/free method calls.")
+            throw AllocationException("Unequal allocate/free method calls (too many 'free' calls).")
         }
         cache.put(id)
         debugChecks.remove(id)

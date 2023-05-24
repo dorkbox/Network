@@ -435,9 +435,9 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         // This is set by the client/server so if there is a "connect()" call in the disconnect callback, we can have proper
         // lock-stop ordering for how disconnect and connect work with each-other
 
-        logger.debug {"[$details] connection closed"}
-
         closeAction()
+
+        logger.debug {"[$details] connection closed"}
     }
 
 
