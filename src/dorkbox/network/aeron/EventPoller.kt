@@ -139,14 +139,14 @@ internal class EventPoller {
     /**
      * Will cause the executing thread to wait until the event has been started
      */
-    suspend fun submit(logger: KLogger, action: suspend EventPoller.() -> Int) {
-        submit(logger, action) {}
+    suspend fun submit(action: suspend EventPoller.() -> Int) {
+        submit(action) {}
     }
 
     /**
      * Will cause the executing thread to wait until the event has been started
      */
-    suspend fun submit(logger: KLogger, action: suspend EventPoller.() -> Int, onShutdown: suspend ()->Unit) = mutex.withLock {
+    suspend fun submit(action: suspend EventPoller.() -> Int, onShutdown: suspend () -> Unit) = mutex.withLock {
         submitEvents.getAndIncrement()
 
         // this forces the current thread to WAIT until the network poll system has started

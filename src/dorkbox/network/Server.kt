@@ -270,8 +270,8 @@ open class Server<CONNECTION : Connection>(
 
 
         // additionally, if we have MULTIPLE clients on the same machine, we are limited by the CPU core count. Ideally we want to share this among ALL clients within the same JVM so that we can support multiple clients/servers
-        networkEventPoller.submit(logger,
-        {
+        networkEventPoller.submit(
+            action = {
             if (!isShutdown()) {
                 var pollCount = 0
 
@@ -321,7 +321,7 @@ open class Server<CONNECTION : Connection>(
                 EventPoller.REMOVE
             }
         },
-        {
+        onShutdown = {
             logger.debug { "Server event dispatch closing..." }
 
             // we want to process **actual** close cleanup events on this thread as well, otherwise we will have threading problems

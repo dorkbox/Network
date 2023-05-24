@@ -716,7 +716,7 @@ open class Client<CONNECTION : Connection>(
         // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
 
         // additionally, if we have MULTIPLE clients on the same machine, we are limited by the CPU core count. Ideally we want to share this among ALL clients within the same JVM so that we can support multiple clients/servers
-        networkEventPoller.submit(logger) {
+        networkEventPoller.submit {
             if (!isShutdown()) {
                 if (!newConnection.isClosedViaAeron()) {
                     // Polls the AERON media driver subscription channel for incoming messages
