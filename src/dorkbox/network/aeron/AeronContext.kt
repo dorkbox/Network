@@ -28,9 +28,9 @@ import java.io.File
  * @throws IllegalStateException if the configuration has already been used to create a context
  * @throws IllegalArgumentException if the aeron media driver directory cannot be setup
  */
-class AeronContext(config: Configuration, aeronErrorHandler: (Throwable) -> Unit) : Closeable {
+internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorHandler: (Throwable) -> Unit) : Closeable {
     companion object {
-        private fun create(config: Configuration, aeronErrorHandler: (Throwable) -> Unit): MediaDriver.Context {
+        private fun create(config: Configuration.MediaDriverConfig, aeronErrorHandler: (Throwable) -> Unit): MediaDriver.Context {
             // LOW-LATENCY SETTINGS
             // MediaDriver.Context()
             //             .termBufferSparseFile(false)
@@ -145,6 +145,9 @@ class AeronContext(config: Configuration, aeronErrorHandler: (Throwable) -> Unit
         if (!isRunning) {
             // NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
             //   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
+            // make sure it's clean!
+            aeronDir.deleteRecursively()
+
             // if we are not CURRENTLY running, then we should ALSO delete it when we are done!
             context.dirDeleteOnShutdown()
         }

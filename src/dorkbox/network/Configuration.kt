@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+@file:OptIn(ExperimentalCoroutinesApi::class)
+
 package dorkbox.network
 
 import dorkbox.netUtil.IPv4
@@ -32,6 +34,7 @@ import io.aeron.driver.exceptions.InvalidChannelException
 import io.aeron.exceptions.DriverTimeoutException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asCoroutineDispatcher
 import mu.KLogger
 import mu.KotlinLogging
@@ -143,6 +146,7 @@ class ServerConfiguration : dorkbox.network.Configuration() {
 }
 
 class ClientConfiguration : dorkbox.network.Configuration() {
+
     /**
      * Validates the current configuration. Throws an exception if there are problems.
      */
@@ -166,6 +170,7 @@ class ClientConfiguration : dorkbox.network.Configuration() {
 }
 
 abstract class Configuration {
+    @OptIn(ExperimentalCoroutinesApi::class)
     companion object {
         internal val NOP_LOGGER = KotlinLogging.logger(NOPLogger.NOP_LOGGER)
 
@@ -427,6 +432,7 @@ abstract class Configuration {
 
 
     internal var uniqueAeronDirectoryID = 0
+
     /**
      * Should we force the Aeron location to be unique for every instance? This is mutually exclusive with IPC.
      */
@@ -434,12 +440,6 @@ abstract class Configuration {
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
-            uniqueAeronDirectoryID = SecureRandom().let {
-                // make sure it's not 0, because 0 is special
-                var id = 0
-                while (id == 0) id = it.nextInt()
-                id
-            }
         }
 
     /**
@@ -674,6 +674,16 @@ abstract class Configuration {
             return
         }
 
+        // we are starting a new context, make sure the aeron directory is unique (if specified)
+        if (uniqueAeronDirectory) {
+            uniqueAeronDirectoryID = SecureRandom().let {
+                // make sure it's not 0, because 0 is special
+                var id = 0
+                while (id == 0) id = it.nextInt()
+                id
+            }
+        }
+
         /*
          * Linux
          * Linux normally requires some settings of sysctl values. One is net.core.rmem_max to allow larger SO_RCVBUF and
@@ -735,7 +745,7 @@ abstract class Configuration {
             val baseFileLocation = suggestAeronLogLocation(logger)
             val aeronLogDirectory = if (uniqueAeronDirectory) {
                 // this is incompatible with IPC, and will not be set if IPC is enabled (error will be thrown on validate)
-                File(baseFileLocation, "aeron_$uniqueAeronDirectoryID")
+                File(baseFileLocation, "aeron_${mediaDriverId()}")
             } else {
                 File(baseFileLocation, "aeron")
             }
@@ -750,12 +760,35 @@ abstract class Configuration {
 
 
     // internal class for making sure that the AeronDriver is not duplicated for the same configuration (as that is entirely unnecessary)
-    internal class MediaDriverConfig : dorkbox.network.Configuration() {
+    internal class MediaDriverConfig(val config: dorkbox.network.Configuration) {
+        val connectionCloseTimeoutInSeconds get() = config.connectionCloseTimeoutInSeconds
+        val threadingMode get() = config.threadingMode
+
+        val networkMtuSize get() = config.networkMtuSize
+        val initialWindowLength get() = config.initialWindowLength
+        val sendBufferSize get() = config.sendBufferSize
+        val receiveBufferSize get() = config.receiveBufferSize
+
+        val aeronDirectory get() = config.aeronDirectory
+        val uniqueAeronDirectory get() = config.uniqueAeronDirectory
+        val uniqueAeronDirectoryID get() = config.uniqueAeronDirectoryID
+
+        val ipcTermBufferLength get() = config.ipcTermBufferLength
+        val publicationTermBufferLength get() = config.publicationTermBufferLength
+
+
+        val aeronErrorFilter get() = config.aeronErrorFilter
+        var contextDefined
+            get() = config.contextDefined
+            set(value) {
+                config.contextDefined = value
+            }
+
         /**
          * Validates the current configuration. Throws an exception if there are problems.
          */
         @Suppress("DuplicatedCode")
-        override fun validate() {
+        fun validate() {
             require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
             require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }
 
@@ -774,40 +807,43 @@ abstract class Configuration {
          * This is because configs that are DIFFERENT, but have the same values MUST use the same aeron driver.
          */
         val id: Int get() {
-            return mediaDriverId()
+            return config.mediaDriverId()
         }
 
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is MediaDriverConfig) return false
 
-            return mediaDriverEquals(this)
+            return mediaDriverEquals(config)
         }
 
         override fun hashCode(): Int {
-            return mediaDriverId()
+            return config.mediaDriverId()
+        }
+
+        @Suppress("DuplicatedCode", "RedundantIf")
+        private fun mediaDriverEquals(other: dorkbox.network.Configuration): Boolean {
+            if (connectionCloseTimeoutInSeconds != other.connectionCloseTimeoutInSeconds) return false
+            if (threadingMode != other.threadingMode) return false
+            if (networkMtuSize != other.networkMtuSize) return false
+            if (initialWindowLength != other.initialWindowLength) return false
+            if (sendBufferSize != other.sendBufferSize) return false
+            if (receiveBufferSize != other.receiveBufferSize) return false
+
+            if (aeronDirectory != other.aeronDirectory) return false
+            if (uniqueAeronDirectory != other.uniqueAeronDirectory) return false
+            if (uniqueAeronDirectoryID != other.uniqueAeronDirectoryID) return false
+
+            if (ipcTermBufferLength != other.ipcTermBufferLength) return false
+            if (publicationTermBufferLength != other.publicationTermBufferLength) return false
+            if (aeronErrorFilter != other.aeronErrorFilter) return false
+
+            return true
         }
     }
-    internal fun asMediaDriverConfig(): MediaDriverConfig {
-        val newConfig = MediaDriverConfig()
 
-        newConfig.threadingMode = threadingMode
-        newConfig.networkMtuSize = networkMtuSize
-        newConfig.initialWindowLength = initialWindowLength
-        newConfig.sendBufferSize = sendBufferSize
-        newConfig.receiveBufferSize = receiveBufferSize
-
-        newConfig.aeronDirectory = aeronDirectory
-        newConfig.uniqueAeronDirectory = uniqueAeronDirectory
-        newConfig.uniqueAeronDirectoryID = uniqueAeronDirectoryID
-
-        newConfig.ipcTermBufferLength = ipcTermBufferLength
-        newConfig.publicationTermBufferLength = publicationTermBufferLength
-        newConfig.aeronErrorFilter = aeronErrorFilter
-
-        return newConfig
-    }
-    fun mediaDriverEquals(other: dorkbox.network.Configuration): Boolean {
+    @Suppress("DuplicatedCode", "RedundantIf")
+    private fun mediaDriverEquals(other: dorkbox.network.Configuration): Boolean {
         if (threadingMode != other.threadingMode) return false
         if (networkMtuSize != other.networkMtuSize) return false
         if (initialWindowLength != other.initialWindowLength) return false
@@ -832,8 +868,6 @@ abstract class Configuration {
         result = 31 * result + sendBufferSize
         result = 31 * result + receiveBufferSize
 
-        result = 31 * result + (aeronDirectory?.hashCode() ?: 0)
-        result = 31 * result + uniqueAeronDirectory.hashCode()
         result = 31 * result + uniqueAeronDirectoryID
 
         result = 31 * result + ipcTermBufferLength

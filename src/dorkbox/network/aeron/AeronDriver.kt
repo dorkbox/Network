@@ -217,15 +217,16 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
     init {
         // not EVERYTHING is used for the media driver. For ** REUSING ** the media driver, only care about those specific settings
-        val mediaDriverConfig = config.asMediaDriverConfig()
+        val mediaDriverConfig = Configuration.MediaDriverConfig(config)
 
         // this happens more than once! (this is ok)
         config.validate()
         mediaDriverConfig.validate()
 
+        require(!config.contextDefined) { "Aeron configuration has already been initialized, unable to reuse this configuration!" }
+
         // cannot make any more changes to the configuration!
         config.initialize(logger)
-        mediaDriverConfig.initialize(logger)
 
         val driverId = mediaDriverConfig.id
 
