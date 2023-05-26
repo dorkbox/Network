@@ -246,15 +246,15 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
                     // register a logger so that we are notified when there is an error in Aeron
                     driver.addError {
-                        logger.error(this) { "Aeron driver [$driverId] error!" }
+                        logger.error(this) { "Aeron Driver [$driverId]: error!" }
                     }
 
                     if (logEverything) {
-                        logger.debug { "Creating Aeron driver [$driverId] at '${driver.aeronDirectory}'" }
+                        logger.debug { "Aeron Driver [$driverId]: Creating at '${driver.aeronDirectory}'" }
                     }
                 } else {
                     if (logEverything) {
-                        logger.debug { "Reusing Aeron driver [$driverId]" }
+                        logger.debug { "Aeron Driver [$driverId]: Reusing driver" }
                     }
 
                     // assign our endpoint to the driver
