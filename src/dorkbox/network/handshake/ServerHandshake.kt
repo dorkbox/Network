@@ -23,8 +23,13 @@ import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.aeron.mediaDriver.ServerIpcConnectionDriver
 import dorkbox.network.aeron.mediaDriver.ServerUdpConnectionDriver
 import dorkbox.network.aeron.mediaDriver.ServerUdpHandshakeDriver
-import dorkbox.network.connection.*
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.EventDispatcher.Companion.EVENT
+import dorkbox.network.connection.ListenerManager
+import dorkbox.network.connection.PublicKeyValidationState
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.util.sync.CountDownLatch
 import io.aeron.Publication
@@ -33,7 +38,7 @@ import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
 import java.net.Inet4Address
 import java.net.InetAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 
 
 /**
@@ -375,7 +380,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
     suspend fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
         mediaDriver: ServerUdpHandshakeDriver,
-        driver: AeronDriver,
         handshakePublication: Publication,
         clientAddress: InetAddress,
         clientAddressString: String,
@@ -521,8 +525,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 listenAddress = mediaDriver.listenAddress,
                 remoteAddress = clientAddress,
                 remoteAddressString = clientAddressString,
+
                 portPub = portPub,
                 portSub = portSub,
+
                 logInfo = logType,
                 isReliable = isReliable,
                 logger = logger
@@ -533,6 +539,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 "SERVER INFO:\n" +
                 "sessionId PUB: $connectionSessionIdPub\n" +
                 "sessionId SUB: $connectionSessionIdSub\n" +
+
                 "streamId PUB: $connectionStreamIdPub\n" +
                 "streamId SUB: $connectionStreamIdSub\n" +
 
