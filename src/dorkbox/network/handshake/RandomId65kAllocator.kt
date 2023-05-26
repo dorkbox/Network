@@ -33,7 +33,6 @@ import java.security.SecureRandom
  * @param max The maximum ID (exclusive)
  */
 class RandomId65kAllocator(private val min: Int, max: Int) {
-
     constructor(size: Int): this(1, size + 1)
 
 
@@ -41,17 +40,9 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
     private val maxAssignments: Int
     private val assigned = atomic(0)
 
-
-    // DEBUGGING
-    private val debugChecks = mutableListOf<Int>()
-
-
-
     init {
         // IllegalArgumentException
-        require(max >= min) {
-            "Maximum value $max must be >= minimum value $min"
-        }
+        require(max >= min) { "Maximum value $max must be >= minimum value $min" }
 
         val max65k = Short.MAX_VALUE * 2
         maxAssignments = (max - min).coerceIn(1, max65k)
@@ -82,7 +73,6 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
 
         assigned.getAndIncrement()
         val id = cache.take()
-        debugChecks.add(id)
         return id
     }
 
@@ -94,10 +84,9 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
     fun free(id: Int) {
         val assigned = assigned.decrementAndGet()
         if (assigned < 0) {
-            throw AllocationException("Unequal allocate/free method calls (too many 'free' calls).")
+            throw AllocationException("Unequal allocate/free method calls attempting to free [$id] (too many 'free' calls).")
         }
         cache.put(id)
-        debugChecks.remove(id)
     }
 
     fun isEmpty(): Boolean {
@@ -105,6 +94,6 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
     }
 
     override fun toString(): String {
-        return "$assigned (${debugChecks.joinToString()})"
+        return "$assigned"
     }
 }
