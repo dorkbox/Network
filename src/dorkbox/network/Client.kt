@@ -235,7 +235,6 @@ open class Client<CONNECTION : Connection>(
             else ->  throw IllegalArgumentException("Cannot connect to $remoteAddress It is an invalid address type!")
         }
 
-
         // Default IPC ports are flipped because they are in the perspective of the SERVER
         connect(remoteAddress = remoteAddress,
                 remoteAddressString = remoteAddressString,
@@ -247,7 +246,6 @@ open class Client<CONNECTION : Connection>(
     /**
      * Will attempt to connect to the server via IPC, with a default 30 second connection timeout and will block until completed.
      *
-     * @param ipcId The IPC address for the client to connect to
      * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
      *
      * @throws IllegalArgumentException if the remote address is invalid
@@ -255,14 +253,10 @@ open class Client<CONNECTION : Connection>(
      * @throws ClientRejectedException if the client connection is rejected
      */
     @Suppress("DuplicatedCode")
-    fun connectIpc(
-        ipcId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID,
-        connectionTimeoutSec: Int = 30) = runBlocking {
-
+    fun connectIpc(connectionTimeoutSec: Int = 30) = runBlocking {
         connect(remoteAddress = null, // required!
                 remoteAddressString = IPC_NAME,
                 remoteAddressPrettyString = IPC_NAME,
-                ipcId = ipcId,
                 connectionTimeoutSec = connectionTimeoutSec)
     }
 
@@ -356,8 +350,7 @@ open class Client<CONNECTION : Connection>(
      *
      * ### Case does not matter, and "localhost" is the default.
      *
-     * @param remoteAddress The network or if localhost, IPC address for the client to connect to
-     * @param ipcId The IPC publication address for the client to connect to
+     * @param remoteAddress The network or if localhost for the client to connect to
      * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
      * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
      *
@@ -372,8 +365,6 @@ open class Client<CONNECTION : Connection>(
         remoteAddress: InetAddress? = null,
         remoteAddressString: String,
         remoteAddressPrettyString: String,
-        // Default IPC ports are flipped because they are in the perspective of the SERVER
-        ipcId: Int = AeronDriver.IPC_HANDSHAKE_STREAM_ID,
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true)
     {
@@ -386,10 +377,10 @@ open class Client<CONNECTION : Connection>(
             EventDispatcher.launch(EVENT.CONNECT) {
                 logger.debug { "Redispatch connect request started!" }
                 disconnectCDL.await(config.connectionCloseTimeoutInSeconds.toLong(), TimeUnit.SECONDS)
+
                 connect(remoteAddress,
                         remoteAddressString,
                         remoteAddressPrettyString,
-                        ipcId,
                         connectionTimeoutSec,
                         reliable)
             }
@@ -436,7 +427,7 @@ open class Client<CONNECTION : Connection>(
             startDriver()
             initializeState()
         } catch (e: Exception) {
-            logger.error(e) { "Unable to start the network driver" }
+            logger.error(e) { "Unable to start the endpoint!" }
             return
         }
 
@@ -457,13 +448,13 @@ open class Client<CONNECTION : Connection>(
 
         if (DEBUG_CONNECTIONS) {
             // connections are extremely difficult to diagnose when the connection timeout is short
-            timoutInNanos = 0 // no timeout!
+            timoutInNanos += TimeUnit.HOURS.toSeconds(1).toInt()
             handshakeTimeoutSec += TimeUnit.HOURS.toSeconds(1).toInt()
         }
 
         val startTime = System.nanoTime()
         var success = false
-        while (timoutInNanos == 0L || System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < timoutInNanos) {
             if (isShutdown()) {
                 // If we are connecting indefinitely, we have to make sure to end the connection process
                 val exception = ClientShutdownException("Unable to connect while shutting down")
@@ -482,8 +473,7 @@ open class Client<CONNECTION : Connection>(
                 aeronDriver.delayLingerTimeout(2)
             }
 
-            // we have to pre-set the type (which will ultimately get set to the correct type on success)
-            var type = ""
+
 
             // the handshake connection is closed when the handshake has an error, or it is finished
             var handshakeConnection: ClientHandshakeDriver? = null
@@ -501,7 +491,6 @@ open class Client<CONNECTION : Connection>(
                     autoChangeToIpc = autoChangeToIpc,
                     remoteAddress = remoteAddress,
                     remoteAddressString = remoteAddressString,
-                    ipcId = ipcId,
                     config = config,
                     handshakeTimeoutSec = handshakeTimeoutSec,
                     reliable = reliable,
