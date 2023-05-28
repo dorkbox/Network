@@ -298,13 +298,6 @@ abstract class Configuration {
             field = value
         }
 
-    var controlPort: Int = 0
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
-
-
     /**
      * How long a connection must be disconnected before we cleanup the memory associated with it
      */
@@ -350,6 +343,14 @@ abstract class Configuration {
             field = value
         }
 
+    /**
+     * Changes the default ping timeout, used to test the liveliness of a connection, specifically it's round-trip performance
+     */
+    var pingTimeoutSeconds = 30
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
 
     /**
      * Specifies the Java thread that will poll the underlying network for incoming messages
@@ -888,11 +889,11 @@ abstract class Configuration {
         if (enableIpc != other.enableIpc) return false
         if (enableRemoteSignatureValidation != other.enableRemoteSignatureValidation) return false
         if (port != other.port) return false
-        if (controlPort != other.controlPort) return false
         if (connectionCloseTimeoutInSeconds != other.connectionCloseTimeoutInSeconds) return false
         if (connectionCheckIntervalNanos != other.connectionCheckIntervalNanos) return false
         if (connectionExpirationTimoutNanos != other.connectionExpirationTimoutNanos) return false
         if (isReliable != other.isReliable) return false
+        if (pingTimeoutSeconds != other.pingTimeoutSeconds) return false
         if (settingsStore != other.settingsStore) return false
         if (serialization != other.serialization) return false
         if (pollIdleStrategy != other.pollIdleStrategy) return false
@@ -914,7 +915,7 @@ abstract class Configuration {
         result = 31 * result + enableIpc.hashCode()
         result = 31 * result + enableRemoteSignatureValidation.hashCode()
         result = 31 * result + port
-        result = 31 * result + controlPort
+        result = 31 * result + pingTimeoutSeconds
         result = 31 * result + connectionCloseTimeoutInSeconds
         result = 31 * result + connectionCheckIntervalNanos.hashCode()
         result = 31 * result + connectionExpirationTimoutNanos.hashCode()

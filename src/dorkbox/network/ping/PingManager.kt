@@ -15,8 +15,6 @@
  */
 
 
-@file:Suppress("UNUSED_PARAMETER")
-
 package dorkbox.network.ping
 
 import dorkbox.network.connection.Connection
@@ -28,11 +26,6 @@ import java.util.concurrent.*
  * How to handle ping messages
  */
 internal class PingManager<CONNECTION : Connection> {
-    companion object {
-        val DEFAULT_TIMEOUT_SECONDS = 30
-    }
-
-    @Suppress("UNCHECKED_CAST")
     suspend fun manage(connection: CONNECTION, responseManager: ResponseManager, ping: Ping, logger: KLogger) {
         if (ping.pongTime == 0L) {
             ping.pongTime = System.currentTimeMillis()
