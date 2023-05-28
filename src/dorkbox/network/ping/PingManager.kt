@@ -18,6 +18,7 @@
 package dorkbox.network.ping
 
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.EventDispatcher.Companion.EVENT
 import dorkbox.network.rmi.ResponseManager
 import mu.KLogger
 import java.util.concurrent.*
@@ -28,9 +29,17 @@ import java.util.concurrent.*
 internal class PingManager<CONNECTION : Connection> {
     suspend fun manage(connection: CONNECTION, responseManager: ResponseManager, ping: Ping, logger: KLogger) {
         if (ping.pongTime == 0L) {
-            ping.pongTime = System.currentTimeMillis()
-            connection.send(ping)
+            // this is on the server. We have to construct a new object, otherwise there are issues with deserialization + object caching.
+            val pong = Ping()
+            pong.packedId = ping.packedId
+            pong.pingTime = ping.pingTime
+            pong.pongTime = System.currentTimeMillis()
+
+            if (!connection.send(pong)) {
+                logger.error { "Error returning ping $pong" }
+            }
         } else {
+            // this is on the client
             ping.finishedTime = System.currentTimeMillis()
 
             val rmiId = ping.packedId
@@ -41,6 +50,8 @@ internal class PingManager<CONNECTION : Connection> {
             val result = responseManager.getWaiterCallback<suspend Ping.() -> Unit>(rmiId, logger)
             if (result != null) {
                 result(ping)
+            } else {
+                logger.error { "Unable to receive ping, there was no waiting response for $ping ($rmiId)" }
             }
         }
     }
@@ -64,7 +75,7 @@ internal class PingManager<CONNECTION : Connection> {
         ping.pingTime = System.currentTimeMillis()
 
         // ALWAYS cancel the ping after XXX seconds
-        responseManager.cancelRequest(TimeUnit.SECONDS.toMillis(pingTimeoutSeconds.toLong()), id, logger) {
+        responseManager.cancelRequest(EVENT.PING, TimeUnit.SECONDS.toMillis(pingTimeoutSeconds.toLong()), id, logger) {
             // kill the callback, since we are now "cancelled". If there is a race here (and the response comes at the exact same time)
             // we don't care since either it will be null or it won't (if it's not null, it will run the callback)
             result = null

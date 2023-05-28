@@ -18,11 +18,10 @@ package dorkbox.network.rmi
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.EventDispatcher.Companion.EVENT
+import dorkbox.network.exceptions.AllocationException
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import mu.KotlinLogging
 import java.util.concurrent.locks.*
@@ -70,15 +69,11 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
         }
         ids.shuffle()
 
-        // populate the array of randomly assigned ID's + waiters. It is OK for this to happen in a new thread
-        runBlocking {
-            try {
-                for (it in ids) {
-                    waiterCache.send(ResponseWaiter(it))
-                }
-            } catch (e: ClosedSendChannelException) {
-                // this can happen if we are starting/stopping an endpoint (and thus a response-manager) VERY quickly, and can be ignored
-                logger.trace("Error during RMI preparation. Usually this is caused by fast a start-then-stop")
+        // populate the array of randomly assigned ID's + waiters.
+        for (it in ids) {
+            val success = waiterCache.trySend(ResponseWaiter(it))
+            if (!success.isSuccess) {
+                throw AllocationException("Error during RMI preparation.")
             }
         }
     }
@@ -184,8 +179,8 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
     /**
      * Cancels the RMI request in the given timeout, the callback is executed inside the read lock
      */
-    suspend fun cancelRequest(timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
-        EventDispatcher.launch(EVENT.RMI) {
+    suspend fun cancelRequest(event: EVENT, timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
+        EventDispatcher.launch(event) {
             delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
             // check if we have a result or not

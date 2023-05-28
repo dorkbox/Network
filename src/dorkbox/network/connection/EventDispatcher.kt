@@ -39,7 +39,7 @@ class EventDispatcher {
         private val logger = KotlinLogging.logger(EventDispatcher::class.java.simpleName)
 
         enum class EVENT {
-            INIT, CONNECT, DISCONNECT, CLOSE, RMI
+            INIT, CONNECT, DISCONNECT, CLOSE, RMI, PING
         }
 
         private val eventData = Array(EVENT.values().size) {

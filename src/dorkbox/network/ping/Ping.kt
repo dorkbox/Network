@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ class Ping {
     var packedId = 0
 
     // ping/pong times are the LOWER 8 bytes of a long, which gives us 65 seconds. This is the same as the max value timeout (a short) so this is acceptable
-
     var pingTime = 0L
     var pongTime = 0L
 
