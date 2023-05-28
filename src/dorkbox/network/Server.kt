@@ -357,9 +357,9 @@ open class Server<CONNECTION : Connection>(
                     }
                 }
             } finally {
+                ipcPoller.close()
                 ipv4Poller.close()
                 ipv6Poller.close()
-                ipcPoller.close()
 
                 // clear all the handshake info
                 handshake.clear()
