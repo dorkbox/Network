@@ -110,7 +110,7 @@ class DisconnectReconnectTest : BaseTest() {
                 delay(2000)
 
                 logger.error("Disconnecting....")
-                client.close()
+                close()
             }
 
             client.onDisconnect {
@@ -177,6 +177,7 @@ class DisconnectReconnectTest : BaseTest() {
                 // the close operation will kill the connection, preventing the response from returning.
                 RemoteObject.cast(closerObject).async = true
 
+                // this just calls connection.close() (on the client)
                 closerObject.close()
             }
         }
@@ -316,7 +317,7 @@ class DisconnectReconnectTest : BaseTest() {
 
                 val count = reconnectCount.getAndIncrement()
                 if (count == 3) {
-                    logger.error("Shutting down")
+                    logger.error("Count reached, shutting down")
                     stopEndPoints()
                 }
                 else {

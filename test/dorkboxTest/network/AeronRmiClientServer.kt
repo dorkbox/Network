@@ -27,9 +27,9 @@ import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.connection.Connection
 import dorkbox.storage.Storage
-import dorkbox.util.async
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
@@ -166,6 +166,7 @@ class AeronRmiClientServer {
     }
 
 
+    @OptIn(DelicateCoroutinesApi::class)
     fun client(index: Int, configuration: ClientConfiguration): Client<Connection> {
         val client = Client<Connection>(configuration)
 
@@ -182,7 +183,7 @@ class AeronRmiClientServer {
             }
             logger.error("$index: starting dispatch")
             try {
-                async(Dispatchers.Default) {
+                GlobalScope.async(Dispatchers.Default) {
                     var startTime = System.nanoTime()
                     logger.error("$index: started dispatch")
 
@@ -214,8 +215,6 @@ class AeronRmiClientServer {
                             previousCount = counter
                         }
                     }
-
-                    logger.error { "$index: DONE with client " }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -261,9 +260,10 @@ class AeronRmiClientServer {
 //        server.rmiGlobal.save(TestCowImpl(44), 44)
 
         // we must always make sure that aeron is shut-down before starting again.
-        while (server.isRunning()) {
-            server.logger.error("Aeron was still running. Waiting for it to stop...")
-            Thread.sleep(2000)
+        runBlocking {
+            if (!server.ensureStopped()) {
+                throw IllegalStateException("Aeron was unable to shut down in a timely manner.")
+            }
         }
 
         server.onInit {

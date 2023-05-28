@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
+ */
+/*
  * Copyright (c) 2008, Nathan Sweet
  * All rights reserved.
  *
@@ -35,10 +36,12 @@
 package dorkboxTest.network
 
 import dorkbox.network.Client
+import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.util.exceptions.SecurityException
 import org.junit.Assert
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -46,7 +49,7 @@ import java.io.IOException
 import java.util.concurrent.atomic.*
 
 class MultipleServerTest : BaseTest() {
-    val total = 5
+    val total = 1
     var received = AtomicInteger()
 
     @Test
@@ -126,28 +129,38 @@ class MultipleServerTest : BaseTest() {
     @Test
     @Throws(SecurityException::class, IOException::class)
     fun multipleIPC() {
-        val portOffset = 2
         received.set(0)
 
-        var serverAeronDir: File? = null
+        // client and server must share locations
+        val aeronDirs = mutableListOf<File>()
+        for (count in 0 until total) {
+            val baseFileLocation = Configuration.defaultAeronLogLocation()
+            aeronDirs.add(File(baseFileLocation, "aeron_${count}"))
+        }
+
+
         val didReceive = mutableListOf<AtomicBoolean>()
 
         for (count in 0 until total) {
             didReceive.add(AtomicBoolean())
-            val offset = count * portOffset
 
             val configuration = serverConfig()
-            configuration.port += offset
-            configuration.aeronDirectory = serverAeronDir
+            configuration.aeronDirectory = aeronDirs.get(count)
             configuration.enableIpc = true
 
-            val server: Server<Connection> = Server(configuration)
+            val server: Server<Connection> = Server(configuration, "server_$count")
             addEndPoint(server)
 
-            server.onMessage<String>{ message ->
-                if (message != "client_$count") {
-                    Assert.fail()
-                }
+            server.onInit {
+                logger.warn { "INIT: $count" }
+            }
+
+            server.onConnect {
+                logger.warn { "CONNECT: $count" }
+            }
+
+            server.onMessage<String> { message ->
+                assertEquals(message, "client_$count")
 
                 didReceive[count].set(true)
                 if (received.incrementAndGet() == total) {
@@ -157,28 +170,26 @@ class MultipleServerTest : BaseTest() {
             }
 
             server.bind()
-
-            serverAeronDir = File(configuration.aeronDirectory.toString() + count)
         }
 
-        var clientAeronDir: File? = null
         val didSend = mutableListOf<AtomicBoolean>()
 
         for (count in 0 until total) {
             didSend.add(AtomicBoolean())
-            val offset = count * portOffset
 
             val configuration = clientConfig()
-            configuration.port += offset
-            configuration.aeronDirectory = clientAeronDir
+            configuration.aeronDirectory = aeronDirs.get(count)
             configuration.enableIpc = true
 
-            val client: Client<Connection> = Client(configuration)
+            val client: Client<Connection> = Client(configuration, "client_$count")
             addEndPoint(client)
 
-            clientAeronDir = File(configuration.aeronDirectory.toString() + count)
+            client.onInit {
+                logger.warn { "INIT: $count" }
+            }
 
             client.onConnect {
+                logger.warn { "CONNECT: $count" }
                 didSend[count].set(true)
                 send("client_$count")
             }

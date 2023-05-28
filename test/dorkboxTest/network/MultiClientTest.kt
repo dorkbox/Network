@@ -37,9 +37,6 @@ class MultiClientTest : BaseTest() {
 
     @Test
     fun multiConnectClient() {
-        setLogLevel(Level.TRACE)
-
-
         // clients first, so they try to connect to the server at (roughly) the same time
         val clients = mutableListOf<Client<Connection>>()
         for (i in 1..totalCount) {

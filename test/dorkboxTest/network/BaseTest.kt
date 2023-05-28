@@ -26,18 +26,21 @@ import dorkbox.network.ClientConfiguration
 import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
+import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
 import dorkbox.os.OS
 import dorkbox.storage.Storage
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException
+import dorkbox.util.sync.CountingLatch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
 import org.slf4j.LoggerFactory
-import java.lang.Thread.sleep
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.concurrent.*
@@ -155,8 +158,7 @@ abstract class BaseTest {
         }
     }
 
-    @Volatile
-    private var latch = CountDownLatch(1)
+    private val latch = CountingLatch()
 
     @Volatile
     private var autoFailThread: Thread? = null
@@ -166,101 +168,171 @@ abstract class BaseTest {
     @Volatile
     private var isStopping = false
 
+    private val logger: org.slf4j.Logger = LoggerFactory.getLogger(this.javaClass.simpleName)!!
+
     init {
-        System.err.println("---- " + this.javaClass.simpleName)
+        setLogLevel(Level.TRACE)
+
+        logger.error("---- " + this.javaClass.simpleName)
 
         // we must always make sure that aeron is shut-down before starting again.
-        while (Server.isRunning(serverConfig())) {
-            println("Aeron was still running. Waiting for it to stop...")
-            sleep(2000)
+        if (!Server.ensureStopped(serverConfig()) || !Client.ensureStopped(clientConfig())) {
+            throw IllegalStateException("Unable to continue, AERON was unable to stop.")
         }
     }
 
-    fun addEndPoint(endPointConnection: EndPoint<*>) {
-        endPointConnections.add(endPointConnection)
-        latch = CountDownLatch(endPointConnections.size + 1)
+
+    fun addEndPoint(endPoint: EndPoint<*>) {
+        endPoint.onInit { logger.error { "init" } }
+        endPoint.onConnect { logger.error { "connect" } }
+        endPoint.onDisconnect { logger.error { "disconnect" } }
+
+        endPoint.onError { logger.error(it) { "ERROR!" } }
+
+        endPointConnections.add(endPoint)
+        latch.countUp()
     }
 
     /**
      * Immediately stop the endpoints
      */
     fun stopEndPoints(stopAfterMillis: Long = 0L) {
+        runBlocking {
+            stopEndPointsSuspending(stopAfterMillis)
+        }
+    }
+
+    /**
+     * Immediately stop the endpoints
+     */
+    suspend fun stopEndPointsSuspending(stopAfterMillis: Long = 0L) {
         if (isStopping) {
             return
         }
         isStopping = true
 
-        // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
-        // ARE NOT in the same thread group as netty!
         if (stopAfterMillis > 0L) {
-            sleep(stopAfterMillis)
+            delay(stopAfterMillis)
         }
 
-        // we start with "1", so make sure adjust if we want an accurate count
-        println("Shutting down ${endPointConnections.size} (${latch.count - 1}) endpoints...")
+        val clients = endPointConnections.filterIsInstance<Client<Connection>>()
+        val servers = endPointConnections.filterIsInstance<Server<Connection>>()
 
-        val remainingConnections = mutableListOf<EndPoint<*>>()
+        logger.error("Unit test shutting down ${clients.size} clients...")
+        logger.error("Unit test shutting down ${servers.size} server...")
+
 
         // shutdown clients first
-        endPointConnections.forEach { endPoint ->
-            if (endPoint is Client) {
-                endPoint.close()
+        clients.forEach { endPoint ->
+            // we are ASYNC, so we must use callbacks to execute code
+            endPoint.close {
                 latch.countDown()
-                println("Done closing: ${endPoint.type.simpleName}")
-            } else {
-                remainingConnections.add(endPoint)
             }
         }
-
-        // shutdown everything else (should only be servers) last
-        println("Shutting down ${remainingConnections.size} (${latch.count - 1}) endpoints...")
-        remainingConnections.forEach {
-            it.close()
-            latch.countDown()
+        clients.forEach { endPoint ->
+             endPoint.waitForClose()
         }
 
-        // we start with "1", so make sure to end it
-        latch.countDown()
+
+        // shutdown everything else (should only be servers) last
+        servers.forEach {
+            it.close {
+                latch.countDown()
+            }
+        }
+        servers.forEach { endPoint ->
+            endPoint.waitForClose()
+        }
+
+
         endPointConnections.clear()
+
+        // now we have to wait for the close events to finish running.
+        val error = try {
+            if (EndPoint.DEBUG_CONNECTIONS) {
+                latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
+            } else {
+                latch.await(AUTO_FAIL_TIMEOUT, TimeUnit.SECONDS)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+
+        logger.error("Shut down all endpoints... Success($error)")
     }
     /**
-     * Wait for network client/server threads to shutdown for the specified time. 0 will wait forever
+     * Wait for network client/server threads to shut down for the specified time. 0 will wait forever
      *
      * it should close as close to naturally as possible, otherwise there are problems
      *
      * @param stopAfterSeconds how many seconds to wait, the default is 2 minutes.
      */
     fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT, preShutdownAction: () -> Unit = {}) {
-        val latchTriggered = try {
-            if (stopAfterSeconds == 0L) {
-                latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
-            } else {
-                latch.await(stopAfterSeconds, TimeUnit.SECONDS)
+        var latchTriggered = try {
+            runBlocking {
+                if (stopAfterSeconds == 0L || EndPoint.DEBUG_CONNECTIONS) {
+                    latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
+                } else {
+                    latch.await(stopAfterSeconds, TimeUnit.SECONDS)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+
+        // run actions before we actually shutdown, but after we wait
+        if (latchTriggered) {
+            preShutdownAction()
+        } else {
+            println("LATCH NOT TRIGGERED")
+            println("LATCH NOT TRIGGERED")
+            println("LATCH NOT TRIGGERED")
+            println("LATCH NOT TRIGGERED")
+        }
+
+        // always stop the endpoints (even if we already called this)
+        try {
+            stopEndPoints()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+
+        // still. we must WAIT for it to finish!
+        latchTriggered = try {
+            runBlocking {
+                if (stopAfterSeconds == 0L || EndPoint.DEBUG_CONNECTIONS) {
+                    latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
+                } else {
+                    latch.await(stopAfterSeconds, TimeUnit.SECONDS)
+                }
             }
         } catch (e: InterruptedException) {
             e.printStackTrace()
             false
         }
 
-        // run actions before we actually shutdown, but after we wait
-        if (!latchTriggered) {
-            preShutdownAction()
-        }
+        logger.error("Finished shutting ($latchTriggered) down all endpoints...")
 
-        // always stop the endpoints
-        stopEndPoints()
+        runBlocking {
+            if (!AeronDriver.areAllInstancesClosed(logger)) {
+                throw RuntimeException("Unable to shutdown! There are still Aeron drivers loaded!")
+            }
+        }
     }
 
     @Before
     fun setupFailureCheck() {
-        autoFailThread = Thread(Runnable {
+        autoFailThread = Thread({
             // not the best, but this works for our purposes. This is a TAD hacky, because we ALSO have to make sure that we
             // ARE NOT in the same thread group as netty!
             try {
                 Thread.sleep(AUTO_FAIL_TIMEOUT * 1000L)
 
                 // if the thread is interrupted, then it means we finished the test.
-                System.err.println("Test did not complete in a timely manner...")
+                LoggerFactory.getLogger(this.javaClass.simpleName).error("Test did not complete in a timely manner...")
                 runBlocking {
                     stopEndPoints(0L)
                 }
