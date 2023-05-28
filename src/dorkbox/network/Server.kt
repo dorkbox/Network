@@ -376,7 +376,8 @@ open class Server<CONNECTION : Connection>(
                 // finish closing -- this lets us make sure that we don't run into race conditions on the thread that calls close()
                 try {
                     shutdownEventLatch.countDown()
-                } catch (ignored: Exception) {}
+                } catch (ignored: Exception) {
+                }
             }
         })
     }
@@ -409,8 +410,10 @@ open class Server<CONNECTION : Connection>(
      *
      * This function will be called for **only** network clients (IPC client are excluded)
      */
-    fun filter(ipFilterRule: IpFilterRule) = runBlocking {
-        listenerManager.filter(ipFilterRule)
+    fun filter(ipFilterRule: IpFilterRule) {
+        runBlocking {
+            listenerManager.filter(ipFilterRule)
+        }
     }
 
     /**
@@ -431,8 +434,10 @@ open class Server<CONNECTION : Connection>(
      *
      * This function will be called for **only** network clients (IPC client are excluded)
      */
-    fun filter(function: CONNECTION.() -> Boolean) = runBlocking {
-        listenerManager.filter(function)
+    fun filter(function: CONNECTION.() -> Boolean)  {
+        runBlocking {
+            listenerManager.filter(function)
+        }
     }
 
     /**
