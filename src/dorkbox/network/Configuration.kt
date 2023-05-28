@@ -199,6 +199,42 @@ abstract class Configuration {
                 else -> { true }
             }
         }
+
+        /**
+         * Depending on the OS, different base locations for the Aeron log directory are preferred.
+         */
+        fun defaultAeronLogLocation(logger: KLogger = NOP_LOGGER): File {
+            return when {
+                OS.isMacOsX -> {
+                    // does the recommended location exist??
+
+                    // Default is to try the RAM drive
+                    val suggestedLocation = File("/Volumes/DevShm")
+                    if (suggestedLocation.exists()) {
+                        suggestedLocation
+                    }
+                    else {
+                        if (logger !== NOP_LOGGER) {
+                            if (!alreadyShownTempFsTips) {
+                                alreadyShownTempFsTips = true
+                                logger.info(
+                                    "It is recommended to create a RAM drive for best performance. For example\n" + "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`"
+                                )
+                            }
+                        }
+
+                        OS.TEMP_DIR
+                    }
+                }
+                OS.isLinux -> {
+                    // this is significantly faster for linux than using the temp dir
+                    File("/dev/shm/")
+                }
+                else -> {
+                    OS.TEMP_DIR
+                }
+            }
+        }
     }
 
     /**
@@ -597,42 +633,6 @@ abstract class Configuration {
 
 
     /**
-     * Depending on the OS, different base locations for the Aeron log directory are preferred.
-     */
-    private fun suggestAeronLogLocation(logger: KLogger): File {
-        return when {
-            OS.isMacOsX -> {
-                // does the recommended location exist??
-
-                // Default is to try the RAM drive
-                val suggestedLocation = File("/Volumes/DevShm")
-                if (suggestedLocation.exists()) {
-                    suggestedLocation
-                }
-                else {
-                    if (logger !== NOP_LOGGER) {
-                        if (!alreadyShownTempFsTips) {
-                            alreadyShownTempFsTips = true
-                            logger.info(
-                                "It is recommended to create a RAM drive for best performance. For example\n" + "\$ diskutil erasevolume HFS+ \"DevShm\" `hdiutil attach -nomount ram://\$((2048 * 2048))`"
-                            )
-                        }
-                    }
-
-                    OS.TEMP_DIR
-                }
-            }
-            OS.isLinux -> {
-                // this is significantly faster for linux than using the temp dir
-                File("/dev/shm/")
-            }
-            else -> {
-                OS.TEMP_DIR
-            }
-        }
-    }
-
-    /**
      * Validates the current configuration. Throws an exception if there are problems.
      */
     @Suppress("DuplicatedCode")
@@ -742,7 +742,7 @@ abstract class Configuration {
          */
         var dir = aeronDirectory
         if (dir == null) {
-            val baseFileLocation = suggestAeronLogLocation(logger)
+            val baseFileLocation = defaultAeronLogLocation(logger)
             val aeronLogDirectory = if (uniqueAeronDirectory) {
                 // this is incompatible with IPC, and will not be set if IPC is enabled (error will be thrown on validate)
                 File(baseFileLocation, "aeron_${mediaDriverId()}")
