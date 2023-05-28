@@ -249,9 +249,6 @@ internal constructor(val type: Class<*>,
     private val pingManager = PingManager<CONNECTION>()
 
 
-
-
-
     init {
         require(EventDispatcher.isActive) { "The Event Dispatch is no longer active. It has been shutdown" }
         require(messageDispatch.isActive) { "The Message Dispatch is no longer active. It has been shutdown" }

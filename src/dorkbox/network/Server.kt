@@ -231,6 +231,7 @@ open class Server<CONNECTION : Connection>(
 
         try {
             startDriver()
+            initializeState()
         } catch (e: Exception) {
             logger.error(e) { "Unable to start the network driver" }
             return@runBlocking
