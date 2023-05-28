@@ -521,8 +521,10 @@ open class Client<CONNECTION : Connection>(
                 // once we're done with the connection process, stop trying
                 break
             } catch (e: ClientRetryException) {
-                val message = if (isIPC) {
-                    "Unable to connect to IPC $ipcId, retrying..."
+                val message = if (connection0 == null) {
+                    "Unable to connect, retrying..."
+                } else if (isIPC) {
+                    "Unable to connect to IPC, retrying..."
                 } else {
                     "Unable to connect to UDP $remoteAddressPrettyString, retrying..."
                 }
@@ -565,8 +567,10 @@ open class Client<CONNECTION : Connection>(
 
         if (!success) {
             if (System.nanoTime() - startTime < timoutInNanos) {
-                val type = if (isIPC) {
-                    "IPC $ipcId"
+                val type = if (connection0 == null) {
+                    "UNKNOWN"
+                } else if (isIPC) {
+                    "IPC"
                 } else {
                     remoteAddressPrettyString + ":" + config.port
                 }
