@@ -194,6 +194,8 @@ internal constructor(val type: Class<*>,
 
     val logger: KLogger = KotlinLogging.logger(loggerName)
 
+    val uuid : UUID
+
     // this is rather silly, BUT if there are more complex errors WITH the coroutine that occur, a regular try/catch WILL NOT catch it.
     // ADDITIONALLY, an error handler is ONLY effective at the first, top-level `launch`. IT WILL NOT WORK ANY OTHER WAY.
     private val errorHandler = CoroutineExceptionHandler { _, exception ->
@@ -288,6 +290,7 @@ internal constructor(val type: Class<*>,
         // we have to be able to specify the property store
         storage = SettingsStore(config.settingsStore, logger)
         crypto = CryptoManagement(logger, storage, type, config.enableRemoteSignatureValidation)
+        uuid = RandomBasedGenerator(crypto.secureRandom).generate()
 
         // Only starts the media driver if we are NOT already running!
         try {
@@ -960,7 +963,7 @@ logger.error { "CLOSE ACTION 1" }
 
 
     override fun toString(): String {
-        return "EndPoint [${type.simpleName}]"
+        return "EndPoint [${type.simpleName}] $uuid"
     }
 
     override fun hashCode(): Int {
