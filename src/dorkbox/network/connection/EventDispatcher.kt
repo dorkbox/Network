@@ -18,12 +18,14 @@ package dorkbox.network.connection
 
 import dorkbox.network.Configuration
 import dorkbox.util.NamedThreadFactory
+import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import mu.KotlinLogging
 import java.util.concurrent.*
 
 /**
@@ -31,6 +33,11 @@ import java.util.concurrent.*
  */
 class EventDispatcher {
     companion object {
+        private val DEBUG_EVENTS = false
+        private val traceId = atomic(0)
+
+        private val logger = KotlinLogging.logger(EventDispatcher::class.java.simpleName)
+
         enum class EVENT {
             INIT, CONNECT, DISCONNECT, CLOSE, RMI
         }
@@ -55,7 +62,16 @@ class EventDispatcher {
          * This is because there are blocking dependencies: DISCONNECT -> CONNECT.
          */
         fun launch(event: EVENT, function: suspend CoroutineScope.() -> Unit): Job {
-            return eventData[event.ordinal].launch(block = function)
+            return if (DEBUG_EVENTS) {
+                val id = traceId.getAndIncrement()
+                eventData[event.ordinal].launch(block = {
+                    logger.debug { "Starting $event : $id" }
+                    function()
+                    logger.debug { "Finished $event : $id" }
+                })
+            } else {
+                eventData[event.ordinal].launch(block = function)
+            }
         }
     }
 }
