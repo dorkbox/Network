@@ -613,11 +613,8 @@ internal constructor(val type: Class<*>,
                 streamingManager.processControlMessage(message, readKryo,this@EndPoint, connection)
             }
             is StreamingData -> {
-                // NOTE: this will read extra data from the kryo input as necessary (which is why it's not on action dispatch)!
-                val rawInput = readKryo.readerBuffer
-                val dataLength = rawInput.readVarInt(true)
-                message.payload = rawInput.readBytes(dataLength)
-
+                // NOTE: this will read extra data from the kryo input as necessary, which is why it's not on action dispatch!
+                message.payload = readKryo.readBytes()
 
                 // NOTE: This MUST NOT be on a new co-routine. It must be on the same thread!
                 try {

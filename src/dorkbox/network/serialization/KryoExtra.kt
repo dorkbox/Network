@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +26,8 @@ import org.agrona.DirectBuffer
  */
 class KryoExtra<CONNECTION: Connection>() : Kryo() {
     // for kryo serialization
-    internal val readerBuffer = AeronInput()
-    internal val writerBuffer = AeronOutput()
+    private val readerBuffer = AeronInput()
+    private val writerBuffer = AeronOutput()
 
     // crypto + compression have to work with native byte arrays, so here we go...
 //    private val reader = Input(ABSOLUTE_MAX_SIZE_OBJECT)
@@ -205,6 +205,18 @@ class KryoExtra<CONNECTION: Connection>() : Kryo() {
         this.connection = connection
 
         return readClassAndObject(reader)
+    }
+
+
+    /**
+     * OUTPUT:
+     * ++++++++++++++++
+     * + object bytes +
+     * ++++++++++++++++
+     */
+    fun readBytes(): ByteArray {
+        val dataLength = readerBuffer.readVarInt(true)
+        return readerBuffer.readBytes(dataLength)
     }
 //
 //    /**
