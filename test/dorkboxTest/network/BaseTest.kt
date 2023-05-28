@@ -279,6 +279,7 @@ abstract class BaseTest {
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            stopEndPoints()
             false
         }
 

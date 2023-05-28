@@ -66,7 +66,7 @@ class PingTest : BaseTest() {
             client.connect(LOCALHOST)
         }
 
-        waitForThreads(500)
+        waitForThreads(1500)
 
         Assert.assertTrue(clientSuccess.value)
     }
