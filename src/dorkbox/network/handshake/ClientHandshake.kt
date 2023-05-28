@@ -47,6 +47,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     private val pollIdleStrategy = endPoint.config.pollIdleStrategy.clone()
 
+    private val handshaker = endPoint.handshaker
+
     // used to keep track and associate UDP/IPC handshakes between client/server
     @Volatile
     var connectKey = 0L
@@ -79,7 +81,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
             val aeronLogInfo = "$streamId/$sessionId : $clientAddressString"
 
-            val message = endPoint.readHandshakeMessage(buffer, offset, length, aeronLogInfo)
+            val message = handshaker.readMessage(buffer, offset, length, aeronLogInfo)
 
             failedException = null
             needToRetry = false
@@ -175,14 +177,14 @@ internal class ClientHandshake<CONNECTION: Connection>(
         val subscription = handshakeConnection.subscription
 
         try {
-            endPoint.writeHandshakeMessage(publication, handshakeConnection.details,
-                                           HandshakeMessage.helloFromClient(
-                                               connectKey = connectKey,
-                                               publicKey = publicKey,
-                                               sessionId = handshakeConnection.sessionIdSub,
-                                               streamId = handshakeConnection.streamIdSub,
-                                               portSub = handshakeConnection.portSub
-                                           ))
+            handshaker.writeMessage(publication, handshakeConnection.details,
+                                    HandshakeMessage.helloFromClient(
+                                        connectKey = connectKey,
+                                        publicKey = publicKey,
+                                        sessionId = handshakeConnection.sessionIdSub,
+                                        streamId = handshakeConnection.streamIdSub,
+                                        portSub = handshakeConnection.portSub
+                                    ))
         } catch (e: Exception) {
             handshakeConnection.close()
 
@@ -237,14 +239,15 @@ internal class ClientHandshake<CONNECTION: Connection>(
         connectionTimeoutSec: Int,
         aeronLogInfo: String
     ) {
-        val registrationMessage = HandshakeMessage.doneFromClient(connectKey,
-                                                                  handshakeConnection.portSub,
-                                                                  clientConnection.streamIdSub,
-                                                                  clientConnection.sessionIdSub)
+        val registrationMessage = HandshakeMessage.doneFromClient(
+                                                                        connectKey,
+                                                                        handshakeConnection.portSub,
+                                                                        clientConnection.streamIdSub,
+                                                                        clientConnection.sessionIdSub)
 
         // Send the done message to the server.
         try {
-            endPoint.writeHandshakeMessage(handshakeConnection.publication, aeronLogInfo, registrationMessage)
+            handshaker.writeMessage(handshakeConnection.publication, aeronLogInfo, registrationMessage)
         } catch (e: Exception) {
             handshakeConnection.close()
 

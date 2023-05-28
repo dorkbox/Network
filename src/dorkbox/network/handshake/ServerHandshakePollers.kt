@@ -55,6 +55,9 @@ internal object ServerHandshakePollers {
         val handshake: ServerHandshake<CONNECTION>,
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION
     ) {
+
+        private val handshaker = server.handshaker
+
         suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
@@ -64,7 +67,7 @@ internal object ServerHandshakePollers {
             val streamId = header.streamId()
             val aeronLogInfo = "$streamId/$sessionId : IPC" // Server is the "source", client mirrors the server
 
-            val message = server.readHandshakeMessage(buffer, offset, length, aeronLogInfo)
+            val message = handshaker.readMessage(buffer, offset, length, aeronLogInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
@@ -98,6 +101,7 @@ internal object ServerHandshakePollers {
                     // Manage the Handshake state. When done with a connection, this returns false
                     if (!handshake.validateMessageTypeAndDoPending(
                                     server = server,
+                                    handshaker = handshaker,
                                     handshakePublication = publication,
                                     message = message,
                                     logger = logger)) {
@@ -108,6 +112,7 @@ internal object ServerHandshakePollers {
 
                     handshake.processIpcHandshakeMessageServer(
                             server = server,
+                            handshaker = handshaker,
                             aeronDriver = driver,
                             handshakePublication = publication,
                             message = message,
@@ -134,10 +139,11 @@ internal object ServerHandshakePollers {
         val isReliable: Boolean,
         val port: Int
     ) {
-        val listenAddress = mediaDriver.listenAddress
-        val listenAddressString = IP.toString(listenAddress)
-        val timoutInNanos = driver.getLingerNs()
-        val logInfo = mediaDriver.logInfo
+        private val listenAddress = mediaDriver.listenAddress!!
+        private val listenAddressString = IP.toString(listenAddress)
+        private val timoutInNanos = driver.getLingerNs()
+        private val logInfo = mediaDriver.logInfo
+        private val handshaker = server.handshaker
 
         suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
@@ -177,7 +183,7 @@ internal object ServerHandshakePollers {
             val aeronLogInfo = "$streamId/$sessionId : $clientAddressString"
 
 
-            val message = server.readHandshakeMessage(buffer, offset, length, aeronLogInfo)
+            val message = handshaker.readMessage(buffer, offset, length, aeronLogInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
@@ -213,6 +219,7 @@ internal object ServerHandshakePollers {
                     // Manage the Handshake state. When done with a connection, this returns
                     if (!handshake.validateMessageTypeAndDoPending(
                                     server = server,
+                                    handshaker = handshaker,
                                     handshakePublication = publication,
                                     message = message,
                                     logger = logger)) {
@@ -224,6 +231,7 @@ internal object ServerHandshakePollers {
 
                     handshake.processUdpHandshakeMessageServer(
                         server = server,
+                        handshaker = handshaker,
                         mediaDriver = mediaDriver,
                         handshakePublication = publication,
                         clientAddress = clientAddress,
