@@ -96,7 +96,7 @@ internal constructor(val type: Class<*>,
 
     companion object {
         // connections are extremely difficult to diagnose when the connection timeout is short
-        internal const val DEBUG_CONNECTIONS = true
+        internal const val DEBUG_CONNECTIONS = false
 
         internal const val IPC_NAME = "IPC"
 
@@ -108,7 +108,7 @@ internal constructor(val type: Class<*>,
         /**
          * @return the error code text for the specified number
          */
-        private fun errorCodeName(result: Long): String {
+        internal fun errorCodeName(result: Long): String {
             return when (result) {
                 // The publication is not connected to a subscriber, this can be an intermittent state as subscribers come and go.
                 Publication.NOT_CONNECTED -> "Not connected"
@@ -412,16 +412,20 @@ internal constructor(val type: Class<*>,
      *
      * For a server, this function will be called for ALL client connections.
      */
-    fun onInit(function: suspend CONNECTION.() -> Unit) = runBlocking {
-        listenerManager.onInit(function)
+    fun onInit(function: suspend CONNECTION.() -> Unit){
+        runBlocking {
+            listenerManager.onInit(function)
+        }
     }
 
     /**
      * Adds a function that will be called when a client/server connection first establishes a connection with the remote end.
      * 'onInit()' callbacks will execute for both the client and server before `onConnect()` will execute will "connects" with each other
      */
-    fun onConnect(function: suspend CONNECTION.() -> Unit)  = runBlocking {
-        listenerManager.onConnect(function)
+    fun onConnect(function: suspend CONNECTION.() -> Unit) {
+        runBlocking {
+            listenerManager.onConnect(function)
+        }
     }
 
     /**
@@ -429,8 +433,10 @@ internal constructor(val type: Class<*>,
      *
      * Do not try to send messages! The connection will already be closed, resulting in an error if you attempt to do so.
      */
-    fun onDisconnect(function: suspend CONNECTION.() -> Unit) = runBlocking {
-        listenerManager.onDisconnect(function)
+    fun onDisconnect(function: suspend CONNECTION.() -> Unit) {
+        runBlocking {
+            listenerManager.onDisconnect(function)
+        }
     }
 
     /**
@@ -438,8 +444,10 @@ internal constructor(val type: Class<*>,
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onError(function: CONNECTION.(Throwable) -> Unit) = runBlocking {
-        listenerManager.onError(function)
+    fun onError(function: CONNECTION.(Throwable) -> Unit) {
+        runBlocking {
+            listenerManager.onError(function)
+        }
     }
 
     /**
@@ -447,8 +455,10 @@ internal constructor(val type: Class<*>,
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onErrorGlobal(function: (Throwable) -> Unit) = runBlocking {
-        listenerManager.onError(function)
+    fun onErrorGlobal(function: (Throwable) -> Unit) {
+        runBlocking {
+            listenerManager.onError(function)
+        }
     }
 
     /**
@@ -456,8 +466,10 @@ internal constructor(val type: Class<*>,
      *
      * This method should not block for long periods as other network activity will not be processed until it returns.
      */
-    fun <Message : Any> onMessage(function: suspend CONNECTION.(Message) -> Unit) = runBlocking {
-        listenerManager.onMessage(function)
+    fun <Message : Any> onMessage(function: suspend CONNECTION.(Message) -> Unit) {
+        runBlocking {
+            listenerManager.onMessage(function)
+        }
     }
 
     /**
