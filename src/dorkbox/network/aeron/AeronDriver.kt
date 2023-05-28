@@ -20,7 +20,6 @@ package dorkbox.network.aeron
 
 import dorkbox.collections.IntMap
 import dorkbox.network.Configuration
-import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.handshake.RandomId65kAllocator
@@ -36,6 +35,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
+import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.IoUtil
 import org.agrona.SemanticVersion
@@ -44,6 +44,7 @@ import org.agrona.concurrent.UnsafeBuffer
 import org.agrona.concurrent.errors.ErrorLogReader
 import org.agrona.concurrent.ringbuffer.RingBufferDescriptor
 import org.agrona.concurrent.status.CountersReader
+import org.slf4j.Logger
 import java.io.File
 
 /**
@@ -75,7 +76,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
         // guarantee that session/stream ID's will ALWAYS be unique! (there can NEVER be a collision!)
         val sessionIdAllocator = RandomId65kAllocator(AeronDriver.RESERVED_SESSION_ID_LOW, AeronDriver.RESERVED_SESSION_ID_HIGH)
-        val streamIdAllocator = RandomId65kAllocator(Short.MAX_VALUE * 2) // this is 65k
+        val streamIdAllocator = RandomId65kAllocator((Short.MAX_VALUE * 2) - 1) // this is 65k-1 values
 
 
         // prevents multiple instances, within the same JVM, from starting at the exact same time.
