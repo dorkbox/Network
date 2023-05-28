@@ -369,6 +369,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
             classesToRegister.clear() // don't need to keep a reference, since this can never be reinitialized.
 
             if (logger.isTraceEnabled) {
+                logger.trace { "Registered classes for serialization:" }
                 // log the in-order output first
                 finalClassRegistrations.forEach { classRegistration ->
                     logger.trace(classRegistration.info)
@@ -393,8 +394,6 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      */
     internal fun finishClientConnect(kryoRegistrationDetailsFromServer: ByteArray): KryoExtra<CONNECTION>? {
         // we self initialize our registrations, THEN we compare them to the server.
-        // NOTE: we MUST be super careful to never modify `classesToRegister`!!
-
         val kryo = initGlobalKryo()
 
         val newRegistrations = initializeRegistrationsForClient(kryoRegistrationDetailsFromServer, classesToRegister) ?: return null
@@ -402,6 +401,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         try {
             initializeRegistrations(kryo, newRegistrations)
 
+            // NOTE: we MUST be super careful to never modify `classesToRegister`!!
             // NOTE: DO NOT CLEAR THIS WITH CLIENTS, THEY HAVE TO REBUILD EVERY TIME WITH A NEW CONNECTION!
             // classesToRegister.clear() // don't need to keep a reference, since this can never be reinitialized.
 
@@ -605,10 +605,22 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
                 }
 
                 when (typeId) {
-                    0 -> newRegistrations.add(ClassRegistration0(clazz, maker.newInstantiatorOf(Class.forName(serializerName)).newInstance() as Serializer<Any>))
-                    1 -> newRegistrations.add(ClassRegistration1(clazz, id))
-                    2 -> newRegistrations.add(ClassRegistration2(clazz, maker.newInstantiatorOf(Class.forName(serializerName)).newInstance() as Serializer<Any>, id))
-                    3 -> newRegistrations.add(ClassRegistration3(clazz))
+                    0 -> {
+                        logger.trace { "REGISTRATION (0) ${clazz.name}" }
+                        newRegistrations.add(ClassRegistration0(clazz, maker.newInstantiatorOf(Class.forName(serializerName)).newInstance() as Serializer<Any>))
+                    }
+                    1 -> {
+                        logger.trace { "REGISTRATION (1) ${clazz.name} :: $id" }
+                        newRegistrations.add(ClassRegistration1(clazz, id))
+                    }
+                    2 -> {
+                        logger.trace { "REGISTRATION (2) ${clazz.name} :: $id" }
+                        newRegistrations.add(ClassRegistration2(clazz, maker.newInstantiatorOf(Class.forName(serializerName)).newInstance() as Serializer<Any>, id))
+                    }
+                    3 -> {
+                        logger.trace { "REGISTRATION (3) ${clazz.name}" }
+                        newRegistrations.add(ClassRegistration3(clazz))
+                    }
                     4 -> {
                         // NOTE: when reconstructing, if we have access to the IMPL, we use it. WE MIGHT NOT HAVE ACCESS TO IT ON THE CLIENT!
                         // we literally want everything to be 100% the same.
