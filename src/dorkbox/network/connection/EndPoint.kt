@@ -228,6 +228,7 @@ internal constructor(val type: Class<*>,
      */
     internal val crypto: CryptoManagement
 
+    // this barrier only prevents multiple shutdowns (in the event this close() is called multiple timees)
     private val shutdown = atomic(false)
 
     @Volatile
@@ -274,8 +275,6 @@ internal constructor(val type: Class<*>,
         val kryo = serialization.initGlobalKryo()
         serialization.finishInit(type, kryo)
 
-
-        handshakeSendIdleStrategy = config.sendIdleStrategy.cloneToNormal()
 
         // the initial kryo created for serialization is reused as the read kryo
         if (type == Server::class.java) {
