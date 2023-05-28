@@ -85,6 +85,47 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         // have to keep track of configurations and drivers, as we do not want to start the same media driver configuration multiple times (this causes problems!)
         internal val driverConfigurations = IntMap<AeronDriverInternal>(4)
 
+
+        /**
+         * @return true if all JVM tracked Aeron drivers are closed, false otherwise
+         */
+        suspend fun areAllInstancesClosed(logger: Logger): Boolean {
+            val logger1 = KotlinLogging.logger(logger)
+            return areAllInstancesClosed(logger1)
+        }
+
+        /**
+         * @return true if all JVM tracked Aeron drivers are closed, false otherwise
+         */
+        suspend fun areAllInstancesClosed(logger: KLogger = KotlinLogging.logger(AeronDriver::class.java.simpleName)): Boolean {
+            return lock.withLock {
+                val traceEnabled = logger.isTraceEnabled
+
+                driverConfigurations.forEach { entry ->
+                    val driver = entry.value
+                    val closed = if (traceEnabled) driver.isInUse(logger) else driver.isRunning()
+
+                    if (closed) {
+                        logger.error { "Aeron Driver [${driver.driverId}]: still running during check" }
+                        return@withLock false
+                    }
+                }
+
+                if (!traceEnabled) {
+                    // this is already checked if we are in trace mode.
+                    driverConfigurations.forEach { entry ->
+                        val driver = entry.value
+                        if (driver.isInUse(logger)) {
+                            logger.error { "Aeron Driver [${driver.driverId}]: still in use during check" }
+                            return@withLock false
+                        }
+                    }
+                }
+
+                true
+            }
+        }
+
         private fun aeronCounters(aeronLocation: File): CountersReader? {
             val resolve = aeronLocation.resolve("cnc.dat")
             return if (resolve.exists()) {
