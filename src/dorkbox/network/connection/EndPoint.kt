@@ -218,9 +218,8 @@ internal constructor(val type: Class<*>,
     // The readKryo WILL RE-CONFIGURED during the client handshake! (it is all the same thread, so object visibility is not a problem)
     internal var readKryo: KryoExtra<CONNECTION>
     internal var streamingReadKryo: KryoExtra<CONNECTION>
-    private val handshakeReadKryo: KryoExtra<CONNECTION>
-    private val handshakeWriteKryo: KryoExtra<CONNECTION>
-    private val handshakeSendIdleStrategy: IdleStrategy
+
+    internal val handshaker: Handshaker<CONNECTION>
 
     /**
      * Crypto and signature management
@@ -285,9 +284,6 @@ internal constructor(val type: Class<*>,
             readKryo = kryo
             streamingReadKryo = kryo
         }
-
-        handshakeReadKryo = serialization.newHandshakeKryo()
-        handshakeWriteKryo = serialization.newHandshakeKryo()
 
         // we have to be able to specify the property store
         storage = SettingsStore(config.settingsStore, logger)
