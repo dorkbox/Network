@@ -16,7 +16,6 @@
 package dorkbox.network.handshake
 
 import dorkbox.network.Client
-import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.mediaDriver.ClientConnectionDriver
 import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
 import dorkbox.network.connection.Connection
@@ -32,7 +31,7 @@ import io.aeron.logbuffer.Header
 import kotlinx.coroutines.delay
 import mu.KLogger
 import org.agrona.DirectBuffer
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 
 internal class ClientHandshake<CONNECTION: Connection>(
     private val endPoint: Client<CONNECTION>,
@@ -167,7 +166,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    suspend fun hello(aeronDriver: AeronDriver, handshakeConnection: ClientHandshakeDriver, connectionTimeoutSec: Int) : ClientConnectionInfo {
+    suspend fun hello(handshakeConnection: ClientHandshakeDriver, connectionTimeoutSec: Int) : ClientConnectionInfo {
         failedException = null
         connectKey = getSafeConnectKey()
         val publicKey = endPoint.storage.getPublicKey()!!
@@ -233,7 +232,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
     suspend fun done(
-        aeronDriver: AeronDriver,
         handshakeConnection: ClientHandshakeDriver,
         clientConnection: ClientConnectionDriver,
         connectionTimeoutSec: Int,
