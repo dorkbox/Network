@@ -319,50 +319,38 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
     }
 
 
-    fun addPublication(publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication =
-        internal.addPublication(logger, publicationUri, aeronLogInfo, streamId)
+    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication {
+        return internal.addPublication(logger, publicationUri, aeronLogInfo, streamId)
+    }
 
     /**
      * This is not a thread-safe publication!
      */
-    fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication =
-        internal.addExclusivePublication(logger, publicationUri, aeronLogInfo, streamId)
+    suspend fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication {
+        return internal.addExclusivePublication(logger, publicationUri, aeronLogInfo, streamId)
+    }
 
-    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Subscription =
-        internal.addSubscription(logger, subscriptionUri, aeronLogInfo, streamId)
+    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Subscription {
+        return internal.addSubscription(logger, subscriptionUri, aeronLogInfo, streamId)
+    }
 
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      *
      * This can throw exceptions!
      */
-    suspend fun closeAndDeletePublication(publication: Publication, aeronLogInfo: String) =
+    suspend fun closeAndDeletePublication(publication: Publication, aeronLogInfo: String) {
         internal.closeAndDeletePublication(publication, aeronLogInfo, logger)
+    }
 
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      *
      * This can throw exceptions!
      */
-    internal suspend fun closeAndDeletePublication(connection: ClientHandshakeDriver) =
-        internal.closeAndDeletePublication(connection.publication, connection.logInfo, logger)
-
-
-    /**
-     * Guarantee that the publication is closed AND the backing file is removed
-     *
-     * This can throw exceptions!
-     */
-    internal suspend fun closeAndDeleteSubscription(connection: ClientHandshakeDriver) =
-        internal.closeAndDeleteSubscription(connection.subscription, connection.logInfo, logger)
-
-    /**
-     * Guarantee that the publication is closed AND the backing file is removed
-     *
-     * This can throw exceptions!
-     */
-    suspend fun closeAndDeleteSubscription(subscription: Subscription, aeronLogInfo: String) =
+    suspend fun closeAndDeleteSubscription(subscription: Subscription, aeronLogInfo: String) {
         internal.closeAndDeleteSubscription(subscription, aeronLogInfo, logger)
+    }
 
 
     /**
