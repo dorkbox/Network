@@ -34,19 +34,14 @@ class StorageTest : BaseTest() {
         val serverConfig = serverConfig {
             settingsStore = sharedStore
         }
-        val server = Server<Connection>(serverConfig)
-        server.bind()
-
         val config = clientConfig {
             settingsStore = sharedStore
         }
-        val client = Client<Connection>(config)
 
-        client.connect(LOCALHOST)
+        val serverSalt = Server<Connection>(serverConfig).use { it.storage.getSalt() }
+        val clientSalt = Client<Connection>(config).use { it.storage.getSalt() }
 
-        Assert.assertTrue(server.storage.getSalt().contentEquals(client.storage.getSalt()))
-
-        server.close()
+        Assert.assertTrue(serverSalt.contentEquals(clientSalt))
     }
 
 
