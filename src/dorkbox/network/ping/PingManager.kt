@@ -29,14 +29,11 @@ import java.util.concurrent.*
 internal class PingManager<CONNECTION : Connection> {
     suspend fun manage(connection: CONNECTION, responseManager: ResponseManager, ping: Ping, logger: KLogger) {
         if (ping.pongTime == 0L) {
-            // this is on the server. We have to construct a new object, otherwise there are issues with deserialization + object caching.
-            val pong = Ping()
-            pong.packedId = ping.packedId
-            pong.pingTime = ping.pingTime
-            pong.pongTime = System.currentTimeMillis()
+            // this is on the server.
+            ping.pongTime = System.currentTimeMillis()
 
-            if (!connection.send(pong)) {
-                logger.error { "Error returning ping $pong" }
+            if (!connection.send(ping)) {
+                logger.error { "Error returning ping: $ping" }
             }
         } else {
             // this is on the client
