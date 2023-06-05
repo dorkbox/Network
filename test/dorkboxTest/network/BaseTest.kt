@@ -335,7 +335,7 @@ abstract class BaseTest {
                 // if the thread is interrupted, then it means we finished the test.
                 LoggerFactory.getLogger(this.javaClass.simpleName).error("Test did not complete in a timely manner...")
                 runBlocking {
-                    stopEndPoints(0L)
+                    stopEndPoints()
                 }
                 Assert.fail("Test did not complete in a timely manner.")
             } catch (ignored: InterruptedException) {
