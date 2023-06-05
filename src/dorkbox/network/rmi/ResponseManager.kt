@@ -18,9 +18,9 @@ package dorkbox.network.rmi
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.EventDispatcher.Companion.EVENT
-import dorkbox.network.exceptions.AllocationException
+import dorkbox.objectPool.ObjectPool
+import dorkbox.objectPool.SuspendingPool
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import mu.KLogger
 import mu.KotlinLogging
@@ -42,14 +42,14 @@ import kotlin.concurrent.write
  *  - 1 is reserved for ASYNC (the response will never be sent back, and we don't wait for it)
  *
  */
-internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int = 2) {
+internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int = 2) {
     companion object {
-        val TIMEOUT_EXCEPTION = Exception()
+        val TIMEOUT_EXCEPTION = Exception().apply { stackTrace = arrayOf<StackTraceElement>() }
         private val logger: KLogger = KotlinLogging.logger(ResponseManager::class.java.simpleName)
     }
 
     private val rmiWaitersInUse = atomic(0)
-    private val waiterCache = Channel<ResponseWaiter>(maxValuesInCache)
+    private val waiterCache: SuspendingPool<ResponseWaiter>
 
     private val pendingLock = ReentrantReadWriteLock()
     private val pending = arrayOfNulls<Any?>(maxValuesInCache+1) // +1 because it's possible to have the value 65535 in the cache
@@ -60,22 +60,17 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
         require(minimumValue > 0) { "The minimum value $minimumValue must be > 0"}
 
         // create a shuffled list of ID's. This operation is ONLY performed ONE TIME per endpoint!
-        val ids = mutableListOf<Int>()
+        val ids = mutableListOf<ResponseWaiter>()
 
         // 0 is special, and is never added!
         // 1 is special, and is used for ASYNC (the response will never be sent back)
         for (id in minimumValue..maxValuesInCache) {
-            ids.add(id)
+            ids.add(ResponseWaiter(id))
         }
         ids.shuffle()
 
         // populate the array of randomly assigned ID's + waiters.
-        for (it in ids) {
-            val success = waiterCache.trySend(ResponseWaiter(it))
-            if (!success.isSuccess) {
-                throw AllocationException("Error during RMI preparation.")
-            }
-        }
+        waiterCache = ObjectPool.suspending(ids)
     }
 
     /**
@@ -121,7 +116,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
             val result = previous.result
 
             // always return this to the cache!
-            waiterCache.send(previous)
+            waiterCache.put(previous)
             rmiWaitersInUse.getAndDecrement()
 
             return result as T
@@ -136,7 +131,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
     suspend fun prep(logger: KLogger): ResponseWaiter {
-        val waiter = waiterCache.receive()
+        val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
         logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
 
@@ -156,7 +151,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
      * We ONLY care about the ID to get the correct response info. If there is no response, the ID can be ignored.
      */
     suspend fun prepWithCallback(logger: KLogger, function: Any): Int {
-        val waiter = waiterCache.receive()
+        val waiter = waiterCache.take()
         rmiWaitersInUse.getAndIncrement()
         logger.trace { "[RM] prep in-use: ${rmiWaitersInUse.value}" }
 
@@ -259,7 +254,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
         }
 
         // always return the waiter to the cache
-        waiterCache.send(responseWaiter)
+        waiterCache.put(responseWaiter)
         rmiWaitersInUse.getAndDecrement()
 
         if (resultOrWaiter is ResponseWaiter) {
@@ -282,8 +277,6 @@ internal class ResponseManager(maxValuesInCache: Int = 65535, minimumValue: Int 
         while (rmiWaitersInUse.value > 0) {
             delay(100)
         }
-
-        waiterCache.close()
 
         pendingLock.write {
             pending.forEachIndexed { index, _ ->
