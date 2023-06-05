@@ -15,6 +15,8 @@
  */
 package dorkboxTest.network
 
+import dorkbox.netUtil.IPv4
+import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
@@ -29,9 +31,74 @@ class SimpleTest : BaseTest() {
     var received = AtomicBoolean()
     val sent = AtomicBoolean()
 
+    enum class ConnectType(val ip4: Boolean, val ip6: Boolean, val ipc: Boolean) {
+        IPC(false, false, true),
+        IPC4(true, false, true),
+        IPC6(false, true, true),
+        IPC46(true, true, true),
+        IPC64(true, true, true),
+        IP4(true, false, false),
+        IP6(false, true, false),
+        IP46(true, true, false),
+        IP64(true, true, false)
+    }
+
+
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIpv4() {
+    fun simpleIp4() {
+        simple(ConnectType.IP4)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIp6() {
+        simple(ConnectType.IP6)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIp46() {
+        simple(ConnectType.IP46)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIp64() {
+        simple(ConnectType.IP64)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpc() {
+        simple(ConnectType.IPC)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpc4Fallback() {
+        simple(ConnectType.IPC4, ConnectType.IPC)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpc6Fallback() {
+        simple(ConnectType.IPC6 , ConnectType.IPC)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpc46Fallback() {
+        simple(ConnectType.IPC46 , ConnectType.IPC)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpc64Fallback() {
+        simple(ConnectType.IPC64 , ConnectType.IPC)
+    }
+
+    private fun simple(clientType: ConnectType, serverType: ConnectType = clientType) {
         received.set(false)
         sent.set(false)
 
@@ -39,9 +106,9 @@ class SimpleTest : BaseTest() {
             val configuration = serverConfig()
             configuration.port = 12312
 
-            configuration.enableIPv4 = true
-            configuration.enableIPv6 = false
-            configuration.enableIpc = false
+            configuration.enableIPv4 = serverType.ip4
+            configuration.enableIPv6 = serverType.ip6
+            configuration.enableIpc = serverType.ipc
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
@@ -62,140 +129,31 @@ class SimpleTest : BaseTest() {
         run {
             val configuration = clientConfig()
             configuration.port = 12312
-            configuration.aeronDirectory = null
 
-            configuration.enableIPv4 = true
-            configuration.enableIPv6 = false
-            configuration.enableIpc = false
-
-
-            val client: Client<Connection> = Client(configuration)
-            addEndPoint(client)
-
-
-            client.onConnect {
-                sent.set(true)
-                send("client")
-            }
-
-            client.connect(LOCALHOST)
-        }
-
-        waitForThreads()
-
-        assertTrue(sent.get())
-        assertTrue(received.get())
-    }
-
-    @Test
-    @Throws(SecurityException::class, IOException::class)
-    fun simpleIpv6() {
-        received.set(false)
-        sent.set(false)
-
-        run {
-            val configuration = serverConfig()
-            configuration.port = 12312
-            configuration.enableIPv4 = false
-            configuration.enableIPv6 = true
-            configuration.enableIpc = false
-
-            val server: Server<Connection> = Server(configuration)
-            addEndPoint(server)
-
-            server.onMessage<String> { message ->
-                if (message != "client") {
-                    Assert.fail()
-                }
-
-                received.set(true)
-                logger.error("Done, stopping endpoints")
-                stopEndPoints()
-            }
-
-            server.bind()
-        }
-
-        run {
-            val configuration = clientConfig()
-            configuration.port = 12312
-            configuration.aeronDirectory = null
-
-            configuration.enableIPv4 = false
-            configuration.enableIPv6 = true
-            configuration.enableIpc = false
+            configuration.enableIPv4 = clientType.ip4
+            configuration.enableIPv6 = clientType.ip6
+            configuration.enableIpc = clientType.ipc
 
 
             val client: Client<Connection> = Client(configuration)
             addEndPoint(client)
 
-
             client.onConnect {
                 sent.set(true)
                 send("client")
             }
 
-            client.connect(LOCALHOST)
-        }
-
-        waitForThreads()
-
-        assertTrue(sent.get())
-        assertTrue(received.get())
-    }
-
-    @Test
-    @Throws(SecurityException::class, IOException::class)
-    fun simpleIPC() {
-        received.set(false)
-        sent.set(false)
-
-        run {
-            val configuration = serverConfig()
-            configuration.enableIpc = true
-
-            val server: Server<Connection> = Server(configuration, "server")
-            addEndPoint(server)
-
-            server.onInit {
-                logger.warn { "INIT: server" }
+            when (clientType) {
+                ConnectType.IPC -> client.connect()
+                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST)
             }
-
-            server.onConnect {
-                logger.warn { "CONNECT: server" }
-            }
-
-            server.onMessage<String> { message ->
-                if (message != "client") {
-                    Assert.fail()
-                }
-
-                received.set(true)
-                logger.error("Done, stopping endpoints")
-                stopEndPoints()
-            }
-
-            server.bind()
-        }
-
-        run {
-            val configuration = clientConfig()
-            configuration.enableIpc = true
-
-            val client: Client<Connection> = Client(configuration, "client")
-            addEndPoint(client)
-
-            client.onInit {
-                logger.warn { "INIT: client" }
-            }
-
-            client.onConnect {
-                logger.warn { "CONNECT: client" }
-                sent.set(true)
-                send("client")
-            }
-
-            client.connect(LOCALHOST)
         }
 
         waitForThreads()

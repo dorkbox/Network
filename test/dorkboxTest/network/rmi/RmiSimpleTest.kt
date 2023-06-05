@@ -38,7 +38,6 @@ package dorkboxTest.network.rmi
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
-import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkboxTest.network.BaseTest
@@ -51,32 +50,64 @@ import org.junit.Test
 
 class RmiSimpleTest : BaseTest() {
 
+    enum class ConnectType(val ip4: Boolean, val ip6: Boolean, val ipc: Boolean) {
+        IPC(false, false, true),
+        IPC4(true, false, true),
+        IPC6(false, true, true),
+        IPC46(true, true, true),
+        IPC64(true, true, true),
+        IP4(true, false, false),
+        IP6(false, true, false),
+        IP46(true, true, false),
+        IP64(true, true, false)
+    }
+
+
     @Test
     fun rmiIPv4NetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = false)
+        rmiGlobal(ConnectType.IP4)
     }
 
     @Test
     fun rmiIPv6NetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = false)
+        rmiGlobal(ConnectType.IP6)
     }
 
     @Test
     fun rmiBothIPv4ConnectNetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = true)
+        rmiGlobal(ConnectType.IP46)
     }
 
     @Test
     fun rmiBothIPv6ConnectNetworkGlobal() {
-        rmiGlobal(isIpv4 = true, isIpv6 = true, runIpv4Connect = true)
+        rmiGlobal(ConnectType.IP64)
     }
 
     @Test
     fun rmiIpcNetworkGlobal() {
-        rmiGlobal {
-            enableIpc = true
-        }
+        rmiGlobal(ConnectType.IPC)
     }
+
+    @Test
+    fun rmiIpcNetworkGlobalFallback4() {
+        rmiGlobal(ConnectType.IPC4)
+    }
+
+    @Test
+    fun rmiIpcNetworkGlobalFallback6() {
+        rmiGlobal(ConnectType.IPC6)
+    }
+
+    @Test
+    fun rmiIpcNetworkGlobalFallback46() {
+        rmiGlobal(ConnectType.IPC46)
+    }
+
+    @Test
+    fun rmiIpcNetworkGlobalFallback64() {
+        rmiGlobal(ConnectType.IPC64)
+    }
+
 
 
 
@@ -85,50 +116,57 @@ class RmiSimpleTest : BaseTest() {
 
     @Test
     fun rmiIPv4NetworkConnection() {
-        rmi(isIpv4 = true, isIpv6 = false)
+        rmi(ConnectType.IP4)
     }
 
     @Test
     fun rmiIPv6NetworkConnection() {
-        rmi(isIpv4 = false, isIpv6 = true)
+        rmi(ConnectType.IP6)
     }
 
     @Test
     fun rmiBothIPv4ConnectNetworkConnection() {
-        rmi(isIpv4 = true, isIpv6 = true)
+        rmi(ConnectType.IP46)
     }
 
 
     @Test
     fun rmiBothIPv6ConnectNetworkConnection() {
-        rmi(isIpv4 = true, isIpv6 = true, runIpv4Connect = true)
+        rmi(ConnectType.IP64)
     }
 
     @Test
     fun rmiIpcNetworkConnection() {
-        rmi {
-            enableIpc = true
-        }
+        rmi(ConnectType.IPC)
     }
 
-    private fun doConnect(isIpv4: Boolean, isIpv6: Boolean, runIpv4Connect: Boolean, client: Client<Connection>) {
-        when {
-            isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST)
-            isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
-            isIpv4 -> client.connect(IPv4.LOCALHOST)
-            isIpv6 -> client.connect(IPv6.LOCALHOST)
-            else -> client.connect()
-        }
+    @Test
+    fun rmiIpcFallback4NetworkConnection() {
+        rmi(ConnectType.IPC4)
     }
 
+    @Test
+    fun rmiIpcFallback6NetworkConnection() {
+        rmi(ConnectType.IPC6)
+    }
+
+    @Test
+    fun rmiIpcFallback46NetworkConnection() {
+        rmi(ConnectType.IPC46)
+    }
+
+    @Test
+    fun rmiIpcFallback64NetworkConnection() {
+        rmi(ConnectType.IPC64)
+    }
 
     // GLOBAL rmi stuff cannot CREATE or DELETE (only save/get)
-    private fun rmiGlobal(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
+    private fun rmiGlobal(clientType: ConnectType, serverType: ConnectType = clientType) {
         run {
             val configuration = serverConfig()
-            configuration.enableIPv4 = isIpv4
-            configuration.enableIPv6 = isIpv6
-            config(configuration)
+            configuration.enableIPv4 = serverType.ip4
+            configuration.enableIPv6 = serverType.ip6
+            configuration.enableIpc = serverType.ipc
 
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
             configuration.serialization.register(MessageWithTestCow::class.java)
@@ -163,7 +201,9 @@ class RmiSimpleTest : BaseTest() {
 
         run {
             val configuration = clientConfig()
-            config(configuration)
+            configuration.enableIPv4 = clientType.ip4
+            configuration.enableIPv6 = clientType.ip6
+            configuration.enableIpc = clientType.ipc
             //            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
 
             val client = Client<Connection>(configuration)
@@ -183,16 +223,26 @@ class RmiSimpleTest : BaseTest() {
                 val id = `object`.id()
                 Assert.assertEquals(4, id)
                 client.logger.error("Finished test for: Client -> Server")
-                stopEndPoints(2000)
+                stopEndPoints()
             }
-
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
 
             client.logger.error("Starting test for: Client -> Server")
 
             // this creates a GLOBAL object on the server (instead of a connection specific object)
             runBlocking {
+// fix me!
+            }
 
+            when (clientType) {
+                ConnectType.IPC -> client.connect()
+                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST)
             }
         }
 
@@ -201,12 +251,12 @@ class RmiSimpleTest : BaseTest() {
 
 
 
-    fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
+    fun rmi(clientType: ConnectType, serverType: ConnectType = clientType) {
         run {
             val configuration = serverConfig()
-            configuration.enableIPv4 = isIpv4
-            configuration.enableIPv6 = isIpv6
-            config(configuration)
+            configuration.enableIPv4 = serverType.ip4
+            configuration.enableIPv6 = serverType.ip6
+            configuration.enableIpc = serverType.ipc
 
             configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
             configuration.serialization.register(MessageWithTestCow::class.java)
@@ -237,7 +287,9 @@ class RmiSimpleTest : BaseTest() {
 
         run {
             val configuration = clientConfig()
-            config(configuration)
+            configuration.enableIPv4 = clientType.ip4
+            configuration.enableIPv6 = clientType.ip6
+            configuration.enableIpc = clientType.ipc
 //            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
 
             val client = Client<Connection>(configuration)
@@ -257,10 +309,20 @@ class RmiSimpleTest : BaseTest() {
                 val id = `object`.id()
                 Assert.assertEquals(123, id)
                 client.logger.error("Finished test for: Client -> Server")
-                stopEndPoints(2000)
+                stopEndPoints()
             }
 
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
+            when (clientType) {
+                ConnectType.IPC -> client.connect()
+                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST)
+                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST)
+            }
         }
 
         waitForThreads()
