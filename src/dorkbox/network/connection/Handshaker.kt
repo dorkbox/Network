@@ -94,10 +94,6 @@ internal class Handshaker<CONNECTION : Connection>(
                     if (System.nanoTime() - startTime < timeoutInNanos) {
                         // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
                         //  publication of any state to other threads and not be long running or re-entrant with the client.
-                        // on close, the publication CAN linger (in case a client goes away, and then comes back)
-                        // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-
-                        //fixme: this should be the linger timeout, not a retry count!
 
                         // we should retry.
                         handshakeSendIdleStrategy.idle()
