@@ -180,12 +180,14 @@ internal class EventPoller {
             // when an endpoint closes its polling, it will automatically be removed from this datastructure.
             val cEvents = configureEvents.decrementAndGet()
             val pEvents = pollEvents.size()
-            if (running && submitEvents.value == 0 && cEvents == 0 && pEvents == 0) {
+            val sEvents = submitEvents.value
+
+            if (running && sEvents == 0 && cEvents == 0 && pEvents == 0) {
                 logger.debug { "Closing the Network Event Poller..." }
                 running = false
                 true
             } else {
-                logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=${submitEvents.value} configureEvents=${cEvents} pollEvents=$pEvents)" }
+                logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)" }
                 false
             }
         }
