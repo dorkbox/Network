@@ -22,24 +22,26 @@ import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.aeron.AeronPoller
-import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
-import dorkbox.network.aeron.mediaDriver.ServerIpcHandshakeDriver
-import dorkbox.network.aeron.mediaDriver.ServerUdpHandshakeDriver
-import dorkbox.network.aeron.mediaDriver.endpoint
+import dorkbox.network.aeron.mediaDriver.ServerHandshakeDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.EventDispatcher
+import dorkbox.network.connection.IpInfo
+import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import org.agrona.DirectBuffer
 import java.net.Inet4Address
 
 internal object ServerHandshakePollers {
+    // session IDs are unique for a entire driver, and there are errors with IPC when creating/closing IPC publications too quickly.
+//    val sessionIdMap = LockFreeIntMap<Publication>()
+
     fun disabled(serverInfo: String): AeronPoller {
         return object : AeronPoller {
             override fun poll(): Int { return 0 }
@@ -56,6 +58,8 @@ internal object ServerHandshakePollers {
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION
     ) {
 
+        private val timeout = server.config.connectionCloseTimeoutInSeconds
+        private val isReliable = server.config.isReliable
         private val handshaker = server.handshaker
 
         suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
@@ -72,59 +76,55 @@ internal object ServerHandshakePollers {
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
                 logger.error { "[$aeronLogInfo] Connection not allowed! Invalid connection request" }
-            } else {
+                return
+            }
+
+            logger.error { "RECEIVED IPC HANDSHAKE MESSAGE" }
+
+            // we have read all the data, now dispatch it.
+            EventDispatcher.launch(EventDispatcher.Companion.EVENT.HANDSHAKE) {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-                val publicationUri = uri("ipc", message.sessionId, true)
+                val publicationUri = uriHandshake("ipc", isReliable)
 
                 val publication = try {
-                    driver.addPublication(publicationUri, "HANDSHAKE-IPC", message.streamId)
+                    // we actually have to wait for it to connect before we continue
+                    driver.addPublicationWithTimeout(publicationUri, timeout, message.streamId, aeronLogInfo) { cause ->
+                        ClientTimedOutException("$aeronLogInfo publication cannot connect with client!", cause)
+                    }
                 } catch (e: Exception) {
-                    logger.error(e) { "Cannot create IPC publication back to remote process" }
-                    return
+                    logger.error(e) { "Cannot create IPC publication back to client remote process" }
+                    return@launch
                 }
 
-                // we actually have to wait for it to connect before we continue
-                val timoutInNanos = driver.getLingerNs()
-                val startTime = System.nanoTime()
-                var success = false
+                logger.error { "CREATED IPC PUB: ${publication.registrationId()}" }
 
-                while (System.nanoTime() - startTime < timoutInNanos) {
-                    if (publication.isConnected) {
-                        success = true
-                        break
-                    }
+                // Manage the Handshake state. When done with a connection, this returns false
+                if (!handshake.validateMessageTypeAndDoPending(
+                        server = server,
+                        handshaker = handshaker,
+                        handshakePublication = publication,
+                        message = message,
+                        logger = logger)) {
 
-                    delay(50L)
-                }
-
-                if (success) {
-                    // Manage the Handshake state. When done with a connection, this returns false
-                    if (!handshake.validateMessageTypeAndDoPending(
-                                    server = server,
-                                    handshaker = handshaker,
-                                    handshakePublication = publication,
-                                    message = message,
-                                    logger = logger)) {
-
-                        driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
-                        return
-                    }
-
-                    handshake.processIpcHandshakeMessageServer(
-                            server = server,
-                            handshaker = handshaker,
-                            aeronDriver = driver,
-                            handshakePublication = publication,
-                            message = message,
-                            aeronLogInfo = aeronLogInfo,
-                            connectionFunc = connectionFunc,
-                            logger = logger
-                    )
-
+                    logger.error { "DELETED IPC PUB: ${publication.registrationId()}" }
+//                        sessionIdMap.remove(message.sessionId)
                     driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
-                } else {
-                    logger.error { "Cannot comm back to remote process" }
+                    return@launch
                 }
+
+                handshake.processIpcHandshakeMessageServer(
+                    server = server,
+                    handshaker = handshaker,
+                    aeronDriver = driver,
+                    handshakePublication = publication,
+                    message = message,
+                    aeronLogInfo = aeronLogInfo,
+                    connectionFunc = connectionFunc,
+                    logger = logger
+                )
+
+                logger.error { "DELETED IPC PUB: ${publication.registrationId()}" }
+                driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
             }
         }
     }
@@ -132,16 +132,14 @@ internal object ServerHandshakePollers {
     class UdpProc<CONNECTION : Connection>(
         val logger: KLogger,
         val server: Server<CONNECTION>,
-        val mediaDriver: ServerUdpHandshakeDriver,
+        val mediaDriver: ServerHandshakeDriver,
         val driver: AeronDriver,
         val handshake: ServerHandshake<CONNECTION>,
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
-        val isReliable: Boolean,
-        val port: Int
+        val isReliable: Boolean
     ) {
-        private val listenAddress = mediaDriver.listenAddress!!
-        private val listenAddressString = IP.toString(listenAddress)
-        private val timoutInNanos = driver.getLingerNs()
+
+        private val ipInfo = server.ipInfo
         private val logInfo = mediaDriver.logInfo
         private val handshaker = server.handshaker
 
@@ -173,81 +171,75 @@ internal object ServerHandshakePollers {
             if (!isRemoteIpv4) {
                 // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
                 clientAddressString = IP.toString(clientAddress)
+
+                if (ipInfo.ipType == IpInfo.Companion.IpListenType.IPv4Wildcard) {
+                    // we DO NOT want to listen to IPv4 traffic, but we received IPv4 traffic!
+                    logger.error { "[$streamId/$sessionId] Connection from $clientAddressString not allowed! IPv4 connections not permitted!" }
+                    return
+                }
             }
 
-
-            // if we are listening on :: (ipv6), and a connection via ipv4 arrives, aeron MUST publish on the IPv4 version
-            val properPubAddress = EndPoint.getWildcard(listenAddress, listenAddressString, isRemoteIpv4)
-
-            // Server is the "source", client mirrors the server
             val aeronLogInfo = "$streamId/$sessionId : $clientAddressString"
-
 
             val message = handshaker.readMessage(buffer, offset, length, aeronLogInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
                 logger.error { "[$aeronLogInfo] Connection not allowed! Invalid connection request" }
-            } else {
-                // NOTE: publications are REMOVED from Aeron clients when their linger timeout has expired!!!
+                return
+            }
 
+            logger.error { "RECEIVED UDP HANDSHAKE MESSAGE" }
+
+            EventDispatcher.launch(EventDispatcher.Companion.EVENT.HANDSHAKE) {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription CONTROL (which then goes to the proper endpoint)
-                val publicationUri = uri("udp", message.sessionId, isReliable)
-                    .endpoint(isRemoteIpv4, properPubAddress, message.port)
+                val publicationUri = uriHandshake("udp", isReliable)
+                    .endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
 
                 val publication = try {
-                    driver.addPublication(publicationUri, logInfo, message.streamId)
+                    // we actually have to wait for it to connect before we continue
+                    driver.addPublicationWithTimeout(publicationUri, 10, message.streamId, aeronLogInfo) { cause ->
+                        ClientTimedOutException("$logInfo publication cannot connect with client!", cause)
+                    }
                 } catch (e: Exception) {
                     logger.error(e) { "Cannot create publication back to $clientAddressString" }
-                    return
+                    return@launch
                 }
 
-                // we actually have to wait for it to connect before we continue
+                logger.error { "CONNECTED" }
+                logger.error { "CONNECTED" }
 
-                val startTime = System.nanoTime()
-                var success = false
-
-                while (System.nanoTime() - startTime < timoutInNanos) {
-                    if (publication.isConnected) {
-                        success = true
-                        break
-                    }
-                    delay(50L)
-                }
-
-                if (success) {
-                    // Manage the Handshake state. When done with a connection, this returns
-                    if (!handshake.validateMessageTypeAndDoPending(
-                                    server = server,
-                                    handshaker = handshaker,
-                                    handshakePublication = publication,
-                                    message = message,
-                                    logger = logger)) {
-                        // publications are REMOVED from Aeron clients when their linger timeout has expired!!!
-                        driver.closeAndDeletePublication(publication, logInfo)
-
-                        return
-                    }
-
-                    handshake.processUdpHandshakeMessageServer(
+                // Manage the Handshake state. When done with a connection, this returns
+                if (!handshake.validateMessageTypeAndDoPending(
                         server = server,
                         handshaker = handshaker,
-                        mediaDriver = mediaDriver,
                         handshakePublication = publication,
-                        clientAddress = clientAddress,
-                        clientAddressString = clientAddressString,
-                        isReliable = isReliable,
                         message = message,
-                        aeronLogInfo = aeronLogInfo,
-                        connectionFunc = connectionFunc,
-                        logger = logger
-                    )
-                } else {
-                    logger.error { "Cannot create $logInfo publication back to '$clientAddressString'" }
+                        logger = logger)) {
+
+                    driver.closeAndDeletePublication(publication, logInfo)
+                    logger.error { "DONE CONNECTED" }
+                    logger.error { "DONE CONNECTED" }
+                    return@launch
                 }
 
-                // publications are REMOVED from Aeron clients when their linger timeout has expired!!!
+                handshake.processUdpHandshakeMessageServer(
+                    server = server,
+                    handshaker = handshaker,
+                    handshakePublication = publication,
+                    clientAddress = clientAddress,
+                    clientAddressString = clientAddressString,
+                    isReliable = isReliable,
+                    message = message,
+                    aeronLogInfo = aeronLogInfo,
+                    connectionFunc = connectionFunc,
+                    logger = logger
+                )
+
                 driver.closeAndDeletePublication(publication, logInfo)
+
+                logger.error { "DONE CONNECTED" }
+                logger.error { "DONE CONNECTED" }
             }
         }
     }
@@ -257,39 +249,47 @@ internal object ServerHandshakePollers {
         val connectionFunc = server.connectionFunc
         val config = server.config as ServerConfiguration
 
-        val poller = if (config.enableIpc) {
-            try {
-                val driver = ServerIpcHandshakeDriver(
-                    aeronDriver = server.aeronDriver,
-                    streamIdSub = config.ipcId,
-                    sessionIdSub = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                    logger = logger
-                )
+        val poller = try {
+            val driver = ServerHandshakeDriver(
+                aeronDriver = server.aeronDriver,
+                isIpc = true,
+                ipInfo = server.ipInfo,
+                streamIdSub = config.ipcId,
+                sessionIdSub = AeronDriver.RESERVED_SESSION_ID_INVALID,
+                isReliable = true,
+                logInfo = "HANDSHAKE-IPC",
+                logger = logger
+            )
 
-                val subscription = driver.subscription
-                val processor = IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc)
+            val subscription = driver.subscription
+            val processor = IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc)
 
-                object : AeronPoller {
-                    val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                        runBlocking {
-                            processor.process(header, buffer, offset, length)
-                        }
+            object : AeronPoller {
+                // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
+                //  we exclusively read from the DirectBuffer on a single thread.
+
+                // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+                //  publication of any state to other threads and not be:
+                //   - long running
+                //   - re-entrant with the client
+                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
+                    runBlocking {
+                        processor.process(header, buffer, offset, length)
                     }
-
-                    override fun poll(): Int {
-                        return subscription.poll(handler, 1)
-                    }
-
-                    override suspend fun close() {
-                        driver.close()
-                    }
-
-                    override val info = "IPC $driver"
                 }
-            } catch (e: Exception) {
-                disabled("IPC Disabled")
+
+                override fun poll(): Int {
+                    return subscription.poll(handler, 1)
+                }
+
+                override suspend fun close() {
+                    driver.close()
+                }
+
+                override val info = "IPC $driver"
             }
-        } else {
+        } catch (e: Exception) {
+            logger.error(e) { "Unable to create IPC listener." }
             disabled("IPC Disabled")
         }
 
@@ -304,33 +304,30 @@ internal object ServerHandshakePollers {
         val connectionFunc = server.connectionFunc
         val config = server.config
         val isReliable = config.isReliable
-        val pubPort = config.port
 
-        val poller = if (server.canUseIPv4) {
-            val driver = ServerUdpHandshakeDriver(
+        val poller = try {
+            val driver = ServerHandshakeDriver(
                 aeronDriver = server.aeronDriver,
-                listenAddress = server.listenIPv4Address!!,
-                port = config.port,
-                streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
+                isIpc = false,
+                ipInfo = server.ipInfo,
+                streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                sessionIdSub = 9,
                 isReliable = isReliable,
                 logInfo = "HANDSHAKE-IPv4",
                 logger = logger
             )
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable)
 
             object : AeronPoller {
-                /**
-                 * Note:
-                 * Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is
-                 * desired, then limiting message sizes to MTU size is a good practice.
-                 *
-                 * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
-                 * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
-                 * properties from failure and streams with mechanical sympathy.
-                 */
+                // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
+                //  we exclusively read from the DirectBuffer on a single thread.
+
+                // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+                //  publication of any state to other threads and not be:
+                //   - long running
+                //   - re-entrant with the client
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
                     runBlocking {
                         processor.process(header, buffer, offset, length)
@@ -347,11 +344,11 @@ internal object ServerHandshakePollers {
 
                 override val info = "IPv4 $driver"
             }
-        } else {
+        } catch (e: Exception) {
+            logger.error(e) { "Unable to create IPv4 listener." }
             disabled("IPv4 Disabled")
         }
 
-        logger.info { poller.info }
         return poller
     }
 
@@ -360,34 +357,31 @@ internal object ServerHandshakePollers {
         val connectionFunc = server.connectionFunc
         val config = server.config
         val isReliable = config.isReliable
-        val pubPort = config.port
 
-        val poller = if (server.canUseIPv6) {
-            val driver = ServerUdpHandshakeDriver(
+        val poller =  try {
+            val driver = ServerHandshakeDriver(
+                isIpc = false,
                 aeronDriver = server.aeronDriver,
-                listenAddress = server.listenIPv6Address!!,
-                port = config.port,
-                streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
+                ipInfo = server.ipInfo,
+                streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                sessionIdSub = 0,
                 isReliable = isReliable,
                 logInfo = "HANDSHAKE-IPv6",
                 logger = logger
             )
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable)
 
 
             object : AeronPoller {
-                /**
-                 * Note:
-                 * Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is
-                 * desired, then limiting message sizes to MTU size is a good practice.
-                 *
-                 * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
-                 * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
-                 * properties from failure and streams with mechanical sympathy.
-                 */
+                // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
+                //  we exclusively read from the DirectBuffer on a single thread.
+
+                // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+                //  publication of any state to other threads and not be:
+                //   - long running
+                //   - re-entrant with the client
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
                     runBlocking {
                         processor.process(header, buffer, offset, length)
@@ -404,28 +398,28 @@ internal object ServerHandshakePollers {
 
                 override val info = "IPv6 $driver"
             }
-        } else {
+        } catch (e: Exception) {
+            logger.error(e) { "Unable to create IPv6 listener." }
             disabled("IPv6 Disabled")
         }
 
-        logger.info { poller.info }
         return poller
     }
 
     suspend fun <CONNECTION : Connection> ip6Wildcard(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
+
         val logger = server.logger
         val connectionFunc = server.connectionFunc
         val config = server.config
         val isReliable = config.isReliable
-        val pubPort = config.port
 
         val poller = try {
-            val driver = ServerUdpHandshakeDriver(
+            val driver = ServerHandshakeDriver(
+                isIpc = false,
                 aeronDriver = server.aeronDriver,
-                listenAddress = server.listenIPv6Address!!,
-                port = config.port,
-                streamId = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
-                connectionTimeoutSec = config.connectionCloseTimeoutInSeconds,
+                ipInfo = server.ipInfo,
+                streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                sessionIdSub = 0,
                 isReliable = isReliable,
                 logInfo = "HANDSHAKE-IPv4+6",
                 logger = logger
@@ -433,18 +427,16 @@ internal object ServerHandshakePollers {
 
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable, pubPort)
+            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable)
 
             object : AeronPoller {
-                /**
-                 * Note:
-                 * Reassembly has been shown to be minimal impact to latency. But not totally negligible. If the lowest latency is
-                 * desired, then limiting message sizes to MTU size is a good practice.
-                 *
-                 * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
-                 * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
-                 * properties from failure and streams with mechanical sympathy.
-                 */
+                // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
+                //  we exclusively read from the DirectBuffer on a single thread.
+
+                // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+                //  publication of any state to other threads and not be:
+                //   - long running
+                //   - re-entrant with the client
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
                     runBlocking {
                         processor.process(header, buffer, offset, length)
@@ -466,7 +458,6 @@ internal object ServerHandshakePollers {
             disabled("IPv4+6 Disabled")
         }
 
-        logger.info { poller.info }
         return poller
     }
 }

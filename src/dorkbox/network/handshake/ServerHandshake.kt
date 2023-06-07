@@ -20,9 +20,7 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
-import dorkbox.network.aeron.mediaDriver.ServerIpcConnectionDriver
-import dorkbox.network.aeron.mediaDriver.ServerUdpConnectionDriver
-import dorkbox.network.aeron.mediaDriver.ServerUdpHandshakeDriver
+import dorkbox.network.aeron.mediaDriver.ServerConnectionDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
@@ -329,8 +327,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
         var connection: CONNECTION? = null
         try {
             // Create a pub/sub at the given address and port, using the given stream ID.
-            val newConnectionDriver = ServerIpcConnectionDriver(
+            val newConnectionDriver = ServerConnectionDriver(
+                isIpc = true,
                 aeronDriver = aeronDriver,
+                ipInfo = server.ipInfo,
+                portPub = 0,
+                portSub = 0,
+                remoteAddress = null,
+                remoteAddressString = "",
                 sessionIdPub = connectionSessionIdPub,
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
@@ -392,7 +396,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
     suspend fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
         handshaker: Handshaker<CONNECTION>,
-        mediaDriver: ServerHandshakeDriver,
         handshakePublication: Publication,
         clientAddress: InetAddress,
         clientAddressString: String,
@@ -528,14 +531,15 @@ internal class ServerHandshake<CONNECTION : Connection>(
         var connection: CONNECTION? = null
         try {
             // Create a pub/sub at the given address and port, using the given stream ID.
-            val newConnectionDriver = ServerUdpConnectionDriver(
+            val newConnectionDriver = ServerConnectionDriver(
+                isIpc = false,
                 aeronDriver = aeronDriver,
                 sessionIdPub = connectionSessionIdPub,
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
 
-                listenAddress = mediaDriver.listenAddress,
+                ipInfo = server.ipInfo,
                 remoteAddress = clientAddress,
                 remoteAddressString = clientAddressString,
 
@@ -640,9 +644,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
         val noAllocations = connectionsPerIpCounts.isEmpty()
 
         if (!noAllocations) {
-            throw AllocationException("Unequal allocate/free method calls for validation. \n" +
+            throw AllocationException("Unequal allocate/free method calls for IP validation. \n" +
                                       "connectionsPerIpCounts: '$connectionsPerIpCounts'")
-
         }
     }
 
