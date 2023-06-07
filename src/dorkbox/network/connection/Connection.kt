@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.network.Server
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.connection.EventDispatcher.Companion.EVENT
@@ -22,7 +23,6 @@ import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.ping.Ping
-import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.RmiSupportConnection
 import dorkbox.network.rmi.messages.MethodResponse
 import dorkbox.network.serialization.KryoExtra
@@ -33,13 +33,12 @@ import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.getAndUpdate
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.IdleStrategy
 import java.net.InetAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.*
 
 /**
  * This connection is established once the registration information is validated, and the various connect/filter checks have passed
@@ -69,10 +68,19 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     val details: String
 
     /**
-     * the stream id of this connection. Can be 0 for IPC connections
+     * the session id's of this connection.
+     *
+     * NOTE: THESE MUST BE UNIQUE ACROSS THE ENTIRE SYSTEM! (these are allocated by the server)
      */
-    val streamIdPub: Int
-    val streamIdSub: Int
+    private val sessionIdPub: Int
+    private val sessionIdSub: Int
+
+    /**
+     * the stream ids of this connection.
+     */
+    private val streamIdPub: Int
+    private val streamIdSub: Int
+
 
     /**
      * the session id of this connection. This value is UNIQUE
@@ -148,7 +156,16 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         val connectionInfo = connectionParameters.connectionInfo
 
-        id = connectionInfo.sessionIdPub // NOTE: this is UNIQUE per server!
+        sessionIdPub = connectionInfo.sessionIdPub
+        sessionIdSub = connectionInfo.sessionIdSub
+
+        // the ID of the connection is the SUB ID from the server!
+        id = if (endPoint.type == Server::class.java) {
+            connectionInfo.sessionIdSub
+        } else {
+            connectionInfo.sessionIdPub
+        }
+
 
         subscription = connectionInfo.subscription
         publication = connectionInfo.publication
@@ -164,11 +181,16 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
 
+        // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
+        //  we exclusively read from the DirectBuffer on a single thread.
+
+        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+        //  publication of any state to other threads and not be:
+        //   - long running
+        //   - re-entrant with the client
         messageHandler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
-            // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
-            //  we exclusively read from the DirectBuffer on a single thread.
             endPoint.dataReceive(buffer, offset, length, header, this@Connection)
         }
 
@@ -235,8 +257,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             try {
                 // The handshake sessionId IS NOT globally unique
                 logger.trace { "[${publication.sessionId()}] send: ${message.javaClass.simpleName} : $message" }
-                endPoint.write(writeKryo, tempWriteKryo, message, publication, sendIdleStrategy, this@Connection, abortEarly)
-            } catch (e: Exception) {
+                val write = endPoint.write(writeKryo, tempWriteKryo, message, publication, sendIdleStrategy, this@Connection, abortEarly)
+                counter.getAndDecrement()
+                write
+            } catch (e: Throwable) {
+                // make sure we atomically create the listener manager, if necessary
+                listenerManager.getAndUpdate { origManager ->
+                    origManager ?: ListenerManager(logger)
+                }
+
                 val listenerManager = listenerManager.value!!
 
                 if (message is MethodResponse && message.result is Exception) {
@@ -247,13 +276,14 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                     logger.error("[${publication.sessionId()}] Error for message '$message'", e)
                     listenerManager.notifyError(this@Connection, e)
                 } else {
-                    logger.error("[${publication.sessionId()}] Error serializing message '$message'", e)
+                    logger.error("[${publication.sessionId()}] Error sending message '$message'", e)
                     listenerManager.notifyError(this@Connection, e)
                 }
 
                 false
             }
         }
+
 
         return success
     }
@@ -270,22 +300,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
     /**
-     * Safely sends objects to a destination.
-     *
-     * @return true if the message was successfully sent, false otherwise. Exceptions are caught and NOT rethrown!
-     */
-    fun sendBlocking(message: Any): Boolean {
-        return runBlocking {
-            send(message)
-        }
-    }
-
-    /**
      * Sends a "ping" packet to measure **ROUND TRIP** time to the remote connection.
      *
      * @return true if the message was successfully sent by aeron
      */
-    suspend fun ping(pingTimeoutSeconds: Int = PingManager.DEFAULT_TIMEOUT_SECONDS, function: suspend Ping.() -> Unit = {}): Boolean {
+    suspend fun ping(pingTimeoutSeconds: Int = endPoint.config.pingTimeoutSeconds, function: suspend Ping.() -> Unit = {}): Boolean {
         return endPoint.ping(this, pingTimeoutSeconds, function)
     }
 
@@ -448,11 +467,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     }
 
 
-    //
-    //
-    // Generic object methods
-    //
-    //
     override fun toString(): String {
         return toString0
     }
@@ -478,13 +492,18 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     // cleans up the connection information
     internal fun cleanup(connectionsPerIpCounts: ConnectionCounts) {
-        sessionIdAllocator.free(id)
-        streamIdAllocator.free(streamIdPub)
-        streamIdAllocator.free(streamIdSub)
+        // the allocations are done by the server, so don't try to free the allocations from the client!
+        if (endPoint.type == Server::class.java) {
+            sessionIdAllocator.free(sessionIdPub)
+            sessionIdAllocator.free(sessionIdSub)
 
-        if (!isIpc) {
-            // unique for UDP endpoints
-            connectionsPerIpCounts.decrementSlow(remoteAddress!!)
+            streamIdAllocator.free(streamIdPub)
+            streamIdAllocator.free(streamIdSub)
+
+            if (!isIpc) {
+                // unique for UDP endpoints
+                connectionsPerIpCounts.decrementSlow(remoteAddress!!)
+            }
         }
     }
 }
