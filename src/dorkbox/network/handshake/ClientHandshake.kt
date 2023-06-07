@@ -65,7 +65,13 @@ internal class ClientHandshake<CONNECTION: Connection>(
     private var failedException: Exception? = null
 
     init {
-        // now we have a bi-directional connection with the server on the handshake "socket".
+        // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
+        //  we exclusively read from the DirectBuffer on a single thread.
+
+        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+        //  publication of any state to other threads and not be:
+        //   - long running
+        //   - re-entrant with the client
         handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
             val sessionId = header.sessionId()
