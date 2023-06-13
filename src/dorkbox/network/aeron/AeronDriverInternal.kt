@@ -498,7 +498,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val driverId = config.id
         if (registeredPublications.value > 0) {
             if (logger.isTraceEnabled) {
-                val elements = registeredPublicationsTrace.elements()
+                val elements = registeredPublicationsTrace.elements
                 val joined = elements.joinToString()
                 logger.debug { "Aeron Driver [$driverId]: has [$joined] publications (${elements.size} total)" }
             } else {
@@ -509,7 +509,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         if (registeredSubscriptions.value > 0) {
             if (logger.isTraceEnabled) {
-                val elements = registeredSubscriptionsTrace.elements()
+                val elements = registeredSubscriptionsTrace.elements
                 val joined = elements.joinToString()
                 logger.debug { "Aeron Driver [$driverId]: has [$joined] subscriptions (${elements.size} total)" }
             } else {
