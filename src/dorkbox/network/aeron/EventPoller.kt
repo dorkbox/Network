@@ -78,7 +78,7 @@ internal class EventPoller {
                 clonedStrategy = config.pollIdleStrategy.cloneToNormal()
 
                 dispatchScope = CoroutineScope(pollDispatcher + SupervisorJob())
-                require(!pollDispatcher.isActive) { "Unable to start the event dispatch in the terminated state!" }
+                require(pollDispatcher.isActive) { "Unable to start the event dispatch in the terminated state!" }
 
                 dispatchScope.launch {
                     val eventLogger: KLogger = KotlinLogging.logger(EventPoller::class.java.simpleName)
@@ -174,7 +174,7 @@ internal class EventPoller {
     suspend fun close(logger: KLogger) {
         logger.trace { "Requesting close for the Network Event Poller..." }
 
-        val doClose =  mutex.withLock {
+        val doClose = mutex.withLock {
             logger.trace { "Attempting close for the Network Event Poller..." }
             // ONLY if there are no more poll-events do we ACTUALLY shut down.
             // when an endpoint closes its polling, it will automatically be removed from this datastructure.
