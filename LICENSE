@@ -281,7 +281,7 @@
        Extra license information
          - SLF4J - Simple facade or abstraction for various logging frameworks
            [MIT License]
-           http://www.slf4j.org
+           https://www.slf4j.org
            Copyright 2023
              QOS.ch
 
@@ -1306,7 +1306,7 @@
 
              - Objenesis - 
                [The Apache Software License, Version 2.0]
-               http://objenesis.org
+               https://github.com/easymock/objenesis
                  Objenesis Team and all contributors
 
              - MinLog-SLF4J - 
@@ -1316,7 +1316,7 @@
 
          - Bouncy Castle Crypto - Lightweight cryptography API and JCE Extension
            [The Apache Software License, Version 2.0]
-           http://www.bouncycastle.org
+           https://www.bouncycastle.org
            Copyright 2023
              The Legion of the Bouncy Castle Inc
 
