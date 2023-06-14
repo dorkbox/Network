@@ -20,12 +20,18 @@ import io.aeron.Publication
 import io.aeron.Subscription
 import java.net.InetAddress
 
-data class MediaDriverConnectInfo(val subscription: Subscription,
-                                  val publication: Publication,
-                                  val sessionIdPub: Int,
-                                  val streamIdPub: Int,
-                                  val streamIdSub: Int,
-                                  val isReliable: Boolean,
-                                  val remoteAddress: InetAddress?,
-                                  val remoteAddressString: String,
-)
+data class PubSub(
+    val pub: Publication,
+    val sub: Subscription,
+    val sessionIdPub: Int,
+    val sessionIdSub: Int,
+    val streamIdPub: Int,
+    val streamIdSub: Int,
+    val reliable: Boolean,
+    val remoteAddress: InetAddress? = null,
+    val remoteAddressString: String = "IPC",
+    val portPub: Int = -1,
+    val portSub: Int = -1
+) {
+    val isIpc get() = remoteAddress == null
+}

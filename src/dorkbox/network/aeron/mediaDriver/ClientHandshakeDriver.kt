@@ -16,26 +16,25 @@
 
 package dorkbox.network.aeron.mediaDriver
 
-import dorkbox.netUtil.IPv6
 import dorkbox.network.ClientConfiguration
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.AeronDriver.Companion.getLocalAddressString
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
-import dorkbox.network.aeron.mediaDriver.MediaDriverConnection.Companion.uri
+import dorkbox.network.aeron.AeronDriver.Companion.uri
+import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
+import dorkbox.network.aeron.endpoint
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
-import io.aeron.Publication
 import io.aeron.Subscription
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.*
-import java.util.concurrent.TimeUnit
 
 
 /**
@@ -44,346 +43,270 @@ import java.util.concurrent.TimeUnit
  * @throws ClientRetryException if we need to retry to connect
  * @throws ClientTimedOutException if we cannot connect to the server in the designated time
  */
-internal open class ClientHandshakeDriver(
-    val aeronDriver: AeronDriver,
-    autoChangeToIpc: Boolean,
-    val remoteAddress: InetAddress?,
-    val remoteAddressString: String,
-    ipcId: Int,
-    val config: ClientConfiguration,
-    val handshakeTimeoutSec: Int = 10,
-    val reliable: Boolean,
-    val logger: KLogger,
-) {
-    val isUsingIPC: Boolean
-
-    val sessionIdPub: Int
-    val sessionIdSub: Int
-
-    val streamIdPub: Int
-    val streamIdSub: Int
-
-    val portPub: Int
-    val portSub: Int
-
-    lateinit var subscription: Subscription
-    lateinit var publication: Publication
-
-    val logInfo: String
-
-    val infoPub: String
-    val infoSub: String
-
+internal class ClientHandshakeDriver(
+    private val aeronDriver: AeronDriver,
+    val pubSub: PubSub,
+    val infoPub: String,
+    val infoSub: String,
+    private val logInfo: String,
     val details: String
+) {
+    companion object {
+        suspend fun build(
+            aeronDriver: AeronDriver,
+            autoChangeToIpc: Boolean,
+            remoteAddress: InetAddress?,
+            remoteAddressString: String,
+            config: ClientConfiguration,
+            handshakeTimeoutSec: Int = 10,
+            reliable: Boolean,
+            logger: KLogger): ClientHandshakeDriver {
 
-    init {
-        var isUsingIPC = false
+            var isUsingIPC = false
 
-        if (autoChangeToIpc) {
-            if (remoteAddress == null) {
-                logger.info { "IPC enabled" }
-            } else {
-                logger.warn { "IPC for loopback enabled and aeron is already running. Auto-changing network connection from '$remoteAddressString' -> IPC" }
+            if (autoChangeToIpc) {
+                if (remoteAddress == null) {
+                    logger.info { "IPC enabled" }
+                } else {
+                    logger.warn { "IPC for loopback enabled and aeron is already running. Auto-changing network connection from '$remoteAddressString' -> IPC" }
+                }
+                isUsingIPC = true
             }
-            isUsingIPC = true
-        }
 
-        var sessionIdPub = 0
-        var sessionIdSub = 0
-        var streamIdPub = 0
-        var streamIdSub = 0
-        var portPub = 0
-        var portSub = 0
-        var subscriptionPort = 0
-        var logInfo = ""
+            var streamIdPub = 0
+            var streamIdSub = 0
 
-        var infoPub = ""
-        var infoSub = ""
-        var details = ""
+            var logInfo = ""
 
+            var infoPub = ""
+            var infoSub = ""
+            var details = ""
 
-
-        if (isUsingIPC) {
-            sessionIdPub = AeronDriver.HANDSHAKE_SESSION_ID
-            sessionIdSub = sessionIdAllocator.allocate()
-            streamIdPub = ipcId  // this is USUALLY the IPC_HANDSHAKE_STREAM_ID
+            // with IPC, the aeron driver MUST be shared, so having a UNIQUE sessionIdPub/Sub is unnecessary.
+//          sessionIdPub = sessionIdAllocator.allocate()
+//          sessionIdSub = sessionIdAllocator.allocate()
+            // streamIdPub is assigned by ipc/udp directly
             streamIdSub = streamIdAllocator.allocate()
 
-            logInfo = "HANDSHAKE-IPC"
-            portPub = AeronDriver.HANDSHAKE_SESSION_ID
-            subscriptionPort = ipcId
+            var pubSub: PubSub? = null
 
-            infoPub = "$logInfo Pub: sessionId=${sessionIdPub}, streamId=${streamIdPub}"
-            infoSub = "$logInfo Sub: sessionId=${sessionIdSub}, streamId=${streamIdSub}"
+            if (isUsingIPC) {
+                streamIdPub = AeronDriver.IPC_HANDSHAKE_STREAM_ID
 
-            details = "$logInfo P:(${sessionIdPub}|${streamIdPub}) S:(${sessionIdSub}|${streamIdSub})"
+                logInfo = "HANDSHAKE-IPC"
 
-            try {
-                buildIPC(logInfo = logInfo,
-                         sessionIdPub = sessionIdPub,
-                         sessionIdSub = sessionIdSub,
-                         streamIdPub = streamIdPub,
-                         streamIdSub = streamIdSub,
-                         reliable = reliable)
+                infoPub = "$logInfo Pub: streamId=${streamIdPub}"
+                infoSub = "$logInfo Sub: streamId=${streamIdSub}"
 
-            } catch (exception: Exception) {
-                // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
-                isUsingIPC = false
 
-                // we will retry!
+                details = "$logInfo P:(***|${streamIdPub})"
+
+                try {
+                    pubSub = buildIPC(
+                        aeronDriver = aeronDriver,
+                        handshakeTimeoutSec = handshakeTimeoutSec,
+                        sessionIdPub = 0,
+                        streamIdPub = streamIdPub,
+                        streamIdSub = streamIdSub,
+                        reliable = reliable,
+                        logInfo = logInfo
+                    )
+                } catch (exception: Exception) {
+                    // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
+                    isUsingIPC = false
+
+                    // we will retry!
+                    if (remoteAddress == null) {
+                        // if we specified that we MUST use IPC, then we have to throw the exception, because there is no IPC
+                        val clientException = ClientException("Unable to connect via IPC to server. No address specified so fallback is unavailable", exception)
+                        clientException.cleanStackTraceInternal()
+                        throw clientException
+                    }
+                }
+            }
+
+            if (!isUsingIPC) {
                 if (remoteAddress == null) {
-                    // if we specified that we MUST use IPC, then we have to throw the exception, because there is no IPC
-                    val clientException = ClientException("Unable to connect via IPC to server. No address specified so fallback is unavailable", exception)
+                    val clientException = ClientException("Unable to connect via UDP to server. No address specified!")
                     clientException.cleanStackTraceInternal()
                     throw clientException
                 }
-            }
-        }
 
-        if (!isUsingIPC) {
-            if (remoteAddress == null) {
-                val clientException = ClientException("Unable to connect via UDP to server. No address specified!")
-                clientException.cleanStackTraceInternal()
-                throw clientException
-            }
-
-            val logType = if (remoteAddress is Inet4Address) {
-                "IPv4"
-            } else {
-                "IPv6"
-            }
-
-            sessionIdPub = AeronDriver.HANDSHAKE_SESSION_ID
-            sessionIdSub = sessionIdAllocator.allocate()
-            streamIdPub = AeronDriver.UDP_HANDSHAKE_STREAM_ID
-            streamIdSub = streamIdAllocator.allocate()
+                logInfo = if (remoteAddress is Inet4Address) {
+                    "HANDSHAKE-IPv4"
+                } else {
+                    "HANDSHAKE-IPv6"
+                }
 
 
-
-            logInfo = "HANDSHAKE-$logType"
-//            type = "$logInfo '$remoteAddressPrettyString:${config.port}'"
-
-            // these are the same, because USUALLY for UDP connections, it is connecting to a different computer!
-            // if it is the SAME computer, then the client with auto-select a random port.
-            portPub = config.port
-            portSub = config.port
-
-            buildUDP(
-                remoteAddress = remoteAddress,
-                remoteAddressString = remoteAddressString,
-                portPub = portPub,
-                portSub = portSub,
-                sessionIdPub = sessionIdPub,
-                sessionIdSub = sessionIdSub,
-                streamIdPub = streamIdPub,
-                streamIdSub = streamIdSub,
-                reliable = reliable,
-                logInfo = logInfo
-            )
+                val sessionIdPub = sessionIdAllocator.allocate() // for UDP, this must be unique otherwise we CANNOT connect to the server!
+                streamIdPub = AeronDriver.UDP_HANDSHAKE_STREAM_ID
 
 
-            val addressesAndPorts = subscription.localSocketAddresses().first()
-            val splitPoint2 = addressesAndPorts.lastIndexOf(':')
-            val subscriptionAddress = addressesAndPorts.substring(0, splitPoint2)
+                // NOTE: for the PORT ... these are the same, because USUALLY for UDP connections, it is connecting to a different computer!
+                // if it is the SAME computer, then the client with auto-select a random port.
 
-            subscriptionPort = addressesAndPorts.substring(splitPoint2+1).toInt()
-
-
-            infoPub = "$logInfo $remoteAddressString [$portPub] [$streamIdPub|$sessionIdPub] (reliable:$reliable)"
-            infoSub = "$logInfo $remoteAddressString [$subscriptionPort] [$streamIdSub|$sessionIdSub] (reliable:$reliable)"
-
-            details = "$logType $subscriptionAddress -> $remoteAddressString     lasdkjf;lsj"
-
-            logger.error { "\n" +
-                    "C-HANDSHAKE PUB: $infoPub \n" +
-                    "C-HANDSHAKE SUB: $infoSub \n" }
-        }
-
-        this.isUsingIPC = isUsingIPC
-
-        this.sessionIdPub = sessionIdPub
-        this.sessionIdSub = sessionIdSub
-
-        this.streamIdPub = streamIdPub
-        this.streamIdSub = streamIdSub
-
-        this.portPub = portPub
-        this.portSub = subscriptionPort
-
-        this.logInfo = logInfo
-        this.infoPub = infoPub
-        this.infoSub = infoSub
-
-        this.details = details
-    }
+                pubSub = buildUDP(
+                    aeronDriver = aeronDriver,
+                    handshakeTimeoutSec = handshakeTimeoutSec,
+                    remoteAddress = remoteAddress,
+                    remoteAddressString = remoteAddressString,
+                    portPub = config.port,
+                    portSub = config.port,
+                    sessionIdPub = sessionIdPub,
+                    streamIdPub = streamIdPub,
+                    reliable = reliable,
+                    streamIdSub = streamIdSub,
+                    logInfo = logInfo
+                )
 
 
-    private fun buildIPC(logInfo: String, sessionIdPub: Int, sessionIdSub: Int,streamIdPub: Int, streamIdSub: Int, reliable: Boolean) {
-        // Create a publication at the given address and port, using the given stream ID.
-        // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-        val publicationUri = uri("ipc", sessionIdPub, reliable)
+                // we have to figure out what our sub port info is, otherwise the server cannot connect back!
+                val addressesAndPorts = pubSub.sub.localSocketAddresses().first()
+                val splitPoint2 = addressesAndPorts.lastIndexOf(':')
+                val subscriptionAddress = addressesAndPorts.substring(0, splitPoint2)
 
-        var success = false
+                val portPub = config.port
+                val subscriptionPort = addressesAndPorts.substring(splitPoint2+1).toInt()
 
-        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
-        //  publication of any state to other threads and not be long running or re-entrant with the client.
+                infoPub = "$logInfo $remoteAddressString Pub: port=$portPub, stream=$streamIdPub (reliable:$reliable)"
+                infoSub = "$logInfo $remoteAddressString Sub: port=$subscriptionPort, stream=$streamIdSub (reliable:$reliable)"
 
-        // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
-        //      ESPECIALLY if it is with the same streamID
-        // this check is in the "reconnect" logic
-
-        val publication = aeronDriver.addPublication(publicationUri, logInfo, streamIdPub)
-
-        // always include the linger timeout, so we don't accidentally kill ourself by taking too long
-        var timeoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong()) + aeronDriver.getLingerNs()
-        val startTime = System.nanoTime()
-
-        while (System.nanoTime() - startTime < timeoutInNanos) {
-            if (publication.isConnected) {
-                success = true
-                break
+                details = "$logInfo $subscriptionAddress -> $remoteAddressString"
             }
 
-            Thread.sleep(500L)
+            return ClientHandshakeDriver(aeronDriver, pubSub!!, infoPub, infoSub, logInfo, details)
         }
 
-        if (!success) {
-            runBlocking {
-                aeronDriver.closeAndDeletePublication(publication, logInfo)
+        @Throws(ClientTimedOutException::class)
+        private suspend fun buildIPC(
+            aeronDriver: AeronDriver,
+            handshakeTimeoutSec: Int,
+            sessionIdPub: Int, streamIdPub: Int,
+            streamIdSub: Int, reliable: Boolean,
+            logInfo: String
+        ): PubSub {
+            // Create a publication at the given address and port, using the given stream ID.
+            // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
+            val publicationUri = uri("ipc", sessionIdPub, reliable)
+
+            // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+            //  publication of any state to other threads and not be long running or re-entrant with the client.
+
+            // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
+            //      ESPECIALLY if it is with the same streamID
+            // this check is in the "reconnect" logic
+
+            val publication = aeronDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, streamIdPub, logInfo)
+            { cause ->
+                ClientTimedOutException("$logInfo publication cannot connect with server!", cause)
             }
 
-            sessionIdAllocator.free(sessionIdPub)
+            // Create a subscription at the given address and port, using the given stream ID.
+            val subscriptionUri = uriHandshake("ipc", reliable)
+            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
 
-            val clientTimedOutException = ClientTimedOutException("Cannot create publication IPC connection to server")
-            clientTimedOutException.cleanAllStackTrace()
-            throw clientTimedOutException
+            return PubSub(publication, subscription,
+                          sessionIdPub, 0,
+                          streamIdPub, streamIdSub,
+                          reliable)
         }
 
-        this.publication = publication
+        @Throws(ClientTimedOutException::class)
+        private suspend fun buildUDP(
+            aeronDriver: AeronDriver,
+            handshakeTimeoutSec: Int,
+            remoteAddress: InetAddress,
+            remoteAddressString: String,
+            portPub: Int,
+            portSub: Int,
+            sessionIdPub: Int,
+            streamIdPub: Int,
+            reliable: Boolean,
+            streamIdSub: Int,
+            logInfo: String,
+        ): PubSub {
+            // on close, the publication CAN linger (in case a client goes away, and then comes back)
+            // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
-        // Create a subscription at the given address and port, using the given stream ID.
-        val subscriptionUri = uri("ipc", sessionIdSub, reliable)
-        val subscription = aeronDriver.addSubscription(subscriptionUri, logInfo, streamIdSub)
+            val isRemoteIpv4 = remoteAddress is Inet4Address
 
-        this.subscription = subscription
-    }
-
-    private fun buildUDP(
-        remoteAddress: InetAddress,
-        remoteAddressString: String,
-        portPub: Int,
-        portSub: Int,
-        sessionIdPub: Int,
-        sessionIdSub: Int,
-        streamIdPub: Int,
-        reliable: Boolean,
-        streamIdSub: Int,
-        logInfo: String,
-    ) {
-        var success = false
-
-        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
-        //  publication of any state to other threads and not be long running or re-entrant with the client.
-
-        // on close, the publication CAN linger (in case a client goes away, and then comes back)
-        // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
-        val isIpv4 = remoteAddress is Inet4Address
-
-        // Create a publication at the given address and port, using the given stream ID.
-        // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-        val publicationUri = uri("udp", sessionIdPub, reliable)
-            .endpoint(isIpv4, remoteAddressString, portPub)
+            // Create a publication at the given address and port, using the given stream ID.
+            val publicationUri = uri("udp", sessionIdPub, reliable)
+                .endpoint(isRemoteIpv4, remoteAddressString, portPub)
 
 
-        // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
-        //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
-        val publication = aeronDriver.addPublication(publicationUri, logInfo, streamIdPub)
+            // For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
+            //      ESPECIALLY if it is with the same streamID. This was noticed as a problem with IPC
 
-
-        // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
-        val localAddresses = publication.localSocketAddresses().first()
-        val splitPoint = localAddresses.lastIndexOf(':')
-        var localAddressString = localAddresses.substring(0, splitPoint)
-
-        if (!isIpv4) {
-            // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
-            // aeron IPv6 addresses all have [...]
-            localAddressString = localAddressString.substring(1, localAddressString.length-1)
-            localAddressString = IPv6.toString(IPv6.toAddress(localAddressString)!!)
-        }
-
-
-        // Create a subscription the given address and port, using the given stream ID.
-        var subscription: Subscription? = null
-        var retryCount = 100
-        val random = Random()
-        val isSameMachine = remoteAddress.isLoopbackAddress || remoteAddress == EndPoint.lanAddress
-
-        while (subscription == null && retryCount-- > 0) {
-            // find a random port to bind to if we are loopback OR if we are the same IP address (not loopback, but to ourselves)
-            var port = portSub
-            if (isSameMachine) {
-                port = random.nextInt(Short.MAX_VALUE-1025) + 1024 // range from 1-65534
+            // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
+            //  publication of any state to other threads and not be long running or re-entrant with the client.
+            val publication = aeronDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, streamIdPub, logInfo)
+            { cause ->
+                sessionIdAllocator.free(sessionIdPub)
+                streamIdAllocator.free(streamIdSub) // we don't continue, so close this as well
+                ClientTimedOutException("$logInfo publication cannot connect with server!", cause)
             }
 
-            try {
-                val subscriptionUri = uri("udp", sessionIdSub, reliable)
-                    .endpoint(isIpv4, localAddressString, port)
-//                    .controlEndpoint(isIpv4, remoteAddressString, port)
-//                    .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
-                subscription = aeronDriver.addSubscription(subscriptionUri, logInfo, streamIdSub)
-            } catch (e: IllegalArgumentException) {
-                // whoops keep retrying!!
-            }
-        }
-
-        if (subscription == null) {
-            val ex = ClientTimedOutException("Cannot create subscription port $logInfo. All attempted ports are invalid")
-            ex.cleanAllStackTrace()
-            throw ex
-        }
+            // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
+            val localAddressString = getLocalAddressString(publication, remoteAddress)
 
 
-        // always include the linger timeout, so we don't accidentally kill ourselves by taking too long
-        val timeoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong()) + aeronDriver.getLingerNs()
-        val startTime = System.nanoTime()
+            // Create a subscription the given address and port, using the given stream ID.
+            var subscription: Subscription? = null
+            var retryCount = 100
+            val random = Random()
+            val isSameMachine = remoteAddress.isLoopbackAddress || remoteAddress == EndPoint.lanAddress
 
-        while (System.nanoTime() - startTime < timeoutInNanos) {
-            if (publication.isConnected) {
-                success = true
-                break
-            }
+            var actualPortSub = portSub
+            while (subscription == null && retryCount-- > 0) {
+                // find a random port to bind to if we are loopback OR if we are the same IP address (not loopback, but to ourselves)
+                if (isSameMachine) {
+                    // range from 1025-65534
+                    actualPortSub = random.nextInt(Short.MAX_VALUE-1025) + 1025
+                }
 
-            Thread.sleep(500L)
-        }
+                try {
+                    val subscriptionUri = uriHandshake("udp", reliable)
+                        .endpoint(isRemoteIpv4, localAddressString, actualPortSub)
 
-        if (!success) {
-            runBlocking {
-                aeronDriver.closeAndDeleteSubscription(subscription, logInfo)
-                aeronDriver.closeAndDeletePublication(publication, logInfo)
+                    subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
+                } catch (ignored: Exception) {
+                    // whoops keep retrying!!
+                }
             }
 
-            sessionIdAllocator.free(sessionIdSub)
+            if (subscription == null) {
+                sessionIdAllocator.free(sessionIdPub)
 
-            val ex = ClientTimedOutException("Cannot create publication $logInfo ${remoteAddressString} in $handshakeTimeoutSec seconds")
-            ex.cleanAllStackTrace()
-            throw ex
+                val ex = ClientTimedOutException("Cannot create subscription port $logInfo. All attempted ports are invalid")
+                ex.cleanAllStackTrace()
+                throw ex
+            }
+
+            return PubSub(publication, subscription,
+                          sessionIdPub, 0,
+                          streamIdPub, streamIdSub,
+                          reliable,
+                          remoteAddress, remoteAddressString,
+                          portPub, actualPortSub)
         }
-
-        this.publication = publication
-        this.subscription = subscription
     }
 
     suspend fun close() {
-        sessionIdAllocator.free(sessionIdPub)
-        sessionIdAllocator.free(sessionIdSub)
-        streamIdAllocator.free(streamIdPub)
-//        streamIdAllocator.free(streamIdSub)
+        // only the subs are allocated on the client!
+        if (!pubSub.isIpc) {
+            sessionIdAllocator.free(pubSub.sessionIdPub)
+        }
+
+//        sessionIdAllocator.free(sessionIdSub)
+//        streamIdAllocator.free(streamIdPub)
+        streamIdAllocator.free(pubSub.streamIdSub)
 
         // on close, we want to make sure this file is DELETED!
-        aeronDriver.closeAndDeleteSubscription(subscription, logInfo)
-        aeronDriver.closeAndDeletePublication(publication, logInfo)
+        aeronDriver.closeAndDeleteSubscription(pubSub.sub, logInfo)
+        aeronDriver.closeAndDeletePublication(pubSub.pub, logInfo)
     }
 
     override fun toString(): String {
