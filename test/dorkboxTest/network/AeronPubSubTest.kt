@@ -98,4 +98,78 @@ class AeronPubSubTest : BaseTest() {
             serverDriver.ensureStopped(10_000, 500)
         }
     }
+
+    @Test(expected = ClientTimedOutException::class)
+    fun connectFailWithBadSessionIdTest() {
+        runBlocking {
+            val log = KotlinLogging.logger("ConnectTest")
+
+            // NOTE: once a config is assigned to a driver, the config cannot be changed
+            val totalCount = 40
+            val port = 3535
+            val serverStreamId = 55555
+            val handshakeTimeoutSec = 10
+
+
+
+            val serverDriver = run {
+                val conf = serverConfig()
+                conf.enableIPv6 = false
+                conf.uniqueAeronDirectory = true
+
+                val driver = AeronDriver(conf, log)
+                driver.start()
+                driver
+            }
+
+            val clientDrivers = mutableListOf<AeronDriver>()
+            val clientPublications = mutableListOf<Pair<AeronDriver, Publication>>()
+
+
+            for (i in 1..totalCount) {
+                val conf = clientConfig()
+                conf.enableIPv6 = false
+                conf.uniqueAeronDirectory = true
+
+                val driver = AeronDriver(conf, log)
+                driver.start()
+
+                clientDrivers.add(driver)
+            }
+
+
+
+            val subscriptionUri = AeronDriver.uriHandshake("udp", true).endpoint(true, "127.0.0.1", port)
+            val sub = serverDriver.addSubscription(subscriptionUri, serverStreamId, "server")
+
+            var sessionID = 1234567
+            clientDrivers.forEachIndexed { index, clientDriver ->
+                val publicationUri = AeronDriver.uri("udp", sessionID, true).endpoint(true, "127.0.0.1", port)
+                clientDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, serverStreamId, "client_$index") { cause ->
+                    ClientTimedOutException("Client publication cannot connect with localhost server", cause)
+                }.also {
+                    clientPublications.add(Pair(clientDriver, it))
+                }
+            }
+
+
+            clientPublications.forEachIndexed { index, (clientDriver, pub) ->
+                clientDriver.closeAndDeletePublication(pub, "client_$index")
+            }
+
+            serverDriver.closeAndDeleteSubscription(sub, "server")
+
+
+            clientDrivers.forEach { clientDriver ->
+                clientDriver.close()
+            }
+
+            clientDrivers.forEach { clientDriver ->
+                clientDriver.ensureStopped(10_000, 500)
+            }
+
+            serverDriver.close()
+            serverDriver.ensureStopped(10_000, 500)
+        }
+    }
 }
