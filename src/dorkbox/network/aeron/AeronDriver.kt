@@ -19,8 +19,10 @@
 package dorkbox.network.aeron
 
 import dorkbox.collections.IntMap
+import dorkbox.netUtil.IPv6
 import dorkbox.network.Configuration
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.handshake.RandomId65kAllocator
 import io.aeron.ChannelUriStringBuilder
@@ -31,6 +33,7 @@ import io.aeron.Subscription
 import io.aeron.driver.reports.LossReportReader
 import io.aeron.driver.reports.LossReportUtil
 import io.aeron.samples.SamplesUtil
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,6 +49,14 @@ import org.agrona.concurrent.ringbuffer.RingBufferDescriptor
 import org.agrona.concurrent.status.CountersReader
 import org.slf4j.Logger
 import java.io.File
+import java.net.Inet6Address
+import java.net.InetAddress
+import java.util.concurrent.*
+
+fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, port: Int): ChannelUriStringBuilder {
+    this.endpoint(AeronDriver.address(isIpv4, addressString, port))
+    return this
+}
 
 /**
  * Class for managing the Aeron+Media drivers
@@ -241,15 +252,68 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
          * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
          */
         fun checkForMemoryLeaks() {
-            val noAllocations = sessionIdAllocator.isEmpty() && streamIdAllocator.isEmpty()
+            val sessionCounts = sessionIdAllocator.counts()
+            val streamCounts = streamIdAllocator.counts()
 
-            if (!noAllocations) {
+            if (sessionCounts > 0 || streamCounts > 0) {
                 throw AllocationException("Unequal allocate/free method calls for session/stream allocation: \n" +
-                                                  "\tsession: $sessionIdAllocator \n" +
-                                                  "\tstream :$streamIdAllocator"
+                                                  "\tsession counts: $sessionCounts \n" +
+                                                  "\tstream counts: $streamCounts"
                 )
             }
         }
+
+        fun uri(type: String, sessionId: Int, isReliable: Boolean): ChannelUriStringBuilder {
+            val builder = ChannelUriStringBuilder().media(type)
+            builder.reliable(isReliable)
+
+            // if a subscription has a session ID, then a publication MUST MATCH for it to connect (even if it has the correct stream ID/port)
+            builder.sessionId(sessionId)
+
+            return builder
+        }
+
+        /**
+         * Do not use a session ID when we are a handshake connection!
+         */
+        fun uriHandshake(type: String, isReliable: Boolean): ChannelUriStringBuilder {
+            val builder = ChannelUriStringBuilder().media(type)
+            builder.reliable(isReliable)
+
+            return builder
+        }
+
+        fun address(isIpv4: Boolean, addressString: String, port: Int): String {
+            return if (isIpv4) {
+                "$addressString:$port"
+            } else if (addressString[0] == '[') {
+                // IPv6 requires the address to be bracketed by [...]
+                "$addressString:$port"
+            } else {
+                // there MUST be [] surrounding the IPv6 address for aeron to like it!
+                "[$addressString]:$port"
+            }
+        }
+
+        /**
+         * This will return the local-address of the interface that connects with the remote address (instead of on ALL interfaces)
+         */
+        fun getLocalAddressString(publication: Publication, remoteAddress: InetAddress): String {
+            val localAddresses = publication.localSocketAddresses().first()
+            val splitPoint = localAddresses.lastIndexOf(':')
+            var localAddressString = localAddresses.substring(0, splitPoint)
+
+            return if (remoteAddress is Inet6Address) {
+                // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
+                // aeron IPv6 addresses all have [...]
+                localAddressString = localAddressString.substring(1, localAddressString.length-1)
+                IPv6.toString(IPv6.toAddress(localAddressString)!!)
+            } else {
+                localAddressString
+            }
+        }
+
+
     }
 
 
@@ -318,20 +382,75 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         internal.start(logger)
     }
 
+    /**
+     * For publications, if we add them "too quickly" (faster than the 'linger' timeout), Aeron will throw exceptions.
+     * ESPECIALLY if it is with the same streamID
+     *
+     * The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
+     *
+     * this check is in the "reconnect" logic
+     */
+    suspend fun addPublicationWithTimeout(
+        publicationUri: ChannelUriStringBuilder,
+        handshakeTimeoutSec: Int,
+        streamId: Int,
+        logInfo: String,
+        onErrorHandler: suspend (Throwable) -> Exception
+    ): Publication {
 
-    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication {
-        return internal.addPublication(logger, publicationUri, aeronLogInfo, streamId)
+        val publication = try {
+            addPublication(publicationUri, streamId, logInfo)
+        } catch (e: Exception) {
+            val exception = onErrorHandler(e)
+            exception.cleanAllStackTrace()
+            throw exception
+        }
+
+        // always include the linger timeout, so we don't accidentally kill ourselves by taking too long
+        val timeoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong()) + getLingerNs()
+        val startTime = System.nanoTime()
+
+        while (System.nanoTime() - startTime < timeoutInNanos) {
+            if (publication.isConnected) {
+                return publication
+            }
+
+            delay(200L)
+        }
+
+        closeAndDeletePublication(publication, logInfo)
+
+        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]:Publication timed out in $handshakeTimeoutSec seconds while waiting for connection state: $publicationUri streamId=$streamId"))
+        exception.cleanAllStackTrace()
+        throw exception
+    }
+
+
+    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
+        return internal.addPublication(logger, publicationUri, streamId, logInfo)
     }
 
     /**
      * This is not a thread-safe publication!
      */
-    suspend fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication {
-        return internal.addExclusivePublication(logger, publicationUri, aeronLogInfo, streamId)
+    suspend fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
+        return internal.addExclusivePublication(logger, publicationUri, streamId, logInfo)
     }
 
-    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Subscription {
-        return internal.addSubscription(logger, subscriptionUri, aeronLogInfo, streamId)
+    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription {
+        return internal.addSubscription(logger, subscriptionUri, streamId, logInfo)
+    }
+
+    /**
+     * Guarantee that the publication is closed AND the backing file is removed.
+     *
+     * On close, the publication CAN linger (in case a client goes away, and then comes back)
+     * AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
+     *
+     * This can throw exceptions!
+     */
+    suspend fun closeAndDeletePublication(publication: Publication, logInfo: String) {
+        internal.closeAndDeletePublication(publication, logger, logInfo)
     }
 
     /**
@@ -339,17 +458,8 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * This can throw exceptions!
      */
-    suspend fun closeAndDeletePublication(publication: Publication, aeronLogInfo: String) {
-        internal.closeAndDeletePublication(publication, aeronLogInfo, logger)
-    }
-
-    /**
-     * Guarantee that the publication is closed AND the backing file is removed
-     *
-     * This can throw exceptions!
-     */
-    suspend fun closeAndDeleteSubscription(subscription: Subscription, aeronLogInfo: String) {
-        internal.closeAndDeleteSubscription(subscription, aeronLogInfo, logger)
+    suspend fun closeAndDeleteSubscription(subscription: Subscription, logInfo: String) {
+        internal.closeAndDeleteSubscription(subscription, logger, logInfo)
     }
 
 

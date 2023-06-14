@@ -22,10 +22,13 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.AeronDriverException
 import dorkbox.network.exceptions.ClientRetryException
 import io.aeron.Aeron
 import io.aeron.ChannelUriStringBuilder
+import io.aeron.ConcurrentPublication
+import io.aeron.ExclusivePublication
 import io.aeron.Publication
 import io.aeron.Subscription
 import io.aeron.driver.MediaDriver
@@ -244,19 +247,29 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     }
 
 
-    suspend fun addPublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication = stateMutex.withLock {
+    /**
+     * Add a [ConcurrentPublication] for publishing messages to subscribers.
+     *
+     * The publication returned is threadsafe.
+     */
+    suspend fun addPublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication = stateMutex.withLock {
+        logger.trace { "Aeron Driver [$driverId]: Creating publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId" }
+
         val uri = publicationUri.build()
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
         // 2) aeron was unable to connect to the driver
         // 3) the address already in use
+        // 4) the SESSION ID is already in use (note: a subscription with NO sessionID will let ANY publication sessionID connect to it)
 
         // configuring pub/sub to aeron is LINEAR -- and it happens in 2 places.
         // 1) starting up the client/server
         // 2) creating a new client-server connection pair (the media driver won't be "dead" at this point)
 
         // in the client, if we are unable to connect to the server, we will attempt to start the media driver + connect to aeron
+
+        // adding a publication can fail
 
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
@@ -266,7 +279,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             throw ex
         }
 
-        val publication = try {
+        val publication: ConcurrentPublication? = try {
             aeron1.addPublication(uri, streamId)
         } catch (e: Exception) {
             // this happens if the aeron media driver cannot actually establish connection... OR IF IT IS TOO FAST BETWEEN ADD AND REMOVE FOR THE SAME SESSION/STREAM ID!
@@ -288,20 +301,25 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             registeredPublicationsTrace.add(publication.registrationId())
         }
 
-        logger.trace { "Aeron Driver [$driverId]: Creating publication [$aeronLogInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
+        logger.trace { "Aeron Driver [$driverId]: Creating publication [$logInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
         return publication
     }
 
     /**
+     * Add an [ExclusivePublication] for publishing messages to subscribers from a single thread.
+     *
      * This is not a thread-safe publication!
      */
-    suspend fun addExclusivePublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Publication = stateMutex.withLock {
+    suspend fun addExclusivePublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication = stateMutex.withLock {
+        logger.trace { "Aeron Driver [$driverId]: Creating ex-publication $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+
         val uri = publicationUri.build()
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
         // 2) aeron was unable to connect to the driver
         // 3) the address already in use
+        // 4) the SESSION ID is already in use (note: a subscription with NO sessionID will let ANY publication sessionID connect to it)
 
         // configuring pub/sub to aeron is LINEAR -- and it happens in 2 places.
         // 1) starting up the client/server
@@ -317,7 +335,9 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             throw ex
         }
 
-        val publication = try {
+        // adding a publication can fail
+
+        val publication: ExclusivePublication? = try {
             aeron1.addExclusivePublication(uri, streamId)
         } catch (e: Exception) {
             // this happens if the aeron media driver cannot actually establish connection... OR IF IT IS TOO FAST BETWEEN ADD AND REMOVE FOR THE SAME SESSION/STREAM ID!
@@ -339,17 +359,27 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             registeredPublicationsTrace.add(publication.registrationId())
         }
 
-        logger.trace { "Aeron Driver [$driverId]: Creating ex-publication $aeronLogInfo :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
+        logger.trace { "Aeron Driver [$driverId]: Creating ex-publication $logInfo :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
         return publication
     }
 
-    suspend fun addSubscription(logger: KLogger, subscriptionUri: ChannelUriStringBuilder, aeronLogInfo: String, streamId: Int): Subscription = stateMutex.withLock {
+    /**
+     * Add a new [Subscription] for subscribing to messages from publishers.
+     *
+     * The method will set up the [Subscription] to use the
+     * {@link Aeron.Context#availableImageHandler(AvailableImageHandler)} and
+     * {@link Aeron.Context#unavailableImageHandler(UnavailableImageHandler)} from the {@link Aeron.Context}.
+     */
+    suspend fun addSubscription(logger: KLogger, subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription = stateMutex.withLock {
+        logger.trace { "Aeron Driver [$driverId]: Creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+
         val uri = subscriptionUri.build()
 
         // reasons we cannot add a pub/sub to aeron
         // 1) the driver was closed
         // 2) aeron was unable to connect to the driver
         // 3) the address already in use
+        // 4) the SESSION ID is already in use (note: a subscription with NO sessionID will let ANY publication sessionID connect to it)
 
 
         // configuring pub/sub to aeron is LINEAR -- and it happens in 2 places.
@@ -365,7 +395,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         if (aeron1 == null || aeron1.isClosed) {
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription to aeron")
-            ex.cleanAllStackTrace()
+            ex.cleanStackTraceInternal()
             throw ex
         }
 
@@ -374,14 +404,14 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         } catch (e: Exception) {
             e.cleanAllStackTrace()
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription", e)
-            ex.cleanAllStackTrace()
+            ex.cleanStackTraceInternal()
             throw ex
         }
 
         if (subscription == null) {
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription")
-            ex.cleanAllStackTrace()
+            ex.cleanStackTraceInternal()
             throw ex
         }
 
@@ -390,24 +420,24 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             registeredSubscriptionsTrace.add(subscription.registrationId())
         }
 
-        logger.trace { "Aeron Driver [$driverId]: Creating subscription [$aeronLogInfo] :: regId=${subscription.registrationId()}, sessionId=${subscriptionUri.sessionId()}, streamId=${subscription.streamId()}" }
+        logger.trace { "Aeron Driver [$driverId]: Creating subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscriptionUri.sessionId()}, streamId=${subscription.streamId()}" }
         return subscription
     }
 
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      */
-    suspend fun closeAndDeletePublication(publication: Publication, aeronLogInfo: String, logger: KLogger) = stateMutex.withLock {
-        logger.trace { "Aeron Driver [$driverId]: Closing publication [$aeronLogInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
+    suspend fun closeAndDeletePublication(publication: Publication, logger: KLogger, logInfo: String) = stateMutex.withLock {
+        logger.trace { "Aeron Driver [$driverId]: Closing publication [$logInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
 
         try {
             // This can throw exceptions!
             publication.close()
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$aeronLogInfo] publication $publication" }
+            logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$logInfo] publication $publication" }
         }
 
-        ensureLogfileDeleted("publication", getMediaDriverFile(publication), aeronLogInfo, logger)
+        ensureLogfileDeleted("publication", getMediaDriverFile(publication), logInfo, logger)
 
         registeredPublications.decrementAndGet()
         if (logger.isTraceEnabled) {
@@ -418,17 +448,17 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      */
-    suspend fun closeAndDeleteSubscription(subscription: Subscription, aeronLogInfo: String, logger: KLogger) {
-        logger.trace { "Aeron Driver [$driverId]: Closing subscription [$aeronLogInfo] ::regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
+    suspend fun closeAndDeleteSubscription(subscription: Subscription, logger: KLogger, logInfo: String) {
+        logger.trace { "Aeron Driver [$driverId]: Closing subscription [$logInfo] ::regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
 
         try {
             // This can throw exceptions!
             subscription.close()
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$aeronLogInfo] subscription $subscription" }
+            logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$logInfo] subscription $subscription" }
         }
 
-        ensureLogfileDeleted("subscription", getMediaDriverFile(subscription), aeronLogInfo, logger)
+        ensureLogfileDeleted("subscription", getMediaDriverFile(subscription), logInfo, logger)
 
         registeredSubscriptions.decrementAndGet()
         if (logger.isTraceEnabled) {
@@ -500,7 +530,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             if (logger.isTraceEnabled) {
                 val elements = registeredPublicationsTrace.elements
                 val joined = elements.joinToString()
-                logger.debug { "Aeron Driver [$driverId]: has [$joined] publications (${elements.size} total)" }
+                logger.debug { "Aeron Driver [$driverId]: has [$joined] publications (${registeredPublications.value} total)" }
             } else {
                 logger.debug { "Aeron Driver [$driverId]: has publications (${registeredPublications.value} total)" }
             }
@@ -511,7 +541,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             if (logger.isTraceEnabled) {
                 val elements = registeredSubscriptionsTrace.elements
                 val joined = elements.joinToString()
-                logger.debug { "Aeron Driver [$driverId]: has [$joined] subscriptions (${elements.size} total)" }
+                logger.debug { "Aeron Driver [$driverId]: has [$joined] subscriptions (${registeredSubscriptions.value} total)" }
             } else {
                 logger.debug { "Aeron Driver [$driverId]: has subscriptions (${registeredSubscriptions.value} total)" }
             }
