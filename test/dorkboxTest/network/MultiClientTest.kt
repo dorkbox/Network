@@ -16,11 +16,11 @@
 
 package dorkboxTest.network
 
-import ch.qos.logback.classic.Level
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -29,14 +29,53 @@ import org.junit.Test
 import java.text.SimpleDateFormat
 import java.util.*
 
+@Suppress("UNUSED_ANONYMOUS_PARAMETER")
 class MultiClientTest : BaseTest() {
-    private val totalCount = 2
+    private val totalCount = 80
+
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
     private val disconnectCount = atomic(0)
 
+    @OptIn(DelicateCoroutinesApi::class)
     @Test
     fun multiConnectClient() {
+        val server = run {
+            val configuration = serverConfig()
+            configuration.enableIPv6 = false
+            configuration.uniqueAeronDirectory = true
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+            server.onConnect {
+                val count = serverConnectCount.incrementAndGet()
+
+                logger.error("${this.id} - Connected $count ....")
+                close()
+
+                if (count == totalCount) {
+                    logger.error { "Stopping endpoints!" }
+
+                    // waiting just a few so that we can make sure that the handshake messages are properly sent
+                    // if we DO NOT wait, what will happen is that the client will CLOSE before it receives the handshake HELLO_ACK
+//                    delay(500)
+
+                    stopEndPointsSuspending()
+                }
+            }
+
+            server.bind()
+            server
+        }
+
+
+        println()
+        println()
+        println()
+        println()
+
+
+
         // clients first, so they try to connect to the server at (roughly) the same time
         val clients = mutableListOf<Client<Connection>>()
         for (i in 1..totalCount) {
@@ -44,16 +83,17 @@ class MultiClientTest : BaseTest() {
             config.enableIPv6 = false
             config.uniqueAeronDirectory = true
 
-            val client: Client<Connection> = Client(config, "Client$i")
+            val client: Client<Connection> = Client(config, "Client $i")
             client.onConnect {
-                val count = clientConnectCount.getAndIncrement()
+                val count = clientConnectCount.incrementAndGet()
+                logger.error("$id - Connected $count ($i)!")
+            }
 
-                logger.error("${this.id} - Connected $count ($i)!")
-            }
             client.onDisconnect {
-                disconnectCount.getAndIncrement()
-                logger.error("${this.id} - Disconnected $i!")
+                val count = disconnectCount.incrementAndGet()
+                logger.error("$id - Disconnected $count ($i)!")
             }
+
             addEndPoint(client)
             clients += client
         }
@@ -61,46 +101,21 @@ class MultiClientTest : BaseTest() {
         // start up the drivers first
         runBlocking {
             clients.forEach {
+                println("******************")
                 it.startDriver()
+                println("******************")
             }
         }
 
-        val configuration = serverConfig()
-        configuration.enableIPv6 = false
 
-        val server: Server<Connection> = Server(configuration)
-        addEndPoint(server)
-        server.onConnect {
-            val count = serverConnectCount.incrementAndGet()
-
-            logger.error("${this.id} - Connecting $count ....")
-            close()
-
-            if (count == totalCount) {
-                logger.error { "Stopping endpoints!" }
-//                delay(6000)
-//                outputStats(server)
-//
-//                delay(2000)
-//                outputStats(server)
-//
-//                delay(2000)
-//                outputStats(server)
-
-                stopEndPoints(10000L)
-            }
-        }
-
-        server.bind()
-
-        GlobalScope.launch {
-            clients.forEach {
+        clients.forEach {
+            GlobalScope.launch {
                 // long connection timeout, since the more that try to connect at the same time, the longer it takes to setup aeron (since it's all shared)
-                launch { it.connect(LOCALHOST, 300*totalCount) }
+                it.connect(LOCALHOST, 30)
             }
         }
 
-        waitForThreads() {
+        waitForThreads(totalCount*AUTO_FAIL_TIMEOUT) {
             outputStats(server)
         }
 
