@@ -250,15 +250,14 @@ internal object ServerHandshakePollers {
         val config = server.config as ServerConfiguration
 
         val poller = try {
-            val driver = ServerHandshakeDriver(
+            val driver = ServerHandshakeDriver.build(
                 aeronDriver = server.aeronDriver,
                 isIpc = true,
                 ipInfo = server.ipInfo,
                 streamIdSub = config.ipcId,
                 sessionIdSub = AeronDriver.RESERVED_SESSION_ID_INVALID,
                 isReliable = true,
-                logInfo = "HANDSHAKE-IPC",
-                logger = logger
+                logInfo = "HANDSHAKE-IPC"
             )
 
             val subscription = driver.subscription
@@ -286,7 +285,7 @@ internal object ServerHandshakePollers {
                     driver.close()
                 }
 
-                override val info = "IPC $driver"
+                override val info = "IPC ${driver.info}"
             }
         } catch (e: Exception) {
             logger.error(e) { "Unable to create IPC listener." }
@@ -306,15 +305,14 @@ internal object ServerHandshakePollers {
         val isReliable = config.isReliable
 
         val poller = try {
-            val driver = ServerHandshakeDriver(
+            val driver = ServerHandshakeDriver.build(
                 aeronDriver = server.aeronDriver,
                 isIpc = false,
                 ipInfo = server.ipInfo,
                 streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionIdSub = 9,
                 isReliable = isReliable,
-                logInfo = "HANDSHAKE-IPv4",
-                logger = logger
+                logInfo = "HANDSHAKE-IPv4"
             )
 
             val subscription = driver.subscription
@@ -342,7 +340,7 @@ internal object ServerHandshakePollers {
                     driver.close()
                 }
 
-                override val info = "IPv4 $driver"
+                override val info = "IPv4 ${driver.info}"
             }
         } catch (e: Exception) {
             logger.error(e) { "Unable to create IPv4 listener." }
@@ -359,15 +357,14 @@ internal object ServerHandshakePollers {
         val isReliable = config.isReliable
 
         val poller =  try {
-            val driver = ServerHandshakeDriver(
-                isIpc = false,
+            val driver = ServerHandshakeDriver.build(
                 aeronDriver = server.aeronDriver,
+                isIpc = false,
                 ipInfo = server.ipInfo,
                 streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionIdSub = 0,
                 isReliable = isReliable,
-                logInfo = "HANDSHAKE-IPv6",
-                logger = logger
+                logInfo = "HANDSHAKE-IPv6"
             )
 
             val subscription = driver.subscription
@@ -396,7 +393,7 @@ internal object ServerHandshakePollers {
                     driver.close()
                 }
 
-                override val info = "IPv6 $driver"
+                override val info = "IPv6 ${driver.info}"
             }
         } catch (e: Exception) {
             logger.error(e) { "Unable to create IPv6 listener." }
@@ -414,15 +411,14 @@ internal object ServerHandshakePollers {
         val isReliable = config.isReliable
 
         val poller = try {
-            val driver = ServerHandshakeDriver(
-                isIpc = false,
+            val driver = ServerHandshakeDriver.build(
                 aeronDriver = server.aeronDriver,
+                isIpc = false,
                 ipInfo = server.ipInfo,
                 streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionIdSub = 0,
                 isReliable = isReliable,
-                logInfo = "HANDSHAKE-IPv4+6",
-                logger = logger
+                logInfo = "HANDSHAKE-IPv4+6"
             )
 
 
@@ -451,7 +447,7 @@ internal object ServerHandshakePollers {
                     driver.close()
                 }
 
-                override val info = "IPv4+6 $driver"
+                override val info = "IPv4+6 ${driver.info}"
             }
         } catch (e: Exception) {
             logger.error(e) { "Unable to create IPv4+6 listeners." }

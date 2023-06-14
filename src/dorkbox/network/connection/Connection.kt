@@ -100,7 +100,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * @return true if this connection is an IPC connection
      */
-    val isIpc = connectionParameters.connectionInfo.remoteAddress == null
+    val isIpc = connectionParameters.connectionInfo.isIpc
 
     /**
      * @return true if this connection is a network connection
@@ -159,7 +159,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         sessionIdPub = connectionInfo.sessionIdPub
         sessionIdSub = connectionInfo.sessionIdSub
 
-        // the ID of the connection is the SUB ID from the server!
+        // the ID of the connection is always the SUB ID from the server!
         id = if (endPoint.type == Server::class.java) {
             connectionInfo.sessionIdSub
         } else {
@@ -167,8 +167,8 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
 
-        subscription = connectionInfo.subscription
-        publication = connectionInfo.publication
+        subscription = connectionInfo.sub
+        publication = connectionInfo.pub
 
         // can only get this AFTER we have built the sub/pub. THESE ARE UNIQUE PER PUB/SUB!
         streamIdPub = connectionInfo.streamIdPub

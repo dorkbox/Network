@@ -15,8 +15,6 @@
  */
 package dorkbox.network
 
-import dorkbox.netUtil.IPv4
-import dorkbox.netUtil.IPv6
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.EventPoller
@@ -25,6 +23,8 @@ import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.EventDispatcher.Companion.EVENT
+import dorkbox.network.connection.IpInfo
+import dorkbox.network.connection.IpInfo.Companion.IpListenType
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerException
@@ -35,7 +35,6 @@ import dorkbox.network.rmi.RmiSupportServer
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
-import java.net.InetAddress
 import java.util.concurrent.*
 
 /**
@@ -188,33 +187,16 @@ open class Server<CONNECTION : Connection>(
     private val connectionRules = CopyOnWriteArrayList<ConnectionRule>()
 
     /**
-     * true if the following network stacks are available for use
+     * the IP address information, if available.
      */
-    internal val canUseIPv4 = config.enableIPv4 && IPv4.isAvailable
-    internal val canUseIPv6 = config.enableIPv6 && IPv6.isAvailable
-
-
-    // localhost/loopback IP might not always be 127.0.0.1 or ::1
-    // We want to listen on BOTH IPv4 and IPv6 (config option lets us configure this)
-    internal val listenIPv4Address: InetAddress? =
-        if (canUseIPv4) {
-            formatCommonAddress(config.listenIpAddress, true) { null } // if it's not a valid IP, the lambda will return null
-        }
-        else {
-            null
-        }
-
-
-    internal val listenIPv6Address: InetAddress? =
-        if (canUseIPv6) {
-            formatCommonAddress(config.listenIpAddress, false) { null } // if it's not a valid IP, the lambda will return null
-        }
-        else {
-            null
-        }
+    internal val ipInfo = IpInfo(config)
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ServerException(message, cause)
+    }
+
+    init {
+        verifyState()
     }
 
     /**
@@ -231,7 +213,8 @@ open class Server<CONNECTION : Connection>(
 
         try {
             startDriver()
-            initializeState()
+            verifyState()
+            initializeLatch()
         } catch (e: Exception) {
             logger.error(e) { "Unable to start the network driver" }
             return@runBlocking
@@ -247,28 +230,25 @@ open class Server<CONNECTION : Connection>(
 
         val server = this@Server
         val handshake = ServerHandshake(logger, config, listenerManager, aeronDriver)
-        val ipcPoller: AeronPoller = ServerHandshakePollers.ipc(server, handshake)
 
-        // if we are binding to WILDCARD, then we have to do something special if BOTH IPv4 and IPv6 are enabled!
-        val isWildcard = listenIPv4Address == IPv4.WILDCARD || listenIPv6Address == IPv6.WILDCARD
-        val ipv4Poller: AeronPoller
-        val ipv6Poller: AeronPoller
-
-        if (isWildcard) {
-            if (canUseIPv4 && canUseIPv6) {
-                // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
-                ipv4Poller = ServerHandshakePollers.disabled("IPv4 Disabled")
-                ipv6Poller = ServerHandshakePollers.ip6Wildcard(server, handshake)
-            } else {
-                // only 1 will be a real poller
-                ipv4Poller = ServerHandshakePollers.ip4(server, handshake)
-                ipv6Poller = ServerHandshakePollers.ip6(server, handshake)
-            }
+        val ipcPoller: AeronPoller = if (config.enableIpc) {
+            ServerHandshakePollers.ipc(server, handshake)
         } else {
-            ipv4Poller = ServerHandshakePollers.ip4(server, handshake)
-            ipv6Poller = ServerHandshakePollers.ip6(server, handshake)
+            ServerHandshakePollers.disabled("IPC Disabled")
         }
 
+        val ipPoller = when (ipInfo.ipType) {
+            // IPv6 will bind to IPv4 wildcard as well, so don't bind both!
+            IpListenType.IPWildcard   -> ServerHandshakePollers.ip6Wildcard(server, handshake)
+            IpListenType.IPv4Wildcard -> ServerHandshakePollers.ip4(server, handshake)
+            IpListenType.IPv6Wildcard -> ServerHandshakePollers.ip6(server, handshake)
+            IpListenType.IPv4 -> ServerHandshakePollers.ip4(server, handshake)
+            IpListenType.IPv6 -> ServerHandshakePollers.ip6(server, handshake)
+            IpListenType.IPC  -> ServerHandshakePollers.disabled("IP Disabled")
+        }
+
+        logger.info { ipcPoller.info }
+        logger.info { ipPoller.info }
 
         // additionally, if we have MULTIPLE clients on the same machine, we are limited by the CPU core count. Ideally we want to share this among ALL clients within the same JVM so that we can support multiple clients/servers
         networkEventPoller.submit(
@@ -280,8 +260,7 @@ open class Server<CONNECTION : Connection>(
                 //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
 
                 // this checks to see if there are NEW clients on the handshake ports
-                pollCount += ipv4Poller.poll()
-                pollCount += ipv6Poller.poll()
+                pollCount += ipPoller.poll()
 
                 // this checks to see if there are NEW clients via IPC
                 pollCount += ipcPoller.poll()
@@ -359,8 +338,7 @@ open class Server<CONNECTION : Connection>(
                 }
             } finally {
                 ipcPoller.close()
-                ipv4Poller.close()
-                ipv6Poller.close()
+                ipPoller.close()
 
                 // clear all the handshake info
                 handshake.clear()
@@ -448,6 +426,18 @@ open class Server<CONNECTION : Connection>(
         connections.forEach {
             function(it)
         }
+    }
+
+    fun close() {
+        close(false) {}
+    }
+
+    fun close(onCloseFunction: () -> Unit = {}) {
+        close(false, onCloseFunction)
+    }
+
+    final override fun close(shutdownEndpoint: Boolean, onCloseFunction: () -> Unit) {
+        super.close(shutdownEndpoint, onCloseFunction)
     }
 
     /**

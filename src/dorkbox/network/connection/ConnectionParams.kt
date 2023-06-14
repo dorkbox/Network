@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,10 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.aeron.mediaDriver.MediaDriverConnectInfo
+import dorkbox.network.aeron.mediaDriver.PubSub
 
 data class ConnectionParams<CONNECTION : Connection>(
     val endPoint: EndPoint<CONNECTION>,
-    val connectionInfo: MediaDriverConnectInfo,
+    val connectionInfo: PubSub,
     val publicKeyValidation: PublicKeyValidationState
 )

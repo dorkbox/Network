@@ -25,14 +25,23 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.EventPoller
 import dorkbox.network.aeron.mediaDriver.ClientConnectionDriver
 import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
-import dorkbox.network.connection.*
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.EventDispatcher.Companion.EVENT
+import dorkbox.network.connection.IpInfo.Companion.formatCommonAddress
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
-import dorkbox.network.exceptions.*
+import dorkbox.network.connection.PublicKeyValidationState
+import dorkbox.network.exceptions.ClientException
+import dorkbox.network.exceptions.ClientRejectedException
+import dorkbox.network.exceptions.ClientRetryException
+import dorkbox.network.exceptions.ClientShutdownException
+import dorkbox.network.exceptions.ClientTimedOutException
+import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
-import dorkbox.network.ping.PingManager
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
@@ -179,6 +188,8 @@ open class Client<CONNECTION : Connection>(
     @Volatile
     var remoteAddressString: String = "UNKNOWN"
         private set
+
+    private val handshake = ClientHandshake(this, logger)
 
     @Volatile
     private var slowDownForException = false
@@ -423,13 +434,17 @@ open class Client<CONNECTION : Connection>(
         }
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
+        // this also makes sure that the dispatchers are still active.
+        // Calling `client.close()` will shutdown the dispatchers (and a new client instance must be created)
         try {
             startDriver()
-            initializeState()
+            verifyState()
+            initializeLatch()
         } catch (e: Exception) {
             logger.error(e) { "Unable to start the endpoint!" }
             return
         }
+
 
         val isSelfMachine = remoteAddress?.isLoopbackAddress == true || remoteAddress == lanAddress
 
@@ -441,9 +456,9 @@ open class Client<CONNECTION : Connection>(
         val autoChangeToIpc =
             (config.enableIpc && (remoteAddress == null || isSelfMachine)) || (!config.enableIpc && remoteAddress == null)
 
-        val handshake = ClientHandshake(this, logger)
-
+        // how long does the initial handshake take to connect
         var handshakeTimeoutSec = 5
+        // how long before we COMPLETELY give up retrying
         var timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
 
         if (DEBUG_CONNECTIONS) {
@@ -486,7 +501,7 @@ open class Client<CONNECTION : Connection>(
                 }
 
                 // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
-                handshakeConnection = ClientHandshakeDriver(
+                handshakeConnection = ClientHandshakeDriver.build(
                     aeronDriver = aeronDriver,
                     autoChangeToIpc = autoChangeToIpc,
                     remoteAddress = remoteAddress,
@@ -497,12 +512,8 @@ open class Client<CONNECTION : Connection>(
                     logger = logger
                 )
 
-                logger.info("")
-                logger.info("")
-                logger.info { "Connecting to ${handshakeConnection.infoPub}" }
-                logger.info { "Connecting to ${handshakeConnection.infoSub}" }
-                logger.info("")
-                logger.info("")
+                logger.debug { "Connecting to ${handshakeConnection.infoPub}" }
+                logger.debug { "Connecting to ${handshakeConnection.infoSub}" }
 
                 connect0(handshake, handshakeConnection, handshakeTimeoutSec)
                 success = true
@@ -586,10 +597,10 @@ open class Client<CONNECTION : Connection>(
         // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
 
         // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
-        val connectionInfo = handshake.hello(aeronDriver, handshakeConnection, connectionTimeoutSec)
+        val connectionInfo = handshake.hello(handshakeConnection, connectionTimeoutSec)
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
-        val validateRemoteAddress = if (handshakeConnection.isUsingIPC) {
+        val validateRemoteAddress = if (handshakeConnection.pubSub.isIpc) {
             PublicKeyValidationState.VALID
         } else {
             crypto.validateRemoteAddress(remoteAddress!!, remoteAddressString, connectionInfo.publicKey)
@@ -620,7 +631,7 @@ open class Client<CONNECTION : Connection>(
 
             // because we are getting the class registration details from the SERVER, this should never be the case.
             // It is still and edge case where the reconstruction of the registration details fails (maybe because of custom serializers)
-            val exception = if (handshakeConnection.isUsingIPC) {
+            val exception = if (handshakeConnection.pubSub.isIpc) {
                 ClientRejectedException("[${handshake.connectKey}] Connection to IPC has incorrect class registration details!!")
             } else {
                 ClientRejectedException("[${handshake.connectKey}] Connection to [$remoteAddressString] has incorrect class registration details!!")
@@ -640,7 +651,7 @@ open class Client<CONNECTION : Connection>(
 
 
         // we are now connected, so we can connect to the NEW client-specific ports
-        val clientConnection = ClientConnectionDriver(handshakeConnection, connectionInfo)
+        val clientConnection = ClientConnectionDriver.build(aeronDriver, connectionTimeoutSec, handshakeConnection, connectionInfo)
 
         // have to rebuild the client pub/sub for the next part of the handshake (since it's a 1-shot deal for the server per session)
         // if we go SLOWLY (slower than the linger timeout), it will work. if we go quickly, this it will have problems (so we must do this!)
@@ -648,10 +659,10 @@ open class Client<CONNECTION : Connection>(
 
 
         val newConnection: CONNECTION
-        if (handshakeConnection.isUsingIPC) {
-            newConnection = connectionFunc(ConnectionParams(this, clientConnection.connectionInfo(), PublicKeyValidationState.VALID))
+        if (handshakeConnection.pubSub.isIpc) {
+            newConnection = connectionFunc(ConnectionParams(this, clientConnection.connectionInfo, PublicKeyValidationState.VALID))
         } else {
-            newConnection = connectionFunc(ConnectionParams(this, clientConnection.connectionInfo(), validateRemoteAddress))
+            newConnection = connectionFunc(ConnectionParams(this, clientConnection.connectionInfo, validateRemoteAddress))
             remoteAddress!!
 
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
@@ -684,11 +695,11 @@ open class Client<CONNECTION : Connection>(
 
             EventDispatcher.launch(EVENT.DISCONNECT) {
                 listenerManager.notifyDisconnect(connection)
-            }
 
-            // we must reset the disconnect-in-progress latch AND count down, so that reconnects can successfully reconnect
-            val disconnectCDL = disconnectInProgress.getAndSet(null)!!
-            disconnectCDL.countDown()
+                // we must reset the disconnect-in-progress latch AND count down, so that reconnects can successfully reconnect
+                val disconnectCDL = disconnectInProgress.getAndSet(null)!!
+                disconnectCDL.countDown()
+            }
         }
 
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
@@ -703,7 +714,7 @@ open class Client<CONNECTION : Connection>(
         // also closes the handshake (will also throw connect timeout exception)
 
         try {
-            handshake.done(aeronDriver, handshakeConnection, clientConnection, connectionTimeoutSec, handshakeConnection.details)
+            handshake.done(handshakeConnection, clientConnection, connectionTimeoutSec, handshakeConnection.details)
         } catch (e: Exception) {
             logger.error(e) { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] error during handshake" }
             throw e
@@ -716,7 +727,6 @@ open class Client<CONNECTION : Connection>(
 
         logger.debug { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] done with handshake." }
 
-
         // have to make a new thread to listen for incoming data!
         // SUBSCRIPTIONS ARE NOT THREAD SAFE! Only one thread at a time can poll them
 
@@ -728,9 +738,10 @@ open class Client<CONNECTION : Connection>(
                     newConnection.poll()
                 } else {
                     // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                    logger.debug { "[${handshakeConnection.details}] connection expired" }
+                    logger.debug { "[${handshakeConnection.details}] connection expired (cleanup)" }
 
-                    // NOTE: We do not shutdown the client!! The client is only closed by explicitly calling `client.close()`
+                    // When we close via a message (or when the connection timeout has expired), we do not flush the state!
+                    // NOTE: the state is ONLY flushed when client.close() is called!
                     EventDispatcher.launch(EVENT.CLOSE) {
                         newConnection.close(enableRemove = true)
                     }
@@ -748,7 +759,6 @@ open class Client<CONNECTION : Connection>(
         // This must be on a different thread
         EventDispatcher.launch(EVENT.CONNECT) {
             // what happens if the disconnect runs INSIDE the connect?
-
             listenerManager.notifyConnect(newConnection)
 
             // now the disconnect logic can run because we are done with the connect logic.
@@ -830,7 +840,7 @@ open class Client<CONNECTION : Connection>(
      *
      * @return true if the ping was successfully sent to the client
      */
-    suspend fun ping(pingTimeoutSeconds: Int = PingManager.DEFAULT_TIMEOUT_SECONDS, function: suspend Ping.() -> Unit): Boolean {
+    suspend fun ping(pingTimeoutSeconds: Int = config.pingTimeoutSeconds, function: suspend Ping.() -> Unit): Boolean {
         val c = connection0
 
         if (c != null) {
@@ -847,7 +857,7 @@ open class Client<CONNECTION : Connection>(
      *
      * @param function called when the ping returns (ie: update time/latency counters/metrics/etc)
      */
-    fun pingBlocking(pingTimeoutSeconds: Int = PingManager.DEFAULT_TIMEOUT_SECONDS, function: suspend Ping.() -> Unit): Boolean {
+    fun pingBlocking(pingTimeoutSeconds: Int = config.pingTimeoutSeconds, function: suspend Ping.() -> Unit): Boolean {
         return runBlocking {
             ping(pingTimeoutSeconds, function)
         }

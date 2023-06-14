@@ -327,7 +327,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         var connection: CONNECTION? = null
         try {
             // Create a pub/sub at the given address and port, using the given stream ID.
-            val newConnectionDriver = ServerConnectionDriver(
+            val newConnectionDriver = ServerConnectionDriver.build(
                 isIpc = true,
                 aeronDriver = aeronDriver,
                 ipInfo = server.ipInfo,
@@ -340,11 +340,11 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
                 logInfo = "IPC",
-                isReliable = true,
-                logger = logger
+                reliable = true
             )
 
-            connection = connectionFunc(ConnectionParams(server, newConnectionDriver.connectionInfo(), PublicKeyValidationState.VALID))
+            logger.info { "Creating new connection to ${newConnectionDriver.info}" }
+            connection = connectionFunc(ConnectionParams(server, newConnectionDriver.pubSub, PublicKeyValidationState.VALID))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
@@ -531,7 +531,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         var connection: CONNECTION? = null
         try {
             // Create a pub/sub at the given address and port, using the given stream ID.
-            val newConnectionDriver = ServerConnectionDriver(
+            val newConnectionDriver = ServerConnectionDriver.build(
                 isIpc = false,
                 aeronDriver = aeronDriver,
                 sessionIdPub = connectionSessionIdPub,
@@ -547,8 +547,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 portSub = portSub,
 
                 logInfo = logType,
-                isReliable = isReliable,
-                logger = logger
+                reliable = isReliable
             )
 
 
@@ -565,7 +564,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 ""
             }
 
-            connection = connectionFunc(ConnectionParams(server, newConnectionDriver.connectionInfo(), validateRemoteAddress))
+            logger.info { "Creating new connection to ${newConnectionDriver.info}" }
+            connection = connectionFunc(ConnectionParams(server, newConnectionDriver.pubSub, validateRemoteAddress))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)

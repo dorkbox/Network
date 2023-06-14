@@ -89,8 +89,8 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
         cache.put(id)
     }
 
-    fun isEmpty(): Boolean {
-        return assigned.value == 0
+    fun counts(): Int {
+        return assigned.value
     }
 
     override fun toString(): String {

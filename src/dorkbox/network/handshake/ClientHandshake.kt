@@ -64,6 +64,9 @@ internal class ClientHandshake<CONNECTION: Connection>(
     @Volatile
     private var failedException: Exception? = null
 
+    @Volatile
+    private var shutdown = false
+
     init {
         // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
         //  we exclusively read from the DirectBuffer on a single thread.
@@ -178,17 +181,17 @@ internal class ClientHandshake<CONNECTION: Connection>(
         val publicKey = endPoint.storage.getPublicKey()!!
 
         // Send the one-time pad to the server.
-        val publication = handshakeConnection.publication
-        val subscription = handshakeConnection.subscription
+        val publication = handshakeConnection.pubSub.pub
+        val subscription = handshakeConnection.pubSub.sub
 
         try {
             handshaker.writeMessage(publication, handshakeConnection.details,
                                     HandshakeMessage.helloFromClient(
                                         connectKey = connectKey,
                                         publicKey = publicKey,
-                                        sessionId = handshakeConnection.sessionIdSub,
-                                        streamId = handshakeConnection.streamIdSub,
-                                        portSub = handshakeConnection.portSub
+                                        sessionId = handshakeConnection.pubSub.sessionIdSub,
+                                        streamId = handshakeConnection.pubSub.streamIdSub,
+                                        portSub = handshakeConnection.pubSub.portSub
                                     ))
         } catch (e: Exception) {
             handshakeConnection.close()
@@ -228,7 +231,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
             handshakeConnection.close()
 
             val exception = ClientTimedOutException("$handshakeConnection Waiting for registration response from server")
-            exception.cleanStackTraceInternal()
             throw exception
         }
 
@@ -245,13 +247,13 @@ internal class ClientHandshake<CONNECTION: Connection>(
     ) {
         val registrationMessage = HandshakeMessage.doneFromClient(
                                                                         connectKey,
-                                                                        handshakeConnection.portSub,
-                                                                        clientConnection.streamIdSub,
-                                                                        clientConnection.sessionIdSub)
+                                                                        handshakeConnection.pubSub.portSub,
+                                                                        clientConnection.connectionInfo.streamIdSub,
+                                                                        clientConnection.connectionInfo.sessionIdSub)
 
         // Send the done message to the server.
         try {
-            handshaker.writeMessage(handshakeConnection.publication, aeronLogInfo, registrationMessage)
+            handshaker.writeMessage(handshakeConnection.pubSub.pub, aeronLogInfo, registrationMessage)
         } catch (e: Exception) {
             handshakeConnection.close()
 
@@ -270,7 +272,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         while (System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pollCount = clientConnection.subscription.poll(handler, 1)
+            pollCount = clientConnection.connectionInfo.sub.poll(handler, 1)
 
             if (failedException != null || connectionDone) {
                 break
@@ -296,12 +298,11 @@ internal class ClientHandshake<CONNECTION: Connection>(
             throw failedEx
         }
 
-        if (!connectionDone) {
+        if (!connectionDone && !shutdown) {
             // since this failed, close everything
             handshakeConnection.close()
 
             val exception = ClientTimedOutException("Waiting for registration response from server")
-            exception.cleanStackTraceInternal()
             throw exception
         }
     }
@@ -312,5 +313,10 @@ internal class ClientHandshake<CONNECTION: Connection>(
         connectionDone = false
         needToRetry = false
         failedException = null
+        shutdown = false
+    }
+
+    fun close() {
+        shutdown = true
     }
 }
