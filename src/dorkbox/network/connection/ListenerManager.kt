@@ -367,7 +367,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * Invoked when a connection is first initialized, but BEFORE it's connected to the remote address.
      */
     suspend fun notifyInit(connection: CONNECTION) {
-        onInitList.value.forEach {
+        val list = onInitList.value
+        list.forEach {
             try {
                 it(connection)
             } catch (t: Throwable) {
@@ -382,7 +383,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * Invoked when a connection is connected to a remote address.
      */
     suspend fun notifyConnect(connection: CONNECTION) {
-        onConnectList.value.forEach {
+        val list = onConnectList.value
+        list.forEach {
             try {
                 it(connection)
             } catch (t: Throwable) {
@@ -397,7 +399,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * Invoked when a connection is disconnected to a remote address.
      */
     suspend fun notifyDisconnect(connection: CONNECTION) {
-        onDisconnectList.value.forEach {
+        val list = onDisconnectList.value
+        list.forEach {
             try {
                 it(connection)
             } catch (t: Throwable) {
@@ -416,7 +419,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     fun notifyError(connection: CONNECTION, exception: Throwable) {
         logger.error("Error with connection $connection", exception)
 
-        onErrorList.value.forEach {
+        val list = onErrorList.value
+        list.forEach {
             try {
                 it(connection, exception)
             } catch (t: Throwable) {
@@ -435,7 +439,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     fun notifyError(exception: Throwable) {
         logger.error("Global error", exception)
 
-        onErrorGlobalList.value.forEach {
+        val list = onErrorGlobalList.value
+        list.forEach {
             try {
                 it(exception)
             } catch (t: Throwable) {
