@@ -46,59 +46,120 @@ class SimpleTest : BaseTest() {
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIp4() {
-        simple(ConnectType.IP4)
+    fun simpleIp4Server() {
+        simpleServerShutdown(ConnectType.IP4)
     }
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIp6() {
-        simple(ConnectType.IP6)
+    fun simpleIp6Server() {
+        simpleServerShutdown(ConnectType.IP6)
     }
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIp46() {
-        simple(ConnectType.IP46)
+    fun simpleIp46Server() {
+        simpleServerShutdown(ConnectType.IP46)
     }
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIp64() {
-        simple(ConnectType.IP64)
+    fun simpleIp64Server() {
+        simpleServerShutdown(ConnectType.IP64)
     }
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIpc() {
-        simple(ConnectType.IPC)
+    fun simpleIpcServer() {
+        simpleServerShutdown(ConnectType.IPC)
     }
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIpc4Fallback() {
-        simple(ConnectType.IPC4, ConnectType.IPC)
+    fun simpleIpc4FallbackServer() {
+        simpleServerShutdown(ConnectType.IPC4, ConnectType.IPC)
     }
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIpc6Fallback() {
-        simple(ConnectType.IPC6 , ConnectType.IPC)
+    fun simpleIpc6FallbackServer() {
+        simpleServerShutdown(ConnectType.IPC6, ConnectType.IPC)
     }
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIpc46Fallback() {
-        simple(ConnectType.IPC46 , ConnectType.IPC)
+    fun simpleIpc46FallbackServer() {
+        simpleServerShutdown(ConnectType.IPC46, ConnectType.IPC)
     }
 
     @Test
     @Throws(SecurityException::class, IOException::class)
-    fun simpleIpc64Fallback() {
-        simple(ConnectType.IPC64 , ConnectType.IPC)
+    fun simpleIpc64FallbackServer() {
+        simpleServerShutdown(ConnectType.IPC64, ConnectType.IPC)
     }
 
-    private fun simple(clientType: ConnectType, serverType: ConnectType = clientType) {
+
+    ////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIp4Client() {
+        simpleClientShutdown(ConnectType.IP4)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIp6Client() {
+        simpleClientShutdown(ConnectType.IP6)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIp46Client() {
+        simpleClientShutdown(ConnectType.IP46)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIp64Client() {
+        simpleClientShutdown(ConnectType.IP64)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpcClient() {
+        simpleClientShutdown(ConnectType.IPC)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpc4FallbackClient() {
+        simpleClientShutdown(ConnectType.IPC4, ConnectType.IPC)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpc6FallbackClient() {
+        simpleClientShutdown(ConnectType.IPC6, ConnectType.IPC)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpc46FallbackClient() {
+        simpleClientShutdown(ConnectType.IPC46, ConnectType.IPC)
+    }
+
+    @Test
+    @Throws(SecurityException::class, IOException::class)
+    fun simpleIpc64FallbackClient() {
+        simpleClientShutdown(ConnectType.IPC64, ConnectType.IPC)
+    }
+
+    // shutdown from the server
+    private fun simpleServerShutdown(clientType: ConnectType, serverType: ConnectType = clientType) {
         received.set(false)
         sent.set(false)
 
@@ -120,6 +181,8 @@ class SimpleTest : BaseTest() {
 
                 received.set(true)
                 logger.error("Done, stopping endpoints")
+
+                // this must NOT be on the disconenct thread, because we cancel it!
                 stopEndPoints()
             }
 
@@ -144,15 +207,84 @@ class SimpleTest : BaseTest() {
             }
 
             when (clientType) {
-                ConnectType.IPC -> client.connect()
-                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST)
-                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST)
-                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST)
-                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IPC -> { client.connect() }
+                ConnectType.IPC4 -> { client.connect(IPv4.LOCALHOST) }
+                ConnectType.IPC6 -> { client.connect(IPv6.LOCALHOST) }
+                ConnectType.IPC46 -> { client.connect(IPv4.LOCALHOST) }
+                ConnectType.IPC64 -> { client.connect(IPv6.LOCALHOST) }
+                ConnectType.IP4 -> { client.connect(IPv4.LOCALHOST) }
+                ConnectType.IP6 -> { client.connect(IPv6.LOCALHOST) }
+                ConnectType.IP46 -> { client.connect(IPv4.LOCALHOST) }
+                ConnectType.IP64 -> { client.connect(IPv6.LOCALHOST) }
+            }
+        }
+
+        waitForThreads()
+
+        assertTrue(sent.get())
+        assertTrue(received.get())
+    }
+
+    // shutdown from the client
+    private fun simpleClientShutdown(clientType: ConnectType, serverType: ConnectType = clientType) {
+        received.set(false)
+        sent.set(false)
+
+        run {
+            val configuration = serverConfig()
+            configuration.port = 12312
+
+            configuration.enableIPv4 = serverType.ip4
+            configuration.enableIPv6 = serverType.ip6
+            configuration.enableIpc = serverType.ipc
+
+            val server: Server<Connection> = Server(configuration)
+            addEndPoint(server)
+
+            server.onMessage<String> { message ->
+                if (message != "client") {
+                    Assert.fail()
+                }
+
+                received.set(true)
+                logger.error("Done, stopping endpoints")
+                close()
+            }
+
+            server.bind()
+        }
+
+        run {
+            val configuration = clientConfig()
+            configuration.port = 12312
+
+            configuration.enableIPv4 = clientType.ip4
+            configuration.enableIPv6 = clientType.ip6
+            configuration.enableIpc = clientType.ipc
+
+
+            val client: Client<Connection> = Client(configuration)
+            addEndPoint(client)
+
+            client.onConnect {
+                sent.set(true)
+                send("client")
+            }
+
+            client.onDisconnect {
+                stopEndPoints()
+            }
+
+            when (clientType) {
+                ConnectType.IPC -> { client.connect() }
+                ConnectType.IPC4 -> { client.connect(IPv4.LOCALHOST) }
+                ConnectType.IPC6 -> { client.connect(IPv6.LOCALHOST) }
+                ConnectType.IPC46 -> { client.connect(IPv4.LOCALHOST) }
+                ConnectType.IPC64 -> { client.connect(IPv6.LOCALHOST) }
+                ConnectType.IP4 -> { client.connect(IPv4.LOCALHOST) }
+                ConnectType.IP6 -> { client.connect(IPv6.LOCALHOST) }
+                ConnectType.IP46 -> { client.connect(IPv4.LOCALHOST) }
+                ConnectType.IP64 -> { client.connect(IPv6.LOCALHOST) }
             }
         }
 

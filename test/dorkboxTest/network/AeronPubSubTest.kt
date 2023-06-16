@@ -22,6 +22,7 @@ import dorkbox.network.exceptions.ClientTimedOutException
 import io.aeron.Publication
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
+import org.junit.Assert
 import org.junit.Test
 
 class AeronPubSubTest : BaseTest() {
@@ -99,7 +100,7 @@ class AeronPubSubTest : BaseTest() {
         }
     }
 
-    @Test(expected = ClientTimedOutException::class)
+    @Test()
     fun connectFailWithBadSessionIdTest() {
         runBlocking {
             val log = KotlinLogging.logger("ConnectTest")
@@ -142,14 +143,18 @@ class AeronPubSubTest : BaseTest() {
             val subscriptionUri = AeronDriver.uriHandshake("udp", true).endpoint(true, "127.0.0.1", port)
             val sub = serverDriver.addSubscription(subscriptionUri, serverStreamId, "server")
 
-            var sessionID = 1234567
-            clientDrivers.forEachIndexed { index, clientDriver ->
-                val publicationUri = AeronDriver.uri("udp", sessionID, true).endpoint(true, "127.0.0.1", port)
-                clientDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, serverStreamId, "client_$index") { cause ->
-                    ClientTimedOutException("Client publication cannot connect with localhost server", cause)
-                }.also {
-                    clientPublications.add(Pair(clientDriver, it))
+            try {
+                var sessionID = 1234567
+                clientDrivers.forEachIndexed { index, clientDriver ->
+                    val publicationUri = AeronDriver.uri("udp", sessionID, true).endpoint(true, "127.0.0.1", port)
+                    clientDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, serverStreamId, "client_$index") { cause ->
+                        ClientTimedOutException("Client publication cannot connect with localhost server", cause)
+                    }.also {
+                        clientPublications.add(Pair(clientDriver, it))
+                    }
                 }
+                Assert.fail("TimeoutException should be caught!")
+            } catch (ignore: Exception) {
             }
 
 

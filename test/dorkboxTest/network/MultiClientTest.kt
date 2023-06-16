@@ -60,7 +60,7 @@ class MultiClientTest : BaseTest() {
                     // if we DO NOT wait, what will happen is that the client will CLOSE before it receives the handshake HELLO_ACK
 //                    delay(500)
 
-                    stopEndPointsSuspending()
+                    stopEndPoints()
                 }
             }
 

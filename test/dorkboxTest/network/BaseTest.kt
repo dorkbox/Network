@@ -195,17 +195,27 @@ abstract class BaseTest {
 
     /**
      * Immediately stop the endpoints
+     *
+     * Can stop from inside different callbacks
+     *  - message
+     *  - connect
+     *  - disconnect
      */
-    fun stopEndPoints(stopAfterMillis: Long = 0L) {
+    fun stopEndPointsBlocking(stopAfterMillis: Long = 0L) {
         runBlocking {
-            stopEndPointsSuspending(stopAfterMillis)
+            stopEndPoints(stopAfterMillis)
         }
     }
 
     /**
      * Immediately stop the endpoints
+     *
+     * Can stop from inside different callbacks
+     *  - message
+     *  - connect
+     *  - disconnect
      */
-    suspend fun stopEndPointsSuspending(stopAfterMillis: Long = 0L) {
+    suspend fun stopEndPoints(stopAfterMillis: Long = 0L) {
         if (isStopping) {
             return
         }
@@ -225,7 +235,8 @@ abstract class BaseTest {
         // shutdown clients first
         clients.forEach { endPoint ->
             // we are ASYNC, so we must use callbacks to execute code
-            endPoint.close {
+            endPoint.close(true) {
+                logger.error("Closed client connection")
                 latch.countDown()
             }
         }
@@ -236,7 +247,8 @@ abstract class BaseTest {
 
         // shutdown everything else (should only be servers) last
         servers.forEach {
-            it.close {
+            it.close(true) {
+                logger.error("Closed server connection")
                 latch.countDown()
             }
         }
@@ -259,6 +271,9 @@ abstract class BaseTest {
             false
         }
 
+        // have to make sure that the aeron driver is CLOSED.
+        Assert.assertTrue("The aeron drivers are not fully closed!", AeronDriver.areAllInstancesClosed())
+
         logger.error("Shut down all endpoints... Success($error)")
     }
     /**
@@ -269,18 +284,18 @@ abstract class BaseTest {
      * @param stopAfterSeconds how many seconds to wait, the default is 2 minutes.
      */
     fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT, preShutdownAction: () -> Unit = {}) {
-        var latchTriggered = try {
-            runBlocking {
+        var latchTriggered =  runBlocking {
+            try {
                 if (stopAfterSeconds == 0L || EndPoint.DEBUG_CONNECTIONS) {
                     latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
                 } else {
                     latch.await(stopAfterSeconds, TimeUnit.SECONDS)
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                stopEndPoints()
+                false
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            stopEndPoints()
-            false
         }
 
         // run actions before we actually shutdown, but after we wait
@@ -295,7 +310,7 @@ abstract class BaseTest {
 
         // always stop the endpoints (even if we already called this)
         try {
-            stopEndPoints()
+            stopEndPointsBlocking()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -334,9 +349,7 @@ abstract class BaseTest {
 
                 // if the thread is interrupted, then it means we finished the test.
                 LoggerFactory.getLogger(this.javaClass.simpleName).error("Test did not complete in a timely manner...")
-                runBlocking {
-                    stopEndPoints()
-                }
+                stopEndPointsBlocking()
                 Assert.fail("Test did not complete in a timely manner.")
             } catch (ignored: InterruptedException) {
             }

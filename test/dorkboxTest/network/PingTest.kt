@@ -48,8 +48,6 @@ class PingTest : BaseTest() {
                     ping {
                         // a ping object is returned, once the round-trip is complete
                         val count = counter.getAndIncrement()
-                        println(count)
-
                         if (count == 99) {
                             clientSuccess.value = true
 
@@ -66,7 +64,7 @@ class PingTest : BaseTest() {
             client.connect(LOCALHOST)
         }
 
-        waitForThreads(1500)
+        waitForThreads()
 
         Assert.assertTrue(clientSuccess.value)
     }

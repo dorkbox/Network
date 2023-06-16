@@ -68,7 +68,7 @@ class ErrorLoggerTest : BaseTest() {
             client.onConnect {
                 // can be any message, we just want the error-log to log something
                 send(TestObj())
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             client.connect(LOCALHOST)

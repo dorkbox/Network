@@ -57,17 +57,16 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
-
 
         waitForThreads()
 
@@ -85,9 +84,9 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
             server.filter(IpSubnetFilterRule(IPv4.WILDCARD, 0))
             server.filter(IpSubnetFilterRule(IPv6.WILDCARD, 0))
+            server.bind()
 
             server.onConnect {
                 serverConnectSuccess.value = true
@@ -106,13 +105,13 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
@@ -154,13 +153,13 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
@@ -203,13 +202,13 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
@@ -245,13 +244,13 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(client)
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
@@ -297,14 +296,15 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                logger.error { "STARTING TO CLOSE CLIENT" }
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
                 e.printStackTrace()
-                stopEndPoints()
+                stopEndPointsBlocking()
                 // this is expected.
             }
         }
@@ -338,13 +338,13 @@ class ConnectionFilterTest : BaseTest() {
 
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
@@ -385,17 +385,16 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
-
 
         waitForThreads()
 
@@ -432,13 +431,13 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
@@ -475,13 +474,13 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(client)
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
@@ -514,13 +513,13 @@ class ConnectionFilterTest : BaseTest() {
 
 
             client.onDisconnect {
-                stopEndPointsSuspending()
+                stopEndPoints()
             }
 
             try {
                 client.connect(LOCALHOST)
             } catch (e: Exception) {
-                stopEndPoints()
+                stopEndPointsBlocking()
                 throw e
             }
         }
