@@ -184,7 +184,6 @@ internal class EventPoller {
 
             if (running && sEvents == 0 && cEvents == 0 && pEvents == 0) {
                 logger.debug { "Closing the Network Event Poller..." }
-                running = false
                 true
             } else {
                 logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)" }
@@ -193,6 +192,7 @@ internal class EventPoller {
         }
 
         if (doClose) {
+            running = false
             shutdownLatch.await()
             configured = false
 
