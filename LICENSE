@@ -1726,12 +1726,6 @@
            Copyright 2018
              Venkat Peri
 
-         - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
-           [The Apache Software License, Version 2.0]
-           https://github.com/Kotlin/kotlinx.coroutines
-           Copyright 2023
-             JetBrains s.r.o.
-
          - Java Uuid Generator - A set of Java classes for working with UUIDs
            [The Apache Software License, Version 2.0]
            https://github.com/cowtowncoder/java-uuid-generator
@@ -1751,14 +1745,6 @@
            Copyright 2023
              Lasse Collin
              Igor Pavlov
-
-         - Kotlin - 
-           [The Apache Software License, Version 2.0]
-           https://github.com/JetBrains/kotlin
-           Copyright 2020
-             JetBrains s.r.o. and Kotlin Programming Language contributors
-           Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
-           See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
          - Netty - An event-driven asynchronous network application framework
            [The Apache Software License, Version 2.0]
@@ -1784,6 +1770,20 @@
            https://github.com/jhalterman/typetools
            Copyright 2023
              Jonathan Halterman and friends
+
+         - Kotlin - 
+           [The Apache Software License, Version 2.0]
+           https://github.com/JetBrains/kotlin
+           Copyright 2020
+             JetBrains s.r.o. and Kotlin Programming Language contributors
+           Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
+           See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
+
+         - kotlinx.coroutines - Library support for Kotlin coroutines with multiplatform support
+           [The Apache Software License, Version 2.0]
+           https://github.com/Kotlin/kotlinx.coroutines
+           Copyright 2023
+             JetBrains s.r.o.
 
          - Collections - Niche collections to augment what is already available.
            [The Apache Software License, Version 2.0]
@@ -1906,13 +1906,13 @@
 
              - SLF4J - Simple facade or abstraction for various logging frameworks
                [MIT License]
-               http://www.slf4j.org
+               https://www.slf4j.org
                Copyright 2023
                  QOS.ch
 
              - Logback - Logback is a logging framework for Java applications
                [The Apache Software License, Version 2.0]
-               http://logback.qos.ch
+               https://logback.qos.ch
                Copyright 2023
                  QOS.ch
 
@@ -1936,13 +1936,13 @@
 
                  - JZlib - 
                    [The Apache Software License, Version 2.0]
-                   http://www.jcraft.com/jzlib
+                   https://github.com/ymnk/jzlib
                      Atsuhiko Yamanaka
                      JCraft, Inc.
 
                  - Bouncy Castle Crypto - 
                    [The Apache Software License, Version 2.0]
-                   http://www.bouncycastle.org
+                   https://www.bouncycastle.org
                      The Legion of the Bouncy Castle Inc
 
                  - ed25519-java - 
