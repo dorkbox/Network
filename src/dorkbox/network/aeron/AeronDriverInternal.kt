@@ -253,8 +253,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * The publication returned is threadsafe.
      */
     suspend fun addPublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication = stateMutex.withLock {
-        logger.trace { "Aeron Driver [$driverId]: Creating publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId" }
-
         val uri = publicationUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -273,6 +271,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
+            logger.error { "Aeron Driver [$driverId]: Error creating publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId" }
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a publication to aeron")
             ex.cleanAllStackTrace()
@@ -282,6 +281,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val publication: ConcurrentPublication? = try {
             aeron1.addPublication(uri, streamId)
         } catch (e: Exception) {
+            logger.error { "Aeron Driver [$driverId]: Error creating publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId" }
+
             // this happens if the aeron media driver cannot actually establish connection... OR IF IT IS TOO FAST BETWEEN ADD AND REMOVE FOR THE SAME SESSION/STREAM ID!
             e.cleanAllStackTrace()
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a publication", e)
@@ -290,6 +291,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         if (publication == null) {
+            logger.error { "Aeron Driver [$driverId]: Error creating publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=$streamId" }
+
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a publication")
             ex.cleanAllStackTrace()
@@ -311,8 +314,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * This is not a thread-safe publication!
      */
     suspend fun addExclusivePublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication = stateMutex.withLock {
-        logger.trace { "Aeron Driver [$driverId]: Creating ex-publication $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
-
         val uri = publicationUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -329,6 +330,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
+            logger.error { "Aeron Driver [$driverId]: Error creating ex-publication $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding an ex-publication to aeron")
             ex.cleanAllStackTrace()
@@ -340,6 +343,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val publication: ExclusivePublication? = try {
             aeron1.addExclusivePublication(uri, streamId)
         } catch (e: Exception) {
+            logger.error { "Aeron Driver [$driverId]: Error creating ex-publication $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+
             // this happens if the aeron media driver cannot actually establish connection... OR IF IT IS TOO FAST BETWEEN ADD AND REMOVE FOR THE SAME SESSION/STREAM ID!
             e.cleanAllStackTrace()
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding an ex-publication", e)
@@ -348,6 +353,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         if (publication == null) {
+            logger.error { "Aeron Driver [$driverId]: Error creating ex-publication $logInfo :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
+
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding an ex-publication")
             ex.cleanAllStackTrace()
@@ -371,8 +378,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * {@link Aeron.Context#unavailableImageHandler(UnavailableImageHandler)} from the {@link Aeron.Context}.
      */
     suspend fun addSubscription(logger: KLogger, subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription = stateMutex.withLock {
-        logger.trace { "Aeron Driver [$driverId]: Creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
-
         val uri = subscriptionUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -393,6 +398,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         val aeron1 = aeron
         if (aeron1 == null || aeron1.isClosed) {
+            logger.error { "Aeron Driver [$driverId]: Error creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription to aeron")
             ex.cleanStackTraceInternal()
@@ -402,6 +409,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         val subscription = try {
             aeron1.addSubscription(uri, streamId)
         } catch (e: Exception) {
+            logger.error { "Aeron Driver [$driverId]: Error creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+
             e.cleanAllStackTrace()
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription", e)
             ex.cleanStackTraceInternal()
@@ -409,6 +418,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         if (subscription == null) {
+            logger.error { "Aeron Driver [$driverId]: Error creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
+
             // there was an error connecting to the aeron client or media driver.
             val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription")
             ex.cleanStackTraceInternal()
