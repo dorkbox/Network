@@ -15,11 +15,11 @@
  */
 package dorkbox.network.handshake
 
+import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.Pool
 import kotlinx.atomicfu.atomic
-import java.security.SecureRandom
 
 /**
  * An allocator for random IDs, the maximum number of IDs is an unsigned short (65535).
@@ -53,7 +53,7 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
             ids.add(id)
         }
 
-        ids.shuffle(SecureRandom())
+        ids.shuffle(CryptoManagement.secureRandom)
 
         // populate the array of randomly assigned ID's.
         cache = ObjectPool.blocking(ids)

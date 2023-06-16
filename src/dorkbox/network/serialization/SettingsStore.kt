@@ -28,7 +28,6 @@ import mu.KLogger
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
-import java.security.SecureRandom
 
 /**
  * This class provides a way for the network stack to use a database of some sort.
@@ -117,11 +116,9 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
         // have to init salt
         val currentValue: ByteArray? = store[saltKey]
         if (currentValue == null) {
-            val secureRandom = SecureRandom()
-
             // server salt is used to salt usernames and other various connection handshake parameters
             val bytes = ByteArray(32) // same size as our public/private key info
-            secureRandom.nextBytes(bytes)
+            CryptoManagement.secureRandom.nextBytes(bytes)
 
             // have to explicitly set it (so it will save)
             store[saltKey] = bytes

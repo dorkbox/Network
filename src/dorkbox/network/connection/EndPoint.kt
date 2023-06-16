@@ -282,7 +282,7 @@ internal constructor(val type: Class<*>,
         // we have to be able to specify the property store
         storage = SettingsStore(config.settingsStore, logger)
         crypto = CryptoManagement(logger, storage, type, config.enableRemoteSignatureValidation)
-        uuid = RandomBasedGenerator(crypto.secureRandom).generate()
+        uuid = RandomBasedGenerator(CryptoManagement.secureRandom).generate()
 
         // Only starts the media driver if we are NOT already running!
         try {

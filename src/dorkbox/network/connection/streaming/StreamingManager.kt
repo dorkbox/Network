@@ -22,6 +22,7 @@ import com.esotericsoftware.kryo.KryoException
 import dorkbox.bytes.OptimizeUtilsByteBuf
 import dorkbox.collections.LockFreeHashMap
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.serialization.AeronInput
@@ -33,7 +34,6 @@ import kotlinx.coroutines.launch
 import mu.KLogger
 import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
-import java.security.SecureRandom
 
 internal class StreamingManager<CONNECTION : Connection>(
     private val logger: KLogger,
@@ -43,8 +43,6 @@ internal class StreamingManager<CONNECTION : Connection>(
     private val streamingDataInMemory = LockFreeHashMap<Long, AeronOutput>()
 
     companion object {
-        val random = SecureRandom()
-
         @Suppress("UNUSED_CHANGED_VALUE")
         private fun writeVarInt(internalBuffer: MutableDirectBuffer, position: Int, value: Int, optimizePositive: Boolean): Int {
             var p = position
@@ -342,7 +340,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         var payloadSent = 0
 
         // NOTE: the stream session ID is a combination of the connection ID + random ID (on the receiving side)
-        val streamSessionId = random.nextInt()
+        val streamSessionId = CryptoManagement.secureRandom.nextInt()
 
         // tell the other side how much data we are sending
         val startMessage = StreamingControl(StreamingState.START, streamSessionId, objectSize.toLong())

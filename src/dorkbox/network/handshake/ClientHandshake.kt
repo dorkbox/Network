@@ -19,6 +19,7 @@ import dorkbox.network.Client
 import dorkbox.network.aeron.mediaDriver.ClientConnectionDriver
 import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.ClientRejectedException
@@ -165,9 +166,9 @@ internal class ClientHandshake<CONNECTION: Connection>(
      * Make sure that NON-ZERO is returned
      */
     private fun getSafeConnectKey(): Long {
-        var key = crypto.secureRandom.nextLong()
+        var key = CryptoManagement.secureRandom.nextLong()
         while (key == 0L) {
-            key = crypto.secureRandom.nextLong()
+            key = CryptoManagement.secureRandom.nextLong()
         }
 
         return key

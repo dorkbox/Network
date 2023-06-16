@@ -24,6 +24,7 @@ import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
 import dorkbox.network.connection.Connection
+import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.serialization.Serialization
 import dorkbox.os.OS
 import dorkbox.storage.Storage
@@ -44,7 +45,6 @@ import org.slf4j.helpers.NOPLogger
 import java.io.File
 import java.net.BindException
 import java.nio.channels.ClosedByInterruptException
-import java.security.SecureRandom
 import java.util.concurrent.*
 
 class ServerConfiguration : dorkbox.network.Configuration() {
@@ -180,10 +180,10 @@ abstract class Configuration {
         private var alreadyShownTempFsTips = false
 
         internal val networkThreadGroup = ThreadGroup("Network")
-        internal val aeronThreadFactory = NamedThreadFactory( "Aeron", networkThreadGroup, Thread.NORM_PRIORITY, true)
+        internal val aeronThreadFactory = NamedThreadFactory( "Aeron", networkThreadGroup,  true)
 
         private val defaultNetworkEventPoll = Executors.newSingleThreadExecutor(
-            NamedThreadFactory( "Poll Dispatcher", networkThreadGroup, Thread.NORM_PRIORITY, true)
+            NamedThreadFactory( "Poll Dispatcher", networkThreadGroup, true)
         ).asCoroutineDispatcher()
 
         private val defaultMessageCoroutineScope = Dispatchers.IO.limitedParallelism(4)
@@ -677,7 +677,7 @@ abstract class Configuration {
 
         // we are starting a new context, make sure the aeron directory is unique (if specified)
         if (uniqueAeronDirectory) {
-            uniqueAeronDirectoryID = SecureRandom().let {
+            uniqueAeronDirectoryID = CryptoManagement.secureRandom.let {
                 // make sure it's not 0, because 0 is special
                 var id = 0
                 while (id == 0) id = it.nextInt()

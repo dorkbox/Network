@@ -59,6 +59,8 @@ internal class CryptoManagement(val logger: KLogger,
         const val curve25519 = "curve25519"
         const val GCM_IV_LENGTH_BYTES = 12
         const val GCM_TAG_LENGTH_BITS = 128
+
+        val secureRandom = SecureRandom()
     }
 
     val privateKey: XECPrivateKey
@@ -66,8 +68,6 @@ internal class CryptoManagement(val logger: KLogger,
 
     val privateKeyBytes: ByteArray
     val publicKeyBytes: ByteArray
-
-    val secureRandom = SecureRandom(settingsStore.getSalt())
 
     private val iv = ByteArray(GCM_IV_LENGTH_BYTES)
     val cryptOutput = AeronOutput()
@@ -77,6 +77,8 @@ internal class CryptoManagement(val logger: KLogger,
         if (!enableRemoteSignatureValidation) {
             logger.warn("WARNING: Disabling remote key validation is a security risk!!")
         }
+
+        secureRandom.setSeed(settingsStore.getSalt())
 
         // initialize the private/public keys used for negotiating ECC handshakes
         // these are ONLY used for IP connections. LOCAL connections do not need a handshake!
