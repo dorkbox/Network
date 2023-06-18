@@ -370,9 +370,10 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
             if (logger.isTraceEnabled) {
                 logger.trace { "Registered classes for serialization:" }
+
                 // log the in-order output first
                 finalClassRegistrations.forEach { classRegistration ->
-                    logger.trace(classRegistration.info)
+                    logger.trace("\t${classRegistration.info}")
                 }
             }
         } else {
