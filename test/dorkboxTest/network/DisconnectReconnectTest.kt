@@ -215,7 +215,7 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
 
-        waitForThreads(AUTO_FAIL_TIMEOUT*10)
+        waitForThreads()
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
         Assert.assertEquals(4, reconnectCount.value)
