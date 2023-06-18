@@ -67,7 +67,7 @@ class ListenerTest : BaseTest() {
     // quick and dirty test to also test connection sub-classing
     internal open inner class TestConnectionA(connectionParameters: ConnectionParams<TestConnectionA>) : Connection(connectionParameters) {
         open fun check() {
-            overrideCheck.value = true
+            overrideCheck.lazySet(true)
         }
     }
 
@@ -78,7 +78,7 @@ class ListenerTest : BaseTest() {
             TestConnectionA(it)
         }
         addEndPoint(server)
-
+// has session/stream count errors!
         // standard listener
         server.onMessage<String> { message ->
             logger.error ("server string message")
@@ -90,14 +90,14 @@ class ListenerTest : BaseTest() {
         // generic listener
         server.onMessage<Any> {
             // should be called!
-            serverOnMessage.value = true
+            serverOnMessage.lazySet(true)
             logger.error ("server any message")
         }
 
         // standard connect check
         server.onConnect {
             logger.error ("server connect")
-            serverConnect.value = true
+            serverConnect.lazySet(true)
 
             onMessage<Any> {
                 logger.error ("server connection any message")
@@ -113,7 +113,7 @@ class ListenerTest : BaseTest() {
         // standard listener disconnect check
         server.onDisconnect {
             logger.error ("server disconnect")
-            serverDisconnect.value = true
+            serverDisconnect.lazySet(true)
         }
 
         server.bind()
@@ -136,14 +136,14 @@ class ListenerTest : BaseTest() {
         // standard connect check
         client.onConnect {
             logger.error { "client connect 2" }
-            clientConnect.value = true
+            clientConnect.lazySet(true)
         }
 
 
         client.onMessage<String> { message ->
             logger.error { "client string message" }
             if (origString != message) {
-                checkFail2.value = true
+                checkFail2.lazySet(true)
                 System.err.println("original string not equal to the string received")
                 stopEndPoints()
                 return@onMessage
@@ -159,7 +159,7 @@ class ListenerTest : BaseTest() {
         // standard listener disconnect check
         client.onDisconnect {
             logger.error ("client disconnect")
-            clientDisconnect.value = true
+            clientDisconnect.lazySet(true)
         }
 
 
