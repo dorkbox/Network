@@ -29,7 +29,7 @@ import java.net.InetAddress
  *
  * This represents the connection PAIR between a server<->client
  */
-internal class ServerConnectionDriver(val pubSub: PubSub, val info: String) {
+internal class ServerConnectionDriver(val pubSub: PubSub) {
     companion object {
         suspend fun build(isIpc: Boolean,
                   aeronDriver: AeronDriver,
@@ -44,7 +44,6 @@ internal class ServerConnectionDriver(val pubSub: PubSub, val info: String) {
                   logInfo: String): ServerConnectionDriver {
 
             val pubSub: PubSub
-            val info: String
 
             if (isIpc) {
                 pubSub = buildIPC(
@@ -56,8 +55,6 @@ internal class ServerConnectionDriver(val pubSub: PubSub, val info: String) {
                         reliable = reliable,
                         logInfo = logInfo
                     )
-
-                info = "[${sessionIdPub}] IPC listening on [$streamIdPub]"
             } else {
                 pubSub = buildUdp(
                     aeronDriver = aeronDriver,
@@ -73,11 +70,9 @@ internal class ServerConnectionDriver(val pubSub: PubSub, val info: String) {
                     reliable = reliable,
                     logInfo = logInfo
                 )
-
-                info = "[${sessionIdPub}] UDP listening on [$streamIdPub] port $portSub"
             }
 
-            return ServerConnectionDriver(pubSub, info)
+            return ServerConnectionDriver(pubSub)
         }
 
         private suspend fun buildIPC(

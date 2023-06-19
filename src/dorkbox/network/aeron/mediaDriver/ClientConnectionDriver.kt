@@ -18,7 +18,6 @@ package dorkbox.network.aeron.mediaDriver
 
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.getLocalAddressString
-import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.uri
 import dorkbox.network.aeron.endpoint
 import dorkbox.network.exceptions.ClientRetryException
@@ -36,7 +35,7 @@ import java.net.InetAddress
  * @throws ClientRetryException if we need to retry to connect
  * @throws ClientTimedOutException if we cannot connect to the server in the designated time
  */
-internal class ClientConnectionDriver(val connectionInfo: PubSub, val info: String) {
+internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
     companion object {
         suspend fun build(
@@ -45,7 +44,8 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub, val info: Stri
             handshakeConnection: ClientHandshakeDriver,
             connectionInfo: ClientConnectionInfo
         ): ClientConnectionDriver {
-            val reliable = handshakeConnection.pubSub.reliable
+            val handshakePubSub = handshakeConnection.pubSub
+            val reliable = handshakePubSub.reliable
 
             // flipped because we are connecting to these!
             val sessionIdPub = connectionInfo.sessionIdSub
@@ -53,17 +53,15 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub, val info: Stri
             val streamIdPub = connectionInfo.streamIdSub
             val streamIdSub = connectionInfo.streamIdPub
 
-            val isUsingIPC = handshakeConnection.pubSub.isIpc
+            val isUsingIPC = handshakePubSub.isIpc
 
             val logInfo: String
-            val info: String
 
             val pubSub: PubSub
 
             if (isUsingIPC) {
                 // Create a subscription at the given address and port, using the given stream ID.
                 logInfo = "CONNECTION-IPC"
-                info = "IPC [$streamIdPub|$streamIdSub|$sessionIdPub]"
 
                 pubSub = buildIPC(
                     aeronDriver = aeronDriver,
@@ -77,15 +75,16 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub, val info: Stri
                 )
             }
             else {
-                val remoteAddress = handshakeConnection.pubSub.remoteAddress
-                val remoteAddressString = handshakeConnection.pubSub.remoteAddressString
+                val remoteAddress = handshakePubSub.remoteAddress
+                val remoteAddressString = handshakePubSub.remoteAddressString
+                val portPub = handshakePubSub.portPub
+                val portSub = handshakePubSub.portSub
 
                 logInfo = if (remoteAddress is Inet4Address) {
                     "CONNECTION-IPv4"
                 } else {
                     "CONNECTION-IPv6"
                 }
-                info = "$remoteAddressString [$streamIdPub|$streamIdSub|$sessionIdPub|$sessionIdSub] (reliable:${reliable})"
 
                 pubSub = buildUDP(
                     aeronDriver = aeronDriver,
@@ -96,15 +95,14 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub, val info: Stri
                     streamIdSub = streamIdSub,
                     remoteAddress = remoteAddress!!,
                     remoteAddressString = remoteAddressString,
-                    portPub = handshakeConnection.pubSub.portPub,
-                    portSub = handshakeConnection.pubSub.portSub,
+                    portPub = portPub,
+                    portSub = portSub,
                     reliable = reliable,
                     logInfo = logInfo
                 )
             }
 
-            val driver = ClientConnectionDriver(pubSub, info)
-            return driver
+            return ClientConnectionDriver(pubSub)
         }
 
         @Throws(ClientTimedOutException::class)
@@ -128,7 +126,6 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub, val info: Stri
             //  publication of any state to other threads and not be long running or re-entrant with the client.
             val publication = aeronDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, streamIdPub, logInfo)
             { cause ->
-                sessionIdAllocator.free(sessionIdPub)
                 ClientTimedOutException("$logInfo publication cannot connect with server!", cause)
             }
 
@@ -171,7 +168,6 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub, val info: Stri
             //  publication of any state to other threads and not be long running or re-entrant with the client.
             val publication = aeronDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, streamIdPub, logInfo)
             { cause ->
-                sessionIdAllocator.free(sessionIdPub)
                 ClientTimedOutException("$logInfo publication cannot connect with server $remoteAddressString", cause)
             }
 

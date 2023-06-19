@@ -17,7 +17,6 @@ package dorkbox.network.rmi
 
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EventDispatcher
-import dorkbox.network.connection.EventDispatcher.Companion.EVENT
 import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.SuspendingPool
 import kotlinx.atomicfu.atomic
@@ -175,7 +174,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
      * Cancels the RMI request in the given timeout, the callback is executed inside the read lock
      */
     suspend fun cancelRequest(timeoutMillis: Long, id: Int, logger: KLogger, onCancelled: ResponseWaiter.() -> Unit) {
-        EventDispatcher.launch(EVENT.RESPONSE_MANAGER) {
+        EventDispatcher.RESPONSE_MANAGER.launch {
             delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
             // check if we have a result or not
@@ -214,7 +213,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
         // 'timeout > 0' -> WAIT w/ TIMEOUT
         // 'timeout == 0' -> WAIT FOREVER
         if (timeoutMillis > 0) {
-            val responseTimeoutJob = EventDispatcher.launch(EVENT.RESPONSE_MANAGER) {
+            val responseTimeoutJob = EventDispatcher.RESPONSE_MANAGER.launch {
                 delay(timeoutMillis) // this will always wait. if this job is cancelled, this will immediately stop waiting
 
                 // check if we have a result or not

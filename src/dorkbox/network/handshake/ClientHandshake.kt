@@ -176,9 +176,11 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    suspend fun hello(handshakeConnection: ClientHandshakeDriver, connectionTimeoutSec: Int) : ClientConnectionInfo {
-        failedException = null
+    suspend fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutSec: Int) : ClientConnectionInfo {
+        // always make sure that we reset the state when we start (in the event of reconnects)
+        reset()
         connectKey = getSafeConnectKey()
+
         val publicKey = endPoint.storage.getPublicKey()!!
 
         // Send the one-time pad to the server.
@@ -190,8 +192,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
                                     HandshakeMessage.helloFromClient(
                                         connectKey = connectKey,
                                         publicKey = publicKey,
-                                        sessionId = handshakeConnection.pubSub.sessionIdSub,
-                                        streamId = handshakeConnection.pubSub.streamIdSub,
+                                        sessionIdSub = handshakeConnection.pubSub.sessionIdSub,
+                                        streamIdSub = handshakeConnection.pubSub.streamIdSub,
                                         portSub = handshakeConnection.pubSub.portSub
                                     ))
         } catch (e: Exception) {
@@ -205,7 +207,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         var pollCount: Int
         pollIdleStrategy.reset()
 
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong()) + endPoint.aeronDriver.getLingerNs()
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong()) + endPoint.aeronDriver.lingerNs()
         val startTime = System.nanoTime()
         while (System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
@@ -231,7 +233,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
         if (connectionHelloInfo == null) {
             handshakeConnection.close()
 
-            val exception = ClientTimedOutException("$handshakeConnection Waiting for registration response from server")
+            val timeout = TimeUnit.NANOSECONDS.toSeconds(endPoint.aeronDriver.lingerNs()) + handshakeTimeoutSec
+            val exception = ClientTimedOutException("$handshakeConnection Waiting for registration response from server for more than $timeout seconds")
             throw exception
         }
 
@@ -243,7 +246,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     suspend fun done(
         handshakeConnection: ClientHandshakeDriver,
         clientConnection: ClientConnectionDriver,
-        connectionTimeoutSec: Int,
+        handshakeTimeoutSec: Int,
         aeronLogInfo: String
     ) {
         val registrationMessage = HandshakeMessage.doneFromClient(
@@ -268,7 +271,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         var pollCount: Int
 
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+        val timoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong())
         var startTime = System.nanoTime()
         while (System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
@@ -299,7 +302,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             throw failedEx
         }
 
-        if (!connectionDone && !shutdown) {
+        if (!connectionDone) {
             // since this failed, close everything
             handshakeConnection.close()
 
@@ -314,10 +317,5 @@ internal class ClientHandshake<CONNECTION: Connection>(
         connectionDone = false
         needToRetry = false
         failedException = null
-        shutdown = false
-    }
-
-    fun close() {
-        shutdown = true
     }
 }

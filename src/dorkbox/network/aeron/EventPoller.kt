@@ -64,11 +64,11 @@ internal class EventPoller {
 
     fun configure(logger: KLogger, config: Configuration) = runBlocking {
         mutex.withLock {
-            logger.trace { "Initializing the Network Event Poller..." }
+            logger.debug { "Initializing the Network Event Poller..." }
             configureEvents.getAndIncrement()
 
             if (!configured) {
-                logger.debug { "Configuring the Network Event Poller..." }
+                logger.trace { "Configuring the Network Event Poller..." }
 
                 running = true
                 configured = true
@@ -176,6 +176,7 @@ internal class EventPoller {
 
         val doClose = mutex.withLock {
             logger.trace { "Attempting close for the Network Event Poller..." }
+
             // ONLY if there are no more poll-events do we ACTUALLY shut down.
             // when an endpoint closes its polling, it will automatically be removed from this datastructure.
             val cEvents = configureEvents.decrementAndGet()

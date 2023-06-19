@@ -21,6 +21,7 @@ package dorkbox.network.aeron
 import dorkbox.collections.IntMap
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Configuration
+import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.exceptions.AllocationException
@@ -406,8 +407,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
             throw exception
         }
 
-        // always include the linger timeout, so we don't accidentally kill ourselves by taking too long
-        val timeoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong()) + getLingerNs()
+        val timeoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong())
         val startTime = System.nanoTime()
 
         while (System.nanoTime() - startTime < timeoutInNanos) {
@@ -421,7 +421,6 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         closeAndDeletePublication(publication, logInfo)
 
         val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]:Publication timed out in $handshakeTimeoutSec seconds while waiting for connection state: $publicationUri streamId=$streamId"))
-        exception.cleanAllStackTrace()
         throw exception
     }
 
@@ -536,10 +535,9 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
     fun contextInfo(): String = internal.contextInfo()
 
     /**
-     * @return the publication linger timeout. With IPC connections, another publication WITHIN the linger timeout will
-     *         cause errors inside of Aeron
+     * @return Time in nanoseconds a publication will linger once it is drained to recover potential tail loss.
      */
-    fun getLingerNs(): Long = internal.getLingerNs()
+    fun lingerNs(): Long = internal.lingerNs()
 
     /**
      * Make sure that we DO NOT approach the Aeron linger timeout!

@@ -42,7 +42,7 @@ internal class Handshaker<CONNECTION : Connection>(
     private val handshakeWriteKryo: KryoExtra<CONNECTION>
     private val handshakeSendIdleStrategy: CoroutineIdleStrategy
 
-    private val writeTimeoutNS = (aeronDriver.getLingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
+    private val writeTimeoutNS = (aeronDriver.lingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
 
     init {
         handshakeReadKryo = serialization.newHandshakeKryo()

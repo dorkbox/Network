@@ -18,6 +18,7 @@ package dorkbox.network.rmi
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import dorkbox.network.exceptions.RMIException
 import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
 import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
 import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
@@ -49,16 +50,14 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
         val response = if (implObject is Exception) {
             // whoops!
             implObject.cleanStackTrace()
-            logger.error("RMI error connection ${connection.id}", implObject)
-            listenerManager.notifyError(connection, implObject)
+            val newException = RMIException(implObject)
+            listenerManager.notifyError(connection, newException)
             ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, RemoteObjectStorage.INVALID_RMI))
         } else {
             val rmiId =  connection.rmi.saveImplObject(implObject)
             if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-                val exception = NullPointerException("Trying to create an RMI object with the INVALID_RMI id!!")
-                exception.cleanStackTrace()
-                logger.error("RMI error connection ${connection.id}", exception)
-                listenerManager.notifyError(connection, exception)
+                val newException = RMIException("Unable to create RMI object, invalid RMI ID")
+                listenerManager.notifyError(connection, newException)
             }
 
             ConnectionObjectCreateResponse(RmiUtils.packShorts(callbackId, rmiId))
@@ -77,10 +76,8 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
 
         // we only create the proxy + execute the callback if the RMI id is valid!
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            val exception = Exception("RMI ID '${rmiId}' is invalid. Unable to create RMI object on server.")
-            exception.cleanStackTrace()
-            logger.error("RMI error connection ${connection.id}", exception)
-            listenerManager.notifyError(connection, exception)
+            val newException = RMIException("Unable to create RMI object, invalid RMI ID")
+            listenerManager.notifyError(connection, newException)
             return
         }
 
@@ -98,8 +95,8 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
             callback(proxyObject)
         } catch (exception: Exception) {
             exception.cleanStackTrace()
-            logger.error("RMI error connection ${connection.id}", exception)
-            listenerManager.notifyError(connection, exception)
+            val newException = RMIException(exception)
+            listenerManager.notifyError(connection, newException)
         }
     }
 
@@ -111,10 +108,8 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
 
         // we only delete the impl object if the RMI id is valid!
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            val exception = Exception("Unable to delete RMI object!")
-            exception.cleanStackTrace()
-            logger.error("RMI error connection ${connection.id}", exception)
-            listenerManager.notifyError(connection, exception)
+            val newException = RMIException("Unable to delete RMI object, invalid RMI ID")
+            listenerManager.notifyError(connection, newException)
             return
         }
 
@@ -135,10 +130,8 @@ class RmiManagerConnections<CONNECTION: Connection> internal constructor(
 
         // we only create the proxy + execute the callback if the RMI id is valid!
         if (rmiId == RemoteObjectStorage.INVALID_RMI) {
-            val exception = Exception("Unable to create RMI object on server.")
-            exception.cleanStackTrace()
-            logger.error("RMI error connection ${connection.id}", exception)
-            listenerManager.notifyError(connection, exception)
+            val newException = RMIException("Unable to create RMI object, invalid RMI ID")
+            listenerManager.notifyError(connection, newException)
             return
         }
 

@@ -19,7 +19,6 @@ package dorkbox.network.aeron.mediaDriver
 import dorkbox.network.ClientConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.getLocalAddressString
-import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.uri
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
@@ -46,8 +45,6 @@ import java.util.*
 internal class ClientHandshakeDriver(
     private val aeronDriver: AeronDriver,
     val pubSub: PubSub,
-    val infoPub: String,
-    val infoSub: String,
     private val logInfo: String,
     val details: String
 ) {
@@ -78,8 +75,6 @@ internal class ClientHandshakeDriver(
 
             var logInfo = ""
 
-            var infoPub = ""
-            var infoSub = ""
             var details = ""
 
             // with IPC, the aeron driver MUST be shared, so having a UNIQUE sessionIdPub/Sub is unnecessary.
@@ -94,12 +89,7 @@ internal class ClientHandshakeDriver(
                 streamIdPub = AeronDriver.IPC_HANDSHAKE_STREAM_ID
 
                 logInfo = "HANDSHAKE-IPC"
-
-                infoPub = "$logInfo Pub: streamId=${streamIdPub}"
-                infoSub = "$logInfo Sub: streamId=${streamIdSub}"
-
-
-                details = "$logInfo P:(***|${streamIdPub})"
+                details = logInfo
 
                 try {
                     pubSub = buildIPC(
@@ -117,6 +107,9 @@ internal class ClientHandshakeDriver(
 
                     // we will retry!
                     if (remoteAddress == null) {
+                        // the exception will HARD KILL the client, make sure aeron driver is closed.
+                        aeronDriver.close()
+
                         // if we specified that we MUST use IPC, then we have to throw the exception, because there is no IPC
                         val clientException = ClientException("Unable to connect via IPC to server. No address specified so fallback is unavailable", exception)
                         clientException.cleanStackTraceInternal()
@@ -166,16 +159,14 @@ internal class ClientHandshakeDriver(
                 val splitPoint2 = addressesAndPorts.lastIndexOf(':')
                 val subscriptionAddress = addressesAndPorts.substring(0, splitPoint2)
 
-                val portPub = config.port
-                val subscriptionPort = addressesAndPorts.substring(splitPoint2+1).toInt()
-
-                infoPub = "$logInfo $remoteAddressString Pub: port=$portPub, stream=$streamIdPub (reliable:$reliable)"
-                infoSub = "$logInfo $remoteAddressString Sub: port=$subscriptionPort, stream=$streamIdSub (reliable:$reliable)"
-
-                details = "$logInfo $subscriptionAddress -> $remoteAddressString"
+                details = if (subscriptionAddress == remoteAddressString) {
+                    logInfo
+                } else {
+                    "$logInfo $subscriptionAddress -> $remoteAddressString"
+                }
             }
 
-            return ClientHandshakeDriver(aeronDriver, pubSub!!, infoPub, infoSub, logInfo, details)
+            return ClientHandshakeDriver(aeronDriver, pubSub!!, logInfo, details)
         }
 
         @Throws(ClientTimedOutException::class)
@@ -232,6 +223,7 @@ internal class ClientHandshakeDriver(
             val isRemoteIpv4 = remoteAddress is Inet4Address
 
             // Create a publication at the given address and port, using the given stream ID.
+            // ANY sessionID for the publication will work, because the SERVER doesn't have it defined
             val publicationUri = uri("udp", sessionIdPub, reliable)
                 .endpoint(isRemoteIpv4, remoteAddressString, portPub)
 
@@ -243,7 +235,6 @@ internal class ClientHandshakeDriver(
             //  publication of any state to other threads and not be long running or re-entrant with the client.
             val publication = aeronDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, streamIdPub, logInfo)
             { cause ->
-                sessionIdAllocator.free(sessionIdPub)
                 streamIdAllocator.free(streamIdSub) // we don't continue, so close this as well
                 ClientTimedOutException("$logInfo publication cannot connect with server!", cause)
             }
@@ -278,8 +269,6 @@ internal class ClientHandshakeDriver(
             }
 
             if (subscription == null) {
-                sessionIdAllocator.free(sessionIdPub)
-
                 val ex = ClientTimedOutException("Cannot create subscription port $logInfo. All attempted ports are invalid")
                 ex.cleanAllStackTrace()
                 throw ex
@@ -296,10 +285,7 @@ internal class ClientHandshakeDriver(
 
     suspend fun close() {
         // only the subs are allocated on the client!
-        if (!pubSub.isIpc) {
-            sessionIdAllocator.free(pubSub.sessionIdPub)
-        }
-
+//        sessionIdAllocator.free(pubSub.sessionIdPub)
 //        sessionIdAllocator.free(sessionIdSub)
 //        streamIdAllocator.free(streamIdPub)
         streamIdAllocator.free(pubSub.streamIdSub)
@@ -307,9 +293,5 @@ internal class ClientHandshakeDriver(
         // on close, we want to make sure this file is DELETED!
         aeronDriver.closeAndDeleteSubscription(pubSub.sub, logInfo)
         aeronDriver.closeAndDeletePublication(pubSub.pub, logInfo)
-    }
-
-    override fun toString(): String {
-        return infoSub
     }
 }

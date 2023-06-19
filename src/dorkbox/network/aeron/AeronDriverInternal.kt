@@ -448,6 +448,11 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$logInfo] publication $publication" }
         }
 
+        // aeron is async. close() doesn't immediately close, it just submits the close command!
+        while (!publication.isClosed) {
+            delay(100)
+        }
+
         ensureLogfileDeleted("publication", getMediaDriverFile(publication), logInfo, logger)
 
         registeredPublications.decrementAndGet()
@@ -467,6 +472,11 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             subscription.close()
         } catch (e: Exception) {
             logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$logInfo] subscription $subscription" }
+        }
+
+        // aeron is async. close() doesn't immediately close, it just submits the close command!
+        while (!subscription.isClosed) {
+            delay(100)
         }
 
         ensureLogfileDeleted("subscription", getMediaDriverFile(subscription), logInfo, logger)
@@ -573,10 +583,16 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         while (count > 0 && currentUsage > 0) {
             logger.debug { "Aeron Driver [$driverId]: in use, double checking status" }
-            delayTimeout(.5)
+            delayDriverTimeout(.5)
             currentUsage = driverBacklog()?.snapshot()?.size ?: 0
             count--
+
+            if (currentUsage == 0) {
+                return false
+            }
         }
+
+
 
         count = 3
         while (count > 0 && currentUsage > 0) {
@@ -586,11 +602,11 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             count--
         }
 
-        val isInUse = currentUsage > 0
-        if (isInUse) {
+        if (currentUsage > 0) {
             logger.debug { "Aeron Driver [$driverId]: usage is: $currentUsage" }
         }
-        return isInUse
+
+        return currentUsage > 0
     }
 
     /**
@@ -785,17 +801,16 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     }
 
     /**
-     * @return the publication linger timeout. With IPC connections, another publication WITHIN the linger timeout will
-     *         cause errors inside of Aeron
+     * @return Time in nanoseconds a publication will linger once it is drained to recover potential tail loss.
      */
-    fun getLingerNs(): Long {
+    fun lingerNs(): Long {
         return context.context.publicationLingerTimeoutNs()
     }
 
     /**
      * Make sure that we DO NOT approach the Aeron linger timeout!
      */
-    suspend fun delayTimeout(multiplier: Number = 1) {
+    suspend fun delayDriverTimeout(multiplier: Number = 1) {
         delay((driverTimeout() * multiplier.toDouble()).toLong())
     }
 
@@ -803,8 +818,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * Make sure that we DO NOT approach the Aeron linger timeout!
      */
     suspend fun delayLingerTimeout(multiplier: Number = 1) {
-        val lingerNs = getLingerNs()
-        delay(driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds((lingerNs * multiplier.toDouble()).toLong())) )
+        delay(driverTimeout().coerceAtLeast(TimeUnit.NANOSECONDS.toSeconds((lingerNs() * multiplier.toDouble()).toLong())) )
     }
 
     override fun equals(other: Any?): Boolean {

@@ -22,6 +22,7 @@ import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
+import dorkbox.network.aeron.AeronDriver.Companion.uri
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.mediaDriver.ServerHandshakeDriver
@@ -30,6 +31,9 @@ import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.IpInfo
 import dorkbox.network.exceptions.ClientTimedOutException
+import dorkbox.network.exceptions.ServerException
+import dorkbox.network.exceptions.ServerHandshakeException
+import dorkbox.network.exceptions.ServerTimedoutException
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
@@ -39,9 +43,6 @@ import org.agrona.DirectBuffer
 import java.net.Inet4Address
 
 internal object ServerHandshakePollers {
-    // session IDs are unique for a entire driver, and there are errors with IPC when creating/closing IPC publications too quickly.
-//    val sessionIdMap = LockFreeIntMap<Publication>()
-
     fun disabled(serverInfo: String): AeronPoller {
         return object : AeronPoller {
             override fun poll(): Int { return 0 }
@@ -69,22 +70,26 @@ internal object ServerHandshakePollers {
             // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
             val sessionId = header.sessionId()
             val streamId = header.streamId()
-            val aeronLogInfo = "$streamId/$sessionId : IPC" // Server is the "source", client mirrors the server
+            val aeronLogInfo = "$sessionId/$streamId : IPC" // Server is the "source", client mirrors the server
 
             val message = handshaker.readMessage(buffer, offset, length, aeronLogInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
-                logger.error { "[$aeronLogInfo] Connection not allowed! Invalid connection request" }
+                server.listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Invalid connection request"))
                 return
             }
 
-            logger.error { "RECEIVED IPC HANDSHAKE MESSAGE" }
-
             // we have read all the data, now dispatch it.
-            EventDispatcher.launch(EventDispatcher.Companion.EVENT.HANDSHAKE) {
+            EventDispatcher.HANDSHAKE.launch {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-                val publicationUri = uriHandshake("ipc", isReliable)
+                val publicationUri = if (message.sessionId == 0) {
+                    // will connect to ANY streamID
+                    uriHandshake("ipc", isReliable)
+                } else {
+                    uri("ipc", message.sessionId, isReliable)
+                }
+
 
                 val publication = try {
                     // we actually have to wait for it to connect before we continue
@@ -92,11 +97,9 @@ internal object ServerHandshakePollers {
                         ClientTimedOutException("$aeronLogInfo publication cannot connect with client!", cause)
                     }
                 } catch (e: Exception) {
-                    logger.error(e) { "Cannot create IPC publication back to client remote process" }
+                    server.listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Cannot create IPC publication back to client remote process", e))
                     return@launch
                 }
-
-                logger.error { "CREATED IPC PUB: ${publication.registrationId()}" }
 
                 // Manage the Handshake state. When done with a connection, this returns false
                 if (!handshake.validateMessageTypeAndDoPending(
@@ -105,25 +108,20 @@ internal object ServerHandshakePollers {
                         handshakePublication = publication,
                         message = message,
                         logger = logger)) {
-
-                    logger.error { "DELETED IPC PUB: ${publication.registrationId()}" }
-//                        sessionIdMap.remove(message.sessionId)
-                    driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
-                    return@launch
+                    // nothing
+                } else {
+                    handshake.processIpcHandshakeMessageServer(
+                        server = server,
+                        handshaker = handshaker,
+                        aeronDriver = driver,
+                        handshakePublication = publication,
+                        message = message,
+                        aeronLogInfo = aeronLogInfo,
+                        connectionFunc = connectionFunc,
+                        logger = logger
+                    )
                 }
 
-                handshake.processIpcHandshakeMessageServer(
-                    server = server,
-                    handshaker = handshaker,
-                    aeronDriver = driver,
-                    handshakePublication = publication,
-                    message = message,
-                    aeronLogInfo = aeronLogInfo,
-                    connectionFunc = connectionFunc,
-                    logger = logger
-                )
-
-                logger.error { "DELETED IPC PUB: ${publication.registrationId()}" }
                 driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
             }
         }
@@ -142,6 +140,7 @@ internal object ServerHandshakePollers {
         private val ipInfo = server.ipInfo
         private val logInfo = mediaDriver.logInfo
         private val handshaker = server.handshaker
+//        private val connectionTimeoutSec = TimeUnit.NANOSECONDS.toSeconds(server.config.connectionExpirationTimoutNanos)
 
         suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
@@ -163,7 +162,7 @@ internal object ServerHandshakePollers {
             val clientAddress = IP.toAddress(clientAddressString)
             if (clientAddress == null) {
                 // Server is the "source", client mirrors the server
-                logger.error { "[$streamId/$sessionId] Connection from $clientAddressString not allowed! Invalid IP address!" }
+                server.listenerManager.notifyError(ServerHandshakeException("[$sessionId/$streamId] Connection from $clientAddressString not allowed! Invalid IP address!"))
                 return
             }
 
@@ -174,40 +173,46 @@ internal object ServerHandshakePollers {
 
                 if (ipInfo.ipType == IpInfo.Companion.IpListenType.IPv4Wildcard) {
                     // we DO NOT want to listen to IPv4 traffic, but we received IPv4 traffic!
-                    logger.error { "[$streamId/$sessionId] Connection from $clientAddressString not allowed! IPv4 connections not permitted!" }
+                    server.listenerManager.notifyError(ServerHandshakeException("[$sessionId/$streamId] Connection from $clientAddressString not allowed! IPv4 connections not permitted!"))
                     return
                 }
             }
 
-            val aeronLogInfo = "$streamId/$sessionId : $clientAddressString"
+            val aeronLogInfo = "$sessionId/$streamId:$clientAddressString"
 
             val message = handshaker.readMessage(buffer, offset, length, aeronLogInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
-                logger.error { "[$aeronLogInfo] Connection not allowed! Invalid connection request" }
+                server.listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Invalid connection request"))
                 return
             }
 
-            logger.error { "RECEIVED UDP HANDSHAKE MESSAGE" }
+            EventDispatcher.HANDSHAKE.launch {
+                // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
+//                val publicationUri = uriHandshake("udp", isReliable)
+//                    .endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
 
-            EventDispatcher.launch(EventDispatcher.Companion.EVENT.HANDSHAKE) {
-                // we create a NEW publication for the handshake, which connects directly to the client handshake subscription CONTROL (which then goes to the proper endpoint)
-                val publicationUri = uriHandshake("udp", isReliable)
-                    .endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
+                val publicationUri = if (message.sessionId == 0) {
+                    // will connect to ANY streamID
+                    uriHandshake("udp", isReliable)
+                } else {
+                    uri("udp", message.sessionId, isReliable)
+                }.also {
+                    it.endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
+                }
+
 
                 val publication = try {
                     // we actually have to wait for it to connect before we continue
-                    driver.addPublicationWithTimeout(publicationUri, 10, message.streamId, aeronLogInfo) { cause ->
-                        ClientTimedOutException("$logInfo publication cannot connect with client!", cause)
+                    driver.addPublicationWithTimeout(publicationUri, 5, message.streamId, aeronLogInfo) { cause ->
+                        ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
                     }
                 } catch (e: Exception) {
-                    logger.error(e) { "Cannot create publication back to $clientAddressString" }
+                    server.listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Cannot create publication back to $clientAddressString", e))
                     return@launch
                 }
 
-                logger.error { "CONNECTED" }
-                logger.error { "CONNECTED" }
 
                 // Manage the Handshake state. When done with a connection, this returns
                 if (!handshake.validateMessageTypeAndDoPending(
@@ -216,30 +221,23 @@ internal object ServerHandshakePollers {
                         handshakePublication = publication,
                         message = message,
                         logger = logger)) {
-
-                    driver.closeAndDeletePublication(publication, logInfo)
-                    logger.error { "DONE CONNECTED" }
-                    logger.error { "DONE CONNECTED" }
-                    return@launch
+                    // nothing to do
+                } else {
+                    handshake.processUdpHandshakeMessageServer(
+                        server = server,
+                        handshaker = handshaker,
+                        handshakePublication = publication,
+                        clientAddress = clientAddress,
+                        clientAddressString = clientAddressString,
+                        isReliable = isReliable,
+                        message = message,
+                        aeronLogInfo = aeronLogInfo,
+                        connectionFunc = connectionFunc,
+                        logger = logger
+                    )
                 }
 
-                handshake.processUdpHandshakeMessageServer(
-                    server = server,
-                    handshaker = handshaker,
-                    handshakePublication = publication,
-                    clientAddress = clientAddress,
-                    clientAddressString = clientAddressString,
-                    isReliable = isReliable,
-                    message = message,
-                    aeronLogInfo = aeronLogInfo,
-                    connectionFunc = connectionFunc,
-                    logger = logger
-                )
-
                 driver.closeAndDeletePublication(publication, logInfo)
-
-                logger.error { "DONE CONNECTED" }
-                logger.error { "DONE CONNECTED" }
             }
         }
     }
@@ -288,11 +286,10 @@ internal object ServerHandshakePollers {
                 override val info = "IPC ${driver.info}"
             }
         } catch (e: Exception) {
-            logger.error(e) { "Unable to create IPC listener." }
+            server.listenerManager.notifyError(ServerException("Unable to create IPC listener.", e))
             disabled("IPC Disabled")
         }
 
-        logger.info { poller.info }
         return poller
     }
 
@@ -343,7 +340,7 @@ internal object ServerHandshakePollers {
                 override val info = "IPv4 ${driver.info}"
             }
         } catch (e: Exception) {
-            logger.error(e) { "Unable to create IPv4 listener." }
+            server.listenerManager.notifyError(ServerException("Unable to create IPv4 listener.", e))
             disabled("IPv4 Disabled")
         }
 
@@ -396,7 +393,7 @@ internal object ServerHandshakePollers {
                 override val info = "IPv6 ${driver.info}"
             }
         } catch (e: Exception) {
-            logger.error(e) { "Unable to create IPv6 listener." }
+            server.listenerManager.notifyError(ServerException("Unable to create IPv6 listener."))
             disabled("IPv6 Disabled")
         }
 
@@ -450,7 +447,7 @@ internal object ServerHandshakePollers {
                 override val info = "IPv4+6 ${driver.info}"
             }
         } catch (e: Exception) {
-            logger.error(e) { "Unable to create IPv4+6 listeners." }
+            server.listenerManager.notifyError(ServerException("Unable to create IPv4+6 listeners.", e))
             disabled("IPv4+6 Disabled")
         }
 

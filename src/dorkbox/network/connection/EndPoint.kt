@@ -15,10 +15,9 @@
  */
 package dorkbox.network.connection
 
+import com.fasterxml.uuid.impl.RandomBasedGenerator
 import dorkbox.collections.ConcurrentIterator
 import dorkbox.netUtil.IP
-import dorkbox.netUtil.IPv4
-import dorkbox.netUtil.IPv6
 import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
@@ -26,15 +25,12 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.BacklogStat
 import dorkbox.network.aeron.EventPoller
-import dorkbox.network.connection.EventDispatcher.Companion.EVENT
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
-import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
-import dorkbox.network.exceptions.ClientException
-import dorkbox.network.exceptions.ServerException
-import dorkbox.network.handshake.HandshakeMessage
+import dorkbox.network.exceptions.AllocationException
+import dorkbox.network.exceptions.StreamingException
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.ResponseManager
@@ -46,11 +42,9 @@ import dorkbox.network.serialization.Serialization
 import dorkbox.network.serialization.SettingsStore
 import io.aeron.Publication
 import io.aeron.logbuffer.Header
-import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -59,7 +53,7 @@ import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
-import java.net.InetAddress
+import java.util.*
 import java.util.concurrent.*
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
@@ -77,8 +71,7 @@ import java.util.concurrent.*
  *
  *  @throws SecurityException if unable to initialize/generate ECC keys
 */
-abstract class EndPoint<CONNECTION : Connection>
-internal constructor(val type: Class<*>,
+abstract class EndPoint<CONNECTION : Connection> private constructor(val type: Class<*>,
                      internal val config: Configuration,
                      internal val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                      loggerName: String)
@@ -87,12 +80,12 @@ internal constructor(val type: Class<*>,
     protected constructor(config: Configuration,
                           connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                           loggerName: String)
-            : this(Client::class.java, config, connectionFunc, loggerName)
+        : this(Client::class.java, config, connectionFunc, loggerName)
 
     protected constructor(config: ServerConfiguration,
                           connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                           loggerName: String)
-            : this(Server::class.java, config, connectionFunc, loggerName)
+        : this(Server::class.java, config, connectionFunc, loggerName)
 
     companion object {
         // connections are extremely difficult to diagnose when the connection timeout is short
@@ -128,70 +121,12 @@ internal constructor(val type: Class<*>,
                 else -> throw IllegalStateException("Unknown error code: $result")
             }
         }
-
-        fun isLocalhost(ipAddress: String): Boolean {
-            return when (ipAddress.lowercase()) {
-                "loopback", "localhost", "lo", "127.0.0.1", "::1" -> true
-                else -> false
-            }
-        }
-        fun isWildcard(ipAddress: String): Boolean {
-            return when (ipAddress) {
-                // this is the "wildcard" address. Windows has problems with this.
-                "0", "::", "0.0.0.0", "*" -> true
-                else -> false
-            }
-        }
-
-        fun isWildcard(ipAddress: InetAddress): Boolean {
-            return when (ipAddress) {
-                // this is the "wildcard" address. Windows has problems with this.
-                IPv4.WILDCARD, IPv6.WILDCARD -> true
-                else -> false
-            }
-        }
-
-        fun getWildcard(ipAddress: InetAddress, ipAddressString: String, shouldBeIpv4: Boolean): String {
-            return if (isWildcard(ipAddress)) {
-                if (shouldBeIpv4) {
-                    IPv4.WILDCARD_STRING
-                } else {
-                    IPv6.WILDCARD_STRING
-                }
-            } else {
-                ipAddressString
-            }
-        }
-
-        fun formatCommonAddress(ipAddress: String, isIpv4: Boolean, elseAction: () -> InetAddress?): InetAddress? {
-            return if (isLocalhost(ipAddress)) {
-                if (isIpv4) { IPv4.LOCALHOST } else { IPv6.LOCALHOST }
-            } else if (isWildcard(ipAddress)) {
-                if (isIpv4) { IPv4.WILDCARD } else { IPv6.WILDCARD }
-            } else if (IPv4.isValid(ipAddress)) {
-                IPv4.toAddress(ipAddress)!!
-            } else if (IPv6.isValid(ipAddress)) {
-                IPv6.toAddress(ipAddress)!!
-            } else {
-                elseAction()
-            }
-        }
-
-        fun formatCommonAddressString(ipAddress: String, isIpv4: Boolean, elseAction: () -> String = { ipAddress }): String {
-            return if (isLocalhost(ipAddress)) {
-                if (isIpv4) { IPv4.LOCALHOST_STRING } else { IPv6.LOCALHOST_STRING }
-            } else if (isWildcard(ipAddress)) {
-                if (isIpv4) { IPv4.WILDCARD_STRING } else { IPv6.WILDCARD_STRING }
-            } else if (IPv4.isValid(ipAddress)) {
-                ipAddress
-            } else if (IPv6.isValid(ipAddress)) {
-                ipAddress
-            } else {
-                elseAction()
-            }
-        }
     }
 
+
+    // TODO: add UUID to handshake so that connections from BOTH endpoints have the same uuid (so we know if there is a reconnect)
+
+    // the ID would be different?? but the UUID would be the same??
     val logger: KLogger = KotlinLogging.logger(loggerName)
 
     val uuid : UUID
@@ -218,6 +153,7 @@ internal constructor(val type: Class<*>,
 
     // These are GLOBAL, single threaded only kryo instances.
     // The readKryo WILL RE-CONFIGURED during the client handshake! (it is all the same thread, so object visibility is not a problem)
+    @Volatile
     internal var readKryo: KryoExtra<CONNECTION>
     internal var streamingReadKryo: KryoExtra<CONNECTION>
 
@@ -229,8 +165,6 @@ internal constructor(val type: Class<*>,
     internal val crypto: CryptoManagement
 
     // this barrier only prevents multiple shutdowns (in the event this close() is called multiple timees)
-    private val shutdown = atomic(false)
-
     @Volatile
     private var shutdownLatch: dorkbox.util.sync.CountDownLatch
 
@@ -314,11 +248,23 @@ internal constructor(val type: Class<*>,
      *
      * The client calls this every time it attempts a connection.
      */
-    internal fun initializeState() {
-        require(EventDispatcher.isActive) { "The Event Dispatch is no longer active. It has been shutdown" }
+    internal fun verifyState() {
         require(messageDispatch.isActive) { "The Message Dispatch is no longer active. It has been shutdown" }
+    }
 
-        shutdownLatch = dorkbox.util.sync.CountDownLatch(1)
+    /**
+     * Make sure that shutdown latch is properly initialized
+     *
+     * The client calls this every time it attempts a connection.
+     */
+    internal fun initializeLatch() {
+        if (shutdownLatch.count == 0) {
+            shutdownLatch.countUp()
+        }
+
+        if (canCloseLatch.count == 0) {
+            canCloseLatch.countUp()
+        }
     }
 
     /**
@@ -332,8 +278,6 @@ internal constructor(val type: Class<*>,
         if (aeronDriver.closed()) {
             // Only starts the media driver if we are NOT already running!
             try {
-                logger.error { "STARTING NEW DRIVER BECAUSE THE PREVIOUS ONE WAS CLOSED!" }
-                @Suppress("LeakingThis")
                 aeronDriver = AeronDriver(this)
             } catch (e: Exception) {
                 logger.error("Error initializing aeron driver", e)
@@ -342,7 +286,6 @@ internal constructor(val type: Class<*>,
         }
 
         aeronDriver.start()
-        shutdown.value = false
     }
 
     /**
@@ -560,19 +503,18 @@ internal constructor(val type: Class<*>,
             // IF we get this message in time, then we do not have to wait for the connection to expire before closing it
             is DisconnectMessage -> {
                 // NOTE: This MUST be on a new co-routine
-                EventDispatcher.launch(EVENT.CLOSE) {
+                EventDispatcher.CLOSE.launch {
                     connection.close(enableRemove = true)
                 }
             }
 
             is Ping -> {
-                // NOTE: This MUST be on a new co-routine
                 // PING will also measure APP latency, not just NETWORK PIPE latency
+                // NOTE: This MUST be on a new co-routine, specifically the messageDispatch (it IS NOT the EventDispatch.RMI!)
                 messageDispatch.launch {
                     try {
                         pingManager.manage(connection, responseManager, message, logger)
                     } catch (e: Exception) {
-                        logger.error("Error processing message", e)
                         listenerManager.notifyError(connection, e)
                     }
                 }
@@ -584,12 +526,11 @@ internal constructor(val type: Class<*>,
             is RmiMessage -> {
                 // if we are an RMI message/registration, we have very specific, defined behavior.
                 // We do not use the "normal" listener callback pattern because this requires special functionality
-                // NOTE: This MUST be on a new co-routine
+                // NOTE: This MUST be on a new co-routine, specifically the messageDispatch (it IS NOT the EventDispatch.RMI!)
                 messageDispatch.launch {
                     try {
                         rmiGlobalSupport.processMessage(serialization, connection, message, rmiConnectionSupport, responseManager, logger)
                     } catch (e: Exception) {
-                        logger.error("Error processing message", e)
                         listenerManager.notifyError(connection, e)
                     }
                 }
@@ -611,8 +552,8 @@ internal constructor(val type: Class<*>,
                 try {
                     streamingManager.processDataMessage(message, this@EndPoint, connection)
                 } catch (e: Exception) {
-                    logger.error("Error processing StreamingMessage", e)
-                    listenerManager.notifyError(connection, e)
+                    val newException = StreamingException("Error processing StreamingMessage", e)
+                    listenerManager.notifyError(connection, newException)
                 }
             }
 
@@ -675,6 +616,10 @@ internal constructor(val type: Class<*>,
      *
      * the actual bits that send data on the network.
      *
+     * There is a maximum length allowed for messages which is the min of 1/8th a term length or 16MB.
+     * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
+     * properties from failure and streams with mechanical sympathy.
+     *
      * @param publication the connection specific publication
      * @param internalBuffer the internal buffer that will be copied to the Aeron network driver
      * @param offset the offset in the internal buffer at which to start copying bytes
@@ -716,7 +661,7 @@ internal constructor(val type: Class<*>,
                 }
 
                 if (timeoutInNanos == 0L) {
-                    timeoutInNanos = (aeronDriver.getLingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
+                    timeoutInNanos = (aeronDriver.lingerNs() * 1.2).toLong() // close enough. Just needs to be slightly longer
                     startTime = System.nanoTime()
                 }
 
@@ -863,14 +808,17 @@ internal constructor(val type: Class<*>,
      * @return true if this endpoint has been closed
      */
     fun isShutdown(): Boolean {
-        return shutdown.value
+        return shutdown
     }
 
     /**
      * Waits for this endpoint to be closed
      */
     suspend fun waitForClose() {
-        var latch: dorkbox.util.sync.CountDownLatch? = null
+        if (!shutdown) {
+            // we're not shutdown, so don't even bother waiting
+            return
+        }
 
         while (latch !== shutdownLatch) {
             latch = shutdownLatch
@@ -882,53 +830,78 @@ internal constructor(val type: Class<*>,
         }
     }
 
-    fun close(onCloseFunction: () -> Unit = {}) {
-        logger.error { "Submitting close event" }
+    /**
+     * Shall we preserve state when we shutdown, or do we remove all onConnect/Disconnect/etc events from memory.
+     *
+     * There are two viable concerns when we close the connection/client.
+     *  1) We should reset 100% of the state+events, so that every time we connect, everything is redone
+     *  2) We preserve the state+event, BECAUSE adding the onConnect/Disconnect/message event states might be VERY expensive.
+     *
+     *  If we call "close" multiple times, we want to run the requested logic + onCloseFunction EACH TIME IT'S CALLED!
+     */
+    suspend fun shutdown(shutdownEndpoint: Boolean = false, onCloseFunction: () -> Unit) {
+        // we must set the shutdown state immediately
+        shutdown = true
 
-        EventDispatcher.launch(EVENT.CLOSE) {
-            if (shutdown.compareAndSet(expect = false, update = true)) {
-                logger.info { "Shutting down..." }
+        EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
+            logger.info { "Shutting down..." }
 
+            // if we were ALREADY shutdown, just run the appropriate logic again (but not ALL the logic)
+
+
+
+            if (!shutdownEndpoint) {
+                closeAction()
+            } else {
                 closeAction {
                     // Connections MUST be closed first, because we want to make sure that no RMI messages can be received
                     // when we close the RMI support objects (in which case, weird - but harmless - errors show up)
                     // this will wait for RMI timeouts if there are RMI in-progress. (this happens if we close via an RMI method)
                     responseManager.close()
 
-                    // the storage is closed via this as well.
+                    // Clears out all registered events
+                    listenerManager.close()
+
+                    // Remove from memory the data from the back-end storage
                     storage.close()
+
+                    // only on the server, this shuts down the poll/event dispatchers
+                    // This cannot be called from the event dispatcher!
+                    close0()
+
+                    if (this is Server<*>) {
+                        try {
+                            // make sure that we have de-allocated all connection data
+                            AeronDriver.checkForMemoryLeaks()
+                            handshake.checkForMemoryLeaks()
+                        } catch (e: AllocationException) {
+                            logger.error(e) { "Error during server cleanup" }
+                        }
+                    }
                 }
             }
 
             onCloseFunction()
 
             logger.info { "Done shutting down..." }
-        }
-    }
-    /**
-     * Close in such a way that we enable us to be restarted. This is the same as a "normal close", but DOES NOT close
-     *  - response manager
-     *  - storage
-     */
-    fun closeForRestart() {
-        EventDispatcher.launch(EVENT.CLOSE) {
-            if (shutdown.compareAndSet(expect = false, update = true)) {
-                logger.info { "Shutting down for restart..." }
 
-                closeAction()
-
-                logger.info { "Done shutting down for restart..." }
-            }
+            // if we are waiting for shutdown, cancel the waiting thread (since we have shutdown now)
+            shutdownLatch.countDown()
+            canCloseLatch.countDown()
         }
+
+
+        // when the endpoint is closed, we must wait until after ALL CLOSE events are called!
+        logger.info { "Waiting for close listener to finish, then shutting down..." + EventDispatcher.getExecutingDispatchEvent()  }
+        canCloseLatch.await()
     }
 
-    private suspend fun closeAction(extraActions: () -> Unit = {}) {
-logger.error { "CLOSE ACTION 1" }
+    private suspend fun closeAction(extraActions: suspend () -> Unit = {}) {
         // the server has to be able to call server.notifyDisconnect() on a list of connections. If we remove the connections
         // inside of connection.close(), then the server does not have a list of connections to call the global notifyDisconnect()
         val enableRemove = type == Client::class.java
         connections.forEach {
-            logger.info { "[${it.details}] Closing connection" }
+            logger.info { "[${it}] Closing connection" }
             it.close(enableRemove)
         }
 
