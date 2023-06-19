@@ -18,6 +18,7 @@ package dorkbox.network.aeron.mediaDriver
 
 import io.aeron.Publication
 import io.aeron.Subscription
+import java.net.Inet4Address
 import java.net.InetAddress
 
 data class PubSub(
@@ -34,4 +35,49 @@ data class PubSub(
     val portSub: Int = -1
 ) {
     val isIpc get() = remoteAddress == null
+
+    /**
+     * The pub/sub info is ALWAYS from the perspective of the SERVER
+     * This is so we can line-up logs between the client/server
+     */
+    fun reverseForClient():PubSub {
+        return PubSub(
+            pub = pub,
+            sub = sub,
+            sessionIdPub = sessionIdSub,
+            sessionIdSub = sessionIdPub,
+            streamIdPub = streamIdSub,
+            streamIdSub = streamIdPub,
+            reliable = reliable,
+            remoteAddress = remoteAddress,
+            remoteAddressString = remoteAddressString,
+            portPub = portSub,
+            portSub = portPub
+        )
+    }
+
+    /**
+     * Note: the pub/sub info is from the perspective of the SERVER
+     */
+    fun getLogInfo(debugEnabled: Boolean): String {
+        return if (isIpc) {
+            if (debugEnabled) {
+                "IPC sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}"
+            } else {
+                "IPC [${sessionIdPub}|${sessionIdSub}|${streamIdPub}|${streamIdSub}]"
+            }
+        } else {
+            val prefix = if (remoteAddress is Inet4Address) {
+                "IPv4 $remoteAddressString"
+            } else {
+                "IPv6 $remoteAddressString"
+            }
+
+            if (debugEnabled) {
+                "$prefix sessionID: p=${sessionIdPub} s=${sessionIdSub}, streamID: p=${streamIdPub} s=${streamIdSub}, port: p=${portPub} s=${portSub}"
+            } else {
+                "$prefix [${sessionIdPub}|${sessionIdSub}|${streamIdPub}|${streamIdSub}|${portPub}|${portSub}]"
+            }
+        }
+    }
 }
