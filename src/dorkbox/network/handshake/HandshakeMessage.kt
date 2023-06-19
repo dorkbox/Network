@@ -56,14 +56,14 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 3
         const val DONE_ACK = 4
 
-        fun helloFromClient(connectKey: Long, publicKey: ByteArray, sessionId: Int, streamId: Int, portSub: Int): HandshakeMessage {
+        fun helloFromClient(connectKey: Long, publicKey: ByteArray, sessionIdSub: Int, streamIdSub: Int, portSub: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
             hello.connectKey = connectKey // this is 'bounced back' by the server, so the client knows if it's the correct connection message
             hello.publicKey = publicKey
-            hello.sessionId = sessionId
+            hello.sessionId = sessionIdSub
+            hello.streamId = streamIdSub
             hello.port = portSub
-            hello.streamId = streamId
             return hello
         }
 
@@ -81,13 +81,13 @@ internal class HandshakeMessage private constructor() {
             return hello
         }
 
-        fun doneFromClient(connectKey: Long, subscriptionPort: Int, streamId: Int, sessionId: Int): HandshakeMessage {
+        fun doneFromClient(connectKey: Long, streamIdSub: Int, sessionIdSub: Int, portSub: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = DONE
             hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
-            hello.sessionId = sessionId
-            hello.port = subscriptionPort
-            hello.streamId = streamId
+            hello.sessionId = sessionIdSub
+            hello.streamId = streamIdSub
+            hello.port = portSub
             return hello
         }
 
@@ -135,6 +135,6 @@ internal class HandshakeMessage private constructor() {
             ", Error: $errorMessage"
         }
 
-        return "HandshakeMessage($stateStr$errorMsg)"
+        return "HandshakeMessage($stateStr$errorMsg sessionId=$sessionId, streamId=$streamId, port=$port)"
     }
 }
