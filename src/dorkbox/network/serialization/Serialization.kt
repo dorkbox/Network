@@ -344,8 +344,18 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
 
         @Suppress("UNCHECKED_CAST")
         kryo.register(InvocationHandler::class.java as Class<Any>, rmiClientSerializer)
-
         kryo.register(Continuation::class.java, continuationSerializer)
+
+        kryo.register(Reserved0::class.java)
+        kryo.register(Reserved1::class.java)
+        kryo.register(Reserved2::class.java)
+        kryo.register(Reserved3::class.java)
+        kryo.register(Reserved4::class.java)
+        kryo.register(Reserved5::class.java)
+        kryo.register(Reserved6::class.java)
+        kryo.register(Reserved7::class.java)
+        kryo.register(Reserved8::class.java)
+        kryo.register(Reserved9::class.java)
 
         return kryo
     }
