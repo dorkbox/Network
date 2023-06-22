@@ -169,6 +169,11 @@ open class Client<CONNECTION : Connection>(
     }
 
     /**
+     * The UUID is a unique, in-memory instance that is created on object construction
+     */
+    val uuid = RandomBasedGenerator(CryptoManagement.secureRandom).generate()
+
+    /**
      * The network or IPC address for the client to connect to.
      *
      * For a network address, it can be:
@@ -597,7 +602,7 @@ open class Client<CONNECTION : Connection>(
         // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
 
         // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
-        val connectionInfo = handshake.hello(handshakeConnection, connectionTimeoutSec)
+        val connectionInfo = handshake.hello(handshakeConnection, connectionTimeoutSec, uuid)
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
         val validateRemoteAddress = if (handshakeConnection.pubSub.isIpc) {
@@ -660,9 +665,9 @@ open class Client<CONNECTION : Connection>(
 
         val newConnection: CONNECTION
         if (handshakeConnection.pubSub.isIpc) {
-            newConnection = connectionFunc(ConnectionParams(this, clientConnection.connectionInfo, PublicKeyValidationState.VALID))
+            newConnection = connectionFunc(ConnectionParams(uuid, this, clientConnection.connectionInfo, PublicKeyValidationState.VALID))
         } else {
-            newConnection = connectionFunc(ConnectionParams(this, clientConnection.connectionInfo, validateRemoteAddress))
+            newConnection = connectionFunc(ConnectionParams(uuid, this, clientConnection.connectionInfo, validateRemoteAddress))
             remoteAddress!!
 
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.

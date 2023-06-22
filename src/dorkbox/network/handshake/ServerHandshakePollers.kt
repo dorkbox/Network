@@ -115,6 +115,7 @@ internal object ServerHandshakePollers {
                         handshaker = handshaker,
                         aeronDriver = driver,
                         handshakePublication = publication,
+                        clientUuid = HandshakeMessage.uuidReader(message.registrationData!!),
                         message = message,
                         aeronLogInfo = aeronLogInfo,
                         connectionFunc = connectionFunc,
@@ -213,32 +214,35 @@ internal object ServerHandshakePollers {
                     return@launch
                 }
 
+            // HandshakeMessage.HELLO
+            // HandshakeMessage.DONE
+            val messageState = message.state
 
-                // Manage the Handshake state. When done with a connection, this returns
-                if (!handshake.validateMessageTypeAndDoPending(
-                        server = server,
-                        handshaker = handshaker,
-                        handshakePublication = publication,
-                        message = message,
-                        logger = logger)) {
-                    // nothing to do
-                } else {
-                    handshake.processUdpHandshakeMessageServer(
-                        server = server,
-                        handshaker = handshaker,
-                        handshakePublication = publication,
-                        clientAddress = clientAddress,
-                        clientAddressString = clientAddressString,
-                        isReliable = isReliable,
-                        message = message,
-                        aeronLogInfo = aeronLogInfo,
-                        connectionFunc = connectionFunc,
-                        logger = logger
-                    )
-                }
-
-                driver.closeAndDeletePublication(publication, logInfo)
+            if (messageState == HandshakeMessage.HELLO) {
+                handshake.processUdpHandshakeMessageServer(
+                    server = server,
+                    handshaker = handshaker,
+                    handshakePublication = publication,
+                    clientUuid = HandshakeMessage.uuidReader(message.registrationData!!),
+                    clientAddress = clientAddress,
+                    clientAddressString = clientAddressString,
+                    isReliable = isReliable,
+                    message = message,
+                    aeronLogInfo = aeronLogInfo,
+                    connectionFunc = connectionFunc,
+                    logger = logger
+                )
+            } else {
+                // HandshakeMessage.DONE
+                handshake.validateMessageTypeAndDoPending(
+                    server = server,
+                    handshaker = handshaker,
+                    handshakePublication = publication,
+                    message = message,
+                    logger = logger)
             }
+
+            driver.closeAndDeletePublication(publication, logInfo)
         }
     }
 

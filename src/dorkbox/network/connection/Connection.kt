@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.Server
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.exceptions.ClientException
@@ -61,11 +60,15 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val writeKryo: KryoExtra<Connection>
     private val tempWriteKryo: KryoExtra<Connection>
 
+    /**
+     * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)
+     */
+    val uuid = connectionParameters.clientUuid
 
     /**
-     * The session id of this connection. This value is UNIQUE
+     * The unique session id of this connection, assigned by the server.
      *
-     * The ID of the connection is always the SUBSCRIPTION SESSION ID from the server
+     * Specifically this is the subscription session ID of the server
      */
     val id = connectionParameters.connectionInfo.sessionIdSub
 

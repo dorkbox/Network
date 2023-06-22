@@ -226,6 +226,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         handshaker: Handshaker<CONNECTION>,
         aeronDriver: AeronDriver,
         handshakePublication: Publication,
+        clientUuid: UUID,
         message: HandshakeMessage,
         aeronLogInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
@@ -344,7 +345,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 logger.info { "Creating new connection to $logInfo" }
             }
 
-            connection = connectionFunc(ConnectionParams(server, newConnectionDriver.pubSub, PublicKeyValidationState.VALID))
+
+
+            connection = connectionFunc(ConnectionParams(clientUuid, server, newConnectionDriver.pubSub, PublicKeyValidationState.VALID))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             // NOTE: all IPC client connections are, by default, always allowed to connect, because they are running on the same machine
@@ -397,6 +400,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         server: Server<CONNECTION>,
         handshaker: Handshaker<CONNECTION>,
         handshakePublication: Publication,
+        clientUuid: UUID,
         clientAddress: InetAddress,
         clientAddressString: String,
         isReliable: Boolean,
@@ -558,7 +562,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 logger.info { "Creating new connection to $logInfo" }
             }
 
-            connection = connectionFunc(ConnectionParams(server, newConnectionDriver.pubSub, validateRemoteAddress))
+            connection = connectionFunc(ConnectionParams(clientUuid, server, newConnectionDriver.pubSub, validateRemoteAddress))
 
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)
