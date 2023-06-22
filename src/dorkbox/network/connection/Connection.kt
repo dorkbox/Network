@@ -324,6 +324,11 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * @return `true` if this connection has been closed via aeron
      */
     fun isClosedViaAeron(): Boolean {
+        if (isClosed.value) {
+            // if we are manually closed, then don't check aeron timeouts!
+            return true
+        }
+
         // we ONLY want to actually, legit check, 1 time every XXX ms.
         val now = System.nanoTime()
 
