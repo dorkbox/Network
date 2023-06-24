@@ -70,18 +70,22 @@ internal class ClientHandshakeDriver(
                 isUsingIPC = true
             }
 
-            var streamIdPub = 0
-            var streamIdSub = 0
 
             var logInfo = ""
 
             var details = ""
 
+            // for UDP, this must be unique otherwise we CANNOT connect to the server!
+            // additionally, this must ONLY be unique per driver (not per connection!) If it is unique PER connection,
+            // there will be sessionID errors (because the handshake connections are created too quickly during reconnects
+            val sessionIdPub = aeronDriver.clientUdpHandshakeSessionId
+
             // with IPC, the aeron driver MUST be shared, so having a UNIQUE sessionIdPub/Sub is unnecessary.
 //          sessionIdPub = sessionIdAllocator.allocate()
 //          sessionIdSub = sessionIdAllocator.allocate()
             // streamIdPub is assigned by ipc/udp directly
-            streamIdSub = streamIdAllocator.allocate()
+            var streamIdPub: Int
+            val streamIdSub = streamIdAllocator.allocate() // sub stream ID so the server can comm back to the client
 
             var pubSub: PubSub? = null
 
@@ -95,13 +99,15 @@ internal class ClientHandshakeDriver(
                     pubSub = buildIPC(
                         aeronDriver = aeronDriver,
                         handshakeTimeoutSec = handshakeTimeoutSec,
-                        sessionIdPub = 0,
+                        sessionIdPub = sessionIdPub,
                         streamIdPub = streamIdPub,
                         streamIdSub = streamIdSub,
                         reliable = reliable,
                         logInfo = logInfo
                     )
                 } catch (exception: Exception) {
+                    logger.error(exception) { "Error initializing IPC connection" }
+
                     // MAYBE the server doesn't have IPC enabled? If no, we need to connect via network instead
                     isUsingIPC = false
 
@@ -132,7 +138,7 @@ internal class ClientHandshakeDriver(
                 }
 
 
-                val sessionIdPub = sessionIdAllocator.allocate() // for UDP, this must be unique otherwise we CANNOT connect to the server!
+
                 streamIdPub = AeronDriver.UDP_HANDSHAKE_STREAM_ID
 
 
@@ -173,8 +179,9 @@ internal class ClientHandshakeDriver(
         private suspend fun buildIPC(
             aeronDriver: AeronDriver,
             handshakeTimeoutSec: Int,
-            sessionIdPub: Int, streamIdPub: Int,
-            streamIdSub: Int, reliable: Boolean,
+            sessionIdPub: Int,
+            streamIdPub: Int, streamIdSub: Int,
+            reliable: Boolean,
             logInfo: String
         ): PubSub {
             // Create a publication at the given address and port, using the given stream ID.

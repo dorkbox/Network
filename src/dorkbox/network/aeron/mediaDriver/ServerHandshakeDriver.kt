@@ -42,7 +42,7 @@ internal class ServerHandshakeDriver(private val aeronDriver: AeronDriver, val s
 
             if (isIpc) {
                 subscriptionUri = uriHandshake("ipc", isReliable)
-                info = "$logInfo [$sessionIdSub] [$streamIdSub]"
+                info = "$logInfo [$sessionIdSub|$streamIdSub]"
             } else {
                 val port = ipInfo.port
 
@@ -50,7 +50,7 @@ internal class ServerHandshakeDriver(private val aeronDriver: AeronDriver, val s
                 subscriptionUri = uriHandshake("udp", isReliable)
                     .endpoint(ipInfo.getAeronPubAddress(ipInfo.isIpv4) + ":" + port)
 
-                info = "$logInfo ${ipInfo.listenAddressStringPretty} [$port] [$streamIdSub|*] (reliable:$isReliable)"
+                info = "$logInfo ${ipInfo.listenAddressStringPretty} [$sessionIdSub|$streamIdSub|$port] (reliable:$isReliable)"
             }
 
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)

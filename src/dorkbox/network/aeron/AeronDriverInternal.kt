@@ -142,6 +142,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         addEndpoint(endPoint)
     }
 
+    // always called within a mutex!
     fun addEndpoint(endPoint: EndPoint<*>?) {
         if (endPoint != null) {
             if (!endPointUsages.contains(endPoint)) {
@@ -252,6 +253,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      *
      * The publication returned is threadsafe.
      */
+    @Suppress("DEPRECATION")
     suspend fun addPublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication = stateMutex.withLock {
         val uri = publicationUri.build()
 
@@ -313,6 +315,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      *
      * This is not a thread-safe publication!
      */
+    @Suppress("DEPRECATION")
     suspend fun addExclusivePublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication = stateMutex.withLock {
         val uri = publicationUri.build()
 
@@ -377,6 +380,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * {@link Aeron.Context#availableImageHandler(AvailableImageHandler)} and
      * {@link Aeron.Context#unavailableImageHandler(UnavailableImageHandler)} from the {@link Aeron.Context}.
      */
+    @Suppress("DEPRECATION")
     suspend fun addSubscription(logger: KLogger, subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription = stateMutex.withLock {
         val uri = subscriptionUri.build()
 
@@ -449,6 +453,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         // aeron is async. close() doesn't immediately close, it just submits the close command!
+        // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
         while (!publication.isClosed) {
             delay(100)
         }
@@ -465,7 +470,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * Guarantee that the publication is closed AND the backing file is removed
      */
     suspend fun closeAndDeleteSubscription(subscription: Subscription, logger: KLogger, logInfo: String) {
-        logger.trace { "Aeron Driver [$driverId]: Closing subscription [$logInfo] ::regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
+        logger.trace { "Aeron Driver [$driverId]: Closing subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
 
         try {
             // This can throw exceptions!
@@ -475,6 +480,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         // aeron is async. close() doesn't immediately close, it just submits the close command!
+        // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
         while (!subscription.isClosed) {
             delay(100)
         }
@@ -521,7 +527,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             // only emit the log info once. It's rather spammy otherwise!
             if (!didLog) {
                 didLog = true
-                logger.debug("Aeron Driver [$driverId]: Still running. Waiting for it to stop...")
+                logger.debug { "Aeron Driver [$driverId]: Still running (${aeronDirectory}). Waiting for it to stop..." }
             }
             delay(intervalTimeoutMS)
         }
@@ -570,7 +576,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         if (endPointUsages.isNotEmpty()) {
-            logger.debug { "Aeron Driver [$driverId]: Still referenced by ${endPointUsages.size} endpoints" }
+            logger.debug { "Aeron Driver [$driverId]: still referenced by ${endPointUsages.size} endpoints" }
             return true
         }
 
@@ -583,7 +589,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         while (count > 0 && currentUsage > 0) {
             logger.debug { "Aeron Driver [$driverId]: in use, double checking status" }
-            delayDriverTimeout(.5)
+            delayLingerTimeout()
             currentUsage = driverBacklog()?.snapshot()?.size ?: 0
             count--
 
@@ -593,11 +599,10 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
 
-
         count = 3
         while (count > 0 && currentUsage > 0) {
             logger.debug { "Aeron Driver [$driverId]: in use, double checking status (long)" }
-            delayLingerTimeout()
+            delayDriverTimeout()
             currentUsage = driverBacklog()?.snapshot()?.size ?: 0
             count--
         }
@@ -614,25 +619,27 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      *
      * NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
      *   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
+     *
+     * @return true if the driver was successfully stopped.
      */
-    suspend fun close(endPoint: EndPoint<*>?, logger: KLogger) = stateMutex.withLock {
+    suspend fun close(endPoint: EndPoint<*>?, logger: KLogger): Boolean = stateMutex.withLock {
         val driverId = config.id
-
-        logger.trace { "Aeron Driver [$driverId]: Requested close... (${endPointUsages.size} endpoints in use)" }
 
         if (endPoint != null) {
             endPointUsages.remove(endPoint)
         }
 
+        logger.trace { "Aeron Driver [$driverId]: Requested close... (${endPointUsages.size} endpoints still in use)" }
+
         if (isInUse(logger)) {
             logger.debug { "Aeron Driver [$driverId]: in use, not shutting down this instance." }
-            return
+            return@withLock false
         }
 
         val removed = AeronDriver.driverConfigurations.remove(driverId)
         if (removed == null) {
             logger.debug { "Aeron Driver [$driverId]: already closed. Ignoring close request." }
-            return
+            return@withLock false
         }
 
         logger.debug { "Aeron Driver [$driverId]: Closing..." }
@@ -644,7 +651,11 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         try {
             aeron?.close()
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Error stopping!" }
+            if (endPoint != null) {
+                endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error stopping", e))
+            } else {
+                logger.error(e) { "Aeron Driver [$driverId]: Error stopping" }
+            }
         }
 
         aeron = null
@@ -652,7 +663,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         if (mediaDriver == null) {
             logger.debug { "Aeron Driver [$driverId]: No driver started, not Stopping." }
-            return
+            return@withLock false
         }
 
         logger.debug { "Aeron Driver [$driverId]: Stopping driver at '${driverDirectory}'..." }
@@ -660,20 +671,24 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         if (!isRunning()) {
             // not running
             logger.debug { "Aeron Driver [$driverId]: is not running at '${driverDirectory}' for this context. Not Stopping." }
-            return
+            return@withLock false
         }
 
         // if we are the ones that started the media driver, then we must be the ones to close it
         try {
             mediaDriver!!.close()
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Error closing" }
+            if (endPoint != null) {
+                endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error closing", e))
+            } else {
+                logger.error(e) { "Aeron Driver [$driverId]: Error closing" }
+            }
         }
 
         mediaDriver = null
 
         // it can actually close faster, if everything is ideal.
-        val timeout = (aeronContext.driverTimeout + AERON_PUBLICATION_LINGER_TIMEOUT)/4
+        val timeout = (aeronContext.driverTimeout + AERON_PUBLICATION_LINGER_TIMEOUT) / 4
 
 
         // it can actually close faster, if everything is ideal.
@@ -700,15 +715,27 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         try {
             val deletedAeron = driverDirectory.deleteRecursively()
             if (!deletedAeron) {
-                logger.error { "Aeron Driver [$driverId]: Error deleting aeron directory $driverDirectory on shutdown "}
+                if (endPoint != null) {
+                    endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory"))
+                } else {
+                    logger.error { "Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory" }
+                }
             }
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory"}
+            if (endPoint != null) {
+                endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory", e))
+            } else {
+                logger.error(e) { "Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory" }
+            }
         }
 
 
         if (driverDirectory.isDirectory) {
-            logger.error { "Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory"}
+            if (endPoint != null) {
+                endPoint.listenerManager.notifyError(AeronDriverException("Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory"))
+            } else {
+                logger.error { "Aeron Driver [$driverId]: Error deleting Aeron directory at: $driverDirectory" }
+            }
         }
 
         logger.debug { "Aeron Driver [$driverId]: Closed the media driver at '${driverDirectory}'" }
@@ -717,6 +744,8 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         config.contextDefined = false
 
         closed = true
+
+        return true
     }
 
     /**
