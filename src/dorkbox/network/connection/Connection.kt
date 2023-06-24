@@ -103,9 +103,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
     private val isClosed = atomic(false)
 
-    // enableNotifyDisconnect : we don't always want to enable notifications on disconnect
-    internal var closeAction: suspend () -> Unit = {}
-
     // only accessed on a single thread!
     private var connectionLastCheckTimeNanos = 0L
     private var connectionTimeoutTimeNanos = 0L
@@ -377,72 +374,73 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      * Closes the connection, and removes all connection specific listeners
      */
     suspend fun close() {
-        EventDispatcher.launch(EVENT.CLOSE) {
-            close(enableRemove = true)
-        }
-    }
-
-    /**
-     * Closes the connection, and removes all connection specific listeners
-     */
-    internal suspend fun close(enableRemove: Boolean) {
         // there are 2 ways to call close.
         //   MANUALLY
         //   When a connection is disconnected via a timeout/expire.
         // the compareAndSet is used to make sure that if we call close() MANUALLY, (and later) when the auto-cleanup/disconnect is called -- it doesn't
         // try to do it again.
 
-        // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
-        if (isClosed.compareAndSet(expect = false, update = true)) {
-            closeAndCleanup(enableRemove)
-        }
-    }
-
-    private suspend fun closeAndCleanup(enableRemove: Boolean) {
         // make sure that EVERYTHING before "close()" runs before we do
         EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
-            logger.debug {"[$toString0] connection closing"}
-
-            // on close, we want to make sure this file is DELETED!
-            endPoint.aeronDriver.closeAndDeleteSubscription(subscription, toString0)
-
-            // notify the remote endPoint that we are closing
-            // we send this AFTER we close our subscription (so that no more messages will be received, when the remote end ping-pong's this message back)
-            send(DisconnectMessage.INSTANCE, true)
-
-            val timeoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
-            val closeTimeoutTime = System.nanoTime()
-
-            // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
-            // we want a timeout-check, otherwise this will run forever
-            while (writeMutex.isLocked && System.nanoTime() - closeTimeoutTime < timeoutInNanos) {
-                delay(500)
-            }
-
-            // on close, we want to make sure this file is DELETED!
-            endPoint.aeronDriver.closeAndDeletePublication(publication, toString0)
-
-            if (enableRemove) {
-                endPoint.removeConnection(this)
-            }
-
-            // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
-            // NOTE: notifyDisconnect() is called inside closeAction()!!
-
-            // This is set by the client/server so if there is a "connect()" call in the disconnect callback, we can have proper
-            // lock-stop ordering for how disconnect and connect work with each-other
-
-            closeAction()
-
-            logger.debug {"[$toString0] connection closed"}
+            closeImmediately()
         }
     }
 
 
-    // called in postCloseAction(), so we don't expose our internal listenerManager
-    internal suspend fun doNotifyDisconnect() {
+    // connection.close() -> this
+    // endpoint.close() -> connection.close() -> this
+    internal suspend fun closeImmediately() {
+        // the server 'handshake' connection info is cleaned up with the disconnect via timeout/expire.
+        if (!isClosed.compareAndSet(expect = false, update = true)) {
+            return
+        }
+
+        logger.debug {"[$toString0] connection closing"}
+
+        // on close, we want to make sure this file is DELETED!
+        endPoint.aeronDriver.closeAndDeleteSubscription(subscription, toString0)
+
+        // notify the remote endPoint that we are closing
+        // we send this AFTER we close our subscription (so that no more messages will be received, when the remote end ping-pong's this message back)
+        if (publication.isConnected) {
+            // sometimes the remote end has already disconnected
+            send(DisconnectMessage.INSTANCE, true)
+        }
+
+        val timeoutInNanos = TimeUnit.SECONDS.toNanos(endPoint.config.connectionCloseTimeoutInSeconds.toLong())
+        val closeTimeoutTime = System.nanoTime()
+
+        // we do not want to close until AFTER all publications have been sent. Calling this WITHOUT waiting will instantly stop everything
+        // we want a timeout-check, otherwise this will run forever
+        while (writeMutex.isLocked && System.nanoTime() - closeTimeoutTime < timeoutInNanos) {
+            delay(50)
+        }
+
+        // on close, we want to make sure this file is DELETED!
+        endPoint.aeronDriver.closeAndDeletePublication(publication, toString0)
+
+        // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
+        // NOTE: notifyDisconnect() is called inside closeAction()!!
+
+        endPoint.removeConnection(this)
+        endPoint.listenerManager.notifyDisconnect(this)
+
+
+        val connection = this
+        // clean up the resources associated with this connection when it's closed
+        endPoint.isServer {
+            logger.debug { "[${connection}] freeing resources" }
+            connection.cleanup(handshake.connectionsPerIpCounts)
+        }
+
+        logger.debug {"[$toString0] connection closed"}
+    }
+
+
+    // called in a ListenerManager.notifyDisconnect(), so we don't expose our internal listenerManager
+    internal suspend fun notifyDisconnect() {
         val connectionSpecificListenerManager = listenerManager.value
-        connectionSpecificListenerManager?.notifyDisconnect(this@Connection)
+        connectionSpecificListenerManager?.directNotifyDisconnect(this@Connection)
     }
 
 
@@ -469,20 +467,17 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         return id == other1.id
     }
 
-    // cleans up the connection information
+    // cleans up the connection information (only the server calls this!)
     internal fun cleanup(connectionsPerIpCounts: ConnectionCounts) {
-        // the allocations are done by the server, so don't try to free the allocations from the client!
-        if (endPoint.type == Server::class.java) {
-            sessionIdAllocator.free(info.sessionIdPub)
-            sessionIdAllocator.free(info.sessionIdSub)
+        sessionIdAllocator.free(info.sessionIdPub)
+        sessionIdAllocator.free(info.sessionIdSub)
 
-            streamIdAllocator.free(info.streamIdPub)
-            streamIdAllocator.free(info.streamIdSub)
+        streamIdAllocator.free(info.streamIdPub)
+        streamIdAllocator.free(info.streamIdSub)
 
-            if (!isIpc) {
-                // unique for UDP endpoints
-                connectionsPerIpCounts.decrementSlow(remoteAddress!!)
-            }
+        if (remoteAddress != null) {
+            // unique for UDP endpoints
+            connectionsPerIpCounts.decrementSlow(remoteAddress)
         }
     }
 }
