@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,8 +75,7 @@ internal class RemoteObjectStorage(val logger: KLogger) {
     // there are 2 ways to get an RMI object ID
     //   1) request the next number from the counter
     //   2) specifically request a number
-    // To solve this, we use 3 data structures, because it's also possible to RETURN no-longer needed object ID's (like when a
-    // connection closes)
+    // To solve this, we use 3 data structures, because it's also possible to RETURN no-longer needed object ID's (like when a connection closes)
     private var objectIdCounter: Int = 1
     private val reservedObjectIds = IntArrayList(1, INVALID_RMI)
     private val objectIds = IntArrayList(16, INVALID_RMI)
