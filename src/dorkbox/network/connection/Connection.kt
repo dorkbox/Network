@@ -21,7 +21,6 @@ import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.SerializationException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.exceptions.TransmitException
-import dorkbox.network.handshake.ConnectionCounts
 import dorkbox.network.ping.Ping
 import dorkbox.network.rmi.RmiSupportConnection
 import dorkbox.network.rmi.messages.MethodResponse
@@ -427,10 +426,19 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
         val connection = this
-        // clean up the resources associated with this connection when it's closed
         endPoint.isServer {
+            // clean up the resources associated with this connection when it's closed
             logger.debug { "[${connection}] freeing resources" }
-            connection.cleanup(handshake.connectionsPerIpCounts)
+            sessionIdAllocator.free(info.sessionIdPub)
+            sessionIdAllocator.free(info.sessionIdSub)
+
+            streamIdAllocator.free(info.streamIdPub)
+            streamIdAllocator.free(info.streamIdSub)
+
+            if (remoteAddress != null) {
+                // unique for UDP endpoints
+                handshake.connectionsPerIpCounts.decrementSlow(remoteAddress)
+            }
         }
 
         logger.debug {"[$toString0] connection closed"}
@@ -465,19 +473,5 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
         val other1 = other as Connection
         return id == other1.id
-    }
-
-    // cleans up the connection information (only the server calls this!)
-    internal fun cleanup(connectionsPerIpCounts: ConnectionCounts) {
-        sessionIdAllocator.free(info.sessionIdPub)
-        sessionIdAllocator.free(info.sessionIdSub)
-
-        streamIdAllocator.free(info.streamIdPub)
-        streamIdAllocator.free(info.streamIdSub)
-
-        if (remoteAddress != null) {
-            // unique for UDP endpoints
-            connectionsPerIpCounts.decrementSlow(remoteAddress)
-        }
     }
 }
