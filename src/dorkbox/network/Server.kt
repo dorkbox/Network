@@ -21,18 +21,14 @@ import dorkbox.network.aeron.EventPoller
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.EventDispatcher
-import dorkbox.network.connection.EventDispatcher.Companion.EVENT
 import dorkbox.network.connection.IpInfo
 import dorkbox.network.connection.IpInfo.Companion.IpListenType
 import dorkbox.network.connectionType.ConnectionRule
-import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
 import dorkbox.network.handshake.ServerHandshakePollers
 import dorkbox.network.ipFilter.IpFilterRule
 import dorkbox.network.rmi.RmiSupportServer
-import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import java.util.concurrent.*
@@ -137,9 +133,7 @@ open class Server<CONNECTION : Connection>(
             val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
 
             val logger = KotlinLogging.logger(Server::class.java.simpleName)
-            AeronDriver(configuration, logger).use {
-                it.ensureStopped(timeout, 500)
-            }
+            AeronDriver.ensureStopped(configuration, logger, timeout)
         }
 
         /**
@@ -151,9 +145,7 @@ open class Server<CONNECTION : Connection>(
          */
         fun isRunning(configuration: ServerConfiguration): Boolean = runBlocking {
             val logger = KotlinLogging.logger(Server::class.java.simpleName)
-            AeronDriver(configuration, logger).use {
-                it.isRunning()
-            }
+            AeronDriver.isRunning(configuration, logger)
         }
 
         init {
@@ -168,20 +160,6 @@ open class Server<CONNECTION : Connection>(
     val rmiGlobal = RmiSupportServer(logger, rmiGlobalSupport)
 
     /**
-     * @return true if this server has successfully bound to an IP address and is running
-     */
-    private var bindAlreadyCalled = atomic(false)
-
-    /**
-     * These are run in lock-step to shutdown/close the server. Afterwards, bind() can be called again
-     */
-    @Volatile
-    private var shutdownPollLatch = dorkbox.util.sync.CountDownLatch(0 )
-
-    @Volatile
-    private var shutdownEventLatch = dorkbox.util.sync.CountDownLatch(0)
-
-    /**
      * Maintains a thread-safe collection of rules used to define the connection type with this server.
      */
     private val connectionRules = CopyOnWriteArrayList<ConnectionRule>()
@@ -190,6 +168,9 @@ open class Server<CONNECTION : Connection>(
      * the IP address information, if available.
      */
     internal val ipInfo = IpInfo(config)
+
+    @Volatile
+    internal lateinit var handshake: ServerHandshake<CONNECTION>
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ServerException(message, cause)
@@ -220,15 +201,12 @@ open class Server<CONNECTION : Connection>(
         try {
             startDriver()
             verifyState()
-            initializeLatch()
+            initializeState()
         } catch (e: Exception) {
             resetOnError()
             listenerManager.notifyError(ServerException("Unable to start the server!", e))
             return@runBlocking
         }
-
-        shutdownPollLatch = dorkbox.util.sync.CountDownLatch(1)
-        shutdownEventLatch = dorkbox.util.sync.CountDownLatch(1)
 
         config as ServerConfiguration
 
@@ -236,7 +214,7 @@ open class Server<CONNECTION : Connection>(
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
 
         val server = this@Server
-        val handshake = ServerHandshake(logger, config, listenerManager, aeronDriver)
+        handshake = ServerHandshake(config, listenerManager, aeronDriver)
 
         val ipcPoller: AeronPoller = if (config.enableIpc) {
             ServerHandshakePollers.ipc(server, handshake)
@@ -251,26 +229,20 @@ open class Server<CONNECTION : Connection>(
             IpListenType.IPv6Wildcard -> ServerHandshakePollers.ip6(server, handshake)
             IpListenType.IPv4 -> ServerHandshakePollers.ip4(server, handshake)
             IpListenType.IPv6 -> ServerHandshakePollers.ip6(server, handshake)
-            IpListenType.IPC  -> ServerHandshakePollers.disabled("IP Disabled")
+            IpListenType.IPC  -> ServerHandshakePollers.disabled("IPv4/6 Disabled")
         }
 
         logger.info { ipcPoller.info }
         logger.info { ipPoller.info }
 
-        // additionally, if we have MULTIPLE clients on the same machine, we are limited by the CPU core count. Ideally we want to share this among ALL clients within the same JVM so that we can support multiple clients/servers
         networkEventPoller.submit(
-            action = {
-            if (!isShutdown()) {
-                var pollCount = 0
-
+        action = {
+            if (!shutdownEventPoller) {
                 // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
                 //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
 
-                // this checks to see if there are NEW clients on the handshake ports
-                pollCount += ipPoller.poll()
-
-                // this checks to see if there are NEW clients via IPC
-                pollCount += ipcPoller.poll()
+                // this checks to see if there are NEW clients to handshake with
+                var pollCount = ipcPoller.poll() + ipPoller.poll()
 
                 // this manages existing clients (for cleanup + connection polling). This has a concurrent iterator,
                 // so we can modify this as we go
@@ -280,25 +252,13 @@ open class Server<CONNECTION : Connection>(
                         pollCount += connection.poll()
                     } else {
                         // If the connection has either been closed, or has expired, it needs to be cleaned-up/deleted.
-                        logger.debug { "[${connection.details}] connection expired (cleanup)" }
+                        logger.debug { "[${connection}] connection expired (cleanup)" }
 
-                        // the connection MUST be removed in the same thread that is processing events
+                        // the connection MUST be removed in the same thread that is processing events (it will be removed again in close, and that is expected)
                         removeConnection(connection)
 
-                        // this will call removeConnection again, but that is ok
-                        EventDispatcher.launch(EVENT.CLOSE) {
-                            // we already removed the connection
-                            connection.close(enableRemove = false)
-
-                            // have to manually notify the server-listenerManager that this connection was closed
-                            // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listener-manager is
-                            // instantly notified and on cleanup, the server-listener-manager is called
-
-                            // this always has to be on event dispatch, otherwise we can have weird logic loops if we reconnect within a disconnect callback
-                            EventDispatcher.launch(EVENT.DISCONNECT) {
-                                listenerManager.notifyDisconnect(connection)
-                            }
-                        }
+                        // we already removed the connection, we can call it again without side affects
+                        connection.close()
                     }
                 }
 
@@ -311,62 +271,20 @@ open class Server<CONNECTION : Connection>(
         onShutdown = {
             logger.debug { "Server event dispatch closing..." }
 
-            // we want to process **actual** close cleanup events on this thread as well, otherwise we will have threading problems
-            shutdownPollLatch.await()
+            ipcPoller.close()
+            ipPoller.close()
 
-            // we want to clear all the connections FIRST (since we are shutting down)
-            val cons = mutableListOf<CONNECTION>()
-            connections.forEach { cons.add(it) }
-            connections.clear()
+            // clear all the handshake info
+            handshake.clear()
 
+            // we can now call bind again
+            endpointIsRunning.lazySet(false)
+            pollerClosedLatch.countDown()
 
-            // when we close a client or a server, we want to make sure that ALL notifications are finished.
-            // when it's just a connection getting closed, we don't care about this. We only care when it's "global" shutdown
-
-            // we have to manually clean-up the connections and call server-notifyDisconnect because otherwise this will never get called
-            try {
-                cons.forEach { connection ->
-                    logger.info { "[${connection.details}] Connection cleanup and close" }
-                    // make sure the connection is closed (close can only happen once, so a duplicate call does nothing!)
-
-                    EventDispatcher.launch(EVENT.CLOSE) {
-                        connection.close(enableRemove = true)
-
-                        // have to manually notify the server-listenerManager that this connection was closed
-                        // if the connection was MANUALLY closed (via calling connection.close()), then the connection-listenermanager is
-                        // instantly notified and on cleanup, the server-listenermanager is called
-                        // NOTE: this must be the LAST thing happening!
-
-                        // the SERVER cannot re-connect to clients, only clients can call 'connect'.
-                        EventDispatcher.launch(EVENT.DISCONNECT) {
-                            listenerManager.notifyDisconnect(connection)
-                        }
-                    }
-                }
-            } finally {
-                ipcPoller.close()
-                ipPoller.close()
-
-                // clear all the handshake info
-                handshake.clear()
-
-                try {
-                    AeronDriver.checkForMemoryLeaks()
-
-                    // make sure that we have de-allocated all connection data
-                    handshake.checkForMemoryLeaks()
-                } catch (e: AllocationException) {
-                    logger.error(e) { "Error during server cleanup" }
-                }
-
-                // finish closing -- this lets us make sure that we don't run into race conditions on the thread that calls close()
-                try {
-                    shutdownEventLatch.countDown()
-                } catch (ignored: Exception) {
-                }
-            }
+            logger.debug { "Closed the Network Event Poller..." }
         })
     }
+
 
     /**
      * Adds an IP+subnet rule that defines what type of connection this IP+subnet should have.
@@ -435,30 +353,27 @@ open class Server<CONNECTION : Connection>(
         }
     }
 
-    fun close() {
-        close(false) {}
-    }
+    /**
+     * Will throw an exception if there are resources that are still in use
+     */
+    fun checkForMemoryLeaks() {
+        AeronDriver.checkForMemoryLeaks()
 
-    fun close(onCloseFunction: () -> Unit = {}) {
-        close(false, onCloseFunction)
-    }
-
-    final override fun close(shutdownEndpoint: Boolean, onCloseFunction: () -> Unit) {
-        super.close(shutdownEndpoint, onCloseFunction)
+        // make sure that we have de-allocated all connection data
+        handshake.checkForMemoryLeaks()
     }
 
     /**
-     * Closes the server and all it's connections. After a close, you may call 'bind' again.
+     * If you call close() on the server endpoint, it will shut down all parts of the endpoint (listeners, driver, event polling, etc).
      */
-    final override suspend fun close0() {
-        // when we call close, it will shutdown the polling mechanism, then wait for us to tell it to clean-up connections.
-        //
-        // Aeron + the Media Driver will have already been shutdown at this point.
-        if (bindAlreadyCalled.getAndSet(false)) {
-            // These are run in lock-step
-            shutdownPollLatch.countDown()
-            shutdownEventLatch.await()
+    fun close() {
+        runBlocking {
+            closeSuspending()
         }
+    }
+
+    override fun toString(): String {
+        return "EndPoint [Server]"
     }
 
     /**
@@ -469,11 +384,6 @@ open class Server<CONNECTION : Connection>(
             block(this)
         } finally {
             close()
-
-            runBlocking {
-                waitForClose()
-                logger.error { "finished close event" }
-            }
         }
     }
 
