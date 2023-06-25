@@ -20,6 +20,7 @@ import dorkbox.network.exceptions.AllocationException
 import dorkbox.objectPool.ObjectPool
 import dorkbox.objectPool.Pool
 import kotlinx.atomicfu.atomic
+import mu.KotlinLogging
 
 /**
  * An allocator for random IDs, the maximum number of IDs is an unsigned short (65535).
@@ -34,6 +35,10 @@ import kotlinx.atomicfu.atomic
  */
 class RandomId65kAllocator(private val min: Int, max: Int) {
     constructor(size: Int): this(1, size + 1)
+
+    companion object {
+        private val logger = KotlinLogging.logger("RandomId65k")
+    }
 
 
     private val cache: Pool<Int>
@@ -71,8 +76,9 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
             throw AllocationException("No IDs left to allocate")
         }
 
-        assigned.getAndIncrement()
+        val count = assigned.incrementAndGet()
         val id = cache.take()
+        logger.trace { "Allocating $id (total $count)" }
         return id
     }
 
@@ -86,6 +92,7 @@ class RandomId65kAllocator(private val min: Int, max: Int) {
         if (assigned < 0) {
             throw AllocationException("Unequal allocate/free method calls attempting to free [$id] (too many 'free' calls).")
         }
+        logger.trace { "Freeing $id" }
         cache.put(id)
     }
 
