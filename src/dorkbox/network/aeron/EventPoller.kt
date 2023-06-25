@@ -227,10 +227,14 @@ internal class EventPoller {
     }
 
     private suspend fun doClose() {
+        val wasRunning = running
+
         running = false
         shutdownLatch.await()
         configured = false
 
-        dispatchScope.cancel("Closed event dispatch")
+        if (wasRunning) {
+            dispatchScope.cancel("Closed event dispatch")
+        }
     }
 }
