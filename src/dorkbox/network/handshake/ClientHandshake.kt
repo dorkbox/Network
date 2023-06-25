@@ -22,9 +22,11 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
+import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRejectedException
 import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.exceptions.ServerException
+import dorkbox.network.exceptions.TransmitException
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.FragmentHandler
@@ -32,6 +34,7 @@ import io.aeron.logbuffer.Header
 import kotlinx.coroutines.delay
 import mu.KLogger
 import org.agrona.DirectBuffer
+import java.util.*
 import java.util.concurrent.*
 
 internal class ClientHandshake<CONNECTION: Connection>(
@@ -44,8 +47,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     private val crypto = endPoint.crypto
     private val handler: FragmentHandler
-
-    private val pollIdleStrategy = endPoint.config.pollIdleStrategy.clone()
 
     private val handshaker = endPoint.handshaker
 
@@ -64,9 +65,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     @Volatile
     private var failedException: Exception? = null
-
-    @Volatile
-    private var shutdown = false
 
     init {
         // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
@@ -88,7 +86,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             val splitPoint = remoteIpAndPort.lastIndexOf(':')
             val clientAddressString = remoteIpAndPort.substring(0, splitPoint)
 
-            val aeronLogInfo = "$streamId/$sessionId : $clientAddressString"
+            val aeronLogInfo = "$sessionId/$streamId:$clientAddressString"
 
             val message = handshaker.readMessage(buffer, offset, length, aeronLogInfo)
 
@@ -104,7 +102,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
             // this is an error message
             if (message.state == HandshakeMessage.INVALID) {
-                val cause = ServerException(message.errorMessage ?: "Unknown").apply { stackTrace = stackTrace.copyOfRange(0, 1) }
+                val cause = ServerException(message.errorMessage ?: "Unknown").apply { stackTrace = emptyArray() }
                 failedException = ClientRejectedException("[$aeronLogInfo}] (${message.connectKey}) cancelled handshake", cause)
                     .apply { cleanAllStackTrace() }
                 return@FragmentAssembler
@@ -176,50 +174,50 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    suspend fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutSec: Int) : ClientConnectionInfo {
+    suspend fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutSec: Int, uuid: UUID) : ClientConnectionInfo {
+        val pubSub = handshakeConnection.pubSub
+
+        // is our pub still connected??
+        if (!pubSub.pub.isConnected) {
+            throw ClientException("Handshake publication is not connected, and it is expected to be connected!")
+        }
+
         // always make sure that we reset the state when we start (in the event of reconnects)
         reset()
         connectKey = getSafeConnectKey()
 
         val publicKey = endPoint.storage.getPublicKey()!!
 
-        // Send the one-time pad to the server.
-        val publication = handshakeConnection.pubSub.pub
-        val subscription = handshakeConnection.pubSub.sub
-
         try {
-            handshaker.writeMessage(publication, handshakeConnection.details,
+            // Send the one-time pad to the server.
+            handshaker.writeMessage(pubSub.pub, handshakeConnection.details,
                                     HandshakeMessage.helloFromClient(
                                         connectKey = connectKey,
                                         publicKey = publicKey,
-                                        sessionIdSub = handshakeConnection.pubSub.sessionIdSub,
-                                        streamIdSub = handshakeConnection.pubSub.streamIdSub,
-                                        portSub = handshakeConnection.pubSub.portSub
+                                        sessionIdSub = pubSub.sessionIdSub,
+                                        streamIdSub = pubSub.streamIdSub,
+                                        portSub = pubSub.portSub,
+                                        uuid = uuid
                                     ))
         } catch (e: Exception) {
             handshakeConnection.close()
-
-            logger.error("$handshakeConnection Handshake error!", e)
-            throw e
+            throw TransmitException("$handshakeConnection Handshake message error!", e)
         }
 
         // block until we receive the connection information from the server
-        var pollCount: Int
-        pollIdleStrategy.reset()
 
         val timoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong()) + endPoint.aeronDriver.lingerNs()
         val startTime = System.nanoTime()
         while (System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pollCount = subscription.poll(handler, 1)
+            pubSub.sub.poll(handler, 1)
 
             if (failedException != null || connectionHelloInfo != null) {
                 break
             }
 
-            // 0 means we idle. >0 means reset and don't idle (because there are likely more)
-            pollIdleStrategy.idle(pollCount)
+            delay(100)
         }
 
         val failedEx = failedException
@@ -249,34 +247,38 @@ internal class ClientHandshake<CONNECTION: Connection>(
         handshakeTimeoutSec: Int,
         aeronLogInfo: String
     ) {
-        val registrationMessage = HandshakeMessage.doneFromClient(
-                                                                        connectKey,
-                                                                        handshakeConnection.pubSub.portSub,
-                                                                        clientConnection.connectionInfo.streamIdSub,
-                                                                        clientConnection.connectionInfo.sessionIdSub)
+        val pubSub = clientConnection.connectionInfo
+
+        // is our pub still connected??
+        if (!pubSub.pub.isConnected) {
+            throw ClientException("Handshake publication is not connected, and it is expected to be connected!")
+        }
 
         // Send the done message to the server.
         try {
-            handshaker.writeMessage(handshakeConnection.pubSub.pub, aeronLogInfo, registrationMessage)
+            handshaker.writeMessage(handshakeConnection.pubSub.pub, aeronLogInfo,
+                                    HandshakeMessage.doneFromClient(
+                                        connectKey = connectKey,
+                                        sessionIdSub = pubSub.sessionIdSub,
+                                        streamIdSub = pubSub.streamIdSub,
+                                        portSub = pubSub.portSub
+                                    ))
         } catch (e: Exception) {
             handshakeConnection.close()
-
-            throw e
+            throw TransmitException("$handshakeConnection Handshake message error!", e)
         }
 
-        // block until we receive the connection information from the server
 
         failedException = null
-        pollIdleStrategy.reset()
+        connectionDone = false
 
-        var pollCount: Int
-
+        // block until we receive the connection information from the server
         val timoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong())
         var startTime = System.nanoTime()
         while (System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pollCount = clientConnection.connectionInfo.sub.poll(handler, 1)
+            pubSub.sub.poll(handler, 1)
 
             if (failedException != null || connectionDone) {
                 break
@@ -289,10 +291,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
                 startTime = System.nanoTime()
             }
 
-            delay(100L)
-
-            // 0 means we idle. >0 means reset and don't idle (because there are likely more)
-            pollIdleStrategy.idle(pollCount)
+            delay(100)
         }
 
         val failedEx = failedException
@@ -306,7 +305,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             // since this failed, close everything
             handshakeConnection.close()
 
-            val exception = ClientTimedOutException("Waiting for registration response from server")
+            val exception = ClientTimedOutException("Timed out waiting for registration response from server: $handshakeTimeoutSec seconds")
             throw exception
         }
     }

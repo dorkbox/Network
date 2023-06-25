@@ -34,11 +34,13 @@ import dorkbox.network.exceptions.ServerTimedoutException
 import dorkbox.network.exceptions.TransmitException
 import dorkbox.util.sync.CountDownLatch
 import io.aeron.Publication
+import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import net.jodah.expiringmap.ExpirationPolicy
 import net.jodah.expiringmap.ExpiringMap
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.util.*
 import java.util.concurrent.*
 
 
@@ -49,12 +51,10 @@ import java.util.concurrent.*
  */
 @Suppress("DuplicatedCode", "JoinDeclarationAndAssignment")
 internal class ServerHandshake<CONNECTION : Connection>(
-    private val logger: KLogger,
     private val config: ServerConfiguration,
     private val listenerManager: ListenerManager<CONNECTION>,
     val aeronDriver: AeronDriver
 ) {
-
 
     // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
     private val pendingConnections = ExpiringMap.builder()
@@ -70,14 +70,14 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // this blocks until it fully runs (which is ok. this is fast)
             listenerManager.notifyError(ServerTimedoutException("[${clientConnectKey} Connection (${connection.id}) Timed out waiting for registration response from client"))
 
-            EventDispatcher.CLOSE.launch {
-                connection.close(enableRemove = true)
+            runBlocking {
+                connection.close()
             }
         }
         .build<Long, CONNECTION>()
 
 
-    private val connectionsPerIpCounts = ConnectionCounts()
+    internal val connectionsPerIpCounts = ConnectionCounts()
 
     /**
      * @return true if we should continue parsing the incoming message, false if we should abort (as we are DONE processing data)
@@ -121,19 +121,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 return true
             }
 
-
             // Server is the "source", client mirrors the server
             logger.debug { "[${existingConnection}] (${message.connectKey}) Connection done with handshake." }
-
-            // NOTE: This is called on connection.close()
-            existingConnection.closeAction = {
-                // clean up the resources associated with this connection when it's closed
-                logger.debug { "[${existingConnection}] freeing resources" }
-                existingConnection.cleanup(connectionsPerIpCounts)
-
-                existingConnection.doNotifyDisconnect()
-                listenerManager.notifyDisconnect(existingConnection)
-            }
 
             // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls occur
             listenerManager.notifyInit(existingConnection)
@@ -167,8 +156,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         handshakePublication: Publication,
         config: ServerConfiguration,
         clientAddress: InetAddress,
-        aeronLogInfo: String,
-        logger: KLogger
+        aeronLogInfo: String
     ): Boolean {
 
         try {
@@ -333,7 +321,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 sessionIdSub = connectionSessionIdSub,
                 streamIdPub = connectionStreamIdPub,
                 streamIdSub = connectionStreamIdSub,
-                logInfo = "IPC",
+                portPub = 0,
+                portSub = 0,
                 reliable = true
             )
 
@@ -425,7 +414,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         val isSelfMachine = clientAddress.isLoopbackAddress || clientAddress == EndPoint.lanAddress
 
         if (!isSelfMachine &&
-            !validateUdpConnectionInfo(server, handshaker, handshakePublication, config, clientAddress, aeronLogInfo, logger)) {
+            !validateUdpConnectionInfo(server, handshaker, handshakePublication, config, clientAddress, aeronLogInfo)) {
             // we do not want to limit the loopback addresses!
             return
         }
@@ -549,8 +538,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 streamIdSub = connectionStreamIdSub,
                 portPub = portPub,
                 portSub = portSub,
-
-                logInfo = logType,
                 reliable = isReliable
             )
 
@@ -567,16 +554,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
             // VALIDATE:: are we allowed to connect to this server (now that we have the initial server information)
             val permitConnection = listenerManager.notifyFilter(connection)
             if (!permitConnection) {
-                // have to unwind actions!
-                connectionsPerIpCounts.decrementSlow(clientAddress)
-                sessionIdAllocator.free(connectionSessionIdPub)
-                sessionIdAllocator.free(connectionSessionIdSub)
-                streamIdAllocator.free(connectionStreamIdPub)
-                streamIdAllocator.free(connectionStreamIdSub)
-
-                EventDispatcher.CLOSE.launch {
-                    connection.close(enableRemove = true)
-                }
+                // this will also unwind/free allocations
+                connection.close()
 
                 listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection was not permitted!"))
 
@@ -655,9 +634,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
         val connections = pendingConnections
         val latch = CountDownLatch(connections.size)
 
-        EventDispatcher.CLOSE.launch {
+        EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
             connections.forEach { (_, v) ->
-                v.close(enableRemove = true)
+                v.close()
                 latch.countDown()
             }
         }

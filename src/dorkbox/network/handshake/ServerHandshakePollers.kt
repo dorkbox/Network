@@ -22,7 +22,6 @@ import dorkbox.netUtil.IP
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
-import dorkbox.network.aeron.AeronDriver.Companion.uri
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.mediaDriver.ServerHandshakeDriver
@@ -34,13 +33,14 @@ import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
+import io.aeron.CommonContext
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.Header
-import kotlinx.coroutines.runBlocking
 import mu.KLogger
 import org.agrona.DirectBuffer
 import java.net.Inet4Address
+import java.util.concurrent.*
 
 internal object ServerHandshakePollers {
     fun disabled(serverInfo: String): AeronPoller {
@@ -63,7 +63,7 @@ internal object ServerHandshakePollers {
         private val isReliable = server.config.isReliable
         private val handshaker = server.handshaker
 
-        suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
+        fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
             // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
@@ -83,14 +83,8 @@ internal object ServerHandshakePollers {
             // we have read all the data, now dispatch it.
             EventDispatcher.HANDSHAKE.launch {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-                val publicationUri = if (message.sessionId == 0) {
-                    // will connect to ANY streamID
-                    uriHandshake("ipc", isReliable)
-                } else {
-                    uri("ipc", message.sessionId, isReliable)
-                }
-
-
+                // will connect to ANY streamID
+                val publicationUri = uriHandshake(CommonContext.IPC_MEDIA, isReliable)
                 val publication = try {
                     // we actually have to wait for it to connect before we continue
                     driver.addPublicationWithTimeout(publicationUri, timeout, message.streamId, aeronLogInfo) { cause ->
@@ -101,15 +95,11 @@ internal object ServerHandshakePollers {
                     return@launch
                 }
 
-                // Manage the Handshake state. When done with a connection, this returns false
-                if (!handshake.validateMessageTypeAndDoPending(
-                        server = server,
-                        handshaker = handshaker,
-                        handshakePublication = publication,
-                        message = message,
-                        logger = logger)) {
-                    // nothing
-                } else {
+                // HandshakeMessage.HELLO
+                // HandshakeMessage.DONE
+                val messageState = message.state
+
+                if (messageState == HandshakeMessage.HELLO) {
                     handshake.processIpcHandshakeMessageServer(
                         server = server,
                         handshaker = handshaker,
@@ -121,6 +111,14 @@ internal object ServerHandshakePollers {
                         connectionFunc = connectionFunc,
                         logger = logger
                     )
+                } else {
+                    // HandshakeMessage.DONE
+                    handshake.validateMessageTypeAndDoPending(
+                        server = server,
+                        handshaker = handshaker,
+                        handshakePublication = publication,
+                        message = message,
+                        logger = logger)
                 }
 
                 driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
@@ -141,16 +139,19 @@ internal object ServerHandshakePollers {
         private val ipInfo = server.ipInfo
         private val logInfo = mediaDriver.logInfo
         private val handshaker = server.handshaker
-//        private val connectionTimeoutSec = TimeUnit.NANOSECONDS.toSeconds(server.config.connectionExpirationTimoutNanos)
+        private val connectionTimeoutSec = TimeUnit.NANOSECONDS.toSeconds(server.config.connectionExpirationTimoutNanos).toInt()
 
-        suspend fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
+        fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
+            // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
+            // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
+
+
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
             // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
             // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
             val sessionId = header.sessionId()
             val streamId = header.streamId()
-
 
             // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
             val remoteIpAndPort = (header.context() as Image).sourceIdentity()
@@ -191,22 +192,13 @@ internal object ServerHandshakePollers {
 
             EventDispatcher.HANDSHAKE.launch {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-//                val publicationUri = uriHandshake("udp", isReliable)
-//                    .endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
-
-                val publicationUri = if (message.sessionId == 0) {
-                    // will connect to ANY streamID
-                    uriHandshake("udp", isReliable)
-                } else {
-                    uri("udp", message.sessionId, isReliable)
-                }.also {
-                    it.endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
-                }
-
+                // will connect to ANY streamID
+                val publicationUri =
+                    uriHandshake(CommonContext.UDP_MEDIA, isReliable).endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
 
                 val publication = try {
                     // we actually have to wait for it to connect before we continue
-                    driver.addPublicationWithTimeout(publicationUri, 5, message.streamId, aeronLogInfo) { cause ->
+                    driver.addPublicationWithTimeout(publicationUri, connectionTimeoutSec, message.streamId, aeronLogInfo) { cause ->
                         ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
                     }
                 } catch (e: Exception) {
@@ -214,35 +206,37 @@ internal object ServerHandshakePollers {
                     return@launch
                 }
 
-            // HandshakeMessage.HELLO
-            // HandshakeMessage.DONE
-            val messageState = message.state
-
-            if (messageState == HandshakeMessage.HELLO) {
-                handshake.processUdpHandshakeMessageServer(
-                    server = server,
-                    handshaker = handshaker,
-                    handshakePublication = publication,
-                    clientUuid = HandshakeMessage.uuidReader(message.registrationData!!),
-                    clientAddress = clientAddress,
-                    clientAddressString = clientAddressString,
-                    isReliable = isReliable,
-                    message = message,
-                    aeronLogInfo = aeronLogInfo,
-                    connectionFunc = connectionFunc,
-                    logger = logger
-                )
-            } else {
+                // HandshakeMessage.HELLO
                 // HandshakeMessage.DONE
-                handshake.validateMessageTypeAndDoPending(
-                    server = server,
-                    handshaker = handshaker,
-                    handshakePublication = publication,
-                    message = message,
-                    logger = logger)
-            }
+                val messageState = message.state
 
-            driver.closeAndDeletePublication(publication, logInfo)
+                if (messageState == HandshakeMessage.HELLO) {
+                    handshake.processUdpHandshakeMessageServer(
+                        server = server,
+                        handshaker = handshaker,
+                        handshakePublication = publication,
+                        clientUuid = HandshakeMessage.uuidReader(message.registrationData!!),
+                        clientAddress = clientAddress,
+                        clientAddressString = clientAddressString,
+                        isReliable = isReliable,
+                        message = message,
+                        aeronLogInfo = aeronLogInfo,
+                        connectionFunc = connectionFunc,
+                        logger = logger
+                    )
+                } else {
+                    // HandshakeMessage.DONE
+                    handshake.validateMessageTypeAndDoPending(
+                        server = server,
+                        handshaker = handshaker,
+                        handshakePublication = publication,
+                        message = message,
+                        logger = logger
+                    )
+                }
+
+                driver.closeAndDeletePublication(publication, logInfo)
+            }
         }
     }
 
@@ -274,9 +268,7 @@ internal object ServerHandshakePollers {
                 //   - long running
                 //   - re-entrant with the client
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    runBlocking {
-                        processor.process(header, buffer, offset, length)
-                    }
+                    processor.process(header, buffer, offset, length)
                 }
 
                 override fun poll(): Int {
@@ -328,9 +320,7 @@ internal object ServerHandshakePollers {
                 //   - long running
                 //   - re-entrant with the client
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    runBlocking {
-                        processor.process(header, buffer, offset, length)
-                    }
+                    processor.process(header, buffer, offset, length)
                 }
 
                 override fun poll(): Int {
@@ -381,9 +371,7 @@ internal object ServerHandshakePollers {
                 //   - long running
                 //   - re-entrant with the client
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    runBlocking {
-                        processor.process(header, buffer, offset, length)
-                    }
+                    processor.process(header, buffer, offset, length)
                 }
 
                 override fun poll(): Int {
@@ -435,9 +423,7 @@ internal object ServerHandshakePollers {
                 //   - long running
                 //   - re-entrant with the client
                 val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    runBlocking {
-                        processor.process(header, buffer, offset, length)
-                    }
+                    processor.process(header, buffer, offset, length)
                 }
 
                 override fun poll(): Int {
