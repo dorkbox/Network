@@ -18,11 +18,13 @@ package dorkbox.network.aeron
 
 import dorkbox.collections.ConcurrentIterator
 import dorkbox.network.Configuration
+import dorkbox.network.connection.EndPoint
+import dorkbox.util.NamedThreadFactory
 import dorkbox.util.sync.CountDownLatch
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -32,6 +34,8 @@ import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.concurrent.IdleStrategy
+import java.util.*
+import java.util.concurrent.*
 
 /**
  * there are threading issues if there are client(s) and server's within the same JVM, where we have thread starvation
@@ -41,12 +45,15 @@ import org.agrona.concurrent.IdleStrategy
  */
 internal class EventPoller {
     companion object {
-        const val REMOVE = -1
-        const val DEBUG = false
+        internal const val REMOVE = -1
+        val eventLogger = KotlinLogging.logger(EventPoller::class.java.simpleName)
+
+        private val pollDispatcher = Executors.newSingleThreadExecutor(
+            NamedThreadFactory("Poll Dispatcher", Configuration.networkThreadGroup, true)
+        ).asCoroutineDispatcher()
     }
 
     private var configured = false
-    private lateinit var pollDispatcher: CoroutineDispatcher
     private lateinit var dispatchScope: CoroutineScope
 
     private lateinit var pollStrategy: CoroutineIdleStrategy
@@ -58,22 +65,36 @@ internal class EventPoller {
     // this is thread safe
     private val pollEvents = ConcurrentIterator<Pair<suspend EventPoller.()->Int, suspend ()->Unit>>()
     private val submitEvents = atomic(0)
-    private val configureEvents = atomic(0)
+    private val configureEventsEndpoints = mutableSetOf<UUID>()
 
-    private var shutdownLatch = CountDownLatch(1)
+    @Volatile
+    private var delayClose = false
 
-    fun configure(logger: KLogger, config: Configuration) = runBlocking {
+    @Volatile
+    private var shutdownLatch = CountDownLatch(0)
+
+
+    @Volatile
+    private var threadId = Thread.currentThread().id
+
+
+    fun inDispatch(): Boolean {
+        // this only works because we are a single thread dispatch
+        return threadId == Thread.currentThread().id
+    }
+
+    fun configure(logger: KLogger, config: Configuration, endPoint: EndPoint<*>) = runBlocking {
         mutex.withLock {
             logger.debug { "Initializing the Network Event Poller..." }
-            configureEvents.getAndIncrement()
+            configureEventsEndpoints.add(endPoint.uuid)
 
             if (!configured) {
                 logger.trace { "Configuring the Network Event Poller..." }
 
+                delayClose = false
                 running = true
                 configured = true
                 shutdownLatch = CountDownLatch(1)
-                pollDispatcher = config.networkEventPoll
                 pollStrategy = config.pollIdleStrategy
                 clonedStrategy = config.pollIdleStrategy.cloneToNormal()
 
@@ -81,10 +102,9 @@ internal class EventPoller {
                 require(pollDispatcher.isActive) { "Unable to start the event dispatch in the terminated state!" }
 
                 dispatchScope.launch {
-                    val eventLogger: KLogger = KotlinLogging.logger(EventPoller::class.java.simpleName)
-
                     val pollIdleStrategy = clonedStrategy
                     var pollCount = 0
+                    threadId = Thread.currentThread().id
 
                     while (running) {
                         pollEvents.forEachRemovable {
@@ -99,16 +119,26 @@ internal class EventPoller {
                                 if (poll < 0) {
                                     // remove our event, it is no longer valid
                                     pollEvents.remove(this)
-                                    it.second()
+                                    it.second() // shutting down
+
+                                    // check to see if we requested a shutdown
+                                    if (delayClose) {
+                                        doClose()
+                                    }
                                 } else if (poll > 0) {
                                     pollCount += poll
                                 }
                             } catch (e: Exception) {
-                                eventLogger.error(e) { "Unexpected error during server message polling! Aborting event dispatch for it!" }
+                                eventLogger.error(e) { "Unexpected error during Network Event Polling! Aborting event dispatch for it!" }
 
                                 // remove our event, it is no longer valid
                                 pollEvents.remove(this)
-                                it.second()
+                                it.second() // shutting down
+
+                                // check to see if we requested a shutdown
+                                if (delayClose) {
+                                    doClose()
+                                }
                             }
                         }
 
@@ -119,28 +149,17 @@ internal class EventPoller {
                     pollEvents.forEachRemovable {
                         // remove our event, it is no longer valid
                         pollEvents.remove(this)
-                        it.second()
+                        it.second() // shutting down
                     }
 
                     shutdownLatch.countDown()
                 }
             } else {
-                require(pollDispatcher == config.networkEventPoll) {
-                    "The network event dispatcher is different between the multiple instances of network clients/servers. There **WILL BE** thread starvation, so this behavior is forbidden!"
-                }
-
                 require(pollStrategy == config.pollIdleStrategy) {
                     "The network event poll strategy is different between the multiple instances of network clients/servers. There **WILL BE** thread starvation, so this behavior is forbidden!"
                 }
             }
         }
-    }
-
-    /**
-     * Will cause the executing thread to wait until the event has been started
-     */
-    suspend fun submit(action: suspend EventPoller.() -> Int) {
-        submit(action) {}
     }
 
     /**
@@ -168,37 +187,50 @@ internal class EventPoller {
         submitEvents.getAndDecrement()
     }
 
+
+
     /**
      * Waits for all events to finish running
      */
-    suspend fun close(logger: KLogger) {
-        logger.trace { "Requesting close for the Network Event Poller..." }
-
-        val doClose = mutex.withLock {
-            logger.trace { "Attempting close for the Network Event Poller..." }
+    suspend fun close(logger: KLogger, endPoint: EndPoint<*>) {
+        mutex.withLock {
+            logger.debug { "Requesting close for the Network Event Poller..." }
 
             // ONLY if there are no more poll-events do we ACTUALLY shut down.
             // when an endpoint closes its polling, it will automatically be removed from this datastructure.
-            val cEvents = configureEvents.decrementAndGet()
+            configureEventsEndpoints.removeIf { it == endPoint.uuid }
+            val cEvents = configureEventsEndpoints.size
+
+            // these prevent us from closing too early
             val pEvents = pollEvents.size()
             val sEvents = submitEvents.value
 
-            if (running && sEvents == 0 && cEvents == 0 && pEvents == 0) {
-                logger.debug { "Closing the Network Event Poller..." }
-                true
+            if (running && sEvents == 0 && cEvents == 0) {
+                when (pEvents) {
+                    0 -> {
+                        logger.debug { "Closing the Network Event Poller..." }
+                        doClose()
+                    }
+                    1 -> {
+                        // this means we are trying to close on our poll event, and obviously it won't work.
+                        logger.debug { "Delayed closing the Network Event Poller..." }
+                        delayClose = true
+                    }
+                    else -> {
+                        logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)" }
+                    }
+                }
             } else {
                 logger.debug { "Not closing the Network Event Poller... (isRunning=$running submitEvents=$sEvents configureEvents=${cEvents} pollEvents=$pEvents)" }
-                false
             }
         }
+    }
 
-        if (doClose) {
-            running = false
-            shutdownLatch.await()
-            configured = false
+    private suspend fun doClose() {
+        running = false
+        shutdownLatch.await()
+        configured = false
 
-            dispatchScope.cancel("Closed event dispatch")
-            logger.debug { "Closed the Network Event Poller..." }
-        }
+        dispatchScope.cancel("Closed event dispatch")
     }
 }
