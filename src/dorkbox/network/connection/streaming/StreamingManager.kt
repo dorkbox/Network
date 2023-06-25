@@ -177,8 +177,8 @@ internal class StreamingManager<CONNECTION : Connection>(
                                         logger.error("No streamed message callbacks found for ${streamedMessage::class.java.name}")
                                     }
                                 } catch (e: Exception) {
-                                    logger.error("Error processing message ${streamedMessage::class.java.name}", e)
-                                    listenerManager.notifyError(connection, e)
+                                    val newException = StreamingException("Error processing message ${streamedMessage::class.java.name}", e)
+                                    listenerManager.notifyError(connection, newException)
                                 }
                             }
                         } else {
