@@ -23,12 +23,14 @@ import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.uri
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.aeron.endpoint
+import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
+import io.aeron.CommonContext
 import io.aeron.Subscription
 import mu.KLogger
 import java.net.Inet4Address
@@ -75,10 +77,8 @@ internal class ClientHandshakeDriver(
 
             var details = ""
 
-            // for UDP, this must be unique otherwise we CANNOT connect to the server!
-            // additionally, this must ONLY be unique per driver (not per connection!) If it is unique PER connection,
-            // there will be sessionID errors (because the handshake connections are created too quickly during reconnects
-            val sessionIdPub = aeronDriver.clientUdpHandshakeSessionId
+            // this must be unique otherwise we CANNOT connect to the server!
+            val sessionIdPub = CryptoManagement.secureRandom.nextInt()
 
             // with IPC, the aeron driver MUST be shared, so having a UNIQUE sessionIdPub/Sub is unnecessary.
 //          sessionIdPub = sessionIdAllocator.allocate()
@@ -186,7 +186,7 @@ internal class ClientHandshakeDriver(
         ): PubSub {
             // Create a publication at the given address and port, using the given stream ID.
             // Note: The Aeron.addPublication method will block until the Media Driver acknowledges the request or a timeout occurs.
-            val publicationUri = uri("ipc", sessionIdPub, reliable)
+            val publicationUri = uri(CommonContext.IPC_MEDIA, sessionIdPub, reliable)
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
             //  publication of any state to other threads and not be long running or re-entrant with the client.
@@ -201,7 +201,7 @@ internal class ClientHandshakeDriver(
             }
 
             // Create a subscription at the given address and port, using the given stream ID.
-            val subscriptionUri = uriHandshake("ipc", reliable)
+            val subscriptionUri = uriHandshake(CommonContext.IPC_MEDIA, reliable)
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
 
             return PubSub(publication, subscription,
@@ -231,7 +231,7 @@ internal class ClientHandshakeDriver(
 
             // Create a publication at the given address and port, using the given stream ID.
             // ANY sessionID for the publication will work, because the SERVER doesn't have it defined
-            val publicationUri = uri("udp", sessionIdPub, reliable)
+            val publicationUri = uri(CommonContext.UDP_MEDIA, sessionIdPub, reliable)
                 .endpoint(isRemoteIpv4, remoteAddressString, portPub)
 
 
@@ -266,7 +266,7 @@ internal class ClientHandshakeDriver(
                 }
 
                 try {
-                    val subscriptionUri = uriHandshake("udp", reliable)
+                    val subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, reliable)
                         .endpoint(isRemoteIpv4, localAddressString, actualPortSub)
 
                     subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)

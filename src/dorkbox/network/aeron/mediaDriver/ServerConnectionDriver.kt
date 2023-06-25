@@ -19,6 +19,7 @@ package dorkbox.network.aeron.mediaDriver
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uri
 import dorkbox.network.connection.IpInfo
+import io.aeron.CommonContext
 import java.net.Inet4Address
 import java.net.InetAddress
 
@@ -86,14 +87,14 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
             // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
             // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
-            val publicationUri = uri("ipc", sessionIdPub, reliable)
+            val publicationUri = uri(CommonContext.IPC_MEDIA, sessionIdPub, reliable)
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
             //  publication of any state to other threads and not be long running or re-entrant with the client.
             val publication = aeronDriver.addPublication(publicationUri, streamIdPub, logInfo)
 
             // Create a subscription at the given address and port, using the given stream ID.
-            val subscriptionUri = uri("ipc", sessionIdSub, reliable)
+            val subscriptionUri = uri(CommonContext.IPC_MEDIA, sessionIdSub, reliable)
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
 
             return PubSub(publication, subscription,
@@ -130,7 +131,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
             // if we are IPv6 WILDCARD -- then our subscription must ALSO be IPv6, even if our connection is via IPv4
 
             // Create a subscription at the given address and port, using the given stream ID.
-            val subscriptionUri = uri("udp", sessionIdSub, reliable)
+            val subscriptionUri = uri(CommonContext.UDP_MEDIA, sessionIdSub, reliable)
                 .endpoint(ipInfo.formattedListenAddressString + ":" + portSub)
 
 

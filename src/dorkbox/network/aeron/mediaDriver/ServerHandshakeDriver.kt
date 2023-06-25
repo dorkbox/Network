@@ -20,6 +20,7 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.connection.IpInfo
 import io.aeron.ChannelUriStringBuilder
+import io.aeron.CommonContext
 import io.aeron.Subscription
 
 /**
@@ -41,13 +42,13 @@ internal class ServerHandshakeDriver(private val aeronDriver: AeronDriver, val s
             val subscriptionUri: ChannelUriStringBuilder
 
             if (isIpc) {
-                subscriptionUri = uriHandshake("ipc", isReliable)
+                subscriptionUri = uriHandshake(CommonContext.IPC_MEDIA, isReliable)
                 info = "$logInfo [$sessionIdSub|$streamIdSub]"
             } else {
                 val port = ipInfo.port
 
                 // are we ipv4 or ipv6 or ipv6wildcard?
-                subscriptionUri = uriHandshake("udp", isReliable)
+                subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, isReliable)
                     .endpoint(ipInfo.getAeronPubAddress(ipInfo.isIpv4) + ":" + port)
 
                 info = "$logInfo ${ipInfo.listenAddressStringPretty} [$sessionIdSub|$streamIdSub|$port] (reliable:$isReliable)"

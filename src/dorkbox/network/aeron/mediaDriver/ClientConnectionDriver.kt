@@ -23,6 +23,7 @@ import dorkbox.network.aeron.endpoint
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.handshake.ClientConnectionInfo
+import io.aeron.CommonContext
 import java.net.Inet4Address
 import java.net.InetAddress
 
@@ -120,7 +121,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
             // Create a publication at the given address and port, using the given stream ID.
-            val publicationUri = uri("ipc", sessionIdPub, reliable)
+            val publicationUri = uri(CommonContext.IPC_MEDIA, sessionIdPub, reliable)
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
             //  publication of any state to other threads and not be long running or re-entrant with the client.
@@ -130,7 +131,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             }
 
             // Create a subscription at the given address and port, using the given stream ID.
-            val subscriptionUri = uri("ipc", sessionIdSub, reliable)
+            val subscriptionUri = uri(CommonContext.IPC_MEDIA, sessionIdSub, reliable)
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
 
             return PubSub(publication, subscription,
@@ -160,7 +161,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
             // Create a publication at the given address and port, using the given stream ID.
-            val publicationUri = uri("udp", sessionIdPub, reliable)
+            val publicationUri = uri(CommonContext.UDP_MEDIA, sessionIdPub, reliable)
                 .endpoint(isRemoteIpv4, remoteAddressString, portPub)
 
 
@@ -174,7 +175,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
             val localAddressString = getLocalAddressString(publication, remoteAddress)
 
-            val subscriptionUri = uri("udp", sessionIdSub, reliable)
+            val subscriptionUri = uri(CommonContext.UDP_MEDIA, sessionIdSub, reliable)
                 .endpoint(isRemoteIpv4, localAddressString, portSub)
 
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
