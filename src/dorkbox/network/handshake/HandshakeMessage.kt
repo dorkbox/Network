@@ -15,6 +15,9 @@
  */
 package dorkbox.network.handshake
 
+import dorkbox.bytes.LittleEndian
+import java.util.*
+
 /**
  * Internal message to handle the connection registration process
  */
@@ -39,11 +42,6 @@ internal class HandshakeMessage private constructor() {
     var sessionId = 0
 
 
-    // by default, this will be a reliable connection. When the client connects to the server, the client will specify if the new connection
-    // is a reliable/unreliable connection when setting up the MediaDriverConnection
-    val isReliable = true
-
-
     // the client sends its registration data to the server to make sure that the registered classes are the same between the client/server
     var registrationData: ByteArray? = null
 
@@ -56,14 +54,27 @@ internal class HandshakeMessage private constructor() {
         const val DONE = 3
         const val DONE_ACK = 4
 
-        fun helloFromClient(connectKey: Long, publicKey: ByteArray, sessionIdSub: Int, streamIdSub: Int, portSub: Int): HandshakeMessage {
+        private val uuidWriter: (UUID) -> ByteArray = { uuid ->
+            val bytes = byteArrayOf(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0) // 16 elements
+            LittleEndian.Long_.toBytes(uuid.mostSignificantBits, bytes, 0)
+            LittleEndian.Long_.toBytes(uuid.leastSignificantBits, bytes, 8)
+            bytes
+        }
+
+        internal val uuidReader: (ByteArray) -> UUID = { bytes ->
+            UUID(LittleEndian.Long_.from(bytes, 0, 8),
+                 LittleEndian.Long_.from(bytes, 8, 8))
+        }
+
+        fun helloFromClient(connectKey: Long, publicKey: ByteArray, sessionIdSub: Int, streamIdSub: Int, portSub: Int, uuid: UUID): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
             hello.connectKey = connectKey // this is 'bounced back' by the server, so the client knows if it's the correct connection message
             hello.publicKey = publicKey
-            hello.sessionId = sessionIdSub
+            hello.sessionId = 0 // not used by the server, since it connects in a different way!
             hello.streamId = streamIdSub
             hello.port = portSub
+            hello.registrationData = uuidWriter(uuid)
             return hello
         }
 
@@ -81,7 +92,7 @@ internal class HandshakeMessage private constructor() {
             return hello
         }
 
-        fun doneFromClient(connectKey: Long, streamIdSub: Int, sessionIdSub: Int, portSub: Int): HandshakeMessage {
+        fun doneFromClient(connectKey: Long, sessionIdSub: Int, streamIdSub: Int, portSub: Int): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = DONE
             hello.connectKey = connectKey // THIS MUST NEVER CHANGE! (the server/client expect this)
