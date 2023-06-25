@@ -206,8 +206,14 @@ open class Server<CONNECTION : Connection>(
     fun bind()  = runBlocking {
         // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
 
-        if (bindAlreadyCalled.getAndSet(true)) {
-            logger.error { "Unable to bind when the server is already running!" }
+        // the lifecycle of a server is the ENDPOINT (measured via the network event poller)
+        if (endpointIsRunning.value) {
+            listenerManager.notifyError(ServerException("Unable to start, the server is already running!"))
+            return@runBlocking
+        }
+
+        if (!waitForClose()) {
+            listenerManager.notifyError(ServerException("Unable to start the server!"))
             return@runBlocking
         }
 
@@ -216,7 +222,8 @@ open class Server<CONNECTION : Connection>(
             verifyState()
             initializeLatch()
         } catch (e: Exception) {
-            logger.error(e) { "Unable to start the network driver" }
+            resetOnError()
+            listenerManager.notifyError(ServerException("Unable to start the server!", e))
             return@runBlocking
         }
 
