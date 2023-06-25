@@ -446,7 +446,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 
 
     // called in a ListenerManager.notifyDisconnect(), so we don't expose our internal listenerManager
-    internal suspend fun notifyDisconnect() {
+    internal fun notifyDisconnect() {
         val connectionSpecificListenerManager = listenerManager.value
         connectionSpecificListenerManager?.directNotifyDisconnect(this@Connection)
     }
