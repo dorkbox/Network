@@ -244,6 +244,7 @@ open class Client<CONNECTION : Connection>(
     }
 
 // TODO:: the port should be part of the connect function!
+
     /**
      * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
      *
@@ -729,7 +730,7 @@ open class Client<CONNECTION : Connection>(
 
             // we only need to run shutdown methods if there was a network outage or D/C
             if (!shutdownInProgress.value) {
-                this@Client.closeSuspending(true)
+                this@Client.closeSuspending(false)
             }
 
             // we can now call connect again
@@ -829,11 +830,13 @@ open class Client<CONNECTION : Connection>(
     }
 
     /**
-     * If you call close() on the client endpoint, it will shut down all parts of the endpoint (listeners, driver, event polling, etc).
+     * By default, if you call close() on the client, it will shut down all parts of the endpoint (listeners, driver, event polling, etc).
+     *
+     * @param closeEverything if true, all parts of the client will be closed (listeners, driver, event polling, etc)
      */
-    fun close() {
+    fun close(closeEverything: Boolean = true) {
         runBlocking {
-            closeSuspending()
+            closeSuspending(closeEverything)
         }
     }
 

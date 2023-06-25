@@ -364,11 +364,13 @@ open class Server<CONNECTION : Connection>(
     }
 
     /**
-     * If you call close() on the server endpoint, it will shut down all parts of the endpoint (listeners, driver, event polling, etc).
+     * By default, if you call close() on the server, it will shut down all parts of the endpoint (listeners, driver, event polling, etc).
+     *
+     * @param closeEverything if true, all parts of the server will be closed (listeners, driver, event polling, etc)
      */
-    fun close() {
+    fun close(closeEverything: Boolean = true) {
         runBlocking {
-            closeSuspending()
+            closeSuspending(closeEverything)
         }
     }
 

@@ -309,7 +309,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         endpointIsRunning.lazySet(true)
         shutdown = false
         shutdownEventPoller = false
-        aeronDriver.resetUdpSessionId()
 
         // there are threading issues if there are client(s) and server's within the same JVM, where we have thread starvation
         // this resolves the problem. Additionally, this is tied-to specific a specific endpoint instance
@@ -894,13 +893,13 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * NOTE: This method does NOT block, as the connection state is asynchronous. Use "waitForClose()" to wait for this to finish
      *
-     * @param clientConnectionDC this is only true when a connection is closed in the client.
+     * @param closeEverything unless explicitly called, this is only false when a connection is closed in the client.
      */
-    internal suspend fun closeSuspending(clientConnectionDC: Boolean = false) {
+    internal suspend fun closeSuspending(closeEverything: Boolean) {
         // 1) endpoints can call close()
         // 2) client can close the endpoint if the connection is D/C from aeron (and the endpoint was not closed manually)
         val shutdownPreviouslyStarted = shutdownInProgress.getAndSet(true)
-        if (shutdownPreviouslyStarted && clientConnectionDC) {
+        if (shutdownPreviouslyStarted && !closeEverything) {
             // this is only called when the client network event poller shuts down
             // if we have clientConnectionClosed, then run that logic (because it doesn't run on the client when the connection is closed remotely)
 
@@ -928,7 +927,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
 
             // don't do these things if we are "closed" from a client connection disconnect
-            if (!clientConnectionDC && !shutdownPreviouslyStarted) {
+            if (closeEverything && !shutdownPreviouslyStarted) {
                 // THIS WILL SHUT DOWN THE EVENT POLLER IMMEDIATELY! BUT IN AN ASYNC MANNER!
                 shutdownEventPoller = true
                 // if we close the poller AND listener manager too quickly, events will not get published
@@ -945,7 +944,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             responseManager.close()
 
             // don't do these things if we are "closed" from a client connection disconnect
-            if (!clientConnectionDC) {
+            if (closeEverything) {
                 // if there are any events going on, we want to schedule them to run AFTER all other events for this endpoint are done
                 EventDispatcher.launchSequentially(EventDispatcher.CLOSE) {
                     // Clears out all registered events
