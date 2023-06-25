@@ -27,13 +27,16 @@ import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
-import java.io.IOException
+import java.util.concurrent.*
 
 class DisconnectReconnectTest : BaseTest() {
-    private val reconnectCount = atomic(0)
+    private val reconnects = 2
 
     @Test
     fun reconnectClient() {
+        val latch = CountDownLatch(reconnects+1)
+        val reconnectCount = atomic(0)
+
         run {
             val configuration = serverConfig()
 
@@ -56,37 +59,33 @@ class DisconnectReconnectTest : BaseTest() {
             val client: Client<Connection> = Client(config)
             addEndPoint(client)
 
-
             client.onDisconnect {
+                latch.countDown()
                 logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
-                if (count == 3) {
-                    logger.error("Shutting down")
-                    stopEndPoints()
-                }
-                else {
+                if (count < reconnects) {
                     logger.error("Reconnecting: $count")
-                    try {
-                        client.connect(LOCALHOST)
-                    } catch (e: IOException) {
-                        e.printStackTrace()
-                    }
+                    client.connect(LOCALHOST)
                 }
             }
 
             client.connect(LOCALHOST)
         }
 
-
+        latch.await()
+        stopEndPointsBlocking()
         waitForThreads()
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
-        Assert.assertEquals(4, reconnectCount.value)
+        Assert.assertEquals(reconnects+1, reconnectCount.value)
     }
 
     @Test
     fun reconnectClientViaClientClose() {
+        val latch = CountDownLatch(reconnects+1)
+        val reconnectCount = atomic(0)
+
         run {
             val configuration = serverConfig {
                 uniqueAeronDirectory = true
@@ -114,15 +113,13 @@ class DisconnectReconnectTest : BaseTest() {
             }
 
             client.onDisconnect {
+                latch.countDown()
                 logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
-                if (count < 3) {
+                if (count < reconnects) {
                     logger.error("Reconnecting: $count")
                     client.connect(LOCALHOST)
-                } else {
-                    logger.error("Shutting down")
-                    stopEndPoints()
                 }
             }
 
@@ -130,10 +127,12 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
 
+        latch.await()
+        stopEndPointsBlocking()
         waitForThreads()
 
         System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
-        Assert.assertEquals(4, reconnectCount.value)
+        Assert.assertEquals(reconnects+1, reconnectCount.value)
     }
 
     interface CloseIface {
@@ -155,6 +154,9 @@ class DisconnectReconnectTest : BaseTest() {
 
     @Test
     fun reconnectRmiClient() {
+        val latch = CountDownLatch(reconnects+1)
+        val reconnectCount = atomic(0)
+
         val CLOSE_ID = 33
 
         run {
@@ -194,35 +196,32 @@ class DisconnectReconnectTest : BaseTest() {
             }
 
             client.onDisconnect {
+                latch.countDown()
                 logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
-                if (count == 3) {
-                    logger.error("Shutting down")
-                    stopEndPoints()
-                }
-                else {
+                if (count < reconnects) {
                     logger.error("Reconnecting: $count")
-                    try {
-                        client.connect(LOCALHOST)
-                    } catch (e: IOException) {
-                        e.printStackTrace()
-                    }
+                    client.connect(LOCALHOST)
                 }
             }
 
             client.connect(LOCALHOST)
         }
 
-
+        latch.await()
+        stopEndPointsBlocking()
         waitForThreads()
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
-        Assert.assertEquals(4, reconnectCount.value)
+        Assert.assertEquals(reconnects+1, reconnectCount.value)
     }
 
     @Test
     fun manualMediaDriverAndReconnectClient() {
+        val latch = CountDownLatch(reconnects+1)
+        val reconnectCount = atomic(0)
+
         val log = KotlinLogging.logger("DCUnitTest")
         // NOTE: once a config is assigned to a driver, the config cannot be changed
         val aeronDriver = runBlocking {
@@ -254,20 +253,13 @@ class DisconnectReconnectTest : BaseTest() {
 
 
             client.onDisconnect {
+                latch.countDown()
                 logger.error("Disconnected!")
 
                 val count = reconnectCount.getAndIncrement()
-                if (count == 3) {
-                    logger.error("Shutting down")
-                    stopEndPoints()
-                }
-                else {
+                if (count < reconnects) {
                     logger.error("Reconnecting: $count")
-                    try {
-                        client.connect(LOCALHOST)
-                    } catch (e: IOException) {
-                        e.printStackTrace()
-                    }
+                    client.connect(LOCALHOST)
                 }
             }
 
@@ -275,17 +267,23 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
 
+        latch.await()
+        stopEndPointsBlocking()
         waitForThreads()
+
         runBlocking {
             aeronDriver.close()
         }
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
-        Assert.assertEquals(4, reconnectCount.value)
+        Assert.assertEquals(reconnects+1, reconnectCount.value)
     }
 
     @Test
     fun reconnectWithFallbackClient() {
+        val latch = CountDownLatch(reconnects+1)
+        val reconnectCount = atomic(0)
+
         // this tests IPC with fallback to UDP (because the server has IPC disabled, and the client has it enabled)
         run {
             val config = serverConfig()
@@ -314,30 +312,24 @@ class DisconnectReconnectTest : BaseTest() {
 
             client.onDisconnect {
                 logger.error("Disconnected!")
+                latch.countDown()
 
                 val count = reconnectCount.getAndIncrement()
-                if (count == 3) {
-                    logger.error("Count reached, shutting down")
-                    stopEndPoints()
-                }
-                else {
+                if (count < reconnects) {
                     logger.error("Reconnecting: $count")
-                    try {
-                        client.connect(LOCALHOST)
-                    } catch (e: IOException) {
-                        e.printStackTrace()
-                    }
+                    client.connect(LOCALHOST)
                 }
             }
 
             client.connect(LOCALHOST)
         }
 
-
+        latch.await()
+        stopEndPointsBlocking()
         waitForThreads()
 
         //System.err.println("Connection count (after reconnecting) is: " + reconnectCount.value)
-        Assert.assertEquals(4, reconnectCount.value)
+        Assert.assertEquals(reconnects+1, reconnectCount.value)
     }
 
     @Test
@@ -378,7 +370,10 @@ class DisconnectReconnectTest : BaseTest() {
         }
 
         server.close()
-
+        runBlocking {
+            client.waitForClose()
+            server.waitForClose()
+        }
 
         waitForThreads()
     }

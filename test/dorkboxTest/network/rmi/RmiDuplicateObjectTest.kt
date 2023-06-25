@@ -47,6 +47,7 @@ import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
 import org.junit.Assert
 import org.junit.Test
+import java.util.concurrent.*
 
 class RmiDuplicateObjectTest : BaseTest() {
     @Test
@@ -83,13 +84,15 @@ class RmiDuplicateObjectTest : BaseTest() {
             isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
             isIpv4 -> client.connect(IPv4.LOCALHOST)
             isIpv6 -> client.connect(IPv6.LOCALHOST)
-            else -> client.connect()
+            else -> client.connect(IPv4.LOCALHOST)
         }
     }
 
     private val objs = mutableSetOf<Int>()
 
     fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
+        val latch = CountDownLatch(2)
+
         run {
             val configuration = serverConfig()
             configuration.enableIPv4 = isIpv4
@@ -106,6 +109,7 @@ class RmiDuplicateObjectTest : BaseTest() {
             server.bind()
 
             server.onConnect {
+                // these are on separate threads (client.init) and this -- there can be race conditions, where the object doesn't exist yet!
                 server.forEachConnection {
                     val testCow = it.rmi.get<TestCow>(4)
                     testCow.moo()
@@ -113,6 +117,7 @@ class RmiDuplicateObjectTest : BaseTest() {
                     synchronized(objs) {
                         objs.add(testCow.id())
                     }
+                    latch.countDown()
                 }
             }
         }
@@ -145,8 +150,10 @@ class RmiDuplicateObjectTest : BaseTest() {
             doConnect(isIpv4, isIpv6, runIpv4Connect, client)
         }
 
-        waitForThreads(5)
+        latch.await()
+        stopEndPointsBlocking()
 
+        waitForThreads()
 
         val actual = synchronized(objs) {
             objs.joinToString()

@@ -22,14 +22,10 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.network.rmi.RemoteObject
 import dorkboxTest.network.BaseTest
-import kotlinx.coroutines.delay
-import org.junit.Assert
 import org.junit.Test
-import java.util.concurrent.atomic.*
+import java.util.concurrent.*
 
 class RmiSpamAsyncTest : BaseTest() {
-    private val counter = AtomicLong(0)
-
     private val RMI_ID = 12251
 
 
@@ -49,11 +45,12 @@ class RmiSpamAsyncTest : BaseTest() {
      * In this test the server has two objects in an object space. The client
      * uses the first remote object to get the second remote object.
      */
-    fun rmi(config: Configuration.() -> Unit = {}) {
+    private fun rmi(config: Configuration.() -> Unit = {}) {
         val server: Server<Connection>
 
         val mod = 100_000L
-        val totalRuns = 1_000_000L
+        val totalRuns = 1_000_000
+        val latch = CountDownLatch(totalRuns)
 
         run {
             val configuration = serverConfig()
@@ -67,7 +64,7 @@ class RmiSpamAsyncTest : BaseTest() {
             server = Server(configuration)
             addEndPoint(server)
 
-            server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
+            server.rmiGlobal.save(TestObjectImpl(latch), RMI_ID)
             server.bind()
         }
 
@@ -107,37 +104,25 @@ class RmiSpamAsyncTest : BaseTest() {
                         e.printStackTrace()
                     }
                 }
-
-                // The async nature means that we don't know EXACTLY when all the messages will arrive. For testing, this is the closest
-                // we can do to attempt to have a correct info lookup.
-                var count = 0
-                while (counter.get() < totalRuns && count < 30) {
-                    logger.error("Waiting for ${totalRuns - counter.get()} more messages...")
-                    count++
-                    delay(1_000)
-                }
-
-
-                // have to do this first, so it will wait for the client responses!
-                // if we close the client first, the connection will be closed, and the responses will never arrive to the server
-                stopEndPoints()
             }
 
             client.connect(LOCALHOST)
         }
 
+        latch.await()
+        stopEndPointsBlocking()
+
         waitForThreads()
-        Assert.assertEquals(totalRuns, counter.get())
     }
 
     private interface TestObject {
-        fun setOther(value: Long): Boolean
+        fun setOther(value: Int): Boolean
     }
 
-    private class TestObjectImpl(private val counter: AtomicLong) : TestObject {
+    private class TestObjectImpl(private val latch: CountDownLatch) : TestObject {
         @Override
-        override fun setOther(value: Long): Boolean {
-            counter.getAndIncrement()
+        override fun setOther(value: Int): Boolean {
+            latch.countDown()
             return true
         }
     }

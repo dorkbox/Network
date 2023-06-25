@@ -25,6 +25,7 @@ import org.junit.Test
 class SerializationValidationTest : BaseTest() {
     @Test
     fun checkManyObjects() {
+        // session/stream count errors
         run {
             val configuration = serverConfig()
             register(configuration.serialization)
@@ -57,6 +58,7 @@ class SerializationValidationTest : BaseTest() {
 
     @Test
     fun checkOutOfOrder() {
+        // session/stream count errors
         run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)

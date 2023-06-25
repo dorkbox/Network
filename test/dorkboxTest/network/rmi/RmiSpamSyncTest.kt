@@ -53,7 +53,7 @@ class RmiSpamSyncTest : BaseTest() {
      * In this test the server has two objects in an object space. The client
      * uses the first remote object to get the second remote object.
      */
-    fun rmi(config: Configuration.() -> Unit = {}) {
+    private fun rmi(config: Configuration.() -> Unit = {}) {
         val server: Server<Connection>
 
         val mod = 400L

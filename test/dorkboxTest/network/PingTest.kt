@@ -27,6 +27,7 @@ class PingTest : BaseTest() {
     val counter = atomic(0)
     @Test
     fun RmiPing() {
+        // session/stream count errors
         val clientSuccess = atomic(false)
 
         run {

@@ -97,6 +97,9 @@ class AeronPubSubTest : BaseTest() {
 
             serverDriver.close()
             serverDriver.ensureStopped(10_000, 500)
+
+            // have to make sure that the aeron driver is CLOSED.
+            Assert.assertTrue("The aeron drivers are not fully closed!", AeronDriver.areAllInstancesClosed())
         }
     }
 
@@ -175,6 +178,9 @@ class AeronPubSubTest : BaseTest() {
 
             serverDriver.close()
             serverDriver.ensureStopped(10_000, 500)
+
+            // have to make sure that the aeron driver is CLOSED.
+            Assert.assertTrue("The aeron drivers are not fully closed!", AeronDriver.areAllInstancesClosed())
         }
     }
 }

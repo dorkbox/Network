@@ -29,13 +29,16 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.EventDispatcher
 import dorkbox.os.OS
 import dorkbox.storage.Storage
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException
-import dorkbox.util.sync.CountingLatch
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert
@@ -45,6 +48,7 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.concurrent.*
 
+@OptIn(DelicateCoroutinesApi::class)
 abstract class BaseTest {
     companion object {
         const val LOCALHOST = "localhost"
@@ -98,6 +102,7 @@ abstract class BaseTest {
             configuration.port = 2000
 
             configuration.enableIpc = false
+            configuration.enableIPv6 = false
 
             block(configuration)
             return configuration
@@ -109,6 +114,7 @@ abstract class BaseTest {
             configuration.port = 2000
 
             configuration.enableIpc = false
+            configuration.enableIPv6 = false
 
             configuration.maxClientCount = 50
             configuration.maxConnectionsPerIpAddress = 50
@@ -158,8 +164,6 @@ abstract class BaseTest {
         }
     }
 
-    private val latch = CountingLatch()
-
     @Volatile
     private var autoFailThread: Thread? = null
 
@@ -175,22 +179,18 @@ abstract class BaseTest {
 
         logger.error("---- " + this.javaClass.simpleName)
 
-        // we must always make sure that aeron is shut-down before starting again.
-        if (!Server.ensureStopped(serverConfig()) || !Client.ensureStopped(clientConfig())) {
-            throw IllegalStateException("Unable to continue, AERON was unable to stop.")
-        }
+        AeronDriver.checkForMemoryLeaks()
     }
 
 
     fun addEndPoint(endPoint: EndPoint<*>) {
-        endPoint.onInit { logger.error { "init" } }
-        endPoint.onConnect { logger.error { "connect" } }
-        endPoint.onDisconnect { logger.error { "disconnect" } }
+        endPoint.onInit { logger.error { "UNIT TEST: init" } }
+        endPoint.onConnect { logger.error { "UNIT TEST: connect" } }
+        endPoint.onDisconnect { logger.error { "UNIT TEST: disconnect" } }
 
-        endPoint.onError { logger.error(it) { "ERROR!" } }
+        endPoint.onError { logger.error(it) { "UNIT TEST: ERROR!" } }
 
         endPointConnections.add(endPoint)
-        latch.countUp()
     }
 
     /**
@@ -219,6 +219,18 @@ abstract class BaseTest {
         if (isStopping) {
             return
         }
+
+        if (EventDispatcher.isCurrentEvent()) {
+            // we want to redispatch, in the event we are already running inside the event dispatch
+            // this gives us the chance to properly exit/close WITHOUT blocking currentEventDispatch
+            // during the `waitForClose()` call
+            GlobalScope.launch {
+                stopEndPoints(stopAfterMillis)
+            }
+
+            return
+        }
+
         isStopping = true
 
         if (stopAfterMillis > 0L) {
@@ -231,50 +243,44 @@ abstract class BaseTest {
         logger.error("Unit test shutting down ${clients.size} clients...")
         logger.error("Unit test shutting down ${servers.size} server...")
 
+        val timeoutMS = 0L
+//        val timeoutMS = if (EndPoint.DEBUG_CONNECTIONS) {
+//            Long.MAX_VALUE
+//        } else {
+//            TimeUnit.SECONDS.toMillis(AUTO_FAIL_TIMEOUT)
+//        }
+
+        var success = true
 
         // shutdown clients first
         clients.forEach { endPoint ->
             // we are ASYNC, so we must use callbacks to execute code
-            endPoint.close(true) {
-                logger.error("Closed client connection")
-                latch.countDown()
-            }
+            endPoint.close()
         }
         clients.forEach { endPoint ->
-             endPoint.waitForClose()
+            success = success && endPoint.waitForClose(timeoutMS)
+            endPoint.stopDriver()
         }
 
 
         // shutdown everything else (should only be servers) last
         servers.forEach {
-            it.close(true) {
-                logger.error("Closed server connection")
-                latch.countDown()
-            }
+            it.close()
         }
         servers.forEach { endPoint ->
-            endPoint.waitForClose()
+            success = success && endPoint.waitForClose(timeoutMS)
+            endPoint.stopDriver()
         }
-
 
         endPointConnections.clear()
 
-        // now we have to wait for the close events to finish running.
-        val error = try {
-            if (EndPoint.DEBUG_CONNECTIONS) {
-                latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
-            } else {
-                latch.await(AUTO_FAIL_TIMEOUT, TimeUnit.SECONDS)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
+        logger.error("UNIT TEST, checking driver and memory leaks")
 
         // have to make sure that the aeron driver is CLOSED.
         Assert.assertTrue("The aeron drivers are not fully closed!", AeronDriver.areAllInstancesClosed())
+        AeronDriver.checkForMemoryLeaks()
 
-        logger.error("Shut down all endpoints... Success($error)")
+        logger.error("Shut down all endpoints... Success($success)")
     }
     /**
      * Wait for network client/server threads to shut down for the specified time. 0 will wait forever
@@ -283,60 +289,45 @@ abstract class BaseTest {
      *
      * @param stopAfterSeconds how many seconds to wait, the default is 2 minutes.
      */
-    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT, preShutdownAction: () -> Unit = {}) {
-        var latchTriggered =  runBlocking {
-            try {
-                if (stopAfterSeconds == 0L || EndPoint.DEBUG_CONNECTIONS) {
-                    latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
-                } else {
-                    latch.await(stopAfterSeconds, TimeUnit.SECONDS)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                stopEndPoints()
-                false
-            }
+    fun waitForThreads(stopAfterSeconds: Long = AUTO_FAIL_TIMEOUT) = runBlocking {
+        val clients = endPointConnections.filterIsInstance<Client<Connection>>()
+        val servers = endPointConnections.filterIsInstance<Server<Connection>>()
+
+        val timeoutMS = 0L
+//        val timeoutMS = if (stopAfterSeconds == 0L || EndPoint.DEBUG_CONNECTIONS) {
+//            Long.MAX_VALUE
+//        } else {
+//            TimeUnit.SECONDS.toMillis(stopAfterSeconds)
+//        }
+
+        var success = true
+
+        clients.forEach { endPoint ->
+            success = success && endPoint.waitForClose(timeoutMS)
+            endPoint.stopDriver()
+        }
+        servers.forEach { endPoint ->
+            success = success && endPoint.waitForClose(timeoutMS)
+            endPoint.stopDriver()
         }
 
         // run actions before we actually shutdown, but after we wait
-        if (latchTriggered) {
-            preShutdownAction()
-        } else {
-            println("LATCH NOT TRIGGERED")
-            println("LATCH NOT TRIGGERED")
-            println("LATCH NOT TRIGGERED")
-            println("LATCH NOT TRIGGERED")
+        if (!success) {
+            Assert.fail("Shutdown latch not triggered!")
         }
 
-        // always stop the endpoints (even if we already called this)
-        try {
-            stopEndPointsBlocking()
-        } catch (e: Exception) {
-            e.printStackTrace()
+        if (!AeronDriver.areAllInstancesClosed(logger)) {
+            throw RuntimeException("Unable to shutdown! There are still Aeron drivers loaded!")
         }
 
-
-        // still. we must WAIT for it to finish!
-        latchTriggered = try {
-            runBlocking {
-                if (stopAfterSeconds == 0L || EndPoint.DEBUG_CONNECTIONS) {
-                    latch.await(Long.MAX_VALUE, TimeUnit.SECONDS)
-                } else {
-                    latch.await(stopAfterSeconds, TimeUnit.SECONDS)
-                }
-            }
-        } catch (e: InterruptedException) {
-            e.printStackTrace()
-            false
+        // we must always make sure that aeron is shut-down before starting again.
+        if (!Server.ensureStopped(serverConfig()) || !Client.ensureStopped(clientConfig())) {
+            throw IllegalStateException("Unable to continue, AERON was unable to stop.")
         }
 
-        logger.error("Finished shutting ($latchTriggered) down all endpoints...")
+        AeronDriver.checkForMemoryLeaks()
 
-        runBlocking {
-            if (!AeronDriver.areAllInstancesClosed(logger)) {
-                throw RuntimeException("Unable to shutdown! There are still Aeron drivers loaded!")
-            }
-        }
+        logger.error("Finished shutting down all endpoints... ($success)")
     }
 
     @Before

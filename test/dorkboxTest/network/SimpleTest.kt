@@ -28,8 +28,8 @@ import java.io.IOException
 import java.util.concurrent.atomic.*
 
 class SimpleTest : BaseTest() {
-    var received = AtomicBoolean()
-    val sent = AtomicBoolean()
+    private var received = AtomicBoolean()
+    private val sent = AtomicBoolean()
 
     enum class ConnectType(val ip4: Boolean, val ip6: Boolean, val ipc: Boolean) {
         IPC(false, false, true),
@@ -182,7 +182,7 @@ class SimpleTest : BaseTest() {
                 received.set(true)
                 logger.error("Done, stopping endpoints")
 
-                // this must NOT be on the disconenct thread, because we cancel it!
+                // this must NOT be on the disconnect thread, because we cancel it!
                 stopEndPoints()
             }
 

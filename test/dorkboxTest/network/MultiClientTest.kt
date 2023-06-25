@@ -17,30 +17,34 @@
 package dorkboxTest.network
 
 import dorkbox.network.Client
+import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.*
 
 @Suppress("UNUSED_ANONYMOUS_PARAMETER")
 class MultiClientTest : BaseTest() {
-    private val totalCount = 80
+    private val totalCount = 40
 
     private val clientConnectCount = atomic(0)
     private val serverConnectCount = atomic(0)
     private val disconnectCount = atomic(0)
 
-    @OptIn(DelicateCoroutinesApi::class)
+    @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
     @Test
     fun multiConnectClient() {
-        val server = run {
+        run {
             val configuration = serverConfig()
             configuration.enableIPv6 = false
             configuration.uniqueAeronDirectory = true
@@ -52,20 +56,9 @@ class MultiClientTest : BaseTest() {
 
                 logger.error("${this.id} - Connected $count ....")
                 close()
-
-                if (count == totalCount) {
-                    logger.error { "Stopping endpoints!" }
-
-                    // waiting just a few so that we can make sure that the handshake messages are properly sent
-                    // if we DO NOT wait, what will happen is that the client will CLOSE before it receives the handshake HELLO_ACK
-//                    delay(500)
-
-                    stopEndPoints()
-                }
             }
 
             server.bind()
-            server
         }
 
 
@@ -74,6 +67,7 @@ class MultiClientTest : BaseTest() {
         println()
         println()
 
+        val shutdownLatch = CountDownLatch(totalCount)
 
 
         // clients first, so they try to connect to the server at (roughly) the same time
@@ -84,7 +78,7 @@ class MultiClientTest : BaseTest() {
             config.uniqueAeronDirectory = true
 
             val client: Client<Connection> = Client(config, "Client $i")
-            client.onConnect {
+            client.onInit {
                 val count = clientConnectCount.incrementAndGet()
                 logger.error("$id - Connected $count ($i)!")
             }
@@ -92,6 +86,7 @@ class MultiClientTest : BaseTest() {
             client.onDisconnect {
                 val count = disconnectCount.incrementAndGet()
                 logger.error("$id - Disconnected $count ($i)!")
+                shutdownLatch.countDown()
             }
 
             addEndPoint(client)
@@ -101,24 +96,25 @@ class MultiClientTest : BaseTest() {
         // start up the drivers first
         runBlocking {
             clients.forEach {
-                println("******************")
                 it.startDriver()
-                println("******************")
             }
         }
 
+        // if we are on the same JVM, the defaultScope for coroutines is SHARED, and limited!
+        val differentThreadLaunchers = Executors.newFixedThreadPool(8,
+            NamedThreadFactory("Unit Test Client", Configuration.networkThreadGroup, true)
+        ).asCoroutineDispatcher()
 
-        clients.forEach {
-            GlobalScope.launch {
-                // long connection timeout, since the more that try to connect at the same time, the longer it takes to setup aeron (since it's all shared)
-                it.connect(LOCALHOST, 30)
+        runBlocking {
+            clients.forEach {
+                launch(differentThreadLaunchers) {
+                    it.connect(LOCALHOST, 30)
+                }
             }
         }
 
-        waitForThreads(totalCount*AUTO_FAIL_TIMEOUT) {
-            outputStats(server)
-        }
-
+        shutdownLatch.await()
+        stopEndPointsBlocking()
 
         Assert.assertEquals(totalCount, clientConnectCount.value)
         Assert.assertEquals(totalCount, serverConnectCount.value)

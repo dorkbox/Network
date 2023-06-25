@@ -28,6 +28,7 @@ import org.junit.Test
 class RoundTripMessageTest : BaseTest() {
     @Test
     fun MessagePing() {
+        // session/stream count errors
         val serverSuccess = atomic(false)
         val clientSuccess = atomic(false)
 

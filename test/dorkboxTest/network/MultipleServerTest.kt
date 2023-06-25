@@ -39,7 +39,9 @@ import dorkbox.network.Client
 import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import dorkbox.network.exceptions.ServerException
 import dorkbox.util.exceptions.SecurityException
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -49,24 +51,22 @@ import java.io.IOException
 import java.util.concurrent.atomic.*
 
 class MultipleServerTest : BaseTest() {
-    val total = 1
-    var received = AtomicInteger()
+    private val total = 4
+
 
     @Test
     @Throws(SecurityException::class, IOException::class)
     fun multipleUDP() {
-        val portOffset = 2
-        received.set(0)
+        val received = AtomicInteger(0)
 
         var serverAeronDir: File? = null
         val didReceive = mutableListOf<AtomicBoolean>()
 
         for (count in 0 until total) {
             didReceive.add(AtomicBoolean())
-            val offset = count * portOffset
 
             val configuration = serverConfig()
-            configuration.port += offset
+            configuration.port += count
             configuration.aeronDirectory = serverAeronDir
             configuration.enableIpc = false
 
@@ -95,10 +95,8 @@ class MultipleServerTest : BaseTest() {
 
         for (count in 0 until total) {
             didSend.add(AtomicBoolean())
-            val offset = count * portOffset
-
             val configuration = clientConfig()
-            configuration.port += offset
+            configuration.port += count
             configuration.aeronDirectory = clientAeronDir
             configuration.enableIpc = false
 
@@ -126,10 +124,35 @@ class MultipleServerTest : BaseTest() {
         }
     }
 
+    @Test(expected = ServerException::class)
+    @Throws(SecurityException::class, IOException::class)
+    fun multipleInvalidIPC() {
+        val servers = mutableListOf<Server<Connection>>()
+        try {
+            for (count in 0 until total) {
+            val configuration = serverConfig()
+            configuration.enableIPv4 = true
+            configuration.enableIPv6 = true
+            configuration.enableIpc = true
+
+            val server: Server<Connection>?
+                servers.add(Server(configuration, "server_$count"))
+            }
+        } catch (e: Exception) {
+            runBlocking {
+                servers.forEach {
+                    it.close()
+                    it.waitForClose()
+                }
+            }
+            throw e
+        }
+    }
+
     @Test
     @Throws(SecurityException::class, IOException::class)
     fun multipleIPC() {
-        received.set(0)
+        val received = AtomicInteger(0)
 
         // client and server must share locations
         val aeronDirs = mutableListOf<File>()
@@ -145,7 +168,9 @@ class MultipleServerTest : BaseTest() {
             didReceive.add(AtomicBoolean())
 
             val configuration = serverConfig()
-            configuration.aeronDirectory = aeronDirs.get(count)
+            configuration.aeronDirectory = aeronDirs[count]
+            configuration.enableIPv4 = false
+            configuration.enableIPv6 = false
             configuration.enableIpc = true
 
             val server: Server<Connection> = Server(configuration, "server_$count")
@@ -178,7 +203,9 @@ class MultipleServerTest : BaseTest() {
             didSend.add(AtomicBoolean())
 
             val configuration = clientConfig()
-            configuration.aeronDirectory = aeronDirs.get(count)
+            configuration.aeronDirectory = aeronDirs[count]
+            configuration.enableIPv4 = false
+            configuration.enableIPv6 = false
             configuration.enableIpc = true
 
             val client: Client<Connection> = Client(configuration, "client_$count")

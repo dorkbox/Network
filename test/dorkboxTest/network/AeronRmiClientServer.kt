@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.*
 @Suppress("UNUSED_ANONYMOUS_PARAMETER")
 class AeronRmiClientServer {
     companion object {
-        val counter = AtomicInteger(0)
+        private val counter = AtomicInteger(0)
 
         init {
             try {

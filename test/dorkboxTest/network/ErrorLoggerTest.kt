@@ -18,6 +18,7 @@ package dorkboxTest.network
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import kotlinx.coroutines.delay
 import org.junit.Test
 
 class ErrorLoggerTest : BaseTest() {
@@ -68,6 +69,8 @@ class ErrorLoggerTest : BaseTest() {
             client.onConnect {
                 // can be any message, we just want the error-log to log something
                 send(TestObj())
+
+                delay(200)
                 stopEndPoints()
             }
 

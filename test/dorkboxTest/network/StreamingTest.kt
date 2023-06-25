@@ -28,7 +28,9 @@ class StreamingTest : BaseTest() {
 
     @Test
     fun sendStreamingObject() {
-        val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 8
+        // TODO: streaming data is NOT saved to temp files, it is in memory. every 16 megs should be flushed to disk (this is arbitrary and should be a config setting). if this number is too
+        //      high, we will run out of memory
+        val sizeToTest = ExpandableDirectByteBuffer.MAX_BUFFER_LENGTH / 16
         val hugeData = ByteArray(sizeToTest)
         SecureRandom().nextBytes(hugeData)
 

@@ -31,7 +31,6 @@ import org.junit.Test
 class RmiSimpleActionsTest : BaseTest() {
     @Test
     fun testGlobalDelete() {
-
         val configuration = serverConfig()
         configuration.serialization.rmi.register(TestCow::class.java, TestCowImpl::class.java)
         configuration.serialization.register(MessageWithTestCow::class.java)
@@ -63,6 +62,8 @@ class RmiSimpleActionsTest : BaseTest() {
         Assert.assertTrue(server.rmiGlobal.delete(testCowImpl))
         Assert.assertFalse(server.rmiGlobal.delete(testCowImpl))
         Assert.assertFalse(server.rmiGlobal.delete(newId2))
+
+        stopEndPointsBlocking()
     }
 
     @Test
