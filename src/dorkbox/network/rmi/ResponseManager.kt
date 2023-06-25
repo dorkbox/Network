@@ -271,7 +271,7 @@ internal class ResponseManager(maxValuesInCache: Int = 65534, minimumValue: Int 
 
     suspend fun close() {
         // technically, this isn't closing it, so much as it's cleaning it out
-        logger.info { "Closing the RMI manager" }
+        logger.debug { "Closing the response manager for RMI" }
 
         // wait for responses, or wait for timeouts!
         while (rmiWaitersInUse.value > 0) {
