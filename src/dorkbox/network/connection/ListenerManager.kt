@@ -390,8 +390,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * NOTE: This is run on the EventDispatch!
      */
     fun notifyConnect(connection: CONNECTION, onCompleteFunction: () -> Unit = {}) {
+        val list = onConnectList.value
         EventDispatcher.CONNECT.launch {
-            val list = onConnectList.value
             list.forEach {
                 try {
                     it(connection)
@@ -414,26 +414,26 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
      * NOTE: This is run on the EventDispatch!
      */
     fun notifyDisconnect(connection: Connection) {
-        EventDispatcher.DISCONNECT.launch {
-            connection.notifyDisconnect()
+        connection.notifyDisconnect()
 
-            @Suppress("UNCHECKED_CAST")
-            directNotifyDisconnect(connection as CONNECTION)
-        }
+        @Suppress("UNCHECKED_CAST")
+        directNotifyDisconnect(connection as CONNECTION)
     }
 
     /**
      * This is invoked by either a GLOBAL listener manager, or for a SPECIFIC CONNECTION listener manager.
      */
-    suspend fun directNotifyDisconnect(connection: CONNECTION) {
+    fun directNotifyDisconnect(connection: CONNECTION) {
         val list = onDisconnectList.value
-        list.forEach {
-            try {
-                it(connection)
-            } catch (t: Throwable) {
-                // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
-                t.cleanStackTrace()
-                logger.error("Connection ${connection.id} error", t)
+        EventDispatcher.DISCONNECT.launch {
+            list.forEach {
+                try {
+                    it(connection)
+                } catch (t: Throwable) {
+                    // NOTE: when we remove stuff, we ONLY want to remove the "tail" of the stacktrace, not ALL parts of the stacktrace
+                    t.cleanStackTrace()
+                    logger.error("Connection ${connection.id} error", t)
+                }
             }
         }
     }
@@ -449,8 +449,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     fun notifyError(connection: CONNECTION, exception: Throwable) {
         logger.error("Error with connection $connection", exception)
 
+        val list = onErrorList.value
         EventDispatcher.ERROR.launch {
-            val list = onErrorList.value
             list.forEach {
                 try {
                     it(connection, exception)
@@ -471,8 +471,8 @@ internal class ListenerManager<CONNECTION: Connection>(private val logger: KLogg
     fun notifyError(exception: Throwable) {
         logger.error("Global error", exception)
 
+        val list = onErrorGlobalList.value
         EventDispatcher.ERROR.launch {
-            val list = onErrorGlobalList.value
             list.forEach {
                 try {
                     it(exception)
