@@ -18,6 +18,8 @@ package dorkbox.network.serialization
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.SerializerFactory
+import com.esotericsoftware.kryo.serializers.DefaultSerializers
+import com.esotericsoftware.kryo.serializers.ImmutableCollectionsSerializers
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy
 import com.esotericsoftware.minlog.Log
 import dorkbox.network.Server
@@ -32,19 +34,9 @@ import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingSerializer
 import dorkbox.network.rmi.CachedMethod
 import dorkbox.network.rmi.RmiUtils
-import dorkbox.network.rmi.messages.ConnectionObjectCreateRequest
-import dorkbox.network.rmi.messages.ConnectionObjectCreateResponse
-import dorkbox.network.rmi.messages.ConnectionObjectDeleteRequest
-import dorkbox.network.rmi.messages.ConnectionObjectDeleteResponse
-import dorkbox.network.rmi.messages.ContinuationSerializer
-import dorkbox.network.rmi.messages.MethodRequest
-import dorkbox.network.rmi.messages.MethodRequestSerializer
-import dorkbox.network.rmi.messages.MethodResponse
-import dorkbox.network.rmi.messages.MethodResponseSerializer
-import dorkbox.network.rmi.messages.RmiClientSerializer
-import dorkbox.network.rmi.messages.RmiServerSerializer
+import dorkbox.network.rmi.messages.*
 import dorkbox.os.OS
-import dorkbox.serializers.SerializationDefaults
+import dorkbox.serializers.*
 import kotlinx.atomicfu.AtomicBoolean
 import kotlinx.atomicfu.atomic
 import mu.KLogger
@@ -52,9 +44,20 @@ import mu.KotlinLogging
 import org.agrona.collections.Int2ObjectHashMap
 import org.objenesis.instantiator.ObjectInstantiator
 import org.objenesis.strategy.StdInstantiatorStrategy
+import java.io.File
+import java.io.IOException
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationHandler
+import java.math.BigDecimal
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.URI
+import java.util.*
+import java.util.regex.*
 import kotlin.coroutines.Continuation
+
+
+
 // Observability issues: make sure that we know WHAT connection is causing serialization errors when they occur!
 // ASYC isues: RMI can timeout when OTHER rmi connections happen! EACH RMI NEEDS TO BE SEPARATE IN THE IO DISPATCHER
 
@@ -284,6 +287,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
      * Kryo specifically for handshakes
      */
     internal fun newHandshakeKryo(): KryoExtra<CONNECTION> {
+        // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
         val kryo = KryoExtra<CONNECTION>()
 
         kryo.instantiatorStrategy = instantiatorStrategy
@@ -293,9 +297,7 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
             kryo.setDefaultSerializer(factory)
         }
 
-        // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
-        SerializationDefaults.register(kryo)
-
+        kryo.register(ByteArray::class.java)
         kryo.register(HandshakeMessage::class.java)
 
         return kryo
@@ -306,6 +308,14 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     */
     internal fun initGlobalKryo(): KryoExtra<CONNECTION> {
         // NOTE:  classesRegistrations.forEach will be called after serialization init!
+        // NOTE: All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
+
+
+        // WIP Java17
+        // Serializes objects using Java's built in serialization mechanism.
+        // Note that this is very inefficient and should be avoided if possible.
+//        val javaSerializer = JavaSerializer()
+
 
         val kryo = KryoExtra<CONNECTION>()
 
@@ -316,8 +326,76 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
             kryo.setDefaultSerializer(factory)
         }
 
-        // All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.
-        SerializationDefaults.register(kryo)
+        // wip java 17 serialization
+//        kryo.addDefaultSerializer(Throwable::class.java, javaSerializer) // this doesn't work properly!
+
+        // these are registered using the default serializers. We don't customize these, because we don't care about it.
+        kryo.register(String::class.java)
+        kryo.register(Array<String>::class.java)
+        kryo.register(IntArray::class.java)
+        kryo.register(ShortArray::class.java)
+        kryo.register(FloatArray::class.java)
+        kryo.register(DoubleArray::class.java)
+        kryo.register(LongArray::class.java)
+        kryo.register(ByteArray::class.java)
+        kryo.register(CharArray::class.java)
+        kryo.register(BooleanArray::class.java)
+        kryo.register(Array<Int>::class.java)
+        kryo.register(Array<Short>::class.java)
+        kryo.register(Array<Float>::class.java)
+        kryo.register(Array<Double>::class.java)
+        kryo.register(Array<Long>::class.java)
+        kryo.register(Array<Byte>::class.java)
+        kryo.register(Array<Char>::class.java)
+        kryo.register(Array<Boolean>::class.java)
+        kryo.register(Array<Any>::class.java)
+        kryo.register(Array<Array<Any>>::class.java)
+        kryo.register(Class::class.java)
+
+        kryo.register(Exception::class.java)
+        kryo.register(IOException::class.java)
+        kryo.register(RuntimeException::class.java)
+        kryo.register(NullPointerException::class.java)
+
+        kryo.register(BigDecimal::class.java)
+        kryo.register(BitSet::class.java)
+
+        // necessary for the transport of exceptions.
+        kryo.register(StackTraceElement::class.java)
+        kryo.register(Array<StackTraceElement>::class.java)
+        kryo.register(ArrayList::class.java)
+        kryo.register(HashMap::class.java)
+        kryo.register(HashSet::class.java)
+
+        kryo.register(EnumSet::class.java, DefaultSerializers.EnumSetSerializer())
+        kryo.register(EnumMap::class.java, EnumMapSerializer())
+        kryo.register(Arrays.asList("").javaClass, DefaultSerializers.ArraysAsListSerializer())
+
+        kryo.register(emptyList<Any>().javaClass)
+        kryo.register(emptySet<Any>().javaClass)
+        kryo.register(emptyMap<Any, Any>().javaClass)
+        kryo.register(Collections.EMPTY_LIST.javaClass)
+        kryo.register(Collections.EMPTY_SET.javaClass)
+        kryo.register(Collections.EMPTY_MAP.javaClass)
+
+        kryo.register(Collections.emptyNavigableSet<Any>().javaClass)
+        kryo.register(Collections.emptyNavigableMap<Any, Any>().javaClass)
+
+        kryo.register(Collections.singletonMap("", "").javaClass, DefaultSerializers.CollectionsSingletonMapSerializer())
+        kryo.register(listOf("").javaClass, DefaultSerializers.CollectionsSingletonListSerializer())
+        kryo.register(setOf("").javaClass, DefaultSerializers.CollectionsSingletonSetSerializer())
+
+        kryo.register(Pattern::class.java, RegexSerializer())
+        kryo.register(URI::class.java, DefaultSerializers.URISerializer())
+        kryo.register(UUID::class.java, DefaultSerializers.UUIDSerializer())
+
+        kryo.register(Inet4Address::class.java, inet4AddressSerializer)
+        kryo.register(Inet6Address::class.java, inet6AddressSerializer)
+        kryo.register(File::class.java, FileSerializer())
+
+        ImmutableCollectionsSerializers.registerSerializers(kryo)
+        UnmodifiableCollectionsSerializer.registerSerializers(kryo)
+        SynchronizedCollectionsSerializer.registerSerializers(kryo)
 
         // TODO: this is for diffie hellmen handshake stuff!
 //            serialization.register(IESParameters::class.java, IesParametersSerializer())
