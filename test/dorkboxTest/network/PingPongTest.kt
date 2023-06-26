@@ -62,7 +62,7 @@ class PingPongTest : BaseTest() {
 
             val server: Server<Connection> = Server(config)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onError { throwable ->
                 fail = "Error during processing. $throwable"
@@ -108,7 +108,7 @@ class PingPongTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
 

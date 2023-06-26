@@ -177,7 +177,7 @@ class RmiSimpleTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.rmiGlobal.save(TestCowImpl(44), 44)
 
@@ -230,19 +230,21 @@ class RmiSimpleTest : BaseTest() {
 
             // this creates a GLOBAL object on the server (instead of a connection specific object)
             runBlocking {
+
 // fix me!
+
             }
 
             when (clientType) {
-                ConnectType.IPC -> client.connect()
-                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST)
-                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST)
-                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST)
-                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IPC -> client.connectIpc()
+                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST, 2000)
+                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST, 2000)
+                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST, 2000)
+                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST, 2000)
+                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST, 2000)
+                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST, 2000)
+                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST, 2000)
+                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST, 2000)
             }
         }
 
@@ -265,7 +267,7 @@ class RmiSimpleTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onMessage<MessageWithTestCow> { m ->
                 server.logger.error("Received finish signal for test for: Client -> Server")
@@ -313,15 +315,15 @@ class RmiSimpleTest : BaseTest() {
             }
 
             when (clientType) {
-                ConnectType.IPC -> client.connect()
-                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST)
-                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST)
-                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST)
-                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST)
-                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST)
+                ConnectType.IPC -> client.connectIpc()
+                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST, 2000)
+                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST, 2000)
+                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST, 2000)
+                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST, 2000)
+                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST, 2000)
+                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST, 2000)
+                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST, 2000)
+                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST, 2000)
             }
         }
 

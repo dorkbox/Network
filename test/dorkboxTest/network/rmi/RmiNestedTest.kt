@@ -75,7 +75,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -116,7 +116,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
         waitForThreads()
     }
@@ -141,7 +141,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -181,7 +181,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
         waitForThreads()
     }
@@ -206,7 +206,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -240,7 +240,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
         waitForThreads()
     }
@@ -279,7 +279,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -300,7 +300,7 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
         waitForThreads()
     }

@@ -54,7 +54,7 @@ class ErrorLoggerTest : BaseTest() {
                 throw Exception("server ERROR. SHOULD BE CAUGHT")
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -74,7 +74,7 @@ class ErrorLoggerTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()

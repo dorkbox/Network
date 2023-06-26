@@ -73,11 +73,11 @@ class RmiSimpleActionsTest : BaseTest() {
 
     private fun doConnect(isIpv4: Boolean, isIpv6: Boolean, runIpv4Connect: Boolean, client: Client<Connection>) {
         when {
-            isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST)
-            isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST)
-            isIpv4 -> client.connect(IPv4.LOCALHOST)
-            isIpv6 -> client.connect(IPv6.LOCALHOST)
-            else -> client.connect()
+            isIpv4 && isIpv6 && runIpv4Connect -> client.connect(IPv4.LOCALHOST, 2000)
+            isIpv4 && isIpv6 && !runIpv4Connect -> client.connect(IPv6.LOCALHOST, 2000)
+            isIpv4 -> client.connect(IPv4.LOCALHOST, 2000)
+            isIpv6 -> client.connect(IPv6.LOCALHOST, 2000)
+            else -> client.connectIpc()
         }
     }
 
@@ -97,7 +97,7 @@ class RmiSimpleActionsTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onMessage<MessageWithTestCow> { m ->
                 server.logger.error("Received finish signal for test for: Client -> Server")

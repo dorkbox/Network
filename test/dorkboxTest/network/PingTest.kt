@@ -35,7 +35,7 @@ class PingTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -62,7 +62,7 @@ class PingTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()

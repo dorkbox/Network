@@ -21,13 +21,7 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.aeron.mediaDriver.ServerConnectionDriver
-import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.EventDispatcher
-import dorkbox.network.connection.Handshaker
-import dorkbox.network.connection.ListenerManager
-import dorkbox.network.connection.PublicKeyValidationState
+import dorkbox.network.connection.*
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
@@ -512,7 +506,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
         // the pub/sub do not necessarily have to be the same. They can be ANY port
         val portPub = message.port
-        val portSub = config.port
+        val portSub = server.port
 
         val logType = if (clientAddress is Inet4Address) {
             "IPv4"

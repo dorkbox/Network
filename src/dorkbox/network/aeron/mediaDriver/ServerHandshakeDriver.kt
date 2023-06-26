@@ -33,8 +33,8 @@ internal class ServerHandshakeDriver(private val aeronDriver: AeronDriver, val s
             aeronDriver: AeronDriver,
             isIpc: Boolean,
             ipInfo: IpInfo,
+            port: Int,
             streamIdSub: Int, sessionIdSub: Int,
-            isReliable: Boolean,
             logInfo: String
         ): ServerHandshakeDriver {
 
@@ -42,16 +42,14 @@ internal class ServerHandshakeDriver(private val aeronDriver: AeronDriver, val s
             val subscriptionUri: ChannelUriStringBuilder
 
             if (isIpc) {
-                subscriptionUri = uriHandshake(CommonContext.IPC_MEDIA, isReliable)
+                subscriptionUri = uriHandshake(CommonContext.IPC_MEDIA, true)
                 info = "$logInfo [$sessionIdSub|$streamIdSub]"
             } else {
-                val port = ipInfo.port
-
                 // are we ipv4 or ipv6 or ipv6wildcard?
-                subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, isReliable)
+                subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, ipInfo.isReliable)
                     .endpoint(ipInfo.getAeronPubAddress(ipInfo.isIpv4) + ":" + port)
 
-                info = "$logInfo ${ipInfo.listenAddressStringPretty} [$sessionIdSub|$streamIdSub|$port] (reliable:$isReliable)"
+                info = "$logInfo ${ipInfo.listenAddressStringPretty} [$sessionIdSub|$streamIdSub|$port] (reliable:${ipInfo.isReliable})"
             }
 
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)

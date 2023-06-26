@@ -21,11 +21,7 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
-import dorkbox.network.Client
-import dorkbox.network.ClientConfiguration
-import dorkbox.network.Configuration
-import dorkbox.network.Server
-import dorkbox.network.ServerConfiguration
+import dorkbox.network.*
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.EndPoint
@@ -35,11 +31,7 @@ import dorkbox.storage.Storage
 import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
@@ -99,7 +91,6 @@ abstract class BaseTest {
 
             val configuration = ClientConfiguration()
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-            configuration.port = 2000
 
             configuration.enableIpc = false
             configuration.enableIPv6 = false
@@ -111,7 +102,6 @@ abstract class BaseTest {
         fun serverConfig(block: ServerConfiguration.() -> Unit = {}): ServerConfiguration {
             val configuration = ServerConfiguration()
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-            configuration.port = 2000
 
             configuration.enableIpc = false
             configuration.enableIPv6 = false

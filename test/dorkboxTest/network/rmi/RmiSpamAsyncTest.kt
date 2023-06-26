@@ -65,7 +65,7 @@ class RmiSpamAsyncTest : BaseTest() {
             addEndPoint(server)
 
             server.rmiGlobal.save(TestObjectImpl(latch), RMI_ID)
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -106,7 +106,7 @@ class RmiSpamAsyncTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         latch.await()

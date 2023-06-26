@@ -16,7 +16,6 @@
 
 package dorkbox.network.aeron.mediaDriver
 
-import dorkbox.network.ClientConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.getLocalAddressString
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
@@ -56,10 +55,11 @@ internal class ClientHandshakeDriver(
             autoChangeToIpc: Boolean,
             remoteAddress: InetAddress?,
             remoteAddressString: String,
-            config: ClientConfiguration,
+            port: Int,
             handshakeTimeoutSec: Int = 10,
             reliable: Boolean,
-            logger: KLogger): ClientHandshakeDriver {
+            logger: KLogger
+        ): ClientHandshakeDriver {
 
             var isUsingIPC = false
 
@@ -150,8 +150,7 @@ internal class ClientHandshakeDriver(
                     handshakeTimeoutSec = handshakeTimeoutSec,
                     remoteAddress = remoteAddress,
                     remoteAddressString = remoteAddressString,
-                    portPub = config.port,
-                    portSub = config.port,
+                    portPub = port,
                     sessionIdPub = sessionIdPub,
                     streamIdPub = streamIdPub,
                     reliable = reliable,
@@ -217,7 +216,6 @@ internal class ClientHandshakeDriver(
             remoteAddress: InetAddress,
             remoteAddressString: String,
             portPub: Int,
-            portSub: Int,
             sessionIdPub: Int,
             streamIdPub: Int,
             reliable: Boolean,
@@ -254,20 +252,20 @@ internal class ClientHandshakeDriver(
             // Create a subscription the given address and port, using the given stream ID.
             var subscription: Subscription? = null
             var retryCount = 100
-            val random = Random()
+            val random = CryptoManagement.secureRandom
             val isSameMachine = remoteAddress.isLoopbackAddress || remoteAddress == EndPoint.lanAddress
 
-            var actualPortSub = portSub
+            var portSub = random.nextInt(Short.MAX_VALUE-1025) + 1025
             while (subscription == null && retryCount-- > 0) {
                 // find a random port to bind to if we are loopback OR if we are the same IP address (not loopback, but to ourselves)
                 if (isSameMachine) {
                     // range from 1025-65534
-                    actualPortSub = random.nextInt(Short.MAX_VALUE-1025) + 1025
+                    portSub = random.nextInt(Short.MAX_VALUE-1025) + 1025
                 }
 
                 try {
                     val subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, reliable)
-                        .endpoint(isRemoteIpv4, localAddressString, actualPortSub)
+                        .endpoint(isRemoteIpv4, localAddressString, portSub)
 
                     subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
                 } catch (ignored: Exception) {
@@ -286,7 +284,7 @@ internal class ClientHandshakeDriver(
                           streamIdPub, streamIdSub,
                           reliable,
                           remoteAddress, remoteAddressString,
-                          portPub, actualPortSub)
+                          portPub, portSub)
         }
     }
 

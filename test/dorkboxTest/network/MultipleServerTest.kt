@@ -66,7 +66,6 @@ class MultipleServerTest : BaseTest() {
             didReceive.add(AtomicBoolean())
 
             val configuration = serverConfig()
-            configuration.port += count
             configuration.aeronDirectory = serverAeronDir
             configuration.enableIpc = false
 
@@ -85,7 +84,7 @@ class MultipleServerTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server.bind(2000 + count)
 
             serverAeronDir = File(configuration.aeronDirectory.toString() + count)
         }
@@ -96,7 +95,6 @@ class MultipleServerTest : BaseTest() {
         for (count in 0 until total) {
             didSend.add(AtomicBoolean())
             val configuration = clientConfig()
-            configuration.port += count
             configuration.aeronDirectory = clientAeronDir
             configuration.enableIpc = false
 
@@ -111,7 +109,7 @@ class MultipleServerTest : BaseTest() {
                 send("client_$count")
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000+count)
         }
 
         waitForThreads()
@@ -194,7 +192,7 @@ class MultipleServerTest : BaseTest() {
                 }
             }
 
-            server.bind()
+            server.bind(2000+count)
         }
 
         val didSend = mutableListOf<AtomicBoolean>()
@@ -221,7 +219,7 @@ class MultipleServerTest : BaseTest() {
                 send("client_$count")
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000+count)
         }
 
         waitForThreads()

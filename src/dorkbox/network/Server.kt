@@ -172,6 +172,13 @@ open class Server<CONNECTION : Connection>(
     @Volatile
     internal lateinit var handshake: ServerHandshake<CONNECTION>
 
+    /**
+     * The machine port that the server will listen for connections on
+     */
+    @Volatile
+    var port: Int = 0
+        private set
+
     final override fun newException(message: String, cause: Throwable?): Throwable {
         return ServerException(message, cause)
     }
@@ -182,10 +189,15 @@ open class Server<CONNECTION : Connection>(
 
     /**
      * Binds the server to AERON configuration
+     *
+     * @param port this is the network port which will be listening for incoming connections
      */
     @Suppress("DuplicatedCode")
-    fun bind()  = runBlocking {
+    fun bind(port: Int = 0)  = runBlocking {
         // NOTE: it is critical to remember that Aeron DOES NOT like running from coroutines!
+
+        require(port > 0 || config.enableIpc) { "port must be > 0" }
+        require(port < 65535) { "port must be < 65535" }
 
         // the lifecycle of a server is the ENDPOINT (measured via the network event poller)
         if (endpointIsRunning.value) {
@@ -208,8 +220,9 @@ open class Server<CONNECTION : Connection>(
             return@runBlocking
         }
 
-        config as ServerConfiguration
+        this@Server.port = port
 
+        config as ServerConfiguration
 
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
 

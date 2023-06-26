@@ -106,7 +106,6 @@ object AeronClient {
     fun main(args: Array<String>) {
         val configuration = ClientConfiguration()
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-        configuration.port = 2000
 
         configuration.enableIpc = false
         configuration.enableIPv4 = true
@@ -138,7 +137,7 @@ object AeronClient {
             logger.error("HAS MESSAGE! $message")
         }
 
-        client.connect("127.0.0.1") // UDP connection via loopback
+        client.connect("127.0.0.1", 2000) // UDP connection via loopback
 
 
         // different ones needed

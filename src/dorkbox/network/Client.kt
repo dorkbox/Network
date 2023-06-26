@@ -25,22 +25,11 @@ import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.EventPoller
 import dorkbox.network.aeron.mediaDriver.ClientConnectionDriver
 import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
-import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EndPoint
-import dorkbox.network.connection.EventDispatcher
+import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.formatCommonAddress
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
-import dorkbox.network.connection.PublicKeyValidationState
-import dorkbox.network.exceptions.ClientException
-import dorkbox.network.exceptions.ClientHandshakeException
-import dorkbox.network.exceptions.ClientRejectedException
-import dorkbox.network.exceptions.ClientRetryException
-import dorkbox.network.exceptions.ClientShutdownException
-import dorkbox.network.exceptions.ClientTimedOutException
-import dorkbox.network.exceptions.ServerException
-import dorkbox.network.exceptions.TransmitException
+import dorkbox.network.exceptions.*
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.ping.Ping
 import dorkbox.util.sync.CountDownLatch
@@ -166,24 +155,45 @@ open class Client<CONNECTION : Connection>(
     }
 
     /**
-     * The network or IPC address for the client to connect to.
-     *
-     * For a network address, it can be:
-     * - a network name ("localhost", "loopback", "lo", "bob.example.org")
-     * - an IP address ("127.0.0.1", "123.123.123.123", "::1")
-     *
-     * For the IPC (Inter-Process-Communication) address. it must be:
-     * - the IPC integer ID, "0x1337c0de", "0x12312312", etc.
+     * The network address that the client connected to
      */
     @Volatile
-    var remoteAddress: InetAddress? = IPv4.LOCALHOST
+    var address: InetAddress? = IPv4.LOCALHOST
         private set
 
     /**
-     * the remote address, as a string.
+     * The network address that the client connected to, as a string.
      */
     @Volatile
-    var remoteAddressString: String = "UNKNOWN"
+    var addressString: String = "UNKNOWN"
+        private set
+
+    /**
+     * The network address that the client connected to, as a pretty string.
+     */
+    @Volatile
+    var addressPrettyString: String = "UNKNOWN"
+        private set
+
+    /**
+     * The machine port that the client connected to,
+     */
+    @Volatile
+    var port: Int = 0
+        private set
+
+    /**
+     * The default connection reliability type (ie: can the lower-level network stack throw away data that has errors, for example real-time-voice)
+     */
+    @Volatile
+    var reliable: Boolean = true
+        private set
+
+    /**
+     * How long (in seconds) will connections wait to connect. 0 will wait indefinitely,
+     */
+    @Volatile
+    var connectionTimeoutSec: Int = 0
         private set
 
     private val handshake = ClientHandshake(this, logger)
@@ -200,50 +210,44 @@ open class Client<CONNECTION : Connection>(
     }
 
     /**
-     * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
-     *
-     * Default connection is to localhost
-     *
-     * ### For a network address, it can be:
-     *  - a network name ("localhost", "bob.example.org")
-     *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
-     *  - an InetAddress address
-     *
-     * ### For the IPC (Inter-Process-Communication) it must be:
-     *  - `connect()`
-     *  - `connect("")`
-     *  - `connectIpc()`
-     *
-     * ### Case does not matter, and "localhost" is the default.
-     *
-     * @param remoteAddress The network or if localhost, IPC address for the client to connect to
-     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
-     * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
+     * Will attempt to re-connect to the server, with the settings previously used when calling connect()
      *
      * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
+     * @throws ClientShutdownException if the client connection is shutdown while trying to connect
+     * @throws ClientException if there are misc errors
      */
-     fun connect(
-        remoteAddress: InetAddress,
-        connectionTimeoutSec: Int = 30,
-        reliable: Boolean = true) = runBlocking {
-
-        val remoteAddressString = when (remoteAddress) {
-            is Inet4Address -> IPv4.toString(remoteAddress)
-            is Inet6Address -> IPv6.toString(remoteAddress, true)
-            else ->  throw IllegalArgumentException("Cannot connect to $remoteAddress It is an invalid address type!")
-        }
-
-        // Default IPC ports are flipped because they are in the perspective of the SERVER
-        connect(remoteAddress = remoteAddress,
-                remoteAddressString = remoteAddressString,
-                remoteAddressPrettyString = remoteAddressString,
-                connectionTimeoutSec = connectionTimeoutSec,
-                reliable = reliable)
+    @Suppress("DuplicatedCode")
+    suspend fun reconnect() {
+        connect(
+            remoteAddress = address,
+            remoteAddressString = addressString,
+            remoteAddressPrettyString = addressPrettyString,
+            port = port,
+            connectionTimeoutSec = connectionTimeoutSec,
+            reliable = reliable,
+        )
     }
 
-// TODO:: the port should be part of the connect function!
+    /**
+     * Will attempt to connect via IPC to the server, with a default 30 second connection timeout and will block until completed.
+     *
+     * ### For the IPC (Inter-Process-Communication) it must be:
+     *  - `connectIpc()`
+     *
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
+     *
+     * @throws ClientTimedOutException if the client is unable to connect in x amount of time
+     */
+    fun connectIpc(connectionTimeoutSec: Int = 30) = runBlocking {
+        connect(remoteAddress = null, // required!
+                port = 0,
+                remoteAddressString = IPC_NAME,
+                remoteAddressPrettyString = IPC_NAME,
+                connectionTimeoutSec = connectionTimeoutSec)
+    }
+
 
     /**
      * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
@@ -254,25 +258,79 @@ open class Client<CONNECTION : Connection>(
      *  - a network name ("localhost", "bob.example.org")
      *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
      *  - an InetAddress address
-     *  - if no address is specified, and IPC is disabled in the config, then localhost will be selected
+     *  - `connect(LOCALHOST)`
+     *  - `connect("localhost")`
+     *  - `connect("bob.example.org")`
+     *  - `connect("127.0.0.1")`
+     *  - `connect("::1")`
      *
      * ### For the IPC (Inter-Process-Communication) it must be:
-     *  - `connect()` (only if ipc is enabled in the configuration)
-     *  - `connect("")` (only if ipc is enabled in the configuration)
-     *  - `connectIpc()`
+     *  - `connectIPC()`
      *
      * ### Case does not matter, and "localhost" is the default.
      *
-     * @param remoteAddress The network host or ip address
+     * @param remoteAddress The network or if localhost, IPC address for the client to connect to
+     * @param port The network host port to connect to
      * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
-     * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
+     * @param reliable true if we want to create a reliable connection, can the lower-level network stack throw away data that has errors, (IE: real-time-voice traffic)
+     *
+     * @throws IllegalArgumentException if the remote address is invalid
+     * @throws ClientTimedOutException if the client is unable to connect in x amount of time
+     * @throws ClientRejectedException if the client connection is rejected
+     */
+     fun connect(
+        remoteAddress: InetAddress,
+        port: Int,
+        connectionTimeoutSec: Int = 30,
+        reliable: Boolean = true) = runBlocking {
+
+        val remoteAddressString = when (remoteAddress) {
+            is Inet4Address -> IPv4.toString(remoteAddress)
+            is Inet6Address -> IPv6.toString(remoteAddress, true)
+            else ->  throw IllegalArgumentException("Cannot connect to $remoteAddress It is an invalid address type!")
+        }
+
+        connect(remoteAddress = remoteAddress,
+                remoteAddressString = remoteAddressString,
+                remoteAddressPrettyString = remoteAddressString,
+                port = port,
+                connectionTimeoutSec = connectionTimeoutSec,
+                reliable = reliable)
+    }
+
+
+    /**
+     * Will attempt to connect to the server, with a default 30 second connection timeout and will block until completed.
+     *
+     * Default connection is to localhost
+     *
+     * ### For a network address, it can be:
+     *  - a network name ("localhost", "bob.example.org")
+     *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
+     *  - an InetAddress address
+     *  - `connect(LOCALHOST)`
+     *  - `connect("localhost")`
+     *  - `connect("bob.example.org")`
+     *  - `connect("127.0.0.1")`
+     *  - `connect("::1")`
+     *
+     * ### For the IPC (Inter-Process-Communication) it must be:
+     *  - `connectIPC()`
+     *
+     * ### Case does not matter, and "localhost" is the default.
+     *
+     * @param remoteAddress The network host name or ip address
+     * @param port The network host port to connect to
+     * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely
+     * @param reliable true if we want to create a reliable connection, can the lower-level network stack throw away data that has errors, (IE: real-time-voice traffic)
      *
      * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
      * @throws ClientRejectedException if the client connection is rejected
      */
     fun connect(
-        remoteAddress: String = "",
+        remoteAddress: String,
+        port: Int,
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true) {
             fun connect(dnsResolveType: ResolvedAddressTypes) = runBlocking {
@@ -298,6 +356,7 @@ open class Client<CONNECTION : Connection>(
                         // we check again, because the inetAddress that comes back from DNS, might not be what we expect
                         remoteAddressString = remoteAddressAsIp,
                         remoteAddressPrettyString = formattedString,
+                        port = port,
                         connectionTimeoutSec = connectionTimeoutSec,
                         reliable = reliable)
             }
@@ -306,6 +365,7 @@ open class Client<CONNECTION : Connection>(
                 // this is default IPC settings
                 remoteAddress.isEmpty() && config.enableIpc -> runBlocking {
                     connect(remoteAddress = null, // required!
+                            port = 0,
                             remoteAddressString = IPC_NAME,
                             remoteAddressPrettyString = IPC_NAME,
                             connectionTimeoutSec = connectionTimeoutSec)
@@ -330,17 +390,21 @@ open class Client<CONNECTION : Connection>(
      *  - a network name ("localhost", "bob.example.org")
      *  - an IP address ("127.0.0.1", "123.123.123.123", "::1")
      *  - an InetAddress address
+     *  - `connect()` (same as localhost, but only if ipc is disabled in the configuration)
+     *  - `connect("localhost")`
+     *  - `connect("bob.example.org")`
+     *  - `connect("127.0.0.1")`
+     *  - `connect("::1")`
      *
      * ### For the IPC (Inter-Process-Communication) it must be:
-     *  - `connect()`
-     *  - `connect("")`
-     *  - `connectIpc()`
+     *  - `connect()` (only if ipc is enabled in the configuration)
      *
      * ### Case does not matter, and "localhost" is the default.
      *
      * @param remoteAddress The network or if localhost for the client to connect to
+     * @param port The network host port to connect to
      * @param connectionTimeoutSec wait for x seconds. 0 will wait indefinitely.
-     * @param reliable true if we want to create a reliable connection (for UDP connections, is message loss acceptable?).
+     * @param reliable true if we want to create a reliable connection, can the lower-level network stack throw away data that has errors, (IE: real-time-voice traffic)
      *
      * @throws IllegalArgumentException if the remote address is invalid
      * @throws ClientTimedOutException if the client is unable to connect in x amount of time
@@ -353,6 +417,7 @@ open class Client<CONNECTION : Connection>(
         remoteAddress: InetAddress? = null,
         remoteAddressString: String,
         remoteAddressPrettyString: String,
+        port: Int = 0,
         connectionTimeoutSec: Int = 30,
         reliable: Boolean = true)
     {
@@ -363,14 +428,19 @@ open class Client<CONNECTION : Connection>(
         val currentDispatcher = EventDispatcher.getCurrentEvent()
         if (currentDispatcher != null && currentDispatcher != EventDispatcher.CONNECT) {
             EventDispatcher.CONNECT.launch {
-                connect(remoteAddress,
-                        remoteAddressString,
-                        remoteAddressPrettyString,
-                        connectionTimeoutSec,
-                        reliable)
+                connect(
+                    remoteAddress = remoteAddress,
+                    remoteAddressString = remoteAddressString,
+                    remoteAddressPrettyString = remoteAddressPrettyString,
+                    port = port,
+                    connectionTimeoutSec = connectionTimeoutSec,
+                    reliable = reliable)
             }
             return
         }
+
+        require(port > 0 || remoteAddress == null) { "port must be > 0" }
+        require(port < 65535) { "port must be < 65535" }
 
         // the lifecycle of a client is the ENDPOINT (measured via the network event poller) and CONNECTION (measure from connection closed)
         if (!waitForClose()) {
@@ -387,15 +457,6 @@ open class Client<CONNECTION : Connection>(
         require(connectionTimeoutSec >= 0) { "connectionTimeoutSec '$connectionTimeoutSec' is invalid. It must be >=0" }
 
         connection0 = null
-
-        // localhost/loopback IP might not always be 127.0.0.1 or ::1
-        // will be null if it's IPC
-        this.remoteAddress = remoteAddress
-
-        // will be exactly 'IPC' if it's IPC
-        // if it's an IP address, it will be the IP address
-        // if it's a DNS name, the name will be resolved, and it will be DNS (IP)
-        this.remoteAddressString = remoteAddressString
 
         // only try to connect via IPv4 if we have a network interface that supports it!
         if (remoteAddress is Inet4Address && !IPv4.isAvailable) {
@@ -428,6 +489,19 @@ open class Client<CONNECTION : Connection>(
             return
         }
 
+        // localhost/loopback IP might not always be 127.0.0.1 or ::1
+        // will be null if it's IPC
+        this.address = remoteAddress
+
+        // will be exactly 'IPC' if it's IPC
+        // if it's an IP address, it will be the IP address
+        // if it's a DNS name, the name will be resolved, and it will be DNS (IP)
+        this.addressString = remoteAddressString
+        this.addressPrettyString = remoteAddressString
+
+        this.port = port
+        this.reliable = reliable
+        this.connectionTimeoutSec = connectionTimeoutSec
 
         val isSelfMachine = remoteAddress?.isLoopbackAddress == true || remoteAddress == lanAddress
 
@@ -493,7 +567,7 @@ open class Client<CONNECTION : Connection>(
                     autoChangeToIpc = autoChangeToIpc,
                     remoteAddress = remoteAddress,
                     remoteAddressString = remoteAddressString,
-                    config = config,
+                    port = port,
                     handshakeTimeoutSec = handshakeTimeoutSec,
                     reliable = reliable,
                     logger = logger
@@ -568,7 +642,7 @@ open class Client<CONNECTION : Connection>(
                 } else if (isIPC) {
                     "IPC"
                 } else {
-                    remoteAddressPrettyString + ":" + config.port
+                    "$remoteAddressPrettyString:$port"
                 }
 
                 // we timed out. Throw the appropriate exception
@@ -606,13 +680,13 @@ open class Client<CONNECTION : Connection>(
         val validateRemoteAddress = if (handshakeConnection.pubSub.isIpc) {
             PublicKeyValidationState.VALID
         } else {
-            crypto.validateRemoteAddress(remoteAddress!!, remoteAddressString, connectionInfo.publicKey)
+            crypto.validateRemoteAddress(address!!, addressString, connectionInfo.publicKey)
         }
 
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
             handshakeConnection.close()
 
-            val exception = ClientRejectedException("Connection to [$remoteAddressString] not allowed! Public key mismatch.")
+            val exception = ClientRejectedException("Connection to [$addressString] not allowed! Public key mismatch.")
             listenerManager.notifyError(exception)
             throw exception
         }
@@ -637,7 +711,7 @@ open class Client<CONNECTION : Connection>(
             val exception = if (handshakeConnection.pubSub.isIpc) {
                 ClientRejectedException("[${handshake.connectKey}] Connection to IPC has incorrect class registration details!!")
             } else {
-                ClientRejectedException("[${handshake.connectKey}] Connection to [$remoteAddressString] has incorrect class registration details!!")
+                ClientRejectedException("[${handshake.connectKey}] Connection to [$addressString] has incorrect class registration details!!")
             }
             exception.cleanStackTraceInternal()
             listenerManager.notifyError(exception)
@@ -672,13 +746,13 @@ open class Client<CONNECTION : Connection>(
             newConnection = connectionFunc(ConnectionParams(uuid, this, clientConnection.connectionInfo, PublicKeyValidationState.VALID))
         } else {
             newConnection = connectionFunc(ConnectionParams(uuid, this, clientConnection.connectionInfo, validateRemoteAddress))
-            remoteAddress!!
+            address!!
 
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
 
-            logger.info { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) adding new signature for [$remoteAddressString] : ${connectionInfo.publicKey.toHexString()}" }
+            logger.info { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) adding new signature for [$addressString] : ${connectionInfo.publicKey.toHexString()}" }
 
-            storage.addRegisteredServerKey(remoteAddress!!, connectionInfo.publicKey)
+            storage.addRegisteredServerKey(address!!, connectionInfo.publicKey)
         }
 
         connection0 = newConnection
@@ -690,14 +764,14 @@ open class Client<CONNECTION : Connection>(
         try {
             handshake.done(handshakeConnection, clientConnection, connectionTimeoutSec, handshakeConnection.details)
         } catch (e: Exception) {
-            listenerManager.notifyError(ClientHandshakeException("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] error during handshake", e))
+            listenerManager.notifyError(ClientHandshakeException("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] error during handshake", e))
             throw e
         }
 
         // finished with the handshake, so always close these!
         handshakeConnection.close()
 
-        logger.debug { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$remoteAddressString] done with handshake." }
+        logger.debug { "[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] done with handshake." }
 
         // before we finish creating the connection, we initialize it (in case there needs to be logic that happens-before `onConnect` calls
         listenerManager.notifyInit(newConnection)

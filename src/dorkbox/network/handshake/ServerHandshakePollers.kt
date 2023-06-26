@@ -249,10 +249,10 @@ internal object ServerHandshakePollers {
             val driver = ServerHandshakeDriver.build(
                 aeronDriver = server.aeronDriver,
                 isIpc = true,
+                port = 0,
                 ipInfo = server.ipInfo,
                 streamIdSub = config.ipcId,
                 sessionIdSub = AeronDriver.RESERVED_SESSION_ID_INVALID,
-                isReliable = true,
                 logInfo = "HANDSHAKE-IPC"
             )
 
@@ -302,9 +302,9 @@ internal object ServerHandshakePollers {
                 aeronDriver = server.aeronDriver,
                 isIpc = false,
                 ipInfo = server.ipInfo,
+                port = server.port,
                 streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionIdSub = 9,
-                isReliable = isReliable,
                 logInfo = "HANDSHAKE-IPv4"
             )
 
@@ -352,9 +352,9 @@ internal object ServerHandshakePollers {
                 aeronDriver = server.aeronDriver,
                 isIpc = false,
                 ipInfo = server.ipInfo,
+                port = server.port,
                 streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionIdSub = 0,
-                isReliable = isReliable,
                 logInfo = "HANDSHAKE-IPv6"
             )
 
@@ -404,9 +404,9 @@ internal object ServerHandshakePollers {
                 aeronDriver = server.aeronDriver,
                 isIpc = false,
                 ipInfo = server.ipInfo,
+                port = server.port,
                 streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
                 sessionIdSub = 0,
-                isReliable = isReliable,
                 logInfo = "HANDSHAKE-IPv4+6"
             )
 

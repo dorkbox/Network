@@ -108,7 +108,6 @@ internal class IpInfo(config: ServerConfiguration) {
     val listenAddressString: String
     val formattedListenAddressString: String
     val listenAddressStringPretty: String
-    val port = config.port
     val isReliable = config.isReliable
 
     val isIpv4: Boolean
@@ -229,6 +228,7 @@ internal class IpInfo(config: ServerConfiguration) {
             formattedListenAddressString
         }
     }
+
 
     // localhost/loopback IP might not always be 127.0.0.1 or ::1
     // We want to listen on BOTH IPv4 and IPv6 (config option lets us configure this)

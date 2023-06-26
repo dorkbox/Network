@@ -38,7 +38,7 @@ class RoundTripMessageTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onMessage<PingMessage> { ping ->
                 serverSuccess.value = true
@@ -76,7 +76,7 @@ class RoundTripMessageTest : BaseTest() {
                 send(ping)
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()

@@ -61,7 +61,7 @@ class RmiDelayedInvocationTest : BaseTest() {
             addEndPoint(server)
 
             server.rmiGlobal.save(TestObjectImpl(countDownLatch), OBJ_ID)
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -106,7 +106,7 @@ class RmiDelayedInvocationTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()

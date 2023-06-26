@@ -165,7 +165,6 @@ class SimpleTest : BaseTest() {
 
         run {
             val configuration = serverConfig()
-            configuration.port = 12312
 
             configuration.enableIPv4 = serverType.ip4
             configuration.enableIPv6 = serverType.ip6
@@ -186,12 +185,11 @@ class SimpleTest : BaseTest() {
                 stopEndPoints()
             }
 
-            server.bind()
+            server.bind(12312)
         }
 
         run {
             val configuration = clientConfig()
-            configuration.port = 12312
 
             configuration.enableIPv4 = clientType.ip4
             configuration.enableIPv6 = clientType.ip6
@@ -207,15 +205,15 @@ class SimpleTest : BaseTest() {
             }
 
             when (clientType) {
-                ConnectType.IPC -> { client.connect() }
-                ConnectType.IPC4 -> { client.connect(IPv4.LOCALHOST) }
-                ConnectType.IPC6 -> { client.connect(IPv6.LOCALHOST) }
-                ConnectType.IPC46 -> { client.connect(IPv4.LOCALHOST) }
-                ConnectType.IPC64 -> { client.connect(IPv6.LOCALHOST) }
-                ConnectType.IP4 -> { client.connect(IPv4.LOCALHOST) }
-                ConnectType.IP6 -> { client.connect(IPv6.LOCALHOST) }
-                ConnectType.IP46 -> { client.connect(IPv4.LOCALHOST) }
-                ConnectType.IP64 -> { client.connect(IPv6.LOCALHOST) }
+                ConnectType.IPC -> { client.connectIpc() }
+                ConnectType.IPC4 -> { client.connect(IPv4.LOCALHOST, 12312) }
+                ConnectType.IPC6 -> { client.connect(IPv6.LOCALHOST, 12312) }
+                ConnectType.IPC46 -> { client.connect(IPv4.LOCALHOST, 12312) }
+                ConnectType.IPC64 -> { client.connect(IPv6.LOCALHOST, 12312) }
+                ConnectType.IP4 -> { client.connect(IPv4.LOCALHOST, 12312) }
+                ConnectType.IP6 -> { client.connect(IPv6.LOCALHOST, 12312) }
+                ConnectType.IP46 -> { client.connect(IPv4.LOCALHOST, 12312) }
+                ConnectType.IP64 -> { client.connect(IPv6.LOCALHOST, 12312) }
             }
         }
 
@@ -232,7 +230,6 @@ class SimpleTest : BaseTest() {
 
         run {
             val configuration = serverConfig()
-            configuration.port = 12312
 
             configuration.enableIPv4 = serverType.ip4
             configuration.enableIPv6 = serverType.ip6
@@ -251,12 +248,11 @@ class SimpleTest : BaseTest() {
                 close()
             }
 
-            server.bind()
+            server.bind(12312)
         }
 
         run {
             val configuration = clientConfig()
-            configuration.port = 12312
 
             configuration.enableIPv4 = clientType.ip4
             configuration.enableIPv6 = clientType.ip6
@@ -276,15 +272,15 @@ class SimpleTest : BaseTest() {
             }
 
             when (clientType) {
-                ConnectType.IPC -> { client.connect() }
-                ConnectType.IPC4 -> { client.connect(IPv4.LOCALHOST) }
-                ConnectType.IPC6 -> { client.connect(IPv6.LOCALHOST) }
-                ConnectType.IPC46 -> { client.connect(IPv4.LOCALHOST) }
-                ConnectType.IPC64 -> { client.connect(IPv6.LOCALHOST) }
-                ConnectType.IP4 -> { client.connect(IPv4.LOCALHOST) }
-                ConnectType.IP6 -> { client.connect(IPv6.LOCALHOST) }
-                ConnectType.IP46 -> { client.connect(IPv4.LOCALHOST) }
-                ConnectType.IP64 -> { client.connect(IPv6.LOCALHOST) }
+                ConnectType.IPC -> { client.connectIpc() }
+                ConnectType.IPC4 -> { client.connect(IPv4.LOCALHOST, 12312) }
+                ConnectType.IPC6 -> { client.connect(IPv6.LOCALHOST, 12312) }
+                ConnectType.IPC46 -> { client.connect(IPv4.LOCALHOST, 12312) }
+                ConnectType.IPC64 -> { client.connect(IPv6.LOCALHOST, 12312) }
+                ConnectType.IP4 -> { client.connect(IPv4.LOCALHOST, 12312) }
+                ConnectType.IP6 -> { client.connect(IPv6.LOCALHOST, 12312) }
+                ConnectType.IP46 -> { client.connect(IPv4.LOCALHOST, 12312) }
+                ConnectType.IP64 -> { client.connect(IPv6.LOCALHOST, 12312) }
             }
         }
 

@@ -36,7 +36,7 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<FinishedCommand> { _ ->
                 stopEndPoints()
             }
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -50,7 +50,7 @@ class SerializationValidationTest : BaseTest() {
                 send(FinishedCommand())
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()
@@ -72,7 +72,7 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<TestObject> { _ ->
                 stopEndPoints()
             }
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -97,7 +97,7 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()
@@ -118,7 +118,7 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<TestObject> { _ ->
                 stopEndPoints()
             }
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -143,7 +143,7 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()

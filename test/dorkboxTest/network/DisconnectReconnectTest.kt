@@ -42,7 +42,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
@@ -66,11 +66,11 @@ class DisconnectReconnectTest : BaseTest() {
                 val count = reconnectCount.getAndIncrement()
                 if (count < reconnects) {
                     logger.error("Reconnecting: $count")
-                    client.connect(LOCALHOST)
+                    client.reconnect()
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         latch.await()
@@ -93,7 +93,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -119,11 +119,11 @@ class DisconnectReconnectTest : BaseTest() {
                 val count = reconnectCount.getAndIncrement()
                 if (count < reconnects) {
                     logger.error("Reconnecting: $count")
-                    client.connect(LOCALHOST)
+                    client.reconnect()
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
 
@@ -165,7 +165,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             val server: Server<Connection> = Server(config)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
 
             server.onConnect {
@@ -202,11 +202,11 @@ class DisconnectReconnectTest : BaseTest() {
                 val count = reconnectCount.getAndIncrement()
                 if (count < reconnects) {
                     logger.error("Reconnecting: $count")
-                    client.connect(LOCALHOST)
+                    client.reconnect()
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         latch.await()
@@ -234,7 +234,7 @@ class DisconnectReconnectTest : BaseTest() {
             val serverConfiguration = serverConfig()
             val server: Server<Connection> = Server(serverConfiguration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
@@ -259,11 +259,11 @@ class DisconnectReconnectTest : BaseTest() {
                 val count = reconnectCount.getAndIncrement()
                 if (count < reconnects) {
                     logger.error("Reconnecting: $count")
-                    client.connect(LOCALHOST)
+                    client.reconnect()
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
 
@@ -291,7 +291,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             val server: Server<Connection> = Server(config)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
@@ -317,11 +317,11 @@ class DisconnectReconnectTest : BaseTest() {
                 val count = reconnectCount.getAndIncrement()
                 if (count < reconnects) {
                     logger.error("Reconnecting: $count")
-                    client.connect(LOCALHOST)
+                    client.reconnect()
                 }
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         latch.await()
@@ -342,7 +342,7 @@ class DisconnectReconnectTest : BaseTest() {
 
             server = Server(config)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onConnect {
                 logger.error("Connected!")
@@ -366,7 +366,7 @@ class DisconnectReconnectTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         server.close()

@@ -40,7 +40,7 @@ class StreamingTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onMessage<ByteArray> {
                 println("received data, shutting down!")
@@ -63,7 +63,7 @@ class StreamingTest : BaseTest() {
                 send(hugeData)
             }
 
-            client.connect(LOCALHOST)
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()

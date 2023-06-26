@@ -123,7 +123,6 @@ class AeronClientServer {
     fun client(remoteAddress: String) {
         val configuration = ClientConfiguration()
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-        configuration.port = 2000
 
         configuration.enableIpc = false
 //            configuration.enableIPv4 = false
@@ -155,7 +154,7 @@ class AeronClientServer {
             logger.error("HAS MESSAGE! $message")
         }
 
-        client.connect(remoteAddress) // UDP connection via loopback
+        client.connect(remoteAddress, 2000) // UDP connection via loopback
 
 
         // different ones needed
@@ -190,7 +189,6 @@ class AeronClientServer {
         val configuration = ServerConfiguration()
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.listenIpAddress = "*"
-        configuration.port = 2000
         configuration.maxClientCount = 50
 
         configuration.enableIpc = false
@@ -242,7 +240,7 @@ class AeronClientServer {
             send("ECHO $message")
         }
 
-        server.bind()
+        server.bind(2000)
 
         return server
     }

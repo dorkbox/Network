@@ -90,7 +90,6 @@ object AeronServer {
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.listenIpAddress = "*"
 //        configuration.listenIpAddress = "127.0.0.1"
-        configuration.port = 2000
         configuration.maxClientCount = 50
 
 //        configuration.enableIpc = true
@@ -141,7 +140,7 @@ object AeronServer {
             send("ECHO $message")
         }
 
-        server.bind()
+        server.bind(2000)
 
         runBlocking {
             server.waitForClose()

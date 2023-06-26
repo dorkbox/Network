@@ -70,7 +70,7 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
             addEndPoint(server)
 
             server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -112,7 +112,11 @@ class RmiSpamSyncSuspendingTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect()
+            if (configuration.enableIpc) {
+                client.connectIpc()
+            } else {
+                client.connect(LOCALHOST, 2000)
+            }
         }
 
         waitForThreads()

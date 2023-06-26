@@ -302,25 +302,6 @@ abstract class Configuration {
 
 
     /**
-     * Specify the UDP port to use. This port is used to establish client-server connections.
-     *
-     * When used for the server, this is the subscription port, which will be listening for incoming connections
-     * When used for the client, this is the publication port, which is what port to connect to when establishing a connection
-     *
-     * When the client/server are the SAME machine (by checking if it's loopback, or if the remote address is the lan address), then
-     * the client will auto-select a random port.
-     *
-     * This means that client-pub -> {{network}} -> server-sub
-     *
-     * Must be the value of an unsigned short and greater than 0.
-     */
-    var port: Int = 0
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
-
-    /**
      * How long a connection must be disconnected before we cleanup the memory associated with it
      */
     var connectionCloseTimeoutInSeconds: Int = 10
@@ -667,9 +648,6 @@ abstract class Configuration {
             }
         }
 
-        require(port > 0) { "configuration controlPort must be > 0" }
-        require(port < 65535) { "configuration controlPort must be < 65535" }
-
         require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
         require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }
 
@@ -882,7 +860,6 @@ abstract class Configuration {
         config.enableIPv6 = enableIPv6
         config.enableIpc = enableIpc
         config.enableRemoteSignatureValidation = enableRemoteSignatureValidation
-        config.port = port
         config.connectionCloseTimeoutInSeconds = connectionCloseTimeoutInSeconds
         config.connectionCheckIntervalNanos = connectionCheckIntervalNanos
         config.connectionExpirationTimoutNanos = connectionExpirationTimoutNanos
@@ -940,7 +917,6 @@ abstract class Configuration {
         if (enableIPv6 != other.enableIPv6) return false
         if (enableIpc != other.enableIpc) return false
         if (enableRemoteSignatureValidation != other.enableRemoteSignatureValidation) return false
-        if (port != other.port) return false
         if (connectionCloseTimeoutInSeconds != other.connectionCloseTimeoutInSeconds) return false
         if (connectionCheckIntervalNanos != other.connectionCheckIntervalNanos) return false
         if (connectionExpirationTimoutNanos != other.connectionExpirationTimoutNanos) return false
@@ -966,7 +942,6 @@ abstract class Configuration {
         result = 31 * result + enableIPv6.hashCode()
         result = 31 * result + enableIpc.hashCode()
         result = 31 * result + enableRemoteSignatureValidation.hashCode()
-        result = 31 * result + port
         result = 31 * result + pingTimeoutSeconds
         result = 31 * result + connectionCloseTimeoutInSeconds
         result = 31 * result + connectionCheckIntervalNanos.hashCode()

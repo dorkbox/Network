@@ -38,7 +38,7 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
 
             server.onConnect {
                 serverConnectSuccess.value = true
@@ -61,7 +61,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e
@@ -86,7 +86,7 @@ class ConnectionFilterTest : BaseTest() {
             addEndPoint(server)
             server.filter(IpSubnetFilterRule(IPv4.WILDCARD, 0))
             server.filter(IpSubnetFilterRule(IPv6.WILDCARD, 0))
-            server.bind()
+            server.bind(2000)
 
             server.onConnect {
                 serverConnectSuccess.value = true
@@ -109,7 +109,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e
@@ -132,7 +132,7 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
             server.filter(IpSubnetFilterRule("1.1.1.1", 0))
             server.filter(IpSubnetFilterRule("::1.1.1.1", 0)) // compressed ipv6
 
@@ -157,7 +157,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e
@@ -187,7 +187,7 @@ class ConnectionFilterTest : BaseTest() {
                 serverConnectSuccess.value = true
                 close()
             }
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -206,7 +206,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e
@@ -234,7 +234,7 @@ class ConnectionFilterTest : BaseTest() {
                 close()
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -248,7 +248,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e
@@ -280,7 +280,7 @@ class ConnectionFilterTest : BaseTest() {
                 close()
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -301,7 +301,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 e.printStackTrace()
                 stopEndPointsBlocking()
@@ -327,7 +327,7 @@ class ConnectionFilterTest : BaseTest() {
                 close()
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -342,7 +342,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e
@@ -371,7 +371,7 @@ class ConnectionFilterTest : BaseTest() {
                 close()
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -389,7 +389,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e
@@ -416,7 +416,7 @@ class ConnectionFilterTest : BaseTest() {
                 serverConnectSuccess.value = true
                 close()
             }
-            server.bind()
+            server.bind(2000)
         }
 
         run {
@@ -435,7 +435,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e
@@ -457,7 +457,7 @@ class ConnectionFilterTest : BaseTest() {
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind()
+            server.bind(2000)
             server.filter {
                 false
             }
@@ -478,7 +478,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e
@@ -498,7 +498,7 @@ class ConnectionFilterTest : BaseTest() {
             server.filter {
                 false
             }
-            server.bind()
+            server.bind(2000)
 
             server.onConnect {
                 close()
@@ -517,7 +517,7 @@ class ConnectionFilterTest : BaseTest() {
             }
 
             try {
-                client.connect(LOCALHOST)
+                client.connect(LOCALHOST, 2000)
             } catch (e: Exception) {
                 stopEndPointsBlocking()
                 throw e

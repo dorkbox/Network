@@ -1,6 +1,6 @@
 
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -102,7 +102,7 @@ object TestClient {
             close()
         }
 
-        client.connect(BaseTest.LOCALHOST)
+        client.connect(BaseTest.LOCALHOST, 2000)
 
         runBlocking {
             client.waitForClose()

@@ -116,7 +116,6 @@ class AeronRmiClientServer {
             try {
                 val configuration = ClientConfiguration()
                 configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
-                configuration.port = 2000
 
                 configuration.enableIpc = false
                 configuration.enableIPv6 = false
@@ -125,7 +124,7 @@ class AeronRmiClientServer {
 
                 if (args.contains("client")) {
                     val client = acs.client(0, configuration)
-                    client.connect("172.31.73.222") // UDP connection via loopback
+                    client.connect("172.31.73.222", 2000) // UDP connection via loopback
 
                     runBlocking {
                         delay(Long.MAX_VALUE)
@@ -149,7 +148,7 @@ class AeronRmiClientServer {
 
                     clients.forEachIndexed { index, client ->
 //                        client.connect()
-                        client.connect("172.31.73.222")
+                        client.connect("172.31.73.222", 2000)
                     }
 
                     System.err.println("DONE")
@@ -242,7 +241,6 @@ class AeronRmiClientServer {
         val configuration = ServerConfiguration()
         configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
         configuration.listenIpAddress = "*"
-        configuration.port = 2000
         configuration.maxClientCount = 50
 
         configuration.enableIpc = true
@@ -289,7 +287,7 @@ class AeronRmiClientServer {
             throwable.printStackTrace()
         }
 
-        server.bind()
+        server.bind(2000)
         return server
     }
 }
