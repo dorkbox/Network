@@ -21,7 +21,6 @@ import dorkbox.netUtil.IP
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
 import dorkbox.network.connection.CryptoManagement
-import dorkbox.serializers.SerializationDefaults
 import dorkbox.storage.Storage
 import dorkbox.storage.serializer.SerializerBytes
 import mu.KLogger
@@ -106,8 +105,8 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
                 // everything is stored as bytes. We use a serializer instead to register types for easy serialization
                 serializer(SerializerBytes {
                     register(ByteArray::class.java)
-                    register(Inet4Address::class.java, SerializationDefaults.inet4AddressSerializer)
-                    register(Inet6Address::class.java, SerializationDefaults.inet6AddressSerializer)
+                    register(Inet4Address::class.java, Serialization.inet4AddressSerializer)
+                    register(Inet6Address::class.java, Serialization.inet6AddressSerializer)
                 })
            }
        }.build()

@@ -87,6 +87,9 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
         init {
             Log.set(Log.LEVEL_ERROR)
         }
+
+        val inet4AddressSerializer by lazy { Inet4AddressSerializer() }
+        val inet6AddressSerializer by lazy { Inet6AddressSerializer() }
     }
 
     open class RmiSupport<CONNECTION: Connection> internal constructor(
