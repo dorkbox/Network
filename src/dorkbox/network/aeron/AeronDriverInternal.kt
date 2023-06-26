@@ -89,6 +89,11 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
                 }
             }
         }
+
+        init {
+            // fix the transport poller for java 17!
+            FixTransportPoller.init()
+        }
     }
 
     val driverId = config.id
