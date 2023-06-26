@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import java.time.Instant
-
 ///////////////////////////////
 //////    PUBLISH TO SONATYPE / MAVEN CENTRAL
 ////// TESTING : (to local maven repo) <'publish and release' - 'publishToMavenLocal'>
@@ -25,9 +23,9 @@ import java.time.Instant
 gradle.startParameter.showStacktrace = ShowStacktrace.ALWAYS   // always show the stacktrace!
 
 plugins {
-    id("com.dorkbox.GradleUtils") version "3.13"
-    id("com.dorkbox.Licensing") version "2.22"
-    id("com.dorkbox.VersionUpdate") version "2.7"
+    id("com.dorkbox.GradleUtils") version "3.17"
+    id("com.dorkbox.Licensing") version "2.24"
+    id("com.dorkbox.VersionUpdate") version "2.8"
     id("com.dorkbox.GradlePublish") version "1.18"
 
     id("com.github.johnrengelman.shadow") version "7.1.2"
@@ -47,8 +45,6 @@ object Extras {
     const val vendor = "Dorkbox LLC"
     const val vendorUrl = "https://dorkbox.com"
     const val url = "https://git.dorkbox.com/dorkbox/Network"
-
-    val buildDate = Instant.now().toString()
 }
 
 ///////////////////////////////
@@ -123,7 +119,7 @@ tasks.jar.get().apply {
         attributes["Specification-Vendor"] = Extras.vendor
 
         attributes["Implementation-Title"] = "${Extras.group}.${Extras.id}"
-        attributes["Implementation-Version"] = Extras.buildDate
+        attributes["Implementation-Version"] = GradleUtils.now()
         attributes["Implementation-Vendor"] = Extras.vendor
     }
 }
@@ -149,31 +145,30 @@ shadowJar.apply {
 
 
 dependencies {
-    api("org.jetbrains.kotlinx:atomicfu:0.19.0")
-    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
+    api("org.jetbrains.kotlinx:atomicfu:0.21.0")
+    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1")
 
     // https://github.com/dorkbox
     api("com.dorkbox:ByteUtilities:1.8")
-    api("com.dorkbox:Collections:1.4")
+    api("com.dorkbox:Collections:1.6")
     api("com.dorkbox:MinLog:2.5")
-    api("com.dorkbox:NetworkDNS:2.7.2")
-    api("com.dorkbox:NetworkUtils:2.19.1")
-//    api("com.dorkbox:ObjectPool:4.2")
+    api("com.dorkbox:NetworkDNS:2.9")
+    api("com.dorkbox:NetworkUtils:2.21")
     api("com.dorkbox:OS:1.6")
-    api("com.dorkbox:Serializers:2.8")
-    api("com.dorkbox:Storage:1.2")
+    api("com.dorkbox:Serializers:3.0")
+    api("com.dorkbox:Storage:1.5")
     api("com.dorkbox:Updates:1.1")
-    api("com.dorkbox:Utilities:1.40")
+    api("com.dorkbox:Utilities:1.41")
 
 
     // we include ALL of aeron, in case we need to debug aeron behavior
     // https://github.com/real-logic/aeron
-    val aeronVer = "1.40.0"
+    val aeronVer = "1.41.4"
     api("io.aeron:aeron-all:$aeronVer")
 //    api("org.agrona:agrona:1.16.0") // sources for this isn't included in aeron-all!
 
     // https://github.com/EsotericSoftware/kryo
-    api("com.esotericsoftware:kryo:5.4.0") {
+    api("com.esotericsoftware:kryo:5.5.0") {
         exclude("com.esotericsoftware", "minlog") // we use our own minlog, that logs to SLF4j instead
     }
 
@@ -195,9 +190,7 @@ dependencies {
 
     // https://github.com/MicroUtils/kotlin-logging
     api("io.github.microutils:kotlin-logging:3.0.5")
-    api("org.slf4j:slf4j-api:2.0.6")
-
-
+    api("org.slf4j:slf4j-api:2.0.7")
 
 
     testImplementation("junit:junit:4.13.2")
