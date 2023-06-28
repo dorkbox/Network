@@ -25,12 +25,7 @@ import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.AeronDriverException
 import dorkbox.network.exceptions.ClientRetryException
-import io.aeron.Aeron
-import io.aeron.ChannelUriStringBuilder
-import io.aeron.ConcurrentPublication
-import io.aeron.ExclusivePublication
-import io.aeron.Publication
-import io.aeron.Subscription
+import io.aeron.*
 import io.aeron.driver.MediaDriver
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
@@ -421,7 +416,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             logger.error { "Aeron Driver [$driverId]: Error creating subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
 
             e.cleanAllStackTrace()
-            val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription", e)
+            val ex = ClientRetryException("Aeron Driver [$driverId]: Error adding a subscription", e)  // maybe not retry? or not clientRetry?
             ex.cleanStackTraceInternal()
             throw ex
         }
@@ -448,22 +443,46 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * Guarantee that the publication is closed AND the backing file is removed
      */
     suspend fun closeAndDeletePublication(publication: Publication, logger: KLogger, logInfo: String) = stateMutex.withLock {
-        logger.trace { "Aeron Driver [$driverId]: Closing publication [$logInfo] :: regId=${publication.registrationId()}, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
+        val name = if (publication is ConcurrentPublication) {
+            "publication"
+        } else {
+            "ex-publication"
+        }
+
+        val registrationId = publication.registrationId()
+
+        logger.trace { "Aeron Driver [$driverId]: Closing $name file [$logInfo] :: regId=$registrationId, sessionId=${publication.sessionId()}, streamId=${publication.streamId()}" }
+
+
+        val aeron1 = aeron
+        if (aeron1 == null || aeron1.isClosed) {
+            val e = Exception("Aeron Driver [$driverId]: Error closing $name [$logInfo] :: sessionId=${publication.sessionId()}, streamId=${publication.streamId()}")
+            e.cleanStackTraceInternal()
+            throw e
+        }
 
         try {
             // This can throw exceptions!
             publication.close()
         } catch (e: Exception) {
-            logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$logInfo] publication $publication" }
+            logger.error(e) { "Aeron Driver [$driverId]: Unable to close [$logInfo] $name $publication" }
         }
 
-        // aeron is async. close() doesn't immediately close, it just submits the close command!
-        // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
-        while (!publication.isClosed) {
-            delay(100)
+        if (publication is ConcurrentPublication) {
+            // aeron is async. close() doesn't immediately close, it just submits the close command!
+            // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
+            while (publication.isConnected || aeron1.getPublication(registrationId) != null) {
+                delay(100)
+            }
+        } else {
+            // aeron is async. close() doesn't immediately close, it just submits the close command!
+            // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
+            while (publication.isConnected || aeron1.getExclusivePublication(registrationId) != null) {
+                delay(100)
+            }
         }
 
-        ensureLogfileDeleted("publication", getMediaDriverFile(publication), logInfo, logger)
+        // deleting log files is generally not recommended in a production environment as it can result in data loss and potential disruption of the messaging system!!
 
         registeredPublications.decrementAndGet()
         if (logger.isTraceEnabled) {
@@ -477,6 +496,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     suspend fun closeAndDeleteSubscription(subscription: Subscription, logger: KLogger, logInfo: String) {
         logger.trace { "Aeron Driver [$driverId]: Closing subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
 
+        val aeron1 = aeron
+        if (aeron1 == null || aeron1.isClosed) {
+            val e = Exception("Aeron Driver [$driverId]: Error closing publication [$logInfo] :: sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}")
+            e.cleanStackTraceInternal()
+            throw e
+        }
+
         try {
             // This can throw exceptions!
             subscription.close()
@@ -486,31 +512,15 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
         // aeron is async. close() doesn't immediately close, it just submits the close command!
         // THIS CAN TAKE A WHILE TO ACTUALLY CLOSE!
-        while (!subscription.isClosed) {
+        while (subscription.isConnected || subscription.images().isNotEmpty()) {
             delay(100)
         }
 
-        ensureLogfileDeleted("subscription", getMediaDriverFile(subscription), logInfo, logger)
+        // deleting log files is generally not recommended in a production environment as it can result in data loss and potential disruption of the messaging system!!
 
         registeredSubscriptions.decrementAndGet()
         if (logger.isTraceEnabled) {
             registeredSubscriptionsTrace.remove(subscription.registrationId())
-        }
-    }
-
-    private suspend fun ensureLogfileDeleted(type: String, logFile: File, aeronLogInfo: String, logger: KLogger) {
-        val timeoutInNanos = TimeUnit.SECONDS.toNanos(config.connectionCloseTimeoutInSeconds.toLong())
-
-        val closeTimeoutTime = System.nanoTime()
-        while (logFile.exists() && System.nanoTime() - closeTimeoutTime < timeoutInNanos) {
-            if (logFile.delete()) {
-                break
-            }
-            delay(100)
-        }
-
-        if (logFile.exists()) {
-            logger.error("Aeron Driver [$driverId]: [$aeronLogInfo] Unable to delete aeron $type log on close: $logFile")
         }
     }
 

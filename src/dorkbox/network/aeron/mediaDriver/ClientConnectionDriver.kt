@@ -125,10 +125,17 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
             //  publication of any state to other threads and not be long running or re-entrant with the client.
-            val publication = aeronDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, streamIdPub, logInfo)
-            { cause ->
+
+
+            // can throw an exception! We catch it in the calling class
+            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo)
+
+            // can throw an exception! We catch it in the calling class
+            // we actually have to wait for it to connect before we continue
+            aeronDriver.waitForConnection(publication, handshakeTimeoutSec, logInfo) { cause ->
                 ClientTimedOutException("$logInfo publication cannot connect with server!", cause)
             }
+
 
             // Create a subscription at the given address and port, using the given stream ID.
             val subscriptionUri = uri(CommonContext.IPC_MEDIA, sessionIdSub, reliable)
@@ -167,8 +174,13 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
             //  publication of any state to other threads and not be long running or re-entrant with the client.
-            val publication = aeronDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, streamIdPub, logInfo)
-            { cause ->
+
+            // can throw an exception! We catch it in the calling class
+            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo)
+
+            // can throw an exception! We catch it in the calling class
+            // we actually have to wait for it to connect before we continue
+            aeronDriver.waitForConnection(publication, handshakeTimeoutSec, logInfo) { cause ->
                 ClientTimedOutException("$logInfo publication cannot connect with server $remoteAddressString", cause)
             }
 

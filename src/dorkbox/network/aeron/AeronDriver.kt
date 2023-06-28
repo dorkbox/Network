@@ -21,16 +21,11 @@ package dorkbox.network.aeron
 import dorkbox.collections.IntMap
 import dorkbox.netUtil.IPv6
 import dorkbox.network.Configuration
-import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.handshake.RandomId65kAllocator
-import io.aeron.ChannelUriStringBuilder
-import io.aeron.CncFileDescriptor
-import io.aeron.CommonContext
-import io.aeron.Publication
-import io.aeron.Subscription
+import io.aeron.*
 import io.aeron.driver.reports.LossReportReader
 import io.aeron.driver.reports.LossReportUtil
 import io.aeron.samples.SamplesUtil
@@ -444,20 +439,14 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * this check is in the "reconnect" logic
      */
-    suspend fun addPublicationWithTimeout(
-        publicationUri: ChannelUriStringBuilder,
+    suspend fun waitForConnection(
+        publication: Publication,
         handshakeTimeoutSec: Int,
-        streamId: Int,
         logInfo: String,
         onErrorHandler: suspend (Throwable) -> Exception
-    ): Publication {
-
-        val publication = try {
-            addPublication(publicationUri, streamId, logInfo)
-        } catch (e: Exception) {
-            val exception = onErrorHandler(e)
-            exception.cleanAllStackTrace()
-            throw exception
+    ) {
+        if (publication.isConnected) {
+            return
         }
 
         val timeoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong())
@@ -465,7 +454,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
         while (System.nanoTime() - startTime < timeoutInNanos) {
             if (publication.isConnected) {
-                return publication
+                return
             }
 
             delay(200L)
@@ -473,7 +462,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
         closeAndDeletePublication(publication, logInfo)
 
-        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Publication timed out in $handshakeTimeoutSec seconds while waiting for connection state: $publicationUri streamId=$streamId"))
+        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Publication timed out in $handshakeTimeoutSec seconds while waiting for connection state: ${publication.channel()} streamId=${publication.streamId()}"))
         exception.cleanAllStackTrace()
         throw exception
     }

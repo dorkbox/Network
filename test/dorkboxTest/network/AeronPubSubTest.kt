@@ -19,6 +19,7 @@ package dorkboxTest.network
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.endpoint
 import dorkbox.network.exceptions.ClientTimedOutException
+import io.aeron.CommonContext
 import io.aeron.Publication
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
@@ -66,17 +67,25 @@ class AeronPubSubTest : BaseTest() {
 
 
 
-            val subscriptionUri = AeronDriver.uriHandshake("udp", true).endpoint(true, "127.0.0.1", port)
+            val subscriptionUri = AeronDriver.uriHandshake(CommonContext.UDP_MEDIA, true)
+                .endpoint(true, "127.0.0.1", port)
             val sub = serverDriver.addSubscription(subscriptionUri, serverStreamId, "server")
 
             var sessionID = 1234567
             clientDrivers.forEachIndexed { index, clientDriver ->
-                val publicationUri = AeronDriver.uri("udp", sessionID++, true).endpoint(true, "127.0.0.1", port)
-                clientDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, serverStreamId, "client_$index") { cause ->
+                val publicationUri = AeronDriver.uri(CommonContext.UDP_MEDIA, sessionID++, true)
+                    .endpoint(true, "127.0.0.1", port)
+
+                // can throw an exception! We catch it in the calling class
+                val publication = clientDriver.addPublication(publicationUri, serverStreamId, "client_$index")
+
+                // can throw an exception! We catch it in the calling class
+                // we actually have to wait for it to connect before we continue
+                clientDriver.waitForConnection(publication, handshakeTimeoutSec, "client_$index") { cause ->
                     ClientTimedOutException("Client publication cannot connect with localhost server", cause)
-                }.also {
-                    clientPublications.add(Pair(clientDriver, it))
                 }
+
+                clientPublications.add(Pair(clientDriver, publication))
             }
 
 
@@ -143,18 +152,27 @@ class AeronPubSubTest : BaseTest() {
 
 
 
-            val subscriptionUri = AeronDriver.uriHandshake("udp", true).endpoint(true, "127.0.0.1", port)
+            val subscriptionUri = AeronDriver.uriHandshake(CommonContext.UDP_MEDIA, true)
+                .endpoint(true, "127.0.0.1", port)
             val sub = serverDriver.addSubscription(subscriptionUri, serverStreamId, "server")
 
             try {
                 var sessionID = 1234567
                 clientDrivers.forEachIndexed { index, clientDriver ->
-                    val publicationUri = AeronDriver.uri("udp", sessionID, true).endpoint(true, "127.0.0.1", port)
-                    clientDriver.addPublicationWithTimeout(publicationUri, handshakeTimeoutSec, serverStreamId, "client_$index") { cause ->
+                    val publicationUri = AeronDriver.uri(CommonContext.UDP_MEDIA, sessionID, true)
+                        .endpoint(true, "127.0.0.1", port)
+
+
+                    // can throw an exception! We catch it in the calling class
+                    val publication = clientDriver.addPublication(publicationUri, serverStreamId, "client_$index")
+
+                    // can throw an exception! We catch it in the calling class
+                    // we actually have to wait for it to connect before we continue
+                    clientDriver.waitForConnection(publication, handshakeTimeoutSec, "client_$index") { cause ->
                         ClientTimedOutException("Client publication cannot connect with localhost server", cause)
-                    }.also {
-                        clientPublications.add(Pair(clientDriver, it))
                     }
+
+                    clientPublications.add(Pair(clientDriver, publication))
                 }
                 Assert.fail("TimeoutException should be caught!")
             } catch (ignore: Exception) {

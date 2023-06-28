@@ -59,7 +59,7 @@ internal object ServerHandshakePollers {
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION
     ) {
 
-        private val timeout = server.config.connectionCloseTimeoutInSeconds
+        private val connectionTimeoutSec = server.config.connectionCloseTimeoutInSeconds
         private val isReliable = server.config.isReliable
         private val handshaker = server.handshaker
 
@@ -70,28 +70,37 @@ internal object ServerHandshakePollers {
             // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
             val sessionId = header.sessionId()
             val streamId = header.streamId()
-            val aeronLogInfo = "$sessionId/$streamId : IPC" // Server is the "source", client mirrors the server
+            val logInfo = "$sessionId/$streamId : IPC" // Server is the "source", client mirrors the server
 
-            val message = handshaker.readMessage(buffer, offset, length, aeronLogInfo)
+            val message = handshaker.readMessage(buffer, offset, length, logInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
-                server.listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Invalid connection request"))
+                server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Invalid connection request"))
                 return
             }
 
             // we have read all the data, now dispatch it.
             EventDispatcher.HANDSHAKE.launch {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-                // will connect to ANY streamID
                 val publicationUri = uriHandshake(CommonContext.IPC_MEDIA, isReliable)
+
+
+                // this will always connect to the CLIENT handshake subscription!
                 val publication = try {
+                    driver.addExclusivePublication(publicationUri, message.streamId, logInfo)
+                } catch (e: Exception) {
+                    server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
+                    return@launch
+                }
+
+                try {
                     // we actually have to wait for it to connect before we continue
-                    driver.addPublicationWithTimeout(publicationUri, timeout, message.streamId, aeronLogInfo) { cause ->
-                        ClientTimedOutException("$aeronLogInfo publication cannot connect with client!", cause)
+                    driver.waitForConnection(publication, connectionTimeoutSec, logInfo) { cause ->
+                        ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
                     }
                 } catch (e: Exception) {
-                    server.listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Cannot create IPC publication back to client remote process", e))
+                    server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
                     return@launch
                 }
 
@@ -107,7 +116,7 @@ internal object ServerHandshakePollers {
                         handshakePublication = publication,
                         clientUuid = HandshakeMessage.uuidReader(message.registrationData!!),
                         message = message,
-                        aeronLogInfo = aeronLogInfo,
+                        aeronLogInfo = logInfo,
                         connectionFunc = connectionFunc,
                         logger = logger
                     )
@@ -118,7 +127,9 @@ internal object ServerHandshakePollers {
                         handshaker = handshaker,
                         handshakePublication = publication,
                         message = message,
-                        logger = logger)
+                        aeronLogInfo = logInfo,
+                        logger = logger
+                    )
                 }
 
                 driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
@@ -129,7 +140,6 @@ internal object ServerHandshakePollers {
     class UdpProc<CONNECTION : Connection>(
         val logger: KLogger,
         val server: Server<CONNECTION>,
-        val mediaDriver: ServerHandshakeDriver,
         val driver: AeronDriver,
         val handshake: ServerHandshake<CONNECTION>,
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
@@ -137,9 +147,8 @@ internal object ServerHandshakePollers {
     ) {
 
         private val ipInfo = server.ipInfo
-        private val logInfo = mediaDriver.logInfo
         private val handshaker = server.handshaker
-        private val connectionTimeoutSec = TimeUnit.NANOSECONDS.toSeconds(server.config.connectionExpirationTimoutNanos).toInt()
+        private val connectionTimeoutSec = server.config.connectionCloseTimeoutInSeconds
 
         fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
             // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
@@ -180,31 +189,39 @@ internal object ServerHandshakePollers {
                 }
             }
 
-            val aeronLogInfo = "$sessionId/$streamId:$clientAddressString"
+            val logInfo = "$sessionId/$streamId:$clientAddressString"
 
-            val message = handshaker.readMessage(buffer, offset, length, aeronLogInfo)
+            val message = handshaker.readMessage(buffer, offset, length, logInfo)
 
             // VALIDATE:: a Registration object is the only acceptable message during the connection phase
             if (message !is HandshakeMessage) {
-                server.listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Invalid connection request"))
+                server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Invalid connection request"))
                 return
             }
 
             EventDispatcher.HANDSHAKE.launch {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-                // will connect to ANY streamID
-                val publicationUri =
-                    uriHandshake(CommonContext.UDP_MEDIA, isReliable).endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
+                val publicationUri = uriHandshake(CommonContext.UDP_MEDIA, isReliable)
+                    .endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
 
+                // this will always connect to the CLIENT handshake subscription!
                 val publication = try {
+                    driver.addExclusivePublication(publicationUri, message.streamId, logInfo)
+                } catch (e: Exception) {
+                    server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
+                    return@launch
+                }
+
+                try {
                     // we actually have to wait for it to connect before we continue
-                    driver.addPublicationWithTimeout(publicationUri, connectionTimeoutSec, message.streamId, aeronLogInfo) { cause ->
+                    driver.waitForConnection(publication, connectionTimeoutSec, logInfo) { cause ->
                         ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
                     }
                 } catch (e: Exception) {
-                    server.listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Cannot create publication back to $clientAddressString", e))
+                    server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
                     return@launch
                 }
+
 
                 // HandshakeMessage.HELLO
                 // HandshakeMessage.DONE
@@ -220,7 +237,7 @@ internal object ServerHandshakePollers {
                         clientAddressString = clientAddressString,
                         isReliable = isReliable,
                         message = message,
-                        aeronLogInfo = aeronLogInfo,
+                        aeronLogInfo = logInfo,
                         connectionFunc = connectionFunc,
                         logger = logger
                     )
@@ -231,6 +248,7 @@ internal object ServerHandshakePollers {
                         handshaker = handshaker,
                         handshakePublication = publication,
                         message = message,
+                        aeronLogInfo = logInfo,
                         logger = logger
                     )
                 }
@@ -309,7 +327,7 @@ internal object ServerHandshakePollers {
             )
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable)
+            val processor = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
 
             object : AeronPoller {
                 // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
@@ -359,7 +377,7 @@ internal object ServerHandshakePollers {
             )
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable)
+            val processor = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
 
 
             object : AeronPoller {
@@ -412,7 +430,7 @@ internal object ServerHandshakePollers {
 
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, driver, server.aeronDriver, handshake, connectionFunc, isReliable)
+            val processor = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
 
             object : AeronPoller {
                 // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
