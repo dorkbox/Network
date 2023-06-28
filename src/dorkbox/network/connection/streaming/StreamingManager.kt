@@ -330,10 +330,16 @@ internal class StreamingManager<CONNECTION : Connection>(
         internalBuffer: MutableDirectBuffer,
         objectSize: Int,
         endPoint: EndPoint<CONNECTION>,
-        tempWriteKryo: KryoExtra<Connection>,
+        kryo: KryoExtra<Connection>,
         sendIdleStrategy: IdleStrategy,
         connection: Connection
     ): Boolean {
+        // this buffer is the exact size as our internal buffer, so it is unnecessary to have multiple kryo instances
+        val originalBuffer = ExpandableDirectByteBuffer(objectSize) // this can grow, so it's fine to lock it to this size!
+
+        // we have to save out our internal buffer, so we can reuse the kryo instance!
+        originalBuffer.putBytes(0, internalBuffer, 0, objectSize)
+
 
         // NOTE: our max object size for IN-MEMORY messages is an INT. For file transfer it's a LONG (so everything here is cast to a long)
         var remainingPayload = objectSize
@@ -345,7 +351,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         // tell the other side how much data we are sending
         val startMessage = StreamingControl(StreamingState.START, streamSessionId, objectSize.toLong())
 
-        val startSent = endPoint.writeUnsafe(tempWriteKryo, startMessage, publication, sendIdleStrategy, connection)
+        val startSent = endPoint.writeUnsafe(kryo, startMessage, publication, sendIdleStrategy, connection)
         if (!startSent) {
             // more critical error sending the message. we shouldn't retry or anything.
             val errorMessage = "[${publication.sessionId()}] Error starting streaming content."
@@ -377,7 +383,7 @@ internal class StreamingManager<CONNECTION : Connection>(
         val headerSize: Int
 
         try {
-            val objectBuffer = tempWriteKryo.write(connection, chunkData)
+            val objectBuffer = kryo.write(connection, chunkData)
             headerSize = objectBuffer.position()
             header = ByteArray(headerSize)
 
@@ -397,7 +403,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             val varIntSize = chunkBuffer.writeVarInt(sizeOfPayload, true)
 
             // write out the payload. Our resulting data written out is the ACTUAL MTU of aeron.
-            internalBuffer.getBytes(0, chunkBuffer.internalBuffer, headerSize + varIntSize, sizeOfPayload)
+            originalBuffer.getBytes(0, chunkBuffer.internalBuffer, headerSize + varIntSize, sizeOfPayload)
 
             remainingPayload -= sizeOfPayload
             payloadSent += sizeOfPayload
@@ -426,7 +432,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                 throw exception
             }
         } catch (e: Exception) {
-            sendFailMessageAndThrow(e, streamSessionId, publication, endPoint, tempWriteKryo, sendIdleStrategy, connection)
+            sendFailMessageAndThrow(e, streamSessionId, publication, endPoint, kryo, sendIdleStrategy, connection)
             return false // doesn't actually get here because exceptions are thrown, but this makes the IDE happy.
         }
 
@@ -453,15 +459,15 @@ internal class StreamingManager<CONNECTION : Connection>(
                 val writeIndex = payloadSent - headerSize - varIntSize
 
                 // write out our header data (this will OVERWRITE previous data!)
-                internalBuffer.putBytes(writeIndex, header)
+                originalBuffer.putBytes(writeIndex, header)
 
                 // write out the payload size using optimized data structures.
-                writeVarInt(internalBuffer, writeIndex + headerSize, sizeOfPayload, true)
+                writeVarInt(originalBuffer, writeIndex + headerSize, sizeOfPayload, true)
 
                 // write out the payload
                 endPoint.dataSend(
                     publication,
-                    internalBuffer,
+                    originalBuffer,
                     writeIndex,
                     headerSize + varIntSize + amountToSend,
                     sendIdleStrategy,
@@ -473,7 +479,7 @@ internal class StreamingManager<CONNECTION : Connection>(
             } catch (e: Exception) {
                 val failMessage = StreamingControl(StreamingState.FAILED, streamSessionId)
 
-                val failSent = endPoint.writeUnsafe(tempWriteKryo, failMessage, publication, sendIdleStrategy, connection)
+                val failSent = endPoint.writeUnsafe(kryo, failMessage, publication, sendIdleStrategy, connection)
                 if (!failSent) {
                     // something SUPER wrong!
                     // more critical error sending the message. we shouldn't retry or anything.
@@ -497,6 +503,6 @@ internal class StreamingManager<CONNECTION : Connection>(
         // send the last chunk of data
         val finishedMessage = StreamingControl(StreamingState.FINISHED, streamSessionId, payloadSent.toLong())
 
-        return endPoint.writeUnsafe(tempWriteKryo, finishedMessage, publication, sendIdleStrategy, connection)
+        return endPoint.writeUnsafe(kryo, finishedMessage, publication, sendIdleStrategy, connection)
     }
 }

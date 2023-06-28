@@ -149,7 +149,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     // The readKryo WILL RE-CONFIGURED during the client handshake! (it is all the same thread, so object visibility is not a problem)
     @Volatile
     internal var readKryo: KryoExtra<CONNECTION>
-    internal var streamingReadKryo: KryoExtra<CONNECTION>
 
     internal val handshaker: Handshaker<CONNECTION>
 
@@ -212,11 +211,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // the initial kryo created for serialization is reused as the read kryo
         if (type == Server::class.java) {
             readKryo = serialization.initKryo(kryo)
-            streamingReadKryo = serialization.initKryo()
         } else {
             // these will be reassigned by the client Connect method!
             readKryo = kryo
-            streamingReadKryo = kryo
         }
 
         // we have to be able to specify the property store
@@ -468,7 +465,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      */
     open fun write(
         writeKryo: KryoExtra<Connection>,
-        tempWriteKryo: KryoExtra<Connection>,
         message: Any,
         publication: Publication,
         sendIdleStrategy: IdleStrategy,
@@ -496,7 +492,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 internalBuffer = internalBuffer,
                 objectSize = objectSize,
                 endPoint = this,
-                tempWriteKryo = tempWriteKryo,
+                kryo = writeKryo,
                 sendIdleStrategy = sendIdleStrategy,
                 connection = connection
             )
@@ -582,7 +578,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // send arbitrarily large pieces of data (gigs in size, potentially).
             // This will recursively call into this method for each of the unwrapped chunks of data.
             is StreamingControl -> {
-                // TODO: this can be the streaming kryo???
                 streamingManager.processControlMessage(message, readKryo,this@EndPoint, connection)
             }
             is StreamingData -> {
@@ -651,6 +646,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
     /**
      * NOTE: we use exclusive publications, and they are not thread safe/concurrent!
+     * NOTE: This cannot be on a coroutine, because our kryo instances are NOT threadsafe!
      *
      * the actual bits that send data on the network.
      *

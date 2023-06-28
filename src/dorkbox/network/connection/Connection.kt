@@ -57,7 +57,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     private val sendIdleStrategy: IdleStrategy
 
     private val writeKryo: KryoExtra<Connection>
-    private val tempWriteKryo: KryoExtra<Connection>
 
     /**
      * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)
@@ -140,9 +139,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     init {
         @Suppress("UNCHECKED_CAST")
         writeKryo = endPoint.serialization.initKryo() as KryoExtra<Connection>
-        @Suppress("UNCHECKED_CAST")
-        tempWriteKryo = endPoint.serialization.initKryo() as KryoExtra<Connection>
-
 
         sendIdleStrategy = endPoint.config.sendIdleStrategy.cloneToNormal()
 
@@ -224,7 +220,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
             try {
                 // The handshake sessionId IS NOT globally unique
                 logger.trace { "[$toString0] send: ${message.javaClass.simpleName} : $message" }
-                val write = endPoint.write(writeKryo, tempWriteKryo, message, publication, sendIdleStrategy, this@Connection, abortEarly)
+                val write = endPoint.write(writeKryo, message, publication, sendIdleStrategy, this@Connection, abortEarly)
                 write
             } catch (e: Throwable) {
                 // make sure we atomically create the listener manager, if necessary

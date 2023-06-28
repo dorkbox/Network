@@ -196,6 +196,7 @@ open class Client<CONNECTION : Connection>(
     var connectionTimeoutSec: Int = 0
         private set
 
+
     private val handshake = ClientHandshake(this, logger)
 
     @Volatile
@@ -720,7 +721,6 @@ open class Client<CONNECTION : Connection>(
 
         // every time we connect to a server, we have to reconfigure AND reassign the readKryos.
         readKryo = kryoConfiguredFromServer
-        streamingReadKryo = serialization.initKryo()
 
 
         ///////////////
