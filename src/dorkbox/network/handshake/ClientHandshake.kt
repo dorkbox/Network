@@ -22,11 +22,7 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
-import dorkbox.network.exceptions.ClientException
-import dorkbox.network.exceptions.ClientRejectedException
-import dorkbox.network.exceptions.ClientTimedOutException
-import dorkbox.network.exceptions.ServerException
-import dorkbox.network.exceptions.TransmitException
+import dorkbox.network.exceptions.*
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.FragmentHandler
@@ -248,6 +244,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         aeronLogInfo: String
     ) {
         val pubSub = clientConnection.connectionInfo
+        val handshakePubSub = handshakeConnection.pubSub
 
         // is our pub still connected??
         if (!pubSub.pub.isConnected) {
@@ -259,9 +256,9 @@ internal class ClientHandshake<CONNECTION: Connection>(
             handshaker.writeMessage(handshakeConnection.pubSub.pub, aeronLogInfo,
                                     HandshakeMessage.doneFromClient(
                                         connectKey = connectKey,
-                                        sessionIdSub = pubSub.sessionIdSub,
-                                        streamIdSub = pubSub.streamIdSub,
-                                        portSub = pubSub.portSub
+                                        sessionIdSub = handshakePubSub.sessionIdSub,
+                                        streamIdSub = handshakePubSub.streamIdSub,
+                                        portSub = handshakePubSub.portSub
                                     ))
         } catch (e: Exception) {
             handshakeConnection.close()
@@ -278,7 +275,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         while (System.nanoTime() - startTime < timoutInNanos) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
-            pubSub.sub.poll(handler, 1)
+            handshakePubSub.sub.poll(handler, 1)
 
             if (failedException != null || connectionDone) {
                 break
