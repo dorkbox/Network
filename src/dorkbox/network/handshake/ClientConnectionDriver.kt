@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron.mediaDriver
+package dorkbox.network.handshake
 
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.getLocalAddressString
 import dorkbox.network.aeron.AeronDriver.Companion.uri
+import dorkbox.network.aeron.controlEndpoint
 import dorkbox.network.aeron.endpoint
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
-import dorkbox.network.handshake.ClientConnectionInfo
 import io.aeron.CommonContext
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -187,10 +187,17 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
             val localAddressString = getLocalAddressString(publication, remoteAddress)
 
+
+            // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
+            // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
             val subscriptionUri = uri(CommonContext.UDP_MEDIA, sessionIdSub, reliable)
-                .endpoint(isRemoteIpv4, localAddressString, portSub)
+                .endpoint(isRemoteIpv4, localAddressString, 0) // 0 for MDC!
+                .controlEndpoint(isRemoteIpv4, remoteAddressString, portSub)
+                .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
+
+
 
             return PubSub(publication, subscription,
                           sessionIdPub, sessionIdSub,

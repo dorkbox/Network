@@ -71,14 +71,19 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     val id = connectionParameters.connectionInfo.sessionIdSub
 
     /**
-     * the remote address, as a string. Will be null for IPC connections
+     * The remote address, as a string. Will be null for IPC connections
      */
     val remoteAddress = connectionParameters.connectionInfo.remoteAddress
 
     /**
-     * the remote address, as a string. Will be "ipc" for IPC connections
+     * The remote address, as a string. Will be "IPC" for IPC connections
      */
     val remoteAddressString = connectionParameters.connectionInfo.remoteAddressString
+
+    /**
+     * The remote port. Will be 0 for IPC connections
+     */
+    val remotePort = connectionParameters.connectionInfo.portPub
 
     /**
      * @return true if this connection is an IPC connection

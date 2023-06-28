@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron.mediaDriver
+package dorkbox.network.handshake
 
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.getLocalAddressString
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.uri
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
+import dorkbox.network.aeron.controlEndpoint
 import dorkbox.network.aeron.endpoint
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
@@ -35,6 +36,7 @@ import mu.KLogger
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.*
+
 
 
 /**
@@ -55,6 +57,7 @@ internal class ClientHandshakeDriver(
             autoChangeToIpc: Boolean,
             remoteAddress: InetAddress?,
             remoteAddressString: String,
+            remotePort: Int,
             port: Int,
             handshakeTimeoutSec: Int = 10,
             reliable: Boolean,
@@ -143,15 +146,13 @@ internal class ClientHandshakeDriver(
                 streamIdPub = AeronDriver.UDP_HANDSHAKE_STREAM_ID
 
 
-                // NOTE: for the PORT ... these are the same, because USUALLY for UDP connections, it is connecting to a different computer!
-                // if it is the SAME computer, then the client with auto-select a random port.
-
                 pubSub = buildUDP(
                     aeronDriver = aeronDriver,
                     handshakeTimeoutSec = handshakeTimeoutSec,
                     remoteAddress = remoteAddress,
                     remoteAddressString = remoteAddressString,
-                    portPub = port,
+                    portPub = remotePort,
+                    portSub = port,
                     sessionIdPub = sessionIdPub,
                     streamIdPub = streamIdPub,
                     reliable = reliable,
@@ -221,12 +222,16 @@ internal class ClientHandshakeDriver(
             remoteAddress: InetAddress,
             remoteAddressString: String,
             portPub: Int,
+            portSub: Int,
             sessionIdPub: Int,
             streamIdPub: Int,
             reliable: Boolean,
             streamIdSub: Int,
             logInfo: String,
         ): PubSub {
+            @Suppress("NAME_SHADOWING")
+            var portSub = portSub
+
             // on close, the publication CAN linger (in case a client goes away, and then comes back)
             // AERON_PUBLICATION_LINGER_TIMEOUT, 5s by default (this can also be set as a URI param)
 
@@ -243,6 +248,7 @@ internal class ClientHandshakeDriver(
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
             //  publication of any state to other threads and not be long running or re-entrant with the client.
+
 
             // can throw an exception! We catch it in the calling class
             val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo)
@@ -261,25 +267,44 @@ internal class ClientHandshakeDriver(
 
             // Create a subscription the given address and port, using the given stream ID.
             var subscription: Subscription? = null
-            var retryCount = 100
-            val random = CryptoManagement.secureRandom
-            val isSameMachine = remoteAddress.isLoopbackAddress || remoteAddress == EndPoint.lanAddress
 
-            var portSub = random.nextInt(Short.MAX_VALUE-1025) + 1025
-            while (subscription == null && retryCount-- > 0) {
-                // find a random port to bind to if we are loopback OR if we are the same IP address (not loopback, but to ourselves)
-                if (isSameMachine) {
-                    // range from 1025-65534
-                    portSub = random.nextInt(Short.MAX_VALUE-1025) + 1025
-                }
+            if (portSub > -1) {
+                // this means we have EXPLICITLY defined a port, we must try to use it
 
-                try {
-                    val subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, reliable)
-                        .endpoint(isRemoteIpv4, localAddressString, portSub)
+                // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
+                // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
+                val subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, reliable)
+                    .endpoint(isRemoteIpv4, localAddressString, 0) // 0 for MDC!
+                    .controlEndpoint(isRemoteIpv4, remoteAddressString, portSub)
+                    .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
-                    subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
-                } catch (ignored: Exception) {
-                    // whoops keep retrying!!
+                subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
+            } else {
+                // randomly select what port should be used
+                var retryCount = 100
+                val random = CryptoManagement.secureRandom
+                val isSameMachine = remoteAddress.isLoopbackAddress || remoteAddress == EndPoint.lanAddress
+
+                portSub = random.nextInt(Short.MAX_VALUE-1025) + 1025
+                while (subscription == null && retryCount-- > 0) {
+                    // find a random port to bind to if we are loopback OR if we are the same IP address (not loopback, but to ourselves)
+                    if (isSameMachine) {
+                        // range from 1025-65534
+                        portSub = random.nextInt(Short.MAX_VALUE-1025) + 1025
+                    }
+
+                    try {
+                        // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
+                        // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
+                        val subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, reliable)
+                            .endpoint(isRemoteIpv4, localAddressString, 0) // 0 for MDC!
+                            .controlEndpoint(isRemoteIpv4, remoteAddressString, portSub)
+                            .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+
+                        subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
+                    } catch (ignored: Exception) {
+                        // whoops keep retrying!!
+                    }
                 }
             }
 

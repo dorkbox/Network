@@ -15,7 +15,7 @@
  */
 package dorkbox.network.connection
 
-import dorkbox.network.aeron.mediaDriver.PubSub
+import dorkbox.network.handshake.PubSub
 import java.util.*
 
 data class ConnectionParams<CONNECTION : Connection>(

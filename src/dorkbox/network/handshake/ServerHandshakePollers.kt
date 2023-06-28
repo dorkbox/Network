@@ -24,7 +24,6 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.aeron.AeronPoller
-import dorkbox.network.aeron.mediaDriver.ServerHandshakeDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EventDispatcher
@@ -82,7 +81,6 @@ internal object ServerHandshakePollers {
             EventDispatcher.HANDSHAKE.launch {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
                 val publicationUri = uriHandshake(CommonContext.IPC_MEDIA, isReliable)
-
 
                 // this will always connect to the CLIENT handshake subscription!
                 val publication = try {
@@ -199,8 +197,13 @@ internal object ServerHandshakePollers {
 
             EventDispatcher.HANDSHAKE.launch {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
+
+                // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
+                // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
                 val publicationUri = uriHandshake(CommonContext.UDP_MEDIA, isReliable)
-                    .endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
+                    .controlEndpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
+                    .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+
 
                 // this will always connect to the CLIENT handshake subscription!
                 val publication = try {

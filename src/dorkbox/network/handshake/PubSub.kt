@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron.mediaDriver
+package dorkbox.network.handshake
 
 import io.aeron.Publication
 import io.aeron.Subscription
@@ -31,8 +31,8 @@ data class PubSub(
     val reliable: Boolean,
     val remoteAddress: InetAddress? = null,
     val remoteAddressString: String = "IPC",
-    val portPub: Int = -1,
-    val portSub: Int = -1
+    val portPub: Int = 0,
+    val portSub: Int = 0
 ) {
     val isIpc get() = remoteAddress == null
 
@@ -40,7 +40,7 @@ data class PubSub(
      * The pub/sub info is ALWAYS from the perspective of the SERVER
      * This is so we can line-up logs between the client/server
      */
-    fun reverseForClient():PubSub {
+    fun reverseForClient(): PubSub {
         return PubSub(
             pub = pub,
             sub = sub,

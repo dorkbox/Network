@@ -304,8 +304,8 @@ open class Serialization<CONNECTION: Connection>(private val references: Boolean
     }
 
     /**
-    * called as the first thing inside when initializing the classesToRegister
-    */
+     * called as the first thing inside when initializing the classesToRegister
+     */
     internal fun initGlobalKryo(): KryoExtra<CONNECTION> {
         // NOTE:  classesRegistrations.forEach will be called after serialization init!
         // NOTE: All registration MUST happen in-order of when the register(*) method was called, otherwise there are problems.

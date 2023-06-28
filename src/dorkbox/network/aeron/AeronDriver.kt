@@ -53,6 +53,10 @@ fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, por
     this.endpoint(AeronDriver.address(isIpv4, addressString, port))
     return this
 }
+ fun ChannelUriStringBuilder.controlEndpoint(isIpv4: Boolean, addressString: String, port: Int): ChannelUriStringBuilder {
+    this.controlEndpoint(AeronDriver.address(isIpv4, addressString, port))
+    return this
+}
 
 /**
  * Class for managing the Aeron+Media drivers
@@ -363,6 +367,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
             // this happens more than once! (this is ok)
             config.validate()
+
             mediaDriverConfig.validate()
 
             require(!config.contextDefined) { "Aeron configuration has already been initialized, unable to reuse this configuration!" }

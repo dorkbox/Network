@@ -23,14 +23,14 @@ import dorkbox.netUtil.IPv6
 import dorkbox.netUtil.dnsUtils.ResolvedAddressTypes
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.EventPoller
-import dorkbox.network.aeron.mediaDriver.ClientConnectionDriver
-import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
 import dorkbox.network.connection.*
 import dorkbox.network.connection.IpInfo.Companion.formatCommonAddress
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.*
+import dorkbox.network.handshake.ClientConnectionDriver
 import dorkbox.network.handshake.ClientHandshake
+import dorkbox.network.handshake.ClientHandshakeDriver
 import dorkbox.network.ping.Ping
 import dorkbox.util.sync.CountDownLatch
 import kotlinx.coroutines.runBlocking
@@ -155,28 +155,28 @@ open class Client<CONNECTION : Connection>(
     }
 
     /**
-     * The network address that the client connected to
+     * The network address of the remote machine that the client connected to. This will be null for IPC connections.
      */
     @Volatile
     var address: InetAddress? = IPv4.LOCALHOST
         private set
 
     /**
-     * The network address that the client connected to, as a string.
+     * The network address of the remote machine that the client connected to, as a string. This will be "IPC" for IPC connections.
      */
     @Volatile
     var addressString: String = "UNKNOWN"
         private set
 
     /**
-     * The network address that the client connected to, as a pretty string.
+     * The network address of the remote machine that the client connected to, as a pretty string. This will be "IPC" for IPC connections.
      */
     @Volatile
     var addressPrettyString: String = "UNKNOWN"
         private set
 
     /**
-     * The machine port that the client connected to,
+     * The machine port of the remote machine that the client has connected to. This will be 0 for IPC connections
      */
     @Volatile
     var port: Int = 0
@@ -568,7 +568,8 @@ open class Client<CONNECTION : Connection>(
                     autoChangeToIpc = autoChangeToIpc,
                     remoteAddress = remoteAddress,
                     remoteAddressString = remoteAddressString,
-                    port = port,
+                    remotePort = port,
+                    port = config.port,
                     handshakeTimeoutSec = handshakeTimeoutSec,
                     reliable = reliable,
                     logger = logger

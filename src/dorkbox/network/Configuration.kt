@@ -164,6 +164,20 @@ class ServerConfiguration : dorkbox.network.Configuration() {
 class ClientConfiguration : dorkbox.network.Configuration() {
 
     /**
+     * Specify the UDP port to use. This port is used by the client to listen for return traffic from the server.
+     *
+     * This will normally be autoconfigured randomly to the first available port, however it can be hardcoded in the event that
+     * there is a reason autoconfiguration is not wanted - for example, specific firewall rules.
+     *
+     * Must be the value of an unsigned short and greater than 0
+     */
+    var port: Int = -1
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+    /**
      * Validates the current configuration. Throws an exception if there are problems.
      */
     @Suppress("DuplicatedCode")
@@ -171,6 +185,12 @@ class ClientConfiguration : dorkbox.network.Configuration() {
         super.validate()
 
         // have to do some basic validation of our configuration
+
+        if (port != -1) {
+            // this means it was configured!
+            require(port > 0) { "Client listen port must be > 0" }
+            require(port < 65535) { "Client listen port must be < 65535" }
+        }
     }
 
     override fun initialize(logger: KLogger): dorkbox.network.ClientConfiguration {
@@ -180,6 +200,9 @@ class ClientConfiguration : dorkbox.network.Configuration() {
     override fun copy(): dorkbox.network.ClientConfiguration {
         val config = ClientConfiguration()
         super.copy(config)
+
+        config.port = port
+
         return config
     }
 
@@ -187,20 +210,28 @@ class ClientConfiguration : dorkbox.network.Configuration() {
         if (this === other) return true
         if (other !is ClientConfiguration) return false
         if (!super.equals(other)) return false
+
+        if (port != other.port) return false
+
         return true
     }
 
     override fun hashCode(): Int {
-        return super.hashCode()
+        var result = super.hashCode()
+        result = 31 * result + port.hashCode()
+        return result
     }
 }
 
-abstract class Configuration {
+abstract class Configuration protected constructor() {
     @OptIn(ExperimentalCoroutinesApi::class)
     companion object {
         internal val NOP_LOGGER = KotlinLogging.logger(NOPLogger.NOP_LOGGER)
 
         internal const val errorMessage = "Cannot set a property after the configuration context has been created!"
+
+        private val appIdRegexString = Regex("a-zA-Z0-9_.-")
+        private val appIdRegex = Regex("^[$appIdRegexString]+$")
 
         @Volatile
         private var alreadyShownTempFsTips = false
@@ -220,6 +251,13 @@ abstract class Configuration {
                 error is BindException || error.cause is BindException -> { false }
                 else -> { true }
             }
+        }
+
+        /**
+         * Determines if the app ID is valid.
+         */
+        fun isAppIdValid(input: String): Boolean {
+            return appIdRegex.matches(input)
         }
 
         /**
@@ -258,6 +296,29 @@ abstract class Configuration {
             }
         }
     }
+
+    /**
+     * Specify the application ID. This is necessary, as it prevents multiple instances of aeron from responding to applications that
+     * is not theirs. Because of the shared nature of aeron drivers, this is necessary.
+     *
+     * This is a human-readable string, and it MUST be configured the same for both the clint/server
+     */
+    var applicationId = ""
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+    /**
+     * In **very** unique circumstances, you might want to force the aeron driver to be shared between processes.
+     *
+     * This is only really applicable if the C driver is running/used.
+     */
+    var forceAllowSharedAeronDriver = false
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
 
     /**
      * Enables the ability to use the IPv4 network stack.
@@ -386,6 +447,17 @@ abstract class Configuration {
             require(!contextDefined) { errorMessage }
             field = value
         }
+
+    /**
+     * What is the max stream size that can exist in memory when deciding if data chunks are in memory or on temo-file on disk.
+     * Data is streamed when it is too large to send in a single aeron message
+     */
+    var maxStreamSizeInMemoryMB: Int = 5
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
 
     /**
      * The idle strategy used when polling the Media Driver for new messages. BackOffIdleStrategy is the DEFAULT.
@@ -633,6 +705,13 @@ abstract class Configuration {
     open fun validate() {
         // have to do some basic validation of our configuration
 
+        require(applicationId.isNotEmpty()) { "The application ID must be set, as it prevents an listener from responding to differently configured applications. This is a human-readable string, and it MUST be configured the same for both the clint/server!"}
+
+        // The applicationID is used to create the prefix for the aeron directory -- EVEN IF the directory name is specified.
+        require(applicationId.length < 32) { "The application ID is too long, it must be < 32 characters" }
+
+        require(isAppIdValid(applicationId)) { "The application ID is not valid. It may only be the following characters: $appIdRegexString" }
+
         // can't disable everything!
         require(enableIpc || enableIPv4 || enableIPv6) { "At least one of IPC/IPv4/IPv6 must be enabled!" }
 
@@ -732,18 +811,24 @@ abstract class Configuration {
          * After this command is executed the new disk will be mounted under /Volumes/DevShm.
          */
         var dir = aeronDirectory
-        if (dir == null) {
+
+        if (forceAllowSharedAeronDriver && dir != null) {
+            logger.warn { "Forcing the Aeron driver to be shared between processes. THIS IS DANGEROUS!" }
+        } else if (dir != null) {
+            // we have defined an aeron directory
+            dir = File(dir.absolutePath + "_$applicationId")
+        } else {
             val baseFileLocation = defaultAeronLogLocation(logger)
             val aeronLogDirectory = if (uniqueAeronDirectory) {
                 // this is incompatible with IPC, and will not be set if IPC is enabled (error will be thrown on validate)
-                File(baseFileLocation, "aeron_${mediaDriverIdNoDir()}")
+                File(baseFileLocation, "aeron_${applicationId}_${mediaDriverIdNoDir()}")
             } else {
-                File(baseFileLocation, "aeron")
+                File(baseFileLocation, "aeron_$applicationId")
             }
-            dir = aeronLogDirectory
+            dir = aeronLogDirectory.absoluteFile
         }
 
-        aeronDirectory = dir.absoluteFile
+        aeronDirectory = dir!!.absoluteFile
 
         // cannot make any more changes to the configuration!
         contextDefined = true
@@ -765,6 +850,8 @@ abstract class Configuration {
         val aeronDirectory get() = config.aeronDirectory
         val uniqueAeronDirectory get() = config.uniqueAeronDirectory
         val uniqueAeronDirectoryID get() = config.uniqueAeronDirectoryID
+
+        val forceAllowSharedAeronDriver get() = config.forceAllowSharedAeronDriver
 
         val ipcTermBufferLength get() = config.ipcTermBufferLength
         val publicationTermBufferLength get() = config.publicationTermBufferLength
@@ -816,6 +903,7 @@ abstract class Configuration {
 
         @Suppress("DuplicatedCode", "RedundantIf")
         private fun mediaDriverEquals(other: dorkbox.network.Configuration): Boolean {
+            if (forceAllowSharedAeronDriver != other.forceAllowSharedAeronDriver) return false
             if (connectionCloseTimeoutInSeconds != other.connectionCloseTimeoutInSeconds) return false
             if (threadingMode != other.threadingMode) return false
             if (networkMtuSize != other.networkMtuSize) return false
@@ -837,6 +925,7 @@ abstract class Configuration {
 
     @Suppress("DuplicatedCode", "RedundantIf")
     private fun mediaDriverEquals(other: dorkbox.network.Configuration): Boolean {
+        if (forceAllowSharedAeronDriver != other.forceAllowSharedAeronDriver) return false
         if (threadingMode != other.threadingMode) return false
         if (networkMtuSize != other.networkMtuSize) return false
         if (initialWindowLength != other.initialWindowLength) return false
@@ -856,6 +945,8 @@ abstract class Configuration {
 
     abstract fun copy(): dorkbox.network.Configuration
     protected fun copy(config: dorkbox.network.Configuration) {
+        config.applicationId = applicationId
+        config.forceAllowSharedAeronDriver = forceAllowSharedAeronDriver
         config.enableIPv4 = enableIPv4
         config.enableIPv6 = enableIPv6
         config.enableIpc = enableIpc
@@ -868,6 +959,7 @@ abstract class Configuration {
         config.messageDispatch = messageDispatch
         config.settingsStore = settingsStore
         config.serialization = serialization
+        config.maxStreamSizeInMemoryMB = maxStreamSizeInMemoryMB
         config.pollIdleStrategy = pollIdleStrategy.clone()
         config.sendIdleStrategy = sendIdleStrategy.clone()
         config.threadingMode = threadingMode
@@ -911,8 +1003,10 @@ abstract class Configuration {
         if (this === other) return true
         if (other !is dorkbox.network.Configuration) return false
 
+        // some values are defined here. Not necessary to list them twice
         if (!mediaDriverEquals(other)) return false
 
+        if (applicationId != other.applicationId) return false
         if (enableIPv4 != other.enableIPv4) return false
         if (enableIPv6 != other.enableIPv6) return false
         if (enableIpc != other.enableIpc) return false
@@ -924,6 +1018,7 @@ abstract class Configuration {
         if (pingTimeoutSeconds != other.pingTimeoutSeconds) return false
         if (settingsStore != other.settingsStore) return false
         if (serialization != other.serialization) return false
+        if (maxStreamSizeInMemoryMB != other.maxStreamSizeInMemoryMB) return false
         if (pollIdleStrategy != other.pollIdleStrategy) return false
         if (sendIdleStrategy != other.sendIdleStrategy) return false
 
@@ -938,6 +1033,8 @@ abstract class Configuration {
     override fun hashCode(): Int {
         var result = mediaDriverId()
 
+        result = 31 * result + applicationId.hashCode()
+        result = 31 * result + forceAllowSharedAeronDriver.hashCode()
         result = 31 * result + enableIPv4.hashCode()
         result = 31 * result + enableIPv6.hashCode()
         result = 31 * result + enableIpc.hashCode()
@@ -950,6 +1047,7 @@ abstract class Configuration {
         result = 31 * result + messageDispatch.hashCode()
         result = 31 * result + settingsStore.hashCode()
         result = 31 * result + serialization.hashCode()
+        result = 31 * result + maxStreamSizeInMemoryMB
         result = 31 * result + pollIdleStrategy.hashCode()
         result = 31 * result + sendIdleStrategy.hashCode()
         // aeronErrorFilter // cannot get the predictable hash code of a lambda

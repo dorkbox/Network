@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron.mediaDriver
+package dorkbox.network.handshake
 
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uri
@@ -121,8 +121,13 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
             val isRemoteIpv4 = remoteAddress is Inet4Address
 
             // create a new publication for the connection (since the handshake ALWAYS closes the current publication)
-            val publicationUri = uri("udp", sessionIdPub, reliable)
-                .endpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + portPub )
+
+            // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
+            // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
+            val publicationUri = uri(CommonContext.UDP_MEDIA, sessionIdPub, reliable)
+                .controlEndpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + portPub) // this is the port of the client subscription!
+                .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
             //  publication of any state to other threads and not be long running or re-entrant with the client.

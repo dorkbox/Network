@@ -20,7 +20,6 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
-import dorkbox.network.aeron.mediaDriver.ServerConnectionDriver
 import dorkbox.network.connection.*
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.exceptions.ServerHandshakeException

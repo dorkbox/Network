@@ -197,7 +197,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             logger.error { "DEBUG_CONNECTIONS is enabled. This should not happen in release!" }
         }
 
-        config.validate() // this happens more than once! (this is ok)
+        // this happens more than once! (this is ok)
+        config.validate()
 
         // serialization stuff
         @Suppress("UNCHECKED_CAST")

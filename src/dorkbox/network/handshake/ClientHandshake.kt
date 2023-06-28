@@ -16,8 +16,6 @@
 package dorkbox.network.handshake
 
 import dorkbox.network.Client
-import dorkbox.network.aeron.mediaDriver.ClientConnectionDriver
-import dorkbox.network.aeron.mediaDriver.ClientHandshakeDriver
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace

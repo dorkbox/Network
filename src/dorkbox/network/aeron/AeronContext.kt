@@ -117,6 +117,9 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
     }
 
     init {
+        // NOTE: if a DIFFERENT PROCESS is using the SAME driver location, THERE WILL BE POTENTIAL PROBLEMS!
+        //  ADDITIONALLY, the ONLY TIME we create a new aeron context is when it is the FIRST aeron context for a driver. Within the same
+        //  JVM, the aeron driver/context is SHARED.
         val context = create(config, aeronErrorHandler)
 
         // this happens EXACTLY once. Must be BEFORE the "isRunning" check!
@@ -128,8 +131,9 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
         val driverTimeout = context.driverTimeoutMs()
 
         // sometimes when starting up, if a PREVIOUS run was corrupted (during startup, for example)
-        // we ONLY do this during the initial startup check because it will delete the directory, and we don't
-        // always want to do this.
+        // we ONLY do this during the initial startup check because it will delete the directory, and we don't always want to do this.
+        //
+
         val isRunning = try {
             context.isDriverActive(driverTimeout) { }
         } catch (e: DriverTimeoutException) {
@@ -142,6 +146,7 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
             }
         }
 
+        // only do this if we KNOW we are not running!
         if (!isRunning) {
             // NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
             //   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
@@ -150,6 +155,10 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
 
             // if we are not CURRENTLY running, then we should ALSO delete it when we are done!
             context.dirDeleteOnShutdown()
+        } else {
+            // maybe it's a mistake?
+            require(config.forceAllowSharedAeronDriver) { "Aeron is currently running, and this is the first instance created by this JVM. " +
+                    "You must use `config.forceAllowSharedAeronDriver` to be able to re-use a shared aeron process at: $aeronDir" }
         }
 
         this.context = context

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package dorkbox.network.aeron.mediaDriver
+package dorkbox.network.handshake
 
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
