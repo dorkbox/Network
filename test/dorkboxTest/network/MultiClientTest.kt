@@ -58,7 +58,7 @@ class MultiClientTest : BaseTest() {
                 close()
             }
 
-            server.bind()
+            server.bind(2000)
         }
 
 
@@ -108,7 +108,7 @@ class MultiClientTest : BaseTest() {
         runBlocking {
             clients.forEach {
                 launch(differentThreadLaunchers) {
-                    it.connect(LOCALHOST, 30)
+                    it.connect(LOCALHOST, 2000, 30)
                 }
             }
         }

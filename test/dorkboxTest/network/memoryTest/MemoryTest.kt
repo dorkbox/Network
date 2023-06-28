@@ -28,8 +28,6 @@ import java.util.concurrent.atomic.*
 
 @Ignore
 class MemoryTest : BaseTest() {
-    private val counter = AtomicLong(0)
-
     init {
         // the logger cannot keep-up if it's on trace
         setLogLevel(Level.DEBUG)
@@ -38,6 +36,7 @@ class MemoryTest : BaseTest() {
     @Test
     fun runForeverIpcAsyncNormal() {
         runBlocking {
+            val counter = AtomicLong(0)
             val RMI_ID = 12251
 
             run {
@@ -69,7 +68,7 @@ class MemoryTest : BaseTest() {
                     }
                 }
 
-                client.connect()
+                client.connectIpc()
             }
 
             Thread.sleep(Long.MAX_VALUE)
@@ -78,6 +77,7 @@ class MemoryTest : BaseTest() {
 
     @Test
     fun runForeverIpcAsyncSuspend() {
+        val counter = AtomicLong(0)
         val RMI_ID = 12251
 
         runBlocking {
@@ -110,7 +110,7 @@ class MemoryTest : BaseTest() {
                     }
                 }
 
-                client.connect()
+                client.connectIpc()
             }
 
             Thread.sleep(Long.MAX_VALUE)
@@ -119,6 +119,7 @@ class MemoryTest : BaseTest() {
 
     @Test
     fun runForeverIpc() {
+        val counter = AtomicLong(0)
         runBlocking {
             run {
                 val configuration = serverConfig()
@@ -144,7 +145,7 @@ class MemoryTest : BaseTest() {
                     send(0L)
                 }
 
-                client.connect()
+                client.connectIpc()
             }
 
             Thread.sleep(Long.MAX_VALUE)
