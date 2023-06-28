@@ -82,7 +82,9 @@ internal class ServerHandshake<CONNECTION : Connection>(
         handshaker: Handshaker<CONNECTION>,
         handshakePublication: Publication,
         message: HandshakeMessage,
-        logger: KLogger): Boolean {
+        aeronLogInfo: String,
+        logger: KLogger
+    ): Boolean {
 
         // check to see if this sessionId is ALREADY in use by another connection!
         // this can happen if there are multiple connections from the SAME ip address (ie: localhost)
@@ -98,7 +100,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
                 try {
                     handshaker.writeMessage(handshakePublication,
-                                            existingConnection.toString(),
+                                            aeronLogInfo,
                                             HandshakeMessage.retry("Handshake already in progress for sessionID!"))
                 } catch (e: Error) {
                     listenerManager.notifyError(ServerHandshakeException("[$existingConnection] Handshake error", e))
@@ -126,7 +128,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
             // now tell the client we are done
             try {
-                handshaker.writeMessage(handshakePublication, existingConnection.toString(),
+                handshaker.writeMessage(handshakePublication,
+                                        aeronLogInfo,
                                         HandshakeMessage.doneToClient(message.connectKey))
 
                 listenerManager.notifyConnect(existingConnection)

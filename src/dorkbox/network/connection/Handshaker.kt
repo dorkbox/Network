@@ -98,7 +98,7 @@ internal class Handshaker<CONNECTION : Connection>(
                         // we should retry.
                         handshakeSendIdleStrategy.idle()
                         continue
-                    } else if (!publication.isClosed) {
+                    } else if (publication.isConnected) {
                         // more critical error sending the message. we shouldn't retry or anything.
                         // this exception will be a ClientException or a ServerException
                         val exception = newException(

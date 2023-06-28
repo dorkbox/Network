@@ -29,11 +29,7 @@ import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
-import dorkbox.network.exceptions.MessageDispatchException
-import dorkbox.network.exceptions.PingException
-import dorkbox.network.exceptions.RMIException
-import dorkbox.network.exceptions.ServerException
-import dorkbox.network.exceptions.StreamingException
+import dorkbox.network.exceptions.*
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.ResponseManager
@@ -46,12 +42,7 @@ import dorkbox.network.serialization.SettingsStore
 import io.aeron.Publication
 import io.aeron.logbuffer.Header
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.DirectBuffer
@@ -633,8 +624,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
 
     /**
-     * reads the message from the aeron buffer and figures out how to process it
+     * reads the message from the aeron buffer and figures out how to process it.
      *
+     * This can be overridden should you want to customize exactly how data is received.
      *
      * @param buffer The buffer
      * @param offset The offset from the start of the buffer
@@ -666,6 +658,8 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      * Messages larger than this should chunked using an application level chunking protocol. Chunking has better recovery
      * properties from failure and streams with mechanical sympathy.
      *
+     * This can be overridden if you want to customize exactly how data is sent on the network
+     *
      * @param publication the connection specific publication
      * @param internalBuffer the internal buffer that will be copied to the Aeron network driver
      * @param offset the offset in the internal buffer at which to start copying bytes
@@ -688,6 +682,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         var result: Long
         while (true) {
             // we use exclusive publications, and they are not thread safe/concurrent!
+
+            // note: we do not use the tryClaim() technique because the final message size is unknown. If we knew the message size, and had
+            //  it fixed in size (ie: if we were sending static-sized frames of data), then we could be significantly faster/optimized
             result = publication.offer(internalBuffer, offset, objectSize)
             if (result >= 0) {
                 // success!
@@ -715,7 +712,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     // we should retry.
                     sendIdleStrategy.idle()
                     continue
-                } else if (!publication.isClosed) {
+                } else if (publication.isConnected) {
                     // more critical error sending the message. we shouldn't retry or anything.
                     val errorMessage = "[${publication.sessionId()}] Error sending message. (Connection in non-connected state longer than linger timeout. ${errorCodeName(result)})"
 

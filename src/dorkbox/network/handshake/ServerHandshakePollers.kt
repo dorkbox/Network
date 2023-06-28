@@ -29,7 +29,6 @@ import dorkbox.network.connection.Connection
 import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EventDispatcher
 import dorkbox.network.connection.IpInfo
-import dorkbox.network.exceptions.ClientTimedOutException
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
@@ -40,7 +39,6 @@ import io.aeron.logbuffer.Header
 import mu.KLogger
 import org.agrona.DirectBuffer
 import java.net.Inet4Address
-import java.util.concurrent.*
 
 internal object ServerHandshakePollers {
     fun disabled(serverInfo: String): AeronPoller {
