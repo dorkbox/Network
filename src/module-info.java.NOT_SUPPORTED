@@ -25,12 +25,12 @@ module dorkbox.network {
     requires transitive dorkbox.os;
 
     // requires transitive expiringmap;
-    requires net.jodah.typetools;
-    requires com.esotericsoftware.kryo;
-    requires com.esotericsoftware.reflectasm;
-    requires org.objenesis;
+    requires transitive net.jodah.typetools;
+    requires transitive com.esotericsoftware.kryo;
+    requires transitive com.esotericsoftware.reflectasm;
+    requires transitive org.objenesis;
 
-    requires io.aeron.all;
+    requires transitive io.aeron.all;
     // requires io.aeron.driver;
     // requires io.aeron.client;
     // requires org.agrona.core;
