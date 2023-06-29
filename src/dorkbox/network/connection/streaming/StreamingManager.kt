@@ -18,31 +18,39 @@
 
 package dorkbox.network.connection.streaming
 
-import com.esotericsoftware.kryo.KryoException
+import com.esotericsoftware.kryo.io.Input
 import dorkbox.bytes.OptimizeUtilsByteBuf
 import dorkbox.collections.LockFreeHashMap
+import dorkbox.network.Configuration
 import dorkbox.network.connection.Connection
 import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
+import dorkbox.network.exceptions.StreamingException
 import dorkbox.network.serialization.AeronInput
 import dorkbox.network.serialization.AeronOutput
 import dorkbox.network.serialization.KryoExtra
+import dorkbox.os.OS
+import dorkbox.util.Sys
 import io.aeron.Publication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import mu.KLogger
+import org.agrona.ExpandableDirectByteBuffer
 import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
+import java.io.FileInputStream
 
 internal class StreamingManager<CONNECTION : Connection>(
-    private val logger: KLogger,
-    private val messageDispatch: CoroutineScope
+    private val logger: KLogger, private val messageDispatch: CoroutineScope, val config: Configuration
 ) {
-    private val streamingDataTarget = LockFreeHashMap<Long, StreamingControl>()
-    private val streamingDataInMemory = LockFreeHashMap<Long, AeronOutput>()
 
     companion object {
+        private const val KILOBYTE = 1024
+        private const val MEGABYTE = 1024 * KILOBYTE
+        private const val GIGABYTE = 1024 * MEGABYTE
+        private const val TERABYTE = 1024L * GIGABYTE
+
         @Suppress("UNUSED_CHANGED_VALUE")
         private fun writeVarInt(internalBuffer: MutableDirectBuffer, position: Int, value: Int, optimizePositive: Boolean): Int {
             var p = position
@@ -83,7 +91,19 @@ internal class StreamingManager<CONNECTION : Connection>(
     }
 
 
+    private val streamingDataTarget = LockFreeHashMap<Long, StreamingControl>()
+    private val streamingDataInMemory = LockFreeHashMap<Long, StreamingWriter>()
+
+
     /**
+     * What is the max stream size that can exist in memory when deciding if data chunks are in memory or on temo-file on disk
+     */
+    private val maxStreamSizeInMemoryInBytes = config.maxStreamSizeInMemoryMB * MEGABYTE
+
+
+    /**
+     * NOTE: MUST BE ON THE AERON THREAD!
+     *
     * Reassemble/figure out the internal message pieces. Processed always on the same thread
     */
     fun processControlMessage(
@@ -98,126 +118,120 @@ internal class StreamingManager<CONNECTION : Connection>(
 
         when (message.state) {
             StreamingState.START -> {
-                streamingDataTarget[streamId] = message
+                // message.totalSize > maxInMemory, then write to a temp file INSTEAD
+                if (message.totalSize > maxStreamSizeInMemoryInBytes) {
+                    val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                    val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
 
-                if (!message.isFile) {
-                    streamingDataInMemory[streamId] = AeronOutput()
+                    val prettySize = Sys.getSizePretty(message.totalSize)
+
+                    endPoint.logger.info { "Saving $prettySize of streaming data [${streamId}] to: $tempFileLocation" }
+                    streamingDataInMemory[streamId] = FileWriter(tempFileLocation)
                 } else {
-                    // write the file to disk
-
+                    endPoint.logger.info { "Saving streaming data [${streamId}] in memory" }
+                    streamingDataInMemory[streamId] = AeronWriter()
                 }
+
+                // this must be last
+                streamingDataTarget[streamId] = message
             }
             StreamingState.FINISHED -> {
+                // NOTE: cannot be on a coroutine before kryo usage!
+
                 // get the data out and send messages!
-                if (!message.isFile) {
-                    val output = streamingDataInMemory.remove(streamId)
-                    if (output != null) {
-                        val streamedMessage: Any?
+                val output = streamingDataInMemory.remove(streamId)
+                val input = when (output) {
+                    is AeronWriter -> {
+                        AeronInput(output.internalBuffer)
+                    }
+                    is FileWriter -> {
+                        output.flush()
+                        output.close()
 
-                        try {
-                            val input = AeronInput(output.internalBuffer)
-                            streamedMessage = kryo.read(input)
-                        } catch (e: Exception) {
-                            if (e is KryoException) {
-                                // YIKES. this isn't good
-                                // print the list of OUR registered message types, emit them (along with the "error" class index)
-                                // send a message to the remote end, that we had an error for class XYZ, and have it emit ITS message types
-//                                endPoint.serialization.logKryoMessages()
-//
-//
+                        val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                        val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
 
-//                                val failSent = endPoint.writeUnsafe(tempWriteKryo, failMessage, publication, sendIdleStrategy, connection)
-//                                if (!failSent) {
-//                                    // something SUPER wrong!
-//                                    // more critical error sending the message. we shouldn't retry or anything.
-//                                    val errorMessage = "[${publication.sessionId()}] Abnormal failure while streaming content."
-//
-//                                    // either client or server. No other choices. We create an exception, because it's more useful!
-//                                    val exception = endPoint.newException(errorMessage)
-//
-//                                    // +2 because we do not want to see the stack for the abstract `newException`
-//                                    // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-//                                    // where we see who is calling "send()"
-//                                    ListenerManager.cleanStackTrace(exception, 5)
-//                                    throw exception
-//                                } else {
-//                                    // send it up!
-//                                    throw e
-//                                }
+                        val fileInputStream = FileInputStream(tempFileLocation)
+                        Input(fileInputStream)
+                    }
+                    else -> {
+                        null
+                    }
+                }
 
-
-                            }
-
-                            // something SUPER wrong!
-                            // more critical error sending the message. we shouldn't retry or anything.
-                            val errorMessage = "Error serializing message from received streaming content, stream $streamId"
-
-                            // either client or server. No other choices. We create an exception, because it's more useful!
-                            val exception = endPoint.newException(errorMessage, e)
-
-                            // +2 because we do not want to see the stack for the abstract `newException`
-                            // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-                            // where we see who is calling "send()"
-                            exception.cleanStackTrace(2)
-                            throw exception
-                        }
-
-                        if (streamedMessage != null) {
-                            // NOTE: This MUST be on a new co-routine
-                            messageDispatch.launch {
-                                val listenerManager = endPoint.listenerManager
-
-                                try {
-                                    var hasListeners = listenerManager.notifyOnMessage(connection, streamedMessage)
-
-                                    // each connection registers, and is polled INDEPENDENTLY for messages.
-                                    hasListeners = hasListeners or connection.notifyOnMessage(streamedMessage)
-
-                                    if (!hasListeners) {
-                                        logger.error("No streamed message callbacks found for ${streamedMessage::class.java.name}")
-                                    }
-                                } catch (e: Exception) {
-                                    val newException = StreamingException("Error processing message ${streamedMessage::class.java.name}", e)
-                                    listenerManager.notifyError(connection, newException)
-                                }
-                            }
-                        } else {
-                            // something SUPER wrong!
-                            // more critical error sending the message. we shouldn't retry or anything.
-                            val errorMessage = "Error while processing streaming content, stream $streamId was null."
-
-                            // either client or server. No other choices. We create an exception, because it's more useful!
-                            val exception = endPoint.newException(errorMessage)
-
-                            // +2 because we do not want to see the stack for the abstract `newException`
-                            // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-                            // where we see who is calling "send()"
-                            exception.cleanStackTrace(2)
-                            throw exception
-                        }
-                    } else {
+                val streamedMessage = if (input != null) {
+                    try {
+                        kryo.read(input)
+                    } catch (e: Exception) {
                         // something SUPER wrong!
                         // more critical error sending the message. we shouldn't retry or anything.
-                        val errorMessage = "Error while receiving streaming content, stream $streamId not available."
+                        val errorMessage = "Error deserializing message from received streaming content, stream $streamId"
 
                         // either client or server. No other choices. We create an exception, because it's more useful!
-                        val exception = endPoint.newException(errorMessage)
+                        val exception = endPoint.newException(errorMessage, e)
 
                         // +2 because we do not want to see the stack for the abstract `newException`
-                        // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
-                        // where we see who is calling "send()"
                         exception.cleanStackTrace(2)
                         throw exception
+                    } finally {
+                        if (output is FileWriter) {
+                            val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                            val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
+                            tempFileLocation.delete()
+                        }
                     }
                 } else {
-                    // we are a file, so process accordingly
-                    println("processing file")
-                    // we should save it WHERE exactly?
+                   null
+                }
+
+                if (streamedMessage == null) {
+                    if (output is FileWriter) {
+                        val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                        val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
+                        tempFileLocation.delete()
+                    }
+
+                    // something SUPER wrong!
+                    // more critical error sending the message. we shouldn't retry or anything.
+                    val errorMessage = "Error while processing streaming content, stream $streamId was null."
+
+                    // either client or server. No other choices. We create an exception, because it's more useful!
+                    val exception = endPoint.newException(errorMessage)
+
+                    // +2 because we do not want to see the stack for the abstract `newException`
+                    // where we see who is calling "send()"
+                    exception.cleanStackTrace(2)
+                    throw exception
+                }
 
 
+                // NOTE: This MUST be on a new co-routine
+                messageDispatch.launch {
+                    val listenerManager = endPoint.listenerManager
+
+                    try {
+                        var hasListeners = listenerManager.notifyOnMessage(connection, streamedMessage)
+
+                        // each connection registers, and is polled INDEPENDENTLY for messages.
+                        hasListeners = hasListeners or connection.notifyOnMessage(streamedMessage)
+
+                        if (!hasListeners) {
+                            logger.error("No streamed message callbacks found for ${streamedMessage::class.java.name}")
+                        }
+                    } catch (e: Exception) {
+                        val newException = StreamingException("Error processing message ${streamedMessage::class.java.name}", e)
+                        listenerManager.notifyError(connection, newException)
+                    }
                 }
             }
             StreamingState.FAILED -> {
+                val output = streamingDataInMemory.remove(streamId)
+                if (output is FileWriter) {
+                    val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                    val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
+                    tempFileLocation.delete()
+                }
+
                 // clear all state
                 // something SUPER wrong!
                 // more critical error sending the message. we shouldn't retry or anything.
@@ -233,6 +247,13 @@ internal class StreamingManager<CONNECTION : Connection>(
                 throw exception
             }
             StreamingState.UNKNOWN ->  {
+                val output = streamingDataInMemory.remove(streamId)
+                if (output is FileWriter) {
+                    val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
+                    val tempFileLocation = OS.TEMP_DIR.resolve(fileName)
+                    tempFileLocation.delete()
+                }
+
                 // something SUPER wrong!
                 // more critical error sending the message. we shouldn't retry or anything.
                 val errorMessage = "Unknown failure while receiving streaming content for stream $streamId"
@@ -263,9 +284,7 @@ internal class StreamingManager<CONNECTION : Connection>(
 
         val controlMessage = streamingDataTarget[streamId]
         if (controlMessage != null) {
-            synchronized(streamingDataInMemory) {
-                streamingDataInMemory.getOrPut(streamId) { AeronOutput() }.writeBytes(message.payload!!)
-            }
+            streamingDataInMemory[streamId]!!.writeBytes(message.payload!!)
         } else {
             // something SUPER wrong!
             // more critical error sending the message. we shouldn't retry or anything.

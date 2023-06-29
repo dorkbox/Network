@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,10 +25,6 @@ class StreamingControlSerializer: Serializer<StreamingControl>() {
         output.writeByte(data.state.ordinal)
         output.writeVarInt(data.streamId, true)
         output.writeVarLong(data.totalSize, true)
-        output.writeBoolean(data.isFile)
-        if (data.isFile) {
-            output.writeString(data.fileName)
-        }
     }
 
     override fun read(kryo: Kryo, input: Input, type: Class<out StreamingControl>): StreamingControl {
@@ -36,14 +32,8 @@ class StreamingControlSerializer: Serializer<StreamingControl>() {
         val state = StreamingState.values().first { it.ordinal == stateOrdinal }
         val streamId = input.readVarInt(true)
         val totalSize = input.readVarLong(true)
-        val isFile = input.readBoolean()
-        val fileName = if (isFile) {
-            input.readString()
-        } else {
-            ""
-        }
 
-        return StreamingControl(state, streamId, totalSize, isFile, fileName)
+        return StreamingControl(state, streamId, totalSize)
     }
 }
 

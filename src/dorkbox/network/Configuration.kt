@@ -451,8 +451,10 @@ abstract class Configuration protected constructor() {
     /**
      * What is the max stream size that can exist in memory when deciding if data chunks are in memory or on temo-file on disk.
      * Data is streamed when it is too large to send in a single aeron message
+     *
+     * Must be >= 16 and <= 256
      */
-    var maxStreamSizeInMemoryMB: Int = 5
+    var maxStreamSizeInMemoryMB: Int = 16
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -726,6 +728,9 @@ abstract class Configuration protected constructor() {
                 require(IPv6.isAvailable) { "IPC/IPv4 are disabled and IPv6 is enabled, but there is no IPv6 interface available!" }
             }
         }
+
+        require(maxStreamSizeInMemoryMB >= 16) { "configuration maxStreamSizeInMemoryMB must be >= 16" }
+        require(maxStreamSizeInMemoryMB <= 256) { "configuration maxStreamSizeInMemoryMB must be <= 256" } // 256 is arbitrary
 
         require(networkMtuSize > 0) { "configuration networkMtuSize must be > 0" }
         require(networkMtuSize < 9 * 1024)  { "configuration networkMtuSize must be < ${9 * 1024}" }

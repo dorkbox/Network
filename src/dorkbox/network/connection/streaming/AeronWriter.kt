@@ -16,7 +16,6 @@
 
 package dorkbox.network.connection.streaming
 
-data class StreamingControl(val state: StreamingState,
-                            val streamId: Int,
-                            val totalSize: Long = 0L
-                            ): StreamingMessage
+import dorkbox.network.serialization.AeronOutput
+
+class AeronWriter: StreamingWriter, AeronOutput()

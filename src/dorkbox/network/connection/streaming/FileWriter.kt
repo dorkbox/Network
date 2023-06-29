@@ -16,7 +16,11 @@
 
 package dorkbox.network.connection.streaming
 
-data class StreamingControl(val state: StreamingState,
-                            val streamId: Int,
-                            val totalSize: Long = 0L
-                            ): StreamingMessage
+import java.io.File
+import java.io.FileOutputStream
+
+class FileWriter(file: File) : StreamingWriter, FileOutputStream(file) {
+    override fun writeBytes(bytes: ByteArray) {
+        write(bytes)
+    }
+}
