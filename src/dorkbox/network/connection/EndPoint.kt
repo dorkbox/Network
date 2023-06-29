@@ -157,6 +157,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      */
     internal val crypto: CryptoManagement
 
+
+    private val hook: Thread
+
+
     // manage the startup state of the endpoint. True if the endpoint is running
     internal val endpointIsRunning = atomic(false)
 
@@ -264,6 +268,14 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         handshaker = Handshaker(logger, config, serialization, listenerManager, aeronDriver) { errorMessage, exception ->
             return@Handshaker newException(errorMessage, exception)
         }
+
+        hook = Thread {
+            runBlocking {
+                closeSuspending(true, true)
+            }
+        }
+
+        Runtime.getRuntime().addShutdownHook(hook)
     }
 
     internal fun isServer(function: Server<CONNECTION>.() -> Unit) {
@@ -889,11 +901,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @param closeEverything unless explicitly called, this is only false when a connection is closed in the client.
      */
-    internal suspend fun closeSuspending(closeEverything: Boolean) {
+    internal suspend fun closeSuspending(closeEverything: Boolean, initiatedByShutdown: Boolean = false) {
         // 1) endpoints can call close()
         // 2) client can close the endpoint if the connection is D/C from aeron (and the endpoint was not closed manually)
         val shutdownPreviouslyStarted = shutdownInProgress.getAndSet(true)
-        if (shutdownPreviouslyStarted && !closeEverything) {
+        if (shutdownPreviouslyStarted && closeEverything) {
             // this is only called when the client network event poller shuts down
             // if we have clientConnectionClosed, then run that logic (because it doesn't run on the client when the connection is closed remotely)
 
@@ -907,6 +919,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
             // don't do anything more, since we've already shutdown!
             return
+        }
+
+        if (!shutdownPreviouslyStarted && initiatedByShutdown) {
+            Runtime.getRuntime().removeShutdownHook(hook)
         }
 
         EventDispatcher.CLOSE.launch {
