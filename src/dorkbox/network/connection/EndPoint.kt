@@ -30,6 +30,7 @@ import dorkbox.network.connection.streaming.StreamingControl
 import dorkbox.network.connection.streaming.StreamingData
 import dorkbox.network.connection.streaming.StreamingManager
 import dorkbox.network.exceptions.*
+import dorkbox.network.handshake.Handshaker
 import dorkbox.network.ping.Ping
 import dorkbox.network.ping.PingManager
 import dorkbox.network.rmi.ResponseManager
@@ -653,6 +654,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
             processMessage(message, connection)
         } catch (e: Exception) {
+            // we must READ all bytes! If we don't the image won't go away. Kyro eagerly aborted the read!
+            for (i in 0..length) {
+                buffer.getByte(offset+i)
+            }
+
             listenerManager.notifyError(connection, newException("Error de-serializing message", e))
         }
     }

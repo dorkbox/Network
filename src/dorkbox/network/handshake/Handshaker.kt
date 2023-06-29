@@ -14,16 +14,18 @@
  * limitations under the License.
  */
 
-package dorkbox.network.connection
+package dorkbox.network.handshake
 
 import dorkbox.network.Configuration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.CoroutineIdleStrategy
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.EndPoint
+import dorkbox.network.connection.ListenerManager
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ServerException
-import dorkbox.network.handshake.HandshakeMessage
 import dorkbox.network.serialization.KryoExtra
 import dorkbox.network.serialization.Serialization
 import io.aeron.Publication
@@ -160,26 +162,16 @@ internal class Handshaker<CONNECTION : Connection>(
     /**
      * NOTE: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
      *
+     * THROWS EXCEPTION IF INVALID READS!
+     *
      * @param buffer The buffer
      * @param offset The offset from the start of the buffer
      * @param length The number of bytes to extract
      *
      * @return the message
      */
-    internal fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, aeronLogInfo: String): Any? {
-        return try {
-            // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
-            val message = handshakeReadKryo.read(buffer, offset, length) as HandshakeMessage
-
-            logger.trace { "[$aeronLogInfo] (${message.connectKey}) received HS: $message" }
-
-            message
-        } catch (e: Exception) {
-            // The handshake sessionId IS NOT globally unique
-            logger.error(e) { "[$aeronLogInfo] Error de-serializing handshake message!!" }
-            listenerManager.notifyError(e)
-            null
-        }
+    internal fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, logInfo: String): Any? {
+        // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
+       return handshakeReadKryo.read(buffer, offset, length)
     }
-
 }

@@ -69,13 +69,28 @@ internal object ServerHandshakePollers {
             val streamId = header.streamId()
             val logInfo = "$sessionId/$streamId : IPC" // Server is the "source", client mirrors the server
 
-            val message = handshaker.readMessage(buffer, offset, length, logInfo)
+            // ugh, this is verbose -- but necessary
+            val message = try {
+                val msg = handshaker.readMessage(buffer, offset, length, logInfo)
 
-            // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-            if (message !is HandshakeMessage) {
-                server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Invalid connection request"))
-                return
-            }
+                // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                if (msg !is HandshakeMessage) {
+                    throw ServerHandshakeException("[$logInfo] Connection not allowed! unrecognized message: $msg")
+                } else {
+                    logger.trace { "[$logInfo] (${msg.connectKey}) received HS: $msg" }
+                }
+                msg
+            } catch (e: Exception) {
+                // we must READ all bytes! If we don't the image won't go away. Kyro eagerly aborted the read!
+                for (i in 0..length) {
+                    buffer.getByte(offset+i)
+                }
+
+                server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error de-serializing handshake message!!", e))
+                null
+            } ?: return
+
+
 
             // we have read all the data, now dispatch it.
             EventDispatcher.HANDSHAKE.launch {
@@ -187,13 +202,29 @@ internal object ServerHandshakePollers {
 
             val logInfo = "$sessionId/$streamId:$clientAddressString"
 
-            val message = handshaker.readMessage(buffer, offset, length, logInfo)
 
-            // VALIDATE:: a Registration object is the only acceptable message during the connection phase
-            if (message !is HandshakeMessage) {
-                server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Connection not allowed! Invalid connection request"))
-                return
-            }
+            // ugh, this is verbose -- but necessary
+            val message = try {
+                val msg = handshaker.readMessage(buffer, offset, length, logInfo)
+
+                // VALIDATE:: a Registration object is the only acceptable message during the connection phase
+                if (msg !is HandshakeMessage) {
+                    throw ServerHandshakeException("[$logInfo] Connection not allowed! unrecognized message: $msg")
+                } else {
+                    logger.trace { "[$logInfo] (${msg.connectKey}) received HS: $msg" }
+                }
+                msg
+            } catch (e: Exception) {
+                // we must READ all bytes! If we don't the image won't go away. Kyro eagerly aborted the read!
+                for (i in 0..length) {
+                    buffer.getByte(offset+i)
+                }
+
+                server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error de-serializing handshake message!!", e))
+                null
+            } ?: return
+
+
 
             EventDispatcher.HANDSHAKE.launch {
                 // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
