@@ -901,11 +901,15 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @param closeEverything unless explicitly called, this is only false when a connection is closed in the client.
      */
-    internal suspend fun closeSuspending(closeEverything: Boolean, initiatedByShutdown: Boolean = false) {
+    internal suspend fun closeSuspending(
+        closeEverything: Boolean,
+        initiatedByClientClose: Boolean = false,
+        initiatedByShutdown: Boolean = false)
+    {
         // 1) endpoints can call close()
         // 2) client can close the endpoint if the connection is D/C from aeron (and the endpoint was not closed manually)
         val shutdownPreviouslyStarted = shutdownInProgress.getAndSet(true)
-        if (shutdownPreviouslyStarted && closeEverything) {
+        if (closeEverything && shutdownPreviouslyStarted) {
             // this is only called when the client network event poller shuts down
             // if we have clientConnectionClosed, then run that logic (because it doesn't run on the client when the connection is closed remotely)
 
@@ -922,7 +926,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         }
 
         if (!shutdownPreviouslyStarted && initiatedByShutdown) {
-            Runtime.getRuntime().removeShutdownHook(hook)
+            try {
+                Runtime.getRuntime().removeShutdownHook(hook)
+            } catch (ignored: Exception) {
+            }
         }
 
         EventDispatcher.CLOSE.launch {
@@ -937,7 +944,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             }
 
             // don't do these things if we are "closed" from a client connection disconnect
-            if (closeEverything && !shutdownPreviouslyStarted) {
+            if (closeEverything && !initiatedByClientClose) {
                 // THIS WILL SHUT DOWN THE EVENT POLLER IMMEDIATELY! BUT IN AN ASYNC MANNER!
                 shutdownEventPoller = true
                 // if we close the poller AND listener manager too quickly, events will not get published
