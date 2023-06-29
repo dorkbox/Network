@@ -133,7 +133,7 @@ open class Server<CONNECTION : Connection>(
             val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
 
             val logger = KotlinLogging.logger(Server::class.java.simpleName)
-            AeronDriver.ensureStopped(configuration, logger, timeout)
+            AeronDriver.ensureStopped(configuration.copy(), logger, timeout)
         }
 
         /**
@@ -145,7 +145,7 @@ open class Server<CONNECTION : Connection>(
          */
         fun isRunning(configuration: ServerConfiguration): Boolean = runBlocking {
             val logger = KotlinLogging.logger(Server::class.java.simpleName)
-            AeronDriver.isRunning(configuration, logger)
+            AeronDriver.isRunning(configuration.copy(), logger)
         }
 
         init {

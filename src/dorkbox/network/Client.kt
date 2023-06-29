@@ -132,7 +132,7 @@ open class Client<CONNECTION : Connection>(
             val timeout = TimeUnit.SECONDS.toMillis(configuration.connectionCloseTimeoutInSeconds.toLong() * 2)
 
             val logger = KotlinLogging.logger(Client::class.java.simpleName)
-            AeronDriver.ensureStopped(configuration, logger, timeout)
+            AeronDriver.ensureStopped(configuration.copy(), logger, timeout)
         }
 
         /**
@@ -144,7 +144,7 @@ open class Client<CONNECTION : Connection>(
          */
         fun isRunning(configuration: Configuration): Boolean = runBlocking {
             val logger = KotlinLogging.logger(Client::class.java.simpleName)
-            AeronDriver.isRunning(configuration, logger)
+            AeronDriver.isRunning(configuration.copy(), logger)
         }
 
         init {
@@ -567,9 +567,8 @@ open class Client<CONNECTION : Connection>(
                     logger = logger
                 )
 
-                // Note: the pub/sub info is from the perspective of the SERVER
                 val pubSub = handshakeConnection.pubSub
-                val logInfo = pubSub.reverseForClient().getLogInfo(logger.isDebugEnabled)
+                val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
 
                 if (logger.isDebugEnabled) {
                     logger.debug { "Creating new handshake to $logInfo" }
@@ -791,7 +790,10 @@ open class Client<CONNECTION : Connection>(
 
             // we only need to run shutdown methods if there was a network outage or D/C
             if (!shutdownInProgress.value) {
-                this@Client.closeSuspending(false)
+                this@Client.closeSuspending(
+                    closeEverything = false,
+                    initiatedByClientClose = true,
+                    initiatedByShutdown = false)
             }
 
             // we can now call connect again

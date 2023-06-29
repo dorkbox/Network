@@ -139,8 +139,6 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
                 it.isRunning()
             }
 
-            // hacky, but necessary for multiple checks
-            configuration.contextDefined = false
             return running
         }
 
