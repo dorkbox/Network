@@ -210,11 +210,11 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
 
         // the initial kryo created for serialization is reused as the read kryo
-        if (type == Server::class.java) {
-            readKryo = serialization.initKryo(kryo)
+        readKryo = if (type == Server::class.java) {
+            serialization.initKryo(kryo)
         } else {
             // these will be reassigned by the client Connect method!
-            readKryo = kryo
+            kryo
         }
 
         // we have to be able to specify the property store
