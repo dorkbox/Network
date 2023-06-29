@@ -168,11 +168,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                         val errorMessage = "Error deserializing message from received streaming content, stream $streamId"
 
                         // either client or server. No other choices. We create an exception, because it's more useful!
-                        val exception = endPoint.newException(errorMessage, e)
-
-                        // +2 because we do not want to see the stack for the abstract `newException`
-                        exception.cleanStackTrace(2)
-                        throw exception
+                        throw endPoint.newException(errorMessage, e)
                     } finally {
                         if (output is FileWriter) {
                             val fileName = "${config.applicationId}_${streamId}_${connection.id}.tmp"
@@ -196,12 +192,7 @@ internal class StreamingManager<CONNECTION : Connection>(
                     val errorMessage = "Error while processing streaming content, stream $streamId was null."
 
                     // either client or server. No other choices. We create an exception, because it's more useful!
-                    val exception = endPoint.newException(errorMessage)
-
-                    // +2 because we do not want to see the stack for the abstract `newException`
-                    // where we see who is calling "send()"
-                    exception.cleanStackTrace(2)
-                    throw exception
+                    throw endPoint.newException(errorMessage)
                 }
 
 
@@ -240,10 +231,9 @@ internal class StreamingManager<CONNECTION : Connection>(
                 // either client or server. No other choices. We create an exception, because it's more useful!
                 val exception = endPoint.newException(errorMessage)
 
-                // +2 because we do not want to see the stack for the abstract `newException`
                 // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                 // where we see who is calling "send()"
-                exception.cleanStackTrace(2)
+                exception.cleanStackTrace(3)
                 throw exception
             }
             StreamingState.UNKNOWN ->  {
@@ -261,10 +251,9 @@ internal class StreamingManager<CONNECTION : Connection>(
                 // either client or server. No other choices. We create an exception, because it's more useful!
                 val exception = endPoint.newException(errorMessage)
 
-                // +2 because we do not want to see the stack for the abstract `newException`
                 // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                 // where we see who is calling "send()"
-                exception.cleanStackTrace(2)
+                exception.cleanStackTrace(3)
                 throw exception
             }
         }
@@ -293,10 +282,9 @@ internal class StreamingManager<CONNECTION : Connection>(
             // either client or server. No other choices. We create an exception, because it's more useful!
             val exception = endPoint.newException(errorMessage)
 
-            // +2 because we do not want to see the stack for the abstract `newException`
             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"
-            exception.cleanStackTrace(5)
+            exception.cleanStackTrace(3)
             throw exception
         }
     }
@@ -321,10 +309,9 @@ internal class StreamingManager<CONNECTION : Connection>(
             // either client or server. No other choices. We create an exception, because it's more useful!
             val exception = endPoint.newException(errorMessage)
 
-            // +2 because we do not want to see the stack for the abstract `newException`
             // +4 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"
-            exception.cleanStackTrace(6)
+            exception.cleanStackTrace(4)
             throw exception
         } else {
             // send it up!
@@ -378,10 +365,9 @@ internal class StreamingManager<CONNECTION : Connection>(
             // either client or server. No other choices. We create an exception, because it's more useful!
             val exception = endPoint.newException(errorMessage)
 
-            // +2 because we do not want to see the stack for the abstract `newException`
             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"
-            exception.cleanStackTrace(5)
+            exception.cleanStackTrace(3)
             throw exception
         }
 
@@ -444,10 +430,9 @@ internal class StreamingManager<CONNECTION : Connection>(
                 // either client or server. No other choices. We create an exception, because it's more useful!
                 val exception = endPoint.newException(errorMessage)
 
-                // +2 because we do not want to see the stack for the abstract `newException`
                 // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                 // where we see who is calling "send()"
-                exception.cleanStackTrace(5)
+                exception.cleanStackTrace(3)
                 throw exception
             }
         } catch (e: Exception) {
@@ -507,10 +492,9 @@ internal class StreamingManager<CONNECTION : Connection>(
                     // either client or server. No other choices. We create an exception, because it's more useful!
                     val exception = endPoint.newException(errorMessage)
 
-                    // +2 because we do not want to see the stack for the abstract `newException`
                     // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                     // where we see who is calling "send()"
-                    exception.cleanStackTrace(5)
+                    exception.cleanStackTrace(3)
                     throw exception
                 } else {
                     // send it up!

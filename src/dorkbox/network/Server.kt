@@ -23,6 +23,7 @@ import dorkbox.network.connection.ConnectionParams
 import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.IpInfo
 import dorkbox.network.connection.IpInfo.Companion.IpListenType
+import dorkbox.network.connection.ListenerManager.Companion.cleanStackTrace
 import dorkbox.network.connectionType.ConnectionRule
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.handshake.ServerHandshake
@@ -180,7 +181,10 @@ open class Server<CONNECTION : Connection>(
         private set
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
-        return ServerException(message, cause)
+        // +2 because we do not want to see the stack for the abstract `newException`
+        val serverException = ServerException(message, cause)
+        serverException.cleanStackTrace(2)
+        return serverException
     }
 
     init {

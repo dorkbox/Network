@@ -734,10 +734,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                     // either client or server. No other choices. We create an exception, because it's more useful!
                     val exception = newException(errorMessage)
 
-                    // +2 because we do not want to see the stack for the abstract `newException`
                     // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
                     // where we see who is calling "send()"
-                    exception.cleanStackTrace(5)
+                    exception.cleanStackTrace(3)
                     return false
                 } else {
                     // publication was actually closed, so no bother throwing an error
@@ -777,10 +776,9 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             // either client or server. No other choices. We create an exception, because it's more useful!
             val exception = newException(errorMessage)
 
-            // +2 because we do not want to see the stack for the abstract `newException`
             // +3 more because we do not need to see the "internals" for sending messages. The important part of the stack trace is
             // where we see who is calling "send()"
-            exception.cleanStackTrace(5)
+            exception.cleanStackTrace(3)
             return false
         }
     }

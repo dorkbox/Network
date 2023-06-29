@@ -206,7 +206,10 @@ open class Client<CONNECTION : Connection>(
     private var connection0: CONNECTION? = null
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
-        return ClientException(message, cause)
+        // +2 because we do not want to see the stack for the abstract `newException`
+        val clientException = ClientException(message, cause)
+        clientException.cleanStackTrace(2)
+        return clientException
     }
 
     /**
