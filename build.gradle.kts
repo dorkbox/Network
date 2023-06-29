@@ -175,7 +175,7 @@ dependencies {
     api("com.dorkbox:Collections:1.6")
     api("com.dorkbox:MinLog:2.5")
     api("com.dorkbox:NetworkDNS:2.9")
-    api("com.dorkbox:NetworkUtils:2.21")
+    api("com.dorkbox:NetworkUtils:2.22")
     api("com.dorkbox:OS:1.6")
     api("com.dorkbox:Serializers:2.9")
     api("com.dorkbox:Storage:1.5")
