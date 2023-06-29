@@ -534,7 +534,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             return true
         }
 
-        val timeoutInNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMS)
+        val timeoutInNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMS) + lingerNs()
         var didLog = false
 
         val closeTimeoutTime = System.nanoTime()
