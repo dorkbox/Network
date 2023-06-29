@@ -37,7 +37,7 @@ import java.io.OutputStream
  *
  * Modified from KRYO to use ByteBuf.
  */
-class AeronOutput : Output {
+open class AeronOutput : Output {
 
     /** Returns the buffer. The bytes between zero and [.position] are the data that has been written.  */
     // NOTE: capacity IS NOT USED!

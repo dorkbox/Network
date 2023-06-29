@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 dorkbox, llc
+ * Copyright 2023 dorkbox, llc
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,23 @@ object Extras {
 /////  assign 'Extras'
 ///////////////////////////////
 GradleUtils.load("$projectDir/../../gradle.properties", Extras)
-GradleUtils.defaults()
+//GradleUtils.defaults()
+GradleUtils.addMavenRepositories()
+GradleUtils.fixMavenPaths()
+GradleUtils.defaultResolutionStrategy()
+GradleUtils.defaultCompileOptions()
+GradleUtils.fixIntellijPaths("$buildDir/classes-intellij")
+
+
+//val kotlin = project.extensions.getByType(org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension::class.java).sourceSets.getByName("main").kotlin
+//kotlin.apply {
+//    setSrcDirs(project.files("src"))
+//    include("**/*.kt") // want to include kotlin files for the source. 'setSrcDirs' resets includes...
+//}
+
+
+
+
 // because of the api changes for stacktrace stuff, it's best for us to ONLY support 11+
 GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
     // see: https://kotlinlang.org/docs/reference/using-gradle.html
@@ -61,6 +77,17 @@ GradleUtils.compileConfiguration(JavaVersion.VERSION_11) {
 //GradleUtils.jpms(JavaVersion.VERSION_11)
 //NOTE: we do not support JPMS yet, as there are some libraries missing support for it still, notably kotlin!
 
+
+// if we are sending a SMALL byte array, then we SEND IT DIRECTLY in a more optimized manner (because we can count size info!)
+//   other side has to be able to parse/know that this was sent directly as bytes. It could be game state data, or voice data, etc.
+// another idea is to be able to "send" a stream of bytes (this would also get chunked/etc!). if chunked, these are fixed byte sizes!
+// -- the first byte manage: byte/message/stream/etc, no-crypt, crypt, crypt+compress
+// - connection.inputStream() --> behaves as an input stream to remote endpoint --> connection.outputStream()
+//   -- open/close/flush/etc commands also go through
+//   -- this can be used to stream files/audio/etc VERY easily
+//   -- have a createInputStream(), which will cause the outputStream() on the remote end to be created.
+//     --- this remote outputStream is a file, raw??? this is setup by createInputStream() on the remote end
+// - state-machine for kryo class registrations?
 
 // ratelimiter, "other" package
 // rest of unit tests
@@ -130,7 +157,7 @@ shadowJar.apply {
     manifest.inheritFrom(tasks.jar.get().manifest)
 
     manifest.attributes.apply {
-        put("Main-Class", "dorkboxTest.network.AeronClientServer")
+        put("Main-Class", "dorkboxTest.network.AeronRmiClientServer")
     }
 
     mergeServiceFiles()
@@ -155,10 +182,20 @@ dependencies {
     api("com.dorkbox:NetworkDNS:2.9")
     api("com.dorkbox:NetworkUtils:2.21")
     api("com.dorkbox:OS:1.6")
-    api("com.dorkbox:Serializers:3.0")
+    api("com.dorkbox:Serializers:2.9")
     api("com.dorkbox:Storage:1.5")
     api("com.dorkbox:Updates:1.1")
     api("com.dorkbox:Utilities:1.41")
+
+    
+    // how we bypass using reflection/jpms to access fields for java17+
+    api("org.javassist:javassist:3.29.2-GA")
+
+    api("com.dorkbox:JNA:1.0")
+
+    val jnaVersion = "5.12.1"
+    api("net.java.dev.jna:jna-jpms:${jnaVersion}")
+    api("net.java.dev.jna:jna-platform-jpms:${jnaVersion}")
 
 
     // we include ALL of aeron, in case we need to debug aeron behavior
