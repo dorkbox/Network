@@ -32,7 +32,6 @@ import dorkbox.network.handshake.ClientConnectionDriver
 import dorkbox.network.handshake.ClientHandshake
 import dorkbox.network.handshake.ClientHandshakeDriver
 import dorkbox.network.ping.Ping
-import dorkbox.util.sync.CountDownLatch
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import java.net.Inet4Address
@@ -473,10 +472,6 @@ open class Client<CONNECTION : Connection>(
             require(false) { "Cannot connect to $remoteAddressPrettyString It is an invalid address!" }
         }
 
-        // if there are client crashes, we want to be able to still call connect()
-        // local scope ONLY until the connection is actually made - because if there are errors we throw this one away
-        val connectLatch = CountDownLatch(1)
-
         // we are done with initial configuration, now initialize aeron and the general state of this endpoint
         // this also makes sure that the dispatchers are still active.
         // Calling `client.close()` will shutdown the dispatchers (and a new client instance must be created)
@@ -519,13 +514,10 @@ open class Client<CONNECTION : Connection>(
         // how long before we COMPLETELY give up retrying
         var connectionTimoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
 
-        var connectionCloseTimeoutInSeconds = config.connectionCloseTimeoutInSeconds.toLong()
-
         if (DEBUG_CONNECTIONS) {
             // connections are extremely difficult to diagnose when the connection timeout is short
             connectionTimoutInNanos = TimeUnit.HOURS.toNanos(1).toLong()
             handshakeTimeoutSec = TimeUnit.HOURS.toSeconds(1).toInt()
-            connectionCloseTimeoutInSeconds = TimeUnit.HOURS.toSeconds(1).toLong()
         }
 
         val startTime = System.nanoTime()

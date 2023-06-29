@@ -66,7 +66,7 @@ internal class HandshakeMessage private constructor() {
                  LittleEndian.Long_.from(bytes, 8, 8))
         }
 
-        fun helloFromClient(connectKey: Long, publicKey: ByteArray, sessionIdSub: Int, streamIdSub: Int, portSub: Int, uuid: UUID): HandshakeMessage {
+        fun helloFromClient(connectKey: Long, publicKey: ByteArray, streamIdSub: Int, portSub: Int, uuid: UUID): HandshakeMessage {
             val hello = HandshakeMessage()
             hello.state = HELLO
             hello.connectKey = connectKey // this is 'bounced back' by the server, so the client knows if it's the correct connection message

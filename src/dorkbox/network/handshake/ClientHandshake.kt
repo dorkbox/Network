@@ -188,7 +188,6 @@ internal class ClientHandshake<CONNECTION: Connection>(
                                     HandshakeMessage.helloFromClient(
                                         connectKey = connectKey,
                                         publicKey = publicKey,
-                                        sessionIdSub = pubSub.sessionIdSub,
                                         streamIdSub = pubSub.streamIdSub,
                                         portSub = pubSub.portSub,
                                         uuid = uuid
