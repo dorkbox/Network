@@ -188,7 +188,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
     internal val rmiGlobalSupport = RmiManagerGlobal<CONNECTION>(logger)
     internal val rmiConnectionSupport: RmiManagerConnections<CONNECTION>
 
-    private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch)
+    private val streamingManager = StreamingManager<CONNECTION>(logger, messageDispatch, config)
 
     private val pingManager = PingManager<CONNECTION>()
 
@@ -416,7 +416,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onError(function: CONNECTION.(Throwable) -> Unit) {
+    fun onError(function: suspend CONNECTION.(Throwable) -> Unit) {
         runBlocking {
             listenerManager.onError(function)
         }
@@ -427,7 +427,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * The error is also sent to an error log before this method is called.
      */
-    fun onErrorGlobal(function: (Throwable) -> Unit) {
+    fun onErrorGlobal(function: suspend (Throwable) -> Unit) {
         runBlocking {
             listenerManager.onError(function)
         }
