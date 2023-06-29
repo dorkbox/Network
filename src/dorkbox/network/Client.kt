@@ -585,7 +585,7 @@ open class Client<CONNECTION : Connection>(
                     logger.info { "Creating new handshake to $logInfo" }
                 }
 
-                connect0(handshake, handshakeConnection, handshakeTimeoutSec, connectionCloseTimeoutInSeconds, connectLatch)
+                connect0(handshake, handshakeConnection, handshakeTimeoutSec)
                 success = true
                 slowDownForException = false
 
@@ -665,13 +665,7 @@ open class Client<CONNECTION : Connection>(
 
 
     // the handshake process might have to restart this connection process.
-    private suspend fun connect0(
-        handshake: ClientHandshake<CONNECTION>,
-        handshakeConnection: ClientHandshakeDriver,
-        connectionTimeoutSec: Int,
-        connectionCloseTimeoutInSeconds: Long,
-        connectLatch: CountDownLatch
-    ) {
+    private suspend fun connect0(handshake: ClientHandshake<CONNECTION>, handshakeConnection: ClientHandshakeDriver, connectionTimeoutSec: Int) {
         // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
 
 
