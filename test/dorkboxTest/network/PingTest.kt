@@ -30,15 +30,15 @@ class PingTest : BaseTest() {
         // session/stream count errors
         val clientSuccess = atomic(false)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind(2000)
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -62,8 +62,11 @@ class PingTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
 

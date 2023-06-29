@@ -37,12 +37,11 @@ class DisconnectReconnectTest : BaseTest() {
         val latch = CountDownLatch(reconnects+1)
         val reconnectCount = atomic(0)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind(2000)
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
@@ -51,9 +50,11 @@ class DisconnectReconnectTest : BaseTest() {
                 logger.error("Disconnecting....")
                 close()
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -70,8 +71,11 @@ class DisconnectReconnectTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         latch.await()
         stopEndPointsBlocking()
@@ -86,17 +90,17 @@ class DisconnectReconnectTest : BaseTest() {
         val latch = CountDownLatch(reconnects+1)
         val reconnectCount = atomic(0)
 
-        run {
+        val server = run {
             val configuration = serverConfig {
                 uniqueAeronDirectory = true
             }
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind(2000)
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig {
                 uniqueAeronDirectory = true
             }
@@ -123,9 +127,11 @@ class DisconnectReconnectTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
 
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         latch.await()
         stopEndPointsBlocking()
@@ -159,14 +165,12 @@ class DisconnectReconnectTest : BaseTest() {
 
         val CLOSE_ID = 33
 
-        run {
+        val server = run {
             val config = serverConfig()
             config.serialization.rmi.register(CloseIface::class.java)
 
             val server: Server<Connection> = Server(config)
             addEndPoint(server)
-            server.bind(2000)
-
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
@@ -182,9 +186,11 @@ class DisconnectReconnectTest : BaseTest() {
                 // this just calls connection.close() (on the client)
                 closerObject.close()
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
             config.serialization.rmi.register(CloseIface::class.java, CloseImpl::class.java)
 
@@ -206,8 +212,11 @@ class DisconnectReconnectTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         latch.await()
         stopEndPointsBlocking()
@@ -230,11 +239,10 @@ class DisconnectReconnectTest : BaseTest() {
             driver
         }
 
-        run {
+        val server = run {
             val serverConfiguration = serverConfig()
             val server: Server<Connection> = Server(serverConfiguration)
-            addEndPoint(server)
-            server.bind(2000)
+            addEndPoint(server, false)
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
@@ -243,13 +251,15 @@ class DisconnectReconnectTest : BaseTest() {
                 logger.error("Disconnecting....")
                 close()
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
-            addEndPoint(client)
+            addEndPoint(client, false)
 
 
             client.onDisconnect {
@@ -263,9 +273,11 @@ class DisconnectReconnectTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
 
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         latch.await()
         stopEndPointsBlocking()
@@ -285,13 +297,12 @@ class DisconnectReconnectTest : BaseTest() {
         val reconnectCount = atomic(0)
 
         // this tests IPC with fallback to UDP (because the server has IPC disabled, and the client has it enabled)
-        run {
+        val server = run {
             val config = serverConfig()
             config.enableIpc = false
 
             val server: Server<Connection> = Server(config)
             addEndPoint(server)
-            server.bind(2000)
 
             server.onConnect {
                 logger.error("Disconnecting after 2 seconds.")
@@ -300,9 +311,11 @@ class DisconnectReconnectTest : BaseTest() {
                 logger.error("Disconnecting....")
                 close()
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
             config.enableIpc = true
 
@@ -321,8 +334,11 @@ class DisconnectReconnectTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         latch.await()
         stopEndPointsBlocking()
@@ -334,28 +350,26 @@ class DisconnectReconnectTest : BaseTest() {
 
     @Test
     fun disconnectedMediaDriver() {
-        val server: Server<Connection>
-        run {
+        val server = run {
             val config = serverConfig()
             config.enableIpc = false
             config.uniqueAeronDirectory = true
 
-            server = Server(config)
+            val server = Server<Connection>(config)
             addEndPoint(server)
-            server.bind(2000)
 
             server.onConnect {
                 logger.error("Connected!")
             }
+            server
         }
 
-        val client: Client<Connection>
-        run {
+        val client = run {
             val config = clientConfig()
             config.enableIpc = false
             config.uniqueAeronDirectory = true
 
-            client = Client(config)
+            val client = Client<Connection>(config)
             addEndPoint(client)
 
             client.onConnect {
@@ -366,8 +380,11 @@ class DisconnectReconnectTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         server.close()
         runBlocking {

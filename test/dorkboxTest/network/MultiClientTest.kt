@@ -22,11 +22,7 @@ import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.util.NamedThreadFactory
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import org.junit.Assert
 import org.junit.Test
 import java.text.SimpleDateFormat
@@ -44,7 +40,7 @@ class MultiClientTest : BaseTest() {
     @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
     @Test
     fun multiConnectClient() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.enableIPv6 = false
             configuration.uniqueAeronDirectory = true
@@ -57,8 +53,7 @@ class MultiClientTest : BaseTest() {
                 logger.error("${this.id} - Connected $count ....")
                 close()
             }
-
-            server.bind(2000)
+            server
         }
 
 
@@ -92,6 +87,9 @@ class MultiClientTest : BaseTest() {
             addEndPoint(client)
             clients += client
         }
+
+
+        server.bind(2000)
 
         // start up the drivers first
         runBlocking {

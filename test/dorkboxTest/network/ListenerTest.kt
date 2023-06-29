@@ -116,8 +116,6 @@ class ListenerTest : BaseTest() {
             serverDisconnect.lazySet(true)
         }
 
-        server.bind(2000)
-
 
 
 
@@ -163,6 +161,7 @@ class ListenerTest : BaseTest() {
         }
 
 
+        server.bind(2000)
         client.connect(LOCALHOST, 2000)
 
         waitForThreads()

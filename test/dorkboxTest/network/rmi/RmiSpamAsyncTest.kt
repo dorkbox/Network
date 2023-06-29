@@ -46,13 +46,11 @@ class RmiSpamAsyncTest : BaseTest() {
      * uses the first remote object to get the second remote object.
      */
     private fun rmi(config: Configuration.() -> Unit = {}) {
-        val server: Server<Connection>
-
         val mod = 100_000L
         val totalRuns = 1_000_000
         val latch = CountDownLatch(totalRuns)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
             config(configuration)
 
@@ -61,23 +59,22 @@ class RmiSpamAsyncTest : BaseTest() {
 
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
-            server = Server(configuration)
+            val server = Server<Connection>(configuration)
             addEndPoint(server)
 
             server.rmiGlobal.save(TestObjectImpl(latch), RMI_ID)
-            server.bind(2000)
+            server
         }
 
 
-        val client: Client<Connection>
-        run {
+        val client = run {
             val configuration = clientConfig()
             config(configuration)
 
             // the logger cannot keep-up if it's on trace
             setLogLevel(Level.DEBUG)
 
-            client = Client<Connection>(configuration)
+            val client = Client<Connection>(configuration)
             addEndPoint(client)
 
             client.onConnect {
@@ -106,8 +103,11 @@ class RmiSpamAsyncTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         latch.await()
         stopEndPointsBlocking()

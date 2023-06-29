@@ -54,31 +54,28 @@ class RmiSpamSyncTest : BaseTest() {
      * uses the first remote object to get the second remote object.
      */
     private fun rmi(config: Configuration.() -> Unit = {}) {
-        val server: Server<Connection>
-
         val mod = 400L
         val totalRuns = 1_000L
 
-        run {
+        val server = run {
             val configuration = serverConfig()
             config(configuration)
 
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
-            server = Server(configuration)
+            val server = Server<Connection>(configuration)
             addEndPoint(server)
 
             server.rmiGlobal.save(TestObjectImpl(counter), RMI_ID)
-            server.bind(2000)
+            server
         }
 
-
-        val client: Client<Connection>
-        run {
+        var ipc: Boolean
+        val client = run {
             val configuration = clientConfig()
             config(configuration)
 
-            client = Client(configuration)
+            val client = Client<Connection>(configuration)
             addEndPoint(client)
 
             client.onConnect {
@@ -111,11 +108,15 @@ class RmiSpamSyncTest : BaseTest() {
                 stopEndPoints()
             }
 
-            if (configuration.enableIpc) {
-                client.connectIpc()
-            } else {
-                client.connect(LOCALHOST, 2000)
-            }
+            ipc = configuration.enableIpc
+            client
+        }
+
+        server.bind(2000)
+        if (ipc) {
+            client.connectIpc()
+        } else {
+            client.connect(LOCALHOST, 2000)
         }
 
         waitForThreads()

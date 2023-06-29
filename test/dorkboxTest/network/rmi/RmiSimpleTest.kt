@@ -44,7 +44,6 @@ import dorkboxTest.network.BaseTest
 import dorkboxTest.network.rmi.cows.MessageWithTestCow
 import dorkboxTest.network.rmi.cows.TestCow
 import dorkboxTest.network.rmi.cows.TestCowImpl
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 
@@ -162,7 +161,7 @@ class RmiSimpleTest : BaseTest() {
 
     // GLOBAL rmi stuff cannot CREATE or DELETE (only save/get)
     private fun rmiGlobal(clientType: ConnectType, serverType: ConnectType = clientType) {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.enableIPv4 = serverType.ip4
             configuration.enableIPv6 = serverType.ip6
@@ -177,7 +176,6 @@ class RmiSimpleTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind(2000)
 
             server.rmiGlobal.save(TestCowImpl(44), 44)
 
@@ -197,9 +195,11 @@ class RmiSimpleTest : BaseTest() {
                 RmiCommonTest.runTests(this@onMessage, rmi.get(4), 4)
                 server.logger.error("Done with test for: Server -> Client")
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val configuration = clientConfig()
             configuration.enableIPv4 = clientType.ip4
             configuration.enableIPv6 = clientType.ip6
@@ -228,24 +228,20 @@ class RmiSimpleTest : BaseTest() {
 
             client.logger.error("Starting test for: Client -> Server")
 
-            // this creates a GLOBAL object on the server (instead of a connection specific object)
-            runBlocking {
+            client
+        }
 
-// fix me!
-
-            }
-
-            when (clientType) {
-                ConnectType.IPC -> client.connectIpc()
-                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST, 2000)
-                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST, 2000)
-                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST, 2000)
-                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST, 2000)
-                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST, 2000)
-                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST, 2000)
-                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST, 2000)
-                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST, 2000)
-            }
+        server.bind(2000)
+        when (clientType) {
+            ConnectType.IPC -> client.connectIpc()
+            ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IP4 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IP6 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IP46 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IP64 -> client.connect(IPv6.LOCALHOST, 2000)
         }
 
         waitForThreads()
@@ -254,7 +250,7 @@ class RmiSimpleTest : BaseTest() {
 
 
     fun rmi(clientType: ConnectType, serverType: ConnectType = clientType) {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.enableIPv4 = serverType.ip4
             configuration.enableIPv6 = serverType.ip6
@@ -267,7 +263,7 @@ class RmiSimpleTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind(2000)
+
 
             server.onMessage<MessageWithTestCow> { m ->
                 server.logger.error("Received finish signal for test for: Client -> Server")
@@ -285,9 +281,10 @@ class RmiSimpleTest : BaseTest() {
                     server.logger.error("Done with test for: Server -> Client")
                 }
             }
+            server
         }
 
-        run {
+        val client = run {
             val configuration = clientConfig()
             configuration.enableIPv4 = clientType.ip4
             configuration.enableIPv6 = clientType.ip6
@@ -314,17 +311,20 @@ class RmiSimpleTest : BaseTest() {
                 stopEndPoints()
             }
 
-            when (clientType) {
-                ConnectType.IPC -> client.connectIpc()
-                ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST, 2000)
-                ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST, 2000)
-                ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST, 2000)
-                ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST, 2000)
-                ConnectType.IP4 -> client.connect(IPv4.LOCALHOST, 2000)
-                ConnectType.IP6 -> client.connect(IPv6.LOCALHOST, 2000)
-                ConnectType.IP46 -> client.connect(IPv4.LOCALHOST, 2000)
-                ConnectType.IP64 -> client.connect(IPv6.LOCALHOST, 2000)
-            }
+            client
+        }
+
+        server.bind(2000)
+        when (clientType) {
+            ConnectType.IPC -> client.connectIpc()
+            ConnectType.IPC4 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IPC6 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IPC46 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IPC64 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IP4 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IP6 -> client.connect(IPv6.LOCALHOST, 2000)
+            ConnectType.IP46 -> client.connect(IPv4.LOCALHOST, 2000)
+            ConnectType.IP64 -> client.connect(IPv6.LOCALHOST, 2000)
         }
 
         waitForThreads()

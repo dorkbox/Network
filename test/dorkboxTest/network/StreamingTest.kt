@@ -19,6 +19,7 @@ package dorkboxTest.network
 import dorkbox.network.Client
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
+import dorkbox.util.Sys
 import org.agrona.ExpandableDirectByteBuffer
 import org.junit.Assert
 import org.junit.Test
@@ -36,12 +37,11 @@ class StreamingTest : BaseTest() {
         SecureRandom().nextBytes(hugeData)
 
 
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind(2000)
 
             server.onMessage<ByteArray> {
                 println("received data, shutting down!")
@@ -49,9 +49,10 @@ class StreamingTest : BaseTest() {
                 Assert.assertArrayEquals(hugeData, it)
                 stopEndPoints()
             }
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config) {
@@ -60,12 +61,17 @@ class StreamingTest : BaseTest() {
             addEndPoint(client)
 
             client.onConnect {
-                logger.error { "Sending huge data: ${hugeData.size} bytes" }
+                logger.error { "Sending huge data: ${Sys.getSizePretty(hugeData.size)} bytes" }
                 send(hugeData)
+                logger.error { "Done sending huge data: ${hugeData.size} bytes" }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
 
         waitForThreads()
     }

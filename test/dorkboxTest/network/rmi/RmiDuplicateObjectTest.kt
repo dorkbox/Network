@@ -93,7 +93,7 @@ class RmiDuplicateObjectTest : BaseTest() {
     fun rmi(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
         val latch = CountDownLatch(2)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.enableIPv4 = isIpv4
             configuration.enableIPv6 = isIpv6
@@ -106,7 +106,7 @@ class RmiDuplicateObjectTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind(2000)
+
 
             server.onConnect {
                 // these are on separate threads (client.init) and this -- there can be race conditions, where the object doesn't exist yet!
@@ -120,9 +120,11 @@ class RmiDuplicateObjectTest : BaseTest() {
                     latch.countDown()
                 }
             }
+
+            server
         }
 
-        run {
+        val client1 = run {
             val configuration = clientConfig()
             config(configuration)
 
@@ -133,9 +135,10 @@ class RmiDuplicateObjectTest : BaseTest() {
                 rmi.save(TestCowImpl(4), 4)
             }
 
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
+            client
         }
-        run {
+
+        val client2 = run {
             val configuration = clientConfig()
             config(configuration)
 
@@ -147,8 +150,13 @@ class RmiDuplicateObjectTest : BaseTest() {
                 rmi.save(TestCowImpl(5), 4)
             }
 
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
+            client
         }
+
+
+        server.bind(2000)
+        doConnect(isIpv4, isIpv6, runIpv4Connect, client1)
+        doConnect(isIpv4, isIpv6, runIpv4Connect, client2)
 
         latch.await()
         stopEndPointsBlocking()

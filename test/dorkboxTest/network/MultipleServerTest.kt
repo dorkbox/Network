@@ -61,6 +61,7 @@ class MultipleServerTest : BaseTest() {
 
         var serverAeronDir: File? = null
         val didReceive = mutableListOf<AtomicBoolean>()
+        val servers = mutableListOf<Server<Connection>>()
 
         for (count in 0 until total) {
             didReceive.add(AtomicBoolean())
@@ -84,13 +85,14 @@ class MultipleServerTest : BaseTest() {
                 }
             }
 
-            server.bind(2000 + count)
+            servers.add(server)
 
             serverAeronDir = File(configuration.aeronDirectory.toString() + count)
         }
 
         var clientAeronDir: File? = null
         val didSend = mutableListOf<AtomicBoolean>()
+        val clients = mutableListOf<Client<Connection>>()
 
         for (count in 0 until total) {
             didSend.add(AtomicBoolean())
@@ -109,7 +111,15 @@ class MultipleServerTest : BaseTest() {
                 send("client_$count")
             }
 
-            client.connect(LOCALHOST, 2000+count)
+            clients.add(client)
+        }
+
+        for (count in 0 until total) {
+            servers[count].bind(2000 + count)
+        }
+
+        for (count in 0 until total) {
+            clients[count].connect(LOCALHOST, 2000+count)
         }
 
         waitForThreads()
@@ -128,12 +138,11 @@ class MultipleServerTest : BaseTest() {
         val servers = mutableListOf<Server<Connection>>()
         try {
             for (count in 0 until total) {
-            val configuration = serverConfig()
-            configuration.enableIPv4 = true
-            configuration.enableIPv6 = true
-            configuration.enableIpc = true
+                val configuration = serverConfig()
+                configuration.enableIPv4 = true
+                configuration.enableIPv6 = true
+                configuration.enableIpc = true
 
-            val server: Server<Connection>?
                 servers.add(Server(configuration, "server_$count"))
             }
         } catch (e: Exception) {
@@ -161,6 +170,7 @@ class MultipleServerTest : BaseTest() {
 
 
         val didReceive = mutableListOf<AtomicBoolean>()
+        val servers = mutableListOf<Server<Connection>>()
 
         for (count in 0 until total) {
             didReceive.add(AtomicBoolean())
@@ -192,10 +202,11 @@ class MultipleServerTest : BaseTest() {
                 }
             }
 
-            server.bind(2000+count)
+            servers.add(server)
         }
 
         val didSend = mutableListOf<AtomicBoolean>()
+        val clients = mutableListOf<Client<Connection>>()
 
         for (count in 0 until total) {
             didSend.add(AtomicBoolean())
@@ -219,7 +230,16 @@ class MultipleServerTest : BaseTest() {
                 send("client_$count")
             }
 
-            client.connect(LOCALHOST, 2000+count)
+            clients.add(client)
+        }
+
+        for (count in 0 until total) {
+            servers[count].bind(2000+count)
+        }
+
+
+        for (count in 0 until total) {
+            clients[count].connect(LOCALHOST, 2000+count)
         }
 
         waitForThreads()

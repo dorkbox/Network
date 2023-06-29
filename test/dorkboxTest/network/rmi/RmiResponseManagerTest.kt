@@ -19,12 +19,8 @@ import dorkbox.network.rmi.ResponseManager
 import dorkboxTest.network.BaseTest
 import kotlinx.atomicfu.AtomicInt
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ObsoleteCoroutinesApi
-import kotlinx.coroutines.async
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.actor
-import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
@@ -42,11 +38,11 @@ class RmiResponseManagerTest: BaseTest() {
         runTest(2, 3000)
         runTest(2, 65535)
 
-       runTest(65535 * 2, 3)
-       runTest(65535 * 2, 30)
-       runTest(65535 * 2, 300)
-       runTest(65535 * 2, 3000)
-       runTest(65535 * 2, 65535)
+        runTest(65535 * 2, 3)
+        runTest(65535 * 2, 30)
+        runTest(65535 * 2, 300)
+        runTest(65535 * 2, 3000)
+        runTest(65535 * 2, 65535)
     }
 
     @Test

@@ -28,7 +28,7 @@ class ErrorLoggerTest : BaseTest() {
 
     @Test
     fun customErrorLoggerTest() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.aeronErrorFilter = {
                 true // log all errors
@@ -54,10 +54,10 @@ class ErrorLoggerTest : BaseTest() {
                 throw Exception("server ERROR. SHOULD BE CAUGHT")
             }
 
-            server.bind(2000)
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
             config.aeronErrorFilter = {
                 true // log all errors
@@ -74,8 +74,11 @@ class ErrorLoggerTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
     }

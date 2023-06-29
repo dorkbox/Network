@@ -56,7 +56,7 @@ class RmiNestedTest : BaseTest() {
      */
     @Test
     fun biDirectionalDoubleRmi() {
-        run {
+        val server = run {
             val configuration = serverConfig()
 
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectAnnotImpl::class.java)
@@ -75,11 +75,11 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind(2000)
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -116,14 +116,18 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
         waitForThreads()
     }
 
     @Test
     fun doubleRmi() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectAnnotImpl::class.java)
             configuration.serialization.rmi.register(OtherObject::class.java, OtherObjectImpl::class.java)
@@ -141,11 +145,11 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind(2000)
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -181,14 +185,17 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
         waitForThreads()
     }
 
     @Test
     fun singleRmi() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
             configuration.serialization.register(OtherObjectImpl::class.java)
@@ -206,11 +213,11 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind(2000)
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -240,14 +247,18 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
         waitForThreads()
     }
 
     @Test
     fun singleReverseRmi() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java, null)
             configuration.serialization.register(OtherObjectImpl::class.java)
@@ -279,11 +290,11 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            server.bind(2000)
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
 
@@ -300,8 +311,12 @@ class RmiNestedTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
+
         waitForThreads()
     }
 

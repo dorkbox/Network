@@ -55,14 +55,13 @@ class PingPongTest : BaseTest() {
         val data = Data()
         populateData(data)
 
-        run {
+        val server = run {
             val config = serverConfig()
             register(config.serialization)
 
 
             val server: Server<Connection> = Server(config)
             addEndPoint(server)
-            server.bind(2000)
 
             server.onError { throwable ->
                 fail = "Error during processing. $throwable"
@@ -75,10 +74,11 @@ class PingPongTest : BaseTest() {
             server.onMessage<Data> { message ->
                 send(message)
             }
+            server
         }
 
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -108,9 +108,11 @@ class PingPongTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
 
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
 

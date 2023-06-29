@@ -82,7 +82,7 @@ class RmiSimpleActionsTest : BaseTest() {
     }
 
     fun rmiConnectionDelete(isIpv4: Boolean = false, isIpv6: Boolean = false, runIpv4Connect: Boolean = true, config: Configuration.() -> Unit = {}) {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.enableIPv4 = isIpv4
             configuration.enableIPv6 = isIpv6
@@ -97,7 +97,6 @@ class RmiSimpleActionsTest : BaseTest() {
 
             val server = Server<Connection>(configuration)
             addEndPoint(server)
-            server.bind(2000)
 
             server.onMessage<MessageWithTestCow> { m ->
                 server.logger.error("Received finish signal for test for: Client -> Server")
@@ -114,9 +113,11 @@ class RmiSimpleActionsTest : BaseTest() {
                 // so we don't want to pass that back -- so pass back a new one
                 send(MessageWithTestCow(TestCowImpl(1)))
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val configuration = clientConfig()
             config(configuration)
             //            configuration.serialization.registerRmi(TestCow::class.java, TestCowImpl::class.java)
@@ -146,8 +147,11 @@ class RmiSimpleActionsTest : BaseTest() {
                 stopEndPoints()
             }
 
-            doConnect(isIpv4, isIpv6, runIpv4Connect, client)
+            client
         }
+
+        server.bind(2000)
+        doConnect(isIpv4, isIpv6, runIpv4Connect, client)
 
         waitForThreads()
     }

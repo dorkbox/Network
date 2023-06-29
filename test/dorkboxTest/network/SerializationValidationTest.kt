@@ -26,7 +26,7 @@ class SerializationValidationTest : BaseTest() {
     @Test
     fun checkManyObjects() {
         // session/stream count errors
-        run {
+        val server = run {
             val configuration = serverConfig()
             register(configuration.serialization)
 
@@ -36,11 +36,11 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<FinishedCommand> { _ ->
                 stopEndPoints()
             }
-            server.bind(2000)
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -50,8 +50,11 @@ class SerializationValidationTest : BaseTest() {
                 send(FinishedCommand())
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
     }
@@ -59,7 +62,7 @@ class SerializationValidationTest : BaseTest() {
     @Test
     fun checkOutOfOrder() {
         // session/stream count errors
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
             configuration.serialization.register(TestObjectImpl::class.java) // this is again, on purpose to verify registration order!
@@ -72,11 +75,11 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<TestObject> { _ ->
                 stopEndPoints()
             }
-            server.bind(2000)
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -97,15 +100,18 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
     }
 
     @Test
     fun checkOutOfOrder2() {
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.rmi.register(TestObject::class.java)
             configuration.serialization.rmi.register(TestObject::class.java, TestObjectImpl::class.java)
@@ -118,11 +124,11 @@ class SerializationValidationTest : BaseTest() {
             server.onMessage<TestObject> { _ ->
                 stopEndPoints()
             }
-            server.bind(2000)
+            server
         }
 
 
-        run {
+        val client = run {
             val configuration = clientConfig()
 
             val client = Client<Connection>(configuration)
@@ -143,8 +149,11 @@ class SerializationValidationTest : BaseTest() {
                 }
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
     }

@@ -32,6 +32,8 @@ import dorkbox.util.entropy.Entropy
 import dorkbox.util.entropy.SimpleEntropy
 import dorkbox.util.exceptions.InitializationException
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
@@ -90,6 +92,7 @@ abstract class BaseTest {
         fun clientConfig(block: Configuration.() -> Unit = {}): ClientConfiguration {
 
             val configuration = ClientConfiguration()
+            configuration.applicationId = "network_test"
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
 
             configuration.enableIpc = false
@@ -101,6 +104,7 @@ abstract class BaseTest {
 
         fun serverConfig(block: ServerConfiguration.() -> Unit = {}): ServerConfiguration {
             val configuration = ServerConfiguration()
+            configuration.applicationId = "network_test"
             configuration.settingsStore = Storage.Memory() // don't want to persist anything on disk!
 
             configuration.enableIpc = false
@@ -173,7 +177,13 @@ abstract class BaseTest {
     }
 
 
-    fun addEndPoint(endPoint: EndPoint<*>) {
+    fun addEndPoint(endPoint: EndPoint<*>, runCheck: Boolean = true) {
+        runBlocking {
+            if (runCheck && !endPoint.ensureStopped()) {
+                throw IllegalStateException("Unable to continue, AERON was unable to stop.")
+            }
+        }
+
         endPoint.onInit { logger.error { "UNIT TEST: init" } }
         endPoint.onConnect { logger.error { "UNIT TEST: connect" } }
         endPoint.onDisconnect { logger.error { "UNIT TEST: disconnect" } }
@@ -211,12 +221,17 @@ abstract class BaseTest {
         }
 
         if (EventDispatcher.isCurrentEvent()) {
+            val mutex = Mutex(true)
+
             // we want to redispatch, in the event we are already running inside the event dispatch
             // this gives us the chance to properly exit/close WITHOUT blocking currentEventDispatch
             // during the `waitForClose()` call
             GlobalScope.launch {
                 stopEndPoints(stopAfterMillis)
+                mutex.unlock()
             }
+
+            mutex.withLock { }
 
             return
         }

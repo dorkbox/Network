@@ -52,7 +52,7 @@ class RmiDelayedInvocationTest : BaseTest() {
      */
     fun rmi(config: Configuration.() -> Unit = {}) {
         val countDownLatch = CountDownLatch(1)
-        run {
+        val server = run {
             val configuration = serverConfig()
             config(configuration)
             register(configuration.serialization)
@@ -61,10 +61,10 @@ class RmiDelayedInvocationTest : BaseTest() {
             addEndPoint(server)
 
             server.rmiGlobal.save(TestObjectImpl(countDownLatch), OBJ_ID)
-            server.bind(2000)
+            server
         }
 
-        run {
+        val client = run {
             val configuration = clientConfig()
             config(configuration)
 
@@ -106,8 +106,11 @@ class RmiDelayedInvocationTest : BaseTest() {
                 stopEndPoints()
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
     }

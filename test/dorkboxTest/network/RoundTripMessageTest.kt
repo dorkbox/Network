@@ -32,13 +32,12 @@ class RoundTripMessageTest : BaseTest() {
         val serverSuccess = atomic(false)
         val clientSuccess = atomic(false)
 
-        run {
+        val server = run {
             val configuration = serverConfig()
             configuration.serialization.register(PingMessage::class.java)
 
             val server: Server<Connection> = Server(configuration)
             addEndPoint(server)
-            server.bind(2000)
 
             server.onMessage<PingMessage> { ping ->
                 serverSuccess.value = true
@@ -46,9 +45,11 @@ class RoundTripMessageTest : BaseTest() {
                 ping.pongTime = System.currentTimeMillis()
                 send(ping)
             }
+
+            server
         }
 
-        run {
+        val client = run {
             val config = clientConfig()
 
             val client: Client<Connection> = Client(config)
@@ -76,8 +77,11 @@ class RoundTripMessageTest : BaseTest() {
                 send(ping)
             }
 
-            client.connect(LOCALHOST, 2000)
+            client
         }
+
+        server.bind(2000)
+        client.connect(LOCALHOST, 2000)
 
         waitForThreads()
 
