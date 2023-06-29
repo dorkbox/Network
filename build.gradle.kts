@@ -51,12 +51,7 @@ object Extras {
 /////  assign 'Extras'
 ///////////////////////////////
 GradleUtils.load("$projectDir/../../gradle.properties", Extras)
-//GradleUtils.defaults()
-GradleUtils.addMavenRepositories()
-GradleUtils.fixMavenPaths()
-GradleUtils.defaultResolutionStrategy()
-GradleUtils.defaultCompileOptions()
-GradleUtils.fixIntellijPaths("$buildDir/classes-intellij")
+GradleUtils.defaults()
 
 
 //val kotlin = project.extensions.getByType(org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension::class.java).sourceSets.getByName("main").kotlin
