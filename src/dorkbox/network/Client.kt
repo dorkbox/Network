@@ -511,7 +511,7 @@ open class Client<CONNECTION : Connection>(
 
         // how long does the initial handshake take to connect
         var handshakeTimeoutSec = 5
-        // how long before we COMPLETELY give up retrying
+        // how long before we COMPLETELY give up retrying. A '0' means try forever.
         var connectionTimoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
 
         if (DEBUG_CONNECTIONS) {
@@ -522,7 +522,7 @@ open class Client<CONNECTION : Connection>(
 
         val startTime = System.nanoTime()
         var success = false
-        while (System.nanoTime() - startTime < connectionTimoutInNanos) {
+        while (connectionTimoutInNanos == 0L || System.nanoTime() - startTime < connectionTimoutInNanos) {
             if (isShutdown()) {
                 resetOnError()
 
