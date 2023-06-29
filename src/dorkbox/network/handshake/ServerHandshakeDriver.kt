@@ -27,7 +27,12 @@ import io.aeron.Subscription
  * For a client, the ports specified here MUST be manually flipped because they are in the perspective of the SERVER.
  * A connection timeout of 0, means to wait forever
  */
-internal class ServerHandshakeDriver(private val aeronDriver: AeronDriver, val subscription: Subscription, val info: String, val logInfo: String) {
+internal class ServerHandshakeDriver(
+    private val aeronDriver: AeronDriver,
+    val subscription: Subscription,
+    val info: String,
+    private val logInfo: String)
+{
     companion object {
         suspend fun build(
             aeronDriver: AeronDriver,
@@ -49,7 +54,7 @@ internal class ServerHandshakeDriver(private val aeronDriver: AeronDriver, val s
                 subscriptionUri = uriHandshake(CommonContext.UDP_MEDIA, ipInfo.isReliable)
                     .endpoint(ipInfo.getAeronPubAddress(ipInfo.isIpv4) + ":" + port)
 
-                info = "$logInfo ${ipInfo.listenAddressStringPretty} [$sessionIdSub|$streamIdSub|$port] (reliable:${ipInfo.isReliable})"
+                info = "$logInfo ${ipInfo.listenAddressStringPretty}:$port [$sessionIdSub|$streamIdSub] (reliable:${ipInfo.isReliable})"
             }
 
             val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
