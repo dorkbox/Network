@@ -185,7 +185,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             }
 
             // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
-            val localAddressString = getLocalAddressString(publication, remoteAddress)
+            val localAddressString = getLocalAddressString(publication, isRemoteIpv4)
 
 
             // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the

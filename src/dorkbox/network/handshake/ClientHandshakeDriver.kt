@@ -141,8 +141,6 @@ internal class ClientHandshakeDriver(
                     "HANDSHAKE-IPv6"
                 }
 
-
-
                 streamIdPub = AeronDriver.UDP_HANDSHAKE_STREAM_ID
 
 
@@ -162,9 +160,11 @@ internal class ClientHandshakeDriver(
 
 
                 // we have to figure out what our sub port info is, otherwise the server cannot connect back!
-                val addressesAndPorts = pubSub.sub.localSocketAddresses().first()
-                val splitPoint2 = addressesAndPorts.lastIndexOf(':')
-                val subscriptionAddress = addressesAndPorts.substring(0, splitPoint2)
+                val subscriptionAddress = try {
+                    getLocalAddressString(pubSub.sub)
+                } catch (e: Exception) {
+                    throw ClientRetryException("$logInfo subscription is not properly created!", e)
+                }
 
                 details = if (subscriptionAddress == remoteAddressString) {
                     logInfo
@@ -262,7 +262,7 @@ internal class ClientHandshakeDriver(
 
 
             // this will cause us to listen on the interface that connects with the remote address, instead of ALL interfaces.
-            val localAddressString = getLocalAddressString(publication, remoteAddress)
+            val localAddressString = getLocalAddressString(publication, isRemoteIpv4)
 
 
             // Create a subscription the given address and port, using the given stream ID.

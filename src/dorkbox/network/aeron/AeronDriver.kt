@@ -45,8 +45,6 @@ import org.agrona.concurrent.ringbuffer.RingBufferDescriptor
 import org.agrona.concurrent.status.CountersReader
 import org.slf4j.Logger
 import java.io.File
-import java.net.Inet6Address
-import java.net.InetAddress
 import java.util.concurrent.*
 
 fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, port: Int): ChannelUriStringBuilder {
@@ -343,19 +341,38 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         /**
          * This will return the local-address of the interface that connects with the remote address (instead of on ALL interfaces)
          */
-        fun getLocalAddressString(publication: Publication, remoteAddress: InetAddress): String {
-            val localAddresses = publication.localSocketAddresses().first()
+        fun getLocalAddressString(publication: Publication, isRemoteIpv4: Boolean): String {
+            val localSocketAddress = publication.localSocketAddresses()
+            if (localSocketAddress == null || localSocketAddress.isEmpty()) {
+                throw Exception("The local socket address for the publication ${publication.channel()} is null/empty.")
+            }
+
+            val localAddresses = localSocketAddress.first()
             val splitPoint = localAddresses.lastIndexOf(':')
             var localAddressString = localAddresses.substring(0, splitPoint)
 
-            return if (remoteAddress is Inet6Address) {
+            return if (isRemoteIpv4) {
+                localAddressString
+            } else {
                 // this is necessary to clean up the address when adding it to aeron, since different formats mess it up
                 // aeron IPv6 addresses all have [...]
                 localAddressString = localAddressString.substring(1, localAddressString.length-1)
                 IPv6.toString(IPv6.toAddress(localAddressString)!!)
-            } else {
-                localAddressString
             }
+        }
+
+        /**
+         * This will return the local-address of the interface that connects with the remote address (instead of on ALL interfaces)
+         */
+        fun getLocalAddressString(subscription: Subscription): String {
+            val localSocketAddress = subscription.localSocketAddresses()
+            if (localSocketAddress == null || localSocketAddress.isEmpty()) {
+                throw Exception("The local socket address for the subscription ${subscription.channel()} is null/empty.")
+            }
+
+            val addressesAndPorts = localSocketAddress.first()
+            val splitPoint2 = addressesAndPorts.lastIndexOf(':')
+            return addressesAndPorts.substring(0, splitPoint2)
         }
 
 
