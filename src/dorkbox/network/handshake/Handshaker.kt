@@ -94,9 +94,6 @@ internal class Handshaker<CONNECTION : Connection>(
                     }
 
                     if (System.nanoTime() - startTime < timeoutInNanos) {
-                        // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
-                        //  publication of any state to other threads and not be long running or re-entrant with the client.
-
                         // we should retry.
                         handshakeSendIdleStrategy.idle()
                         continue
@@ -105,9 +102,7 @@ internal class Handshaker<CONNECTION : Connection>(
                         // this exception will be a ClientException or a ServerException
                         val exception = newException(
                             "[$aeronLogInfo] Error sending message. (Connection in non-connected state longer than linger timeout. ${
-                                EndPoint.errorCodeName(
-                                    result
-                                )
+                                EndPoint.errorCodeName(result)
                             })",
                             null
                         )
