@@ -491,7 +491,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * The publication returned is threadsafe.
      */
-    fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
+    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
         return internal.addPublication(logger, publicationUri, streamId, logInfo)
     }
 
@@ -515,7 +515,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      * {@link Aeron.Context#availableImageHandler(AvailableImageHandler)} and
      * {@link Aeron.Context#unavailableImageHandler(UnavailableImageHandler)} from the {@link Aeron.Context}.
      */
-    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription {
+    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription {
         return internal.addSubscription(logger, subscriptionUri, streamId, logInfo)
     }
 

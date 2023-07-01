@@ -27,6 +27,7 @@ import dorkbox.network.exceptions.AeronDriverException
 import dorkbox.network.exceptions.ClientRetryException
 import io.aeron.*
 import io.aeron.driver.MediaDriver
+import io.aeron.status.ChannelEndpointStatus
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -318,7 +319,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
 
-        registeredPublications++
+        registeredPublications.getAndIncrement()
         if (logger.isTraceEnabled) {
             registeredPublicationsTrace.add(publication.registrationId())
         }
@@ -397,7 +398,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             logger.debug { "Aeron Driver [$driverId]: Delayed creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
         }
 
-        registeredPublications++
+        registeredPublications.getAndIncrement()
         if (logger.isTraceEnabled) {
             registeredPublicationsTrace.add(publication.registrationId())
         }
@@ -479,7 +480,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
             logger.debug { "Aeron Driver [$driverId]: Delayed creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }
         }
 
-        registeredSubscriptions++
+        registeredSubscriptions.getAndIncrement()
         if (logger.isTraceEnabled) {
             registeredSubscriptionsTrace.add(subscription.registrationId())
         }
