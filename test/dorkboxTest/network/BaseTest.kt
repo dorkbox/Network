@@ -184,11 +184,11 @@ abstract class BaseTest {
             }
         }
 
-        endPoint.onInit { logger.error { "UNIT TEST: init" } }
-        endPoint.onConnect { logger.error { "UNIT TEST: connect" } }
-        endPoint.onDisconnect { logger.error { "UNIT TEST: disconnect" } }
+        endPoint.onInit { logger.error { "UNIT TEST: init $id ($uuid)" } }
+        endPoint.onConnect { logger.error { "UNIT TEST: connect $id ($uuid)" } }
+        endPoint.onDisconnect { logger.error { "UNIT TEST: disconnect $id ($uuid)" } }
 
-        endPoint.onError { logger.error(it) { "UNIT TEST: ERROR!" } }
+        endPoint.onError { logger.error(it) { "UNIT TEST: ERROR! $id ($uuid)" } }
 
         endPointConnections.add(endPoint)
     }
@@ -248,13 +248,7 @@ abstract class BaseTest {
         logger.error("Unit test shutting down ${clients.size} clients...")
         logger.error("Unit test shutting down ${servers.size} server...")
 
-        val timeoutMS = 0L
-//        val timeoutMS = if (EndPoint.DEBUG_CONNECTIONS) {
-//            Long.MAX_VALUE
-//        } else {
-//            TimeUnit.SECONDS.toMillis(AUTO_FAIL_TIMEOUT)
-//        }
-
+        val timeoutMS = TimeUnit.SECONDS.toMillis(AUTO_FAIL_TIMEOUT)
         var success = true
 
         // shutdown clients first
@@ -264,7 +258,6 @@ abstract class BaseTest {
         }
         clients.forEach { endPoint ->
             success = success && endPoint.waitForClose(timeoutMS)
-            endPoint.stopDriver()
         }
 
 
@@ -274,6 +267,12 @@ abstract class BaseTest {
         }
         servers.forEach { endPoint ->
             success = success && endPoint.waitForClose(timeoutMS)
+        }
+
+        clients.forEach { endPoint ->
+            endPoint.stopDriver()
+        }
+        servers.forEach { endPoint ->
             endPoint.stopDriver()
         }
 
@@ -298,23 +297,23 @@ abstract class BaseTest {
         val clients = endPointConnections.filterIsInstance<Client<Connection>>()
         val servers = endPointConnections.filterIsInstance<Server<Connection>>()
 
-        val timeoutMS = 0L
-//        val timeoutMS = if (stopAfterSeconds == 0L || EndPoint.DEBUG_CONNECTIONS) {
-//            Long.MAX_VALUE
-//        } else {
-//            TimeUnit.SECONDS.toMillis(stopAfterSeconds)
-//        }
-
+        val timeoutMS = TimeUnit.SECONDS.toMillis(stopAfterSeconds)
         var success = true
 
         clients.forEach { endPoint ->
             success = success && endPoint.waitForClose(timeoutMS)
-            endPoint.stopDriver()
         }
         servers.forEach { endPoint ->
             success = success && endPoint.waitForClose(timeoutMS)
+        }
+
+        clients.forEach { endPoint ->
             endPoint.stopDriver()
         }
+        servers.forEach { endPoint ->
+            endPoint.stopDriver()
+        }
+
 
         // run actions before we actually shutdown, but after we wait
         if (!success) {
