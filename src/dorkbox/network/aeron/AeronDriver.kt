@@ -491,8 +491,8 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * The publication returned is thread-safe.
      */
-    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
-        return internal.addPublication(logger, publicationUri, streamId, logInfo)
+    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String, isIpc: Boolean): Publication {
+        return internal.addPublication(logger, publicationUri, streamId, logInfo, isIpc)
     }
 
     /**
@@ -502,8 +502,8 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * This is not a thread-safe publication!
      */
-    suspend fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
-        return internal.addExclusivePublication(logger, publicationUri, streamId, logInfo)
+    suspend fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String, isIpc: Boolean): Publication {
+        return internal.addExclusivePublication(logger, publicationUri, streamId, logInfo, isIpc)
     }
 
     /**
@@ -515,8 +515,8 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      * {@link Aeron.Context#availableImageHandler(AvailableImageHandler)} and
      * {@link Aeron.Context#unavailableImageHandler(UnavailableImageHandler)} from the {@link Aeron.Context}.
      */
-    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription {
-        return internal.addSubscription(logger, subscriptionUri, streamId, logInfo)
+    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String, isIpc: Boolean): Subscription {
+        return internal.addSubscription(logger, subscriptionUri, streamId, logInfo, isIpc)
     }
 
     /**

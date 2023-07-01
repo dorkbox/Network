@@ -57,7 +57,7 @@ internal class ServerHandshakeDriver(
                 info = "$logInfo ${ipInfo.listenAddressStringPretty}:$port [$sessionIdSub|$streamIdSub] (reliable:${ipInfo.isReliable})"
             }
 
-            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
+            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, isIpc)
             return ServerHandshakeDriver(aeronDriver, subscription, info, logInfo)
         }
     }

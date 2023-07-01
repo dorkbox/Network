@@ -91,11 +91,11 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
             //  publication of any state to other threads and not be long running or re-entrant with the client.
-            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo)
+            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo, true)
 
             // Create a subscription at the given address and port, using the given stream ID.
             val subscriptionUri = uri(CommonContext.IPC_MEDIA, sessionIdSub, reliable)
-            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
+            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, true)
 
             return PubSub(publication, subscription,
                           sessionIdPub, sessionIdSub,
@@ -131,7 +131,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
 
             // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
             //  publication of any state to other threads and not be long running or re-entrant with the client.
-            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo)
+            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo, false)
 
             // if we are IPv6 WILDCARD -- then our subscription must ALSO be IPv6, even if our connection is via IPv4
 
@@ -140,7 +140,7 @@ internal class ServerConnectionDriver(val pubSub: PubSub) {
                 .endpoint(ipInfo.formattedListenAddressString + ":" + portSub)
 
 
-            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
+            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, false)
 
             return PubSub(publication, subscription,
                           sessionIdPub, sessionIdSub,

@@ -69,7 +69,7 @@ class AeronPubSubTest : BaseTest() {
 
             val subscriptionUri = AeronDriver.uriHandshake(CommonContext.UDP_MEDIA, true)
                 .endpoint(true, "127.0.0.1", port)
-            val sub = serverDriver.addSubscription(subscriptionUri, serverStreamId, "server")
+            val sub = serverDriver.addSubscription(subscriptionUri, serverStreamId, "server", false)
 
             var sessionID = 1234567
             clientDrivers.forEachIndexed { index, clientDriver ->
@@ -77,7 +77,7 @@ class AeronPubSubTest : BaseTest() {
                     .endpoint(true, "127.0.0.1", port)
 
                 // can throw an exception! We catch it in the calling class
-                val publication = clientDriver.addPublication(publicationUri, serverStreamId, "client_$index")
+                val publication = clientDriver.addPublication(publicationUri, serverStreamId, "client_$index", false)
 
                 // can throw an exception! We catch it in the calling class
                 // we actually have to wait for it to connect before we continue
@@ -154,7 +154,7 @@ class AeronPubSubTest : BaseTest() {
 
             val subscriptionUri = AeronDriver.uriHandshake(CommonContext.UDP_MEDIA, true)
                 .endpoint(true, "127.0.0.1", port)
-            val sub = serverDriver.addSubscription(subscriptionUri, serverStreamId, "server")
+            val sub = serverDriver.addSubscription(subscriptionUri, serverStreamId, "server", false)
 
             try {
                 var sessionID = 1234567
@@ -164,7 +164,7 @@ class AeronPubSubTest : BaseTest() {
 
 
                     // can throw an exception! We catch it in the calling class
-                    val publication = clientDriver.addPublication(publicationUri, serverStreamId, "client_$index")
+                    val publication = clientDriver.addPublication(publicationUri, serverStreamId, "client_$index", false)
 
                     // can throw an exception! We catch it in the calling class
                     // we actually have to wait for it to connect before we continue

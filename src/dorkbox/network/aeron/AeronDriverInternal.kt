@@ -257,7 +257,14 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * The publication returned is threadsafe.
      */
     @Suppress("DEPRECATION")
-    suspend fun addPublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication = stateMutex.withLock {
+    suspend fun addPublication(
+        logger: KLogger,
+        publicationUri: ChannelUriStringBuilder,
+        streamId: Int,
+        logInfo: String,
+        isIpc: Boolean
+    ): Publication = stateMutex.withLock {
+
         val uri = publicationUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -305,7 +312,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         var hasDelay = false
-        while (publication.channelStatus() != ChannelEndpointStatus.ACTIVE || publication.localSocketAddresses().isEmpty()) {
+        while (publication.channelStatus() != ChannelEndpointStatus.ACTIVE || (!isIpc && publication.localSocketAddresses().isEmpty())) {
             if (!hasDelay) {
                 hasDelay = true
                 logger.debug { "Aeron Driver [$driverId]: Delaying creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
@@ -336,7 +343,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * This is not a thread-safe publication!
      */
     @Suppress("DEPRECATION")
-    suspend fun addExclusivePublication(logger: KLogger, publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication = stateMutex.withLock {
+    suspend fun addExclusivePublication(
+        logger: KLogger,
+        publicationUri: ChannelUriStringBuilder,
+        streamId: Int,
+        logInfo: String,
+        isIpc: Boolean): Publication = stateMutex.withLock {
+
         val uri = publicationUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -385,7 +398,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         var hasDelay = false
-        while (publication.channelStatus() != ChannelEndpointStatus.ACTIVE || publication.localSocketAddresses().isEmpty()) {
+        while (publication.channelStatus() != ChannelEndpointStatus.ACTIVE || (!isIpc && publication.localSocketAddresses().isEmpty())) {
             if (!hasDelay) {
                 hasDelay = true
                 logger.debug { "Aeron Driver [$driverId]: Delaying creation of publication [$logInfo] :: sessionId=${publicationUri.sessionId()}, streamId=${streamId}" }
@@ -417,7 +430,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
      * {@link Aeron.Context#unavailableImageHandler(UnavailableImageHandler)} from the {@link Aeron.Context}.
      */
     @Suppress("DEPRECATION")
-    suspend fun addSubscription(logger: KLogger, subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription = stateMutex.withLock {
+    suspend fun addSubscription(
+        logger: KLogger,
+        subscriptionUri: ChannelUriStringBuilder,
+        streamId: Int,
+        logInfo: String,
+        isIpc: Boolean): Subscription = stateMutex.withLock {
+
         val uri = subscriptionUri.build()
 
         // reasons we cannot add a pub/sub to aeron
@@ -467,7 +486,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
         }
 
         var hasDelay = false
-        while (subscription.channelStatus() != ChannelEndpointStatus.ACTIVE || subscription.localSocketAddresses().isEmpty()) {
+        while (subscription.channelStatus() != ChannelEndpointStatus.ACTIVE || (!isIpc && subscription.localSocketAddresses().isEmpty())) {
             if (!hasDelay) {
                 hasDelay = true
                 logger.debug { "Aeron Driver [$driverId]: Delaying creation of subscription [$logInfo] :: sessionId=${subscriptionUri.sessionId()}, streamId=${streamId}" }

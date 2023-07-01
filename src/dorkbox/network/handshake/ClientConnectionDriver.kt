@@ -128,7 +128,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
 
             // can throw an exception! We catch it in the calling class
-            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo)
+            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo, true)
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
@@ -139,7 +139,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
             // Create a subscription at the given address and port, using the given stream ID.
             val subscriptionUri = uri(CommonContext.IPC_MEDIA, sessionIdSub, reliable)
-            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
+            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, true)
 
             return PubSub(publication, subscription,
                           sessionIdPub, sessionIdSub,
@@ -176,7 +176,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
             //  publication of any state to other threads and not be long running or re-entrant with the client.
 
             // can throw an exception! We catch it in the calling class
-            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo)
+            val publication = aeronDriver.addExclusivePublication(publicationUri, streamIdPub, logInfo, false)
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
@@ -195,7 +195,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
                 .controlEndpoint(isRemoteIpv4, remoteAddressString, portSub)
                 .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
 
-            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo)
+            val subscription = aeronDriver.addSubscription(subscriptionUri, streamIdSub, logInfo, false)
 
 
 
