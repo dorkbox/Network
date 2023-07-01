@@ -21,6 +21,7 @@ import io.aeron.driver.MediaDriver
 import io.aeron.exceptions.DriverTimeoutException
 import java.io.Closeable
 import java.io.File
+import java.util.concurrent.*
 
 /**
  * Creates the Aeron Media Driver context
@@ -116,6 +117,11 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
         return context.isDriverActive(context.driverTimeoutMs()) { }
     }
 
+    private fun isRunning(context: MediaDriver.Context): Boolean {
+        // if the media driver is running, it will be a quick connection. Usually 100ms or so
+        return context.isDriverActive(context.driverTimeoutMs()) { }
+    }
+
     init {
         // NOTE: if a DIFFERENT PROCESS is using the SAME driver location, THERE WILL BE POTENTIAL PROBLEMS!
         //  ADDITIONALLY, the ONLY TIME we create a new aeron context is when it is the FIRST aeron context for a driver. Within the same
@@ -156,7 +162,15 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
             // if we are not CURRENTLY running, then we should ALSO delete it when we are done!
             context.dirDeleteOnShutdown()
         } else {
-            // maybe it's a mistake?
+            // maybe it's a mistake because we restarted too quickly! A brief pause to fix this!
+
+            // wait for it to close!
+            val timeoutInNanos = TimeUnit.SECONDS.toMillis(config.connectionCloseTimeoutInSeconds.toLong())
+            val closeTimeoutTime = System.nanoTime()
+            while (isRunning(context) && System.nanoTime() - closeTimeoutTime < timeoutInNanos) {
+                Thread.sleep(timeoutInNanos)
+            }
+
             require(config.forceAllowSharedAeronDriver) { "Aeron is currently running, and this is the first instance created by this JVM. " +
                     "You must use `config.forceAllowSharedAeronDriver` to be able to re-use a shared aeron process at: $aeronDir" }
         }
