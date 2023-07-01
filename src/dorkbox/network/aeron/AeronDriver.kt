@@ -487,19 +487,38 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         throw exception
     }
 
-
-    suspend fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
+    /**
+     * Add a [ConcurrentPublication] for publishing messages to subscribers.
+     *
+     * This guarantees that the publication is added and ACTIVE
+     *
+     * The publication returned is threadsafe.
+     */
+    fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
         return internal.addPublication(logger, publicationUri, streamId, logInfo)
     }
 
     /**
+     * Add an [ExclusivePublication] for publishing messages to subscribers from a single thread.
+     *
+     * This guarantees that the publication is added and ACTIVE
+     *
      * This is not a thread-safe publication!
      */
     suspend fun addExclusivePublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
         return internal.addExclusivePublication(logger, publicationUri, streamId, logInfo)
     }
 
-    suspend fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription {
+    /**
+     * Add a new [Subscription] for subscribing to messages from publishers.
+     *
+     * This guarantees that the subscription is added and ACTIVE
+     *
+     * The method will set up the [Subscription] to use the
+     * {@link Aeron.Context#availableImageHandler(AvailableImageHandler)} and
+     * {@link Aeron.Context#unavailableImageHandler(UnavailableImageHandler)} from the {@link Aeron.Context}.
+     */
+    fun addSubscription(subscriptionUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Subscription {
         return internal.addSubscription(logger, subscriptionUri, streamId, logInfo)
     }
 
