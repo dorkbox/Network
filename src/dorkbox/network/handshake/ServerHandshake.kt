@@ -322,7 +322,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 reliable = true
             )
 
-            // note the pub/sub info is from the perspective of the SERVER
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
                 logger.debug { "Creating new connection to $logInfo" }
@@ -537,7 +536,6 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 reliable = isReliable
             )
 
-            // note the pub/sub info is from the perspective of the SERVER
             val logInfo = newConnectionDriver.pubSub.getLogInfo(logger.isDebugEnabled)
             if (logger.isDebugEnabled) {
                 logger.debug { "Creating new connection to $logInfo" }

@@ -559,6 +559,7 @@ open class Client<CONNECTION : Connection>(
 
                 // throws a ConnectTimedOutException if the client cannot connect for any reason to the server handshake ports
                 handshakeConnection = ClientHandshakeDriver.build(
+                    config = config,
                     aeronDriver = aeronDriver,
                     autoChangeToIpc = autoChangeToIpc,
                     remoteAddress = remoteAddress,
@@ -720,8 +721,7 @@ open class Client<CONNECTION : Connection>(
         // we are now connected, so we can connect to the NEW client-specific ports
         val clientConnection = ClientConnectionDriver.build(aeronDriver, connectionTimeoutSec, handshakeConnection, connectionInfo)
 
-        // Note: the pub/sub info is from the perspective of the SERVER
-        val pubSub = clientConnection.connectionInfo.reverseForClient()
+        val pubSub = clientConnection.connectionInfo
         val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
 
         if (logger.isDebugEnabled) {

@@ -15,6 +15,7 @@
  */
 package dorkbox.network.connection
 
+import dorkbox.network.Client
 import dorkbox.network.aeron.AeronDriver.Companion.sessionIdAllocator
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
 import dorkbox.network.exceptions.ClientException
@@ -41,6 +42,14 @@ import java.util.concurrent.*
  */
 open class Connection(connectionParameters: ConnectionParams<*>) {
     private var messageHandler: FragmentAssembler
+
+    /**
+     * The specific connection details for this connection!
+     *
+     * NOTE: remember, the connection details are for the connection, but the toString() info is reversed for the client
+     *     (so that we can line-up client/server connection logs)
+     */
+    val info = connectionParameters.connectionInfo
 
     /**
      * the endpoint associated with this connection
@@ -134,14 +143,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
      */
     val rmi: RmiSupportConnection<out Connection>
 
-    /**
-     * The specific connection details for this connection!
-     *
-     * NOTE: remember, the connection details are for the connection, but the toString() info is reversed for the client
-     *     (so that we can line-up client/server connection logs)
-     */
-    val info = connectionParameters.connectionInfo
-
     // we customize the toString() value for this connection, and it's just better to cache it's value (since it's a modestly complex string)
     private val toString0: String
 
@@ -171,7 +172,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         rmi = endPoint.rmiConnectionSupport.getNewRmiSupport(this)
 
         // For toString() and logging
-        // Note: the pub/sub info is from the perspective of the SERVER
         toString0 = info.getLogInfo(logger.isDebugEnabled)
     }
 

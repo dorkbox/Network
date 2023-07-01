@@ -16,6 +16,7 @@
 
 package dorkbox.network.handshake
 
+import dorkbox.network.Configuration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.getLocalAddressString
 import dorkbox.network.aeron.AeronDriver.Companion.streamIdAllocator
@@ -53,6 +54,7 @@ internal class ClientHandshakeDriver(
 ) {
     companion object {
         suspend fun build(
+            config: Configuration,
             aeronDriver: AeronDriver,
             autoChangeToIpc: Boolean,
             remoteAddress: InetAddress?,

@@ -353,7 +353,7 @@ internal object ServerHandshakePollers {
                 isIpc = false,
                 ipInfo = server.ipInfo,
                 port = server.port,
-                streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                streamIdSub = config.udpId,
                 sessionIdSub = 9,
                 logInfo = "HANDSHAKE-IPv4"
             )
@@ -403,7 +403,7 @@ internal object ServerHandshakePollers {
                 isIpc = false,
                 ipInfo = server.ipInfo,
                 port = server.port,
-                streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                streamIdSub = config.udpId,
                 sessionIdSub = 0,
                 logInfo = "HANDSHAKE-IPv6"
             )
@@ -455,7 +455,7 @@ internal object ServerHandshakePollers {
                 isIpc = false,
                 ipInfo = server.ipInfo,
                 port = server.port,
-                streamIdSub = AeronDriver.UDP_HANDSHAKE_STREAM_ID,
+                streamIdSub = config.udpId,
                 sessionIdSub = 0,
                 logInfo = "HANDSHAKE-IPv4+6"
             )
