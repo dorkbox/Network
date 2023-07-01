@@ -94,7 +94,7 @@ internal class ClientHandshakeDriver(
             var pubSub: PubSub? = null
 
             if (isUsingIPC) {
-                streamIdPub = AeronDriver.IPC_HANDSHAKE_STREAM_ID
+                streamIdPub = config.ipcId
 
                 logInfo = "HANDSHAKE-IPC"
                 details = logInfo
@@ -141,7 +141,7 @@ internal class ClientHandshakeDriver(
                     "HANDSHAKE-IPv6"
                 }
 
-                streamIdPub = AeronDriver.UDP_HANDSHAKE_STREAM_ID
+                streamIdPub = config.udpId
 
 
                 pubSub = buildUDP(
