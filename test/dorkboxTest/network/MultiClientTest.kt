@@ -21,8 +21,11 @@ import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.connection.Connection
 import dorkbox.util.NamedThreadFactory
+import io.aeron.driver.ThreadingMode
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.*
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert
 import org.junit.Test
 import java.text.SimpleDateFormat
@@ -41,11 +44,11 @@ class MultiClientTest : BaseTest() {
     @Test
     fun multiConnectClient() {
         val server = run {
-            val configuration = serverConfig()
-            configuration.enableIPv6 = false
-            configuration.uniqueAeronDirectory = true
+            val config = serverConfig()
+            config.uniqueAeronDirectory = true
+            config.threadingMode = ThreadingMode.DEDICATED
 
-            val server: Server<Connection> = Server(configuration)
+            val server: Server<Connection> = Server(config)
             addEndPoint(server)
             server.onConnect {
                 val count = serverConnectCount.incrementAndGet()
@@ -69,7 +72,6 @@ class MultiClientTest : BaseTest() {
         val clients = mutableListOf<Client<Connection>>()
         for (i in 1..totalCount) {
             val config = clientConfig()
-            config.enableIPv6 = false
             config.uniqueAeronDirectory = true
 
             val client: Client<Connection> = Client(config, "Client $i")

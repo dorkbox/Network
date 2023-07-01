@@ -121,7 +121,7 @@ class MemoryTest : BaseTest() {
     fun runForeverIpc() {
         val counter = AtomicLong(0)
         runBlocking {
-            run {
+            val server = run {
                 val configuration = serverConfig()
 
                 val server = Server<Connection>(configuration)
@@ -130,11 +130,11 @@ class MemoryTest : BaseTest() {
                     send(testObject+1)
                 }
 
-                server.bind()
+                server
             }
 
 
-            run {
+            val client = run {
                 val client = Client<Connection>(clientConfig())
 
                 client.onMessage<Long> { testObject ->
@@ -145,8 +145,11 @@ class MemoryTest : BaseTest() {
                     send(0L)
                 }
 
-                client.connectIpc()
+                client
             }
+
+            server.bind()
+            client.connectIpc()
 
             Thread.sleep(Long.MAX_VALUE)
         }
