@@ -81,9 +81,6 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
          */
         internal const val RESERVED_SESSION_ID_HIGH = Integer.MAX_VALUE
 
-        const val UDP_HANDSHAKE_STREAM_ID: Int = 0x1337cafe  // 322423550
-        const val IPC_HANDSHAKE_STREAM_ID: Int = 0x1337c0de  // 322420958
-
         // guarantee that session/stream ID's will ALWAYS be unique! (there can NEVER be a collision!)
         val sessionIdAllocator = RandomId65kAllocator(RESERVED_SESSION_ID_LOW, RESERVED_SESSION_ID_HIGH)
         val streamIdAllocator = RandomId65kAllocator((Short.MAX_VALUE * 2) - 1) // this is 65k-1 values

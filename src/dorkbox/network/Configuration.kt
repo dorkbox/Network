@@ -19,7 +19,6 @@ package dorkbox.network
 
 import dorkbox.netUtil.IPv4
 import dorkbox.netUtil.IPv6
-import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.CoroutineBackoffIdleStrategy
 import dorkbox.network.aeron.CoroutineIdleStrategy
 import dorkbox.network.aeron.CoroutineSleepingMillisIdleStrategy
@@ -82,15 +81,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         }
 
     /**
-     * The IPC ID is used to define what ID the server will receive data on. The client IPC ID must match this value.
-     */
-    var ipcId = AeronDriver.IPC_HANDSHAKE_STREAM_ID
-        set(value) {
-            require(!contextDefined) { errorMessage }
-            field = value
-        }
-
-    /**
      * Allows the user to change how endpoint settings and public key information are saved.
      */
     override var settingsStore: Storage.Builder = Storage.Property().file("settings-server.db")
@@ -128,7 +118,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         config.listenIpAddress = listenIpAddress
         config.maxClientCount = maxClientCount
         config.maxConnectionsPerIpAddress = maxConnectionsPerIpAddress
-        config.ipcId = ipcId
         config.settingsStore = settingsStore
 
         super.copy(config)
@@ -144,7 +133,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         if (listenIpAddress != other.listenIpAddress) return false
         if (maxClientCount != other.maxClientCount) return false
         if (maxConnectionsPerIpAddress != other.maxConnectionsPerIpAddress) return false
-        if (ipcId != other.ipcId) return false
         if (settingsStore != other.settingsStore) return false
 
         return true
@@ -155,7 +143,6 @@ class ServerConfiguration : dorkbox.network.Configuration() {
         result = 31 * result + listenIpAddress.hashCode()
         result = 31 * result + maxClientCount
         result = 31 * result + maxConnectionsPerIpAddress
-        result = 31 * result + ipcId
         result = 31 * result + settingsStore.hashCode()
         return result
     }
@@ -238,6 +225,9 @@ abstract class Configuration protected constructor() {
 
         internal val networkThreadGroup = ThreadGroup("Network")
         internal val aeronThreadFactory = NamedThreadFactory( "Aeron", networkThreadGroup,  true)
+
+        const val UDP_HANDSHAKE_STREAM_ID: Int = 0x1337cafe  // 322423550
+        const val IPC_HANDSHAKE_STREAM_ID: Int = 0x1337c0de  // 322420958
 
         private val defaultMessageCoroutineScope = Dispatchers.Default
 
@@ -349,6 +339,25 @@ abstract class Configuration protected constructor() {
             require(!contextDefined) { errorMessage }
             field = value
         }
+
+    /**
+     * The IPC ID is used to define what ID the server will receive data on for the handshake. The client IPC ID must match this value.
+     */
+    var ipcId = IPC_HANDSHAKE_STREAM_ID
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
+    /**
+     * The UDP ID is used to define what ID the server will receive data on for the handshake. The client UDP ID must match this value.
+     */
+    var udpId = UDP_HANDSHAKE_STREAM_ID
+        set(value) {
+            require(!contextDefined) { errorMessage }
+            field = value
+        }
+
 
     /**
      * When connecting to a remote client/server, should connections be allowed if the remote machine signature has changed?
@@ -519,7 +528,7 @@ abstract class Configuration protected constructor() {
      * SHARED_NETWORK or SHARED. INVOKER can be used for low resource environments while the application using Aeron can invoke the
      * media driver to carry out its duty cycle on a regular interval.
      */
-    var threadingMode = ThreadingMode.SHARED
+    var threadingMode = ThreadingMode.SHARED_NETWORK
         set(value) {
             require(!contextDefined) { errorMessage }
             field = value
@@ -955,6 +964,8 @@ abstract class Configuration protected constructor() {
         config.enableIPv4 = enableIPv4
         config.enableIPv6 = enableIPv6
         config.enableIpc = enableIpc
+        config.ipcId = ipcId
+        config.udpId = udpId
         config.enableRemoteSignatureValidation = enableRemoteSignatureValidation
         config.connectionCloseTimeoutInSeconds = connectionCloseTimeoutInSeconds
         config.connectionCheckIntervalNanos = connectionCheckIntervalNanos
@@ -1015,6 +1026,8 @@ abstract class Configuration protected constructor() {
         if (enableIPv4 != other.enableIPv4) return false
         if (enableIPv6 != other.enableIPv6) return false
         if (enableIpc != other.enableIpc) return false
+        if (ipcId != other.ipcId) return false
+        if (udpId != other.udpId) return false
         if (enableRemoteSignatureValidation != other.enableRemoteSignatureValidation) return false
         if (connectionCloseTimeoutInSeconds != other.connectionCloseTimeoutInSeconds) return false
         if (connectionCheckIntervalNanos != other.connectionCheckIntervalNanos) return false
@@ -1044,6 +1057,8 @@ abstract class Configuration protected constructor() {
         result = 31 * result + enableIPv6.hashCode()
         result = 31 * result + enableIpc.hashCode()
         result = 31 * result + enableRemoteSignatureValidation.hashCode()
+        result = 31 * result + ipcId
+        result = 31 * result + udpId
         result = 31 * result + pingTimeoutSeconds
         result = 31 * result + connectionCloseTimeoutInSeconds
         result = 31 * result + connectionCheckIntervalNanos.hashCode()
