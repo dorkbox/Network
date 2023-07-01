@@ -81,11 +81,6 @@ internal object ServerHandshakePollers {
                 }
                 msg
             } catch (e: Exception) {
-                // we must READ all bytes! If we don't the image won't go away. Kyro eagerly aborted the read!
-                for (i in 0..length) {
-                    buffer.getByte(offset+i)
-                }
-
                 server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error de-serializing handshake message!!", e))
                 null
             } ?: return
@@ -215,11 +210,6 @@ internal object ServerHandshakePollers {
                 }
                 msg
             } catch (e: Exception) {
-                // we must READ all bytes! If we don't the image won't go away. Kyro eagerly aborted the read!
-                for (i in 0..length) {
-                    buffer.getByte(offset+i)
-                }
-
                 server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error de-serializing handshake message!!", e))
                 null
             } ?: return
