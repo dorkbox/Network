@@ -146,6 +146,12 @@ internal class HandshakeMessage private constructor() {
             ", Error: $errorMessage"
         }
 
-        return "HandshakeMessage($stateStr$errorMsg sessionId=$sessionId, streamId=$streamId, port=$port)"
+        val connectInfo = if (connectKey != 0L) {
+            ", key=$connectKey"
+        } else {
+            ""
+        }
+
+        return "HandshakeMessage($stateStr$errorMsg sessionId=$sessionId, streamId=$streamId, port=$port${connectInfo})"
     }
 }
