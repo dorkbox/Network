@@ -489,7 +489,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * This guarantees that the publication is added and ACTIVE
      *
-     * The publication returned is threadsafe.
+     * The publication returned is thread-safe.
      */
     suspend fun addPublication(publicationUri: ChannelUriStringBuilder, streamId: Int, logInfo: String): Publication {
         return internal.addPublication(logger, publicationUri, streamId, logInfo)
