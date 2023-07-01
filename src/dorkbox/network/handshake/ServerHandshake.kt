@@ -203,7 +203,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
     /**
-     * @return true if the handshake poller is to close the publication, false will keep the publication (as we are DONE processing data)
+     * @return true if the connection was SUCCESS. False if the handshake poller should immediately close the publication
      */
     suspend fun processIpcHandshakeMessageServer(
         server: Server<CONNECTION>,
@@ -215,7 +215,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         aeronLogInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
-    ) {
+    ): Boolean {
         val serialization = config.serialization
 
         /////
@@ -238,7 +238,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             } catch (e: Exception) {
                 listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
             }
-            return
+            return false
         }
 
         val connectionSessionIdSub: Int
@@ -256,7 +256,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             } catch (e: Exception) {
                 listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
             }
-            return
+            return false
         }
 
 
@@ -276,7 +276,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             } catch (e: Exception) {
                 listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
             }
-            return
+            return false
         }
 
         val connectionStreamIdSub: Int
@@ -296,7 +296,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             } catch (e: Exception) {
                 listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
             }
-            return
+            return false
         }
 
 
@@ -373,12 +373,17 @@ internal class ServerHandshake<CONNECTION : Connection>(
             streamIdAllocator.free(connectionStreamIdPub)
 
             listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message", e))
+
+            return false
         }
+
+        return true
     }
 
     /**
      * note: CANNOT be called in action dispatch. ALWAYS ON SAME THREAD
-     * @return true if the handshake poller is to close the publication, false will keep the publication
+     *
+     * @return true if the connection was SUCCESS. False if the handshake poller should immediately close the publication
      */
     suspend fun processUdpHandshakeMessageServer(
         server: Server<CONNECTION>,
@@ -392,7 +397,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         aeronLogInfo: String,
         connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         logger: KLogger
-    ) {
+    ): Boolean {
         val serialization = config.serialization
 
         // UDP ONLY
@@ -403,7 +408,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         validateRemoteAddress = server.crypto.validateRemoteAddress(clientAddress, clientAddressString, clientPublicKeyBytes)
         if (validateRemoteAddress == PublicKeyValidationState.INVALID) {
             listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] Connection not allowed! Public key mismatch."))
-            return
+            return false
         }
 
         val isSelfMachine = clientAddress.isLoopbackAddress || clientAddress == EndPoint.lanAddress
@@ -411,7 +416,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
         if (!isSelfMachine &&
             !validateUdpConnectionInfo(server, handshaker, handshakePublication, config, clientAddress, aeronLogInfo)) {
             // we do not want to limit the loopback addresses!
-            return
+            return false
         }
 
 
@@ -438,7 +443,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             } catch (e: Exception) {
                 listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
             }
-            return
+            return false
         }
 
 
@@ -458,7 +463,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             } catch (e: Exception) {
                 listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
             }
-            return
+            return false
         }
 
 
@@ -479,7 +484,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             } catch (e: Exception) {
                 listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
             }
-            return
+            return false
         }
 
         val connectionStreamIdSub: Int
@@ -500,7 +505,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
             } catch (e: Exception) {
                 listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
             }
-            return
+            return false
         }
 
 
@@ -559,7 +564,7 @@ internal class ServerHandshake<CONNECTION : Connection>(
                 } catch (e: Exception) {
                     listenerManager.notifyError(TransmitException("[$aeronLogInfo] Handshake error", e))
                 }
-                return
+                return false
             }
 
 
@@ -602,7 +607,10 @@ internal class ServerHandshake<CONNECTION : Connection>(
             streamIdAllocator.free(connectionStreamIdSub)
 
             listenerManager.notifyError(ServerHandshakeException("[$aeronLogInfo] (${message.connectKey}) Connection (${connection?.id}) handshake crashed! Message $message"))
+            return false
         }
+
+        return true
     }
 
     /**

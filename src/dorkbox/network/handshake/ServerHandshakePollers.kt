@@ -19,25 +19,30 @@
 package dorkbox.network.handshake
 
 import dorkbox.netUtil.IP
+import dorkbox.network.Configuration
 import dorkbox.network.Server
 import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.aeron.AeronPoller
-import dorkbox.network.connection.Connection
-import dorkbox.network.connection.ConnectionParams
-import dorkbox.network.connection.EventDispatcher
-import dorkbox.network.connection.IpInfo
+import dorkbox.network.connection.*
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
+import dorkbox.util.NamedThreadFactory
 import io.aeron.CommonContext
 import io.aeron.FragmentAssembler
 import io.aeron.Image
+import io.aeron.Publication
+import io.aeron.logbuffer.FragmentHandler
 import io.aeron.logbuffer.Header
+import kotlinx.coroutines.runBlocking
 import mu.KLogger
+import net.jodah.expiringmap.ExpirationPolicy
+import net.jodah.expiringmap.ExpiringMap
 import org.agrona.DirectBuffer
 import java.net.Inet4Address
+import java.util.concurrent.*
 
 internal object ServerHandshakePollers {
     fun disabled(serverInfo: String): AeronPoller {
@@ -54,13 +59,30 @@ internal object ServerHandshakePollers {
         val driver: AeronDriver,
         val handshake: ServerHandshake<CONNECTION>,
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION
-    ) {
+    ): FragmentHandler {
 
         private val connectionTimeoutSec = server.config.connectionCloseTimeoutInSeconds
         private val isReliable = server.config.isReliable
         private val handshaker = server.handshaker
 
-        fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
+        // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
+        private val publications = ExpiringMap.builder()
+            .apply {
+                // connections are extremely difficult to diagnose when the connection timeout is short
+                val timeUnit = if (EndPoint.DEBUG_CONNECTIONS) { TimeUnit.HOURS } else { TimeUnit.NANOSECONDS }
+
+                // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
+                this.expiration(TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong() * 2) + driver.lingerNs(), timeUnit)
+            }
+            .expirationPolicy(ExpirationPolicy.CREATED)
+            .expirationListener<Long, Publication> { connectKey, publication ->
+                runBlocking {
+                    driver.closeAndDeletePublication(publication, "Server IPC Handshake ($connectKey)")
+                }
+            }
+            .build<Long, Publication>()
+
+        override fun onFragment(buffer: DirectBuffer, offset: Int, length: Int, header: Header) {
             // this is processed on the thread that calls "poll". Subscriptions are NOT multi-thread safe!
 
             // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
@@ -89,33 +111,34 @@ internal object ServerHandshakePollers {
 
             // we have read all the data, now dispatch it.
             EventDispatcher.HANDSHAKE.launch {
-                // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-                val publicationUri = uriHandshake(CommonContext.IPC_MEDIA, isReliable)
-
-                // this will always connect to the CLIENT handshake subscription!
-                val publication = try {
-                    driver.addExclusivePublication(publicationUri, message.streamId, logInfo)
-                } catch (e: Exception) {
-                    server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
-                    return@launch
-                }
-
-                try {
-                    // we actually have to wait for it to connect before we continue
-                    driver.waitForConnection(publication, connectionTimeoutSec, logInfo) { cause ->
-                        ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
-                    }
-                } catch (e: Exception) {
-                    server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
-                    return@launch
-                }
-
                 // HandshakeMessage.HELLO
                 // HandshakeMessage.DONE
                 val messageState = message.state
+                val connectKey = message.connectKey
 
                 if (messageState == HandshakeMessage.HELLO) {
-                    handshake.processIpcHandshakeMessageServer(
+                    // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
+                    val publicationUri = uriHandshake(CommonContext.IPC_MEDIA, isReliable)
+
+                    // this will always connect to the CLIENT handshake subscription!
+                    val publication = try {
+                        driver.addExclusivePublication(publicationUri, message.streamId, logInfo, true)
+                    } catch (e: Exception) {
+                        server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
+                        return@launch
+                    }
+
+                    try {
+                        // we actually have to wait for it to connect before we continue
+                        driver.waitForConnection(publication, connectionTimeoutSec, logInfo) { cause ->
+                            ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
+                        }
+                    } catch (e: Exception) {
+                        server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
+                        return@launch
+                    }
+
+                    val success = handshake.processIpcHandshakeMessageServer(
                         server = server,
                         handshaker = handshaker,
                         aeronDriver = driver,
@@ -126,7 +149,20 @@ internal object ServerHandshakePollers {
                         connectionFunc = connectionFunc,
                         logger = logger
                     )
+
+                    if (success) {
+                        publications[connectKey] = publication
+                    } else {
+                        driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
+                    }
                 } else {
+                    val publication = publications.remove(connectKey)
+
+                    if (publication == null) {
+                        server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] No publication back to IPC"))
+                        return@launch
+                    }
+
                     // HandshakeMessage.DONE
                     handshake.validateMessageTypeAndDoPending(
                         server = server,
@@ -136,9 +172,9 @@ internal object ServerHandshakePollers {
                         aeronLogInfo = logInfo,
                         logger = logger
                     )
-                }
 
-                driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
+                    driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
+                }
             }
         }
     }
@@ -150,13 +186,36 @@ internal object ServerHandshakePollers {
         val handshake: ServerHandshake<CONNECTION>,
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
         val isReliable: Boolean
-    ) {
+    ): FragmentHandler {
+        companion object {
+            init {
+                ExpiringMap.setThreadFactory(NamedThreadFactory("ExpiringMap-Eviction", Configuration.networkThreadGroup, true))
+            }
+        }
 
         private val ipInfo = server.ipInfo
         private val handshaker = server.handshaker
         private val connectionTimeoutSec = server.config.connectionCloseTimeoutInSeconds
 
-        fun process(header: Header, buffer: DirectBuffer, offset: Int, length: Int) {
+        // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
+        private val publications = ExpiringMap.builder()
+            .apply {
+                // connections are extremely difficult to diagnose when the connection timeout is short
+                val timeUnit = if (EndPoint.DEBUG_CONNECTIONS) { TimeUnit.HOURS } else { TimeUnit.NANOSECONDS }
+
+                // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
+                this.expiration(TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong() * 2) + driver.lingerNs(), timeUnit)
+            }
+            .expirationPolicy(ExpirationPolicy.CREATED)
+            .expirationListener<Long, Publication> { connectKey, publication ->
+                runBlocking {
+                    driver.closeAndDeletePublication(publication, "Server UDP Handshake ($connectKey)")
+                }
+            }
+            .build<Long, Publication>()
+
+
+        override fun onFragment(buffer: DirectBuffer, offset: Int, length: Int, header: Header) {
             // The sessionId is unique within a Subscription and unique across all Publication's from a sourceIdentity.
             // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
 
@@ -217,40 +276,40 @@ internal object ServerHandshakePollers {
 
 
             EventDispatcher.HANDSHAKE.launch {
-                // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
-
-                // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
-                // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
-                val publicationUri = uriHandshake(CommonContext.UDP_MEDIA, isReliable)
-                    .controlEndpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
-                    .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
-
-
-                // this will always connect to the CLIENT handshake subscription!
-                val publication = try {
-                    driver.addExclusivePublication(publicationUri, message.streamId, logInfo)
-                } catch (e: Exception) {
-                    server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
-                    return@launch
-                }
-
-                try {
-                    // we actually have to wait for it to connect before we continue
-                    driver.waitForConnection(publication, connectionTimeoutSec, logInfo) { cause ->
-                        ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
-                    }
-                } catch (e: Exception) {
-                    server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
-                    return@launch
-                }
-
-
                 // HandshakeMessage.HELLO
                 // HandshakeMessage.DONE
                 val messageState = message.state
+                val connectKey = message.connectKey
 
                 if (messageState == HandshakeMessage.HELLO) {
-                    handshake.processUdpHandshakeMessageServer(
+                    // we create a NEW publication for the handshake, which connects directly to the client handshake subscription
+
+                    // A control endpoint for the subscriptions will cause a periodic service management "heartbeat" to be sent to the
+                    // remote endpoint publication, which permits the remote publication to send us data, thereby getting us around NAT
+                    val publicationUri = uriHandshake(CommonContext.UDP_MEDIA, isReliable)
+                        .controlEndpoint(ipInfo.getAeronPubAddress(isRemoteIpv4) + ":" + message.port)
+                        .controlMode(CommonContext.MDC_CONTROL_MODE_DYNAMIC)
+
+
+                    // this will always connect to the CLIENT handshake subscription!
+                    val publication = try {
+                        driver.addExclusivePublication(publicationUri, message.streamId, logInfo, false)
+                    } catch (e: Exception) {
+                        server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
+                        return@launch
+                    }
+
+                    try {
+                        // we actually have to wait for it to connect before we continue
+                        driver.waitForConnection(publication, connectionTimeoutSec, logInfo) { cause ->
+                            ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
+                        }
+                    } catch (e: Exception) {
+                        server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
+                        return@launch
+                    }
+
+                    val success = handshake.processUdpHandshakeMessageServer(
                         server = server,
                         handshaker = handshaker,
                         handshakePublication = publication,
@@ -263,8 +322,24 @@ internal object ServerHandshakePollers {
                         connectionFunc = connectionFunc,
                         logger = logger
                     )
+
+                    if (success) {
+                        publications[connectKey] = publication
+                    } else {
+                        driver.closeAndDeletePublication(publication, logInfo)
+                    }
+
                 } else {
                     // HandshakeMessage.DONE
+
+                    val publication = publications.remove(connectKey)
+
+                    if (publication == null) {
+                        server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] No publication back to $clientAddressString"))
+                        return@launch
+                    }
+
+
                     handshake.validateMessageTypeAndDoPending(
                         server = server,
                         handshaker = handshaker,
@@ -273,9 +348,9 @@ internal object ServerHandshakePollers {
                         aeronLogInfo = logInfo,
                         logger = logger
                     )
-                }
 
-                driver.closeAndDeletePublication(publication, logInfo)
+                    driver.closeAndDeletePublication(publication, logInfo)
+                }
             }
         }
     }
@@ -297,19 +372,13 @@ internal object ServerHandshakePollers {
             )
 
             val subscription = driver.subscription
-            val processor = IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc)
 
             object : AeronPoller {
-                // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
-                //  we exclusively read from the DirectBuffer on a single thread.
-
                 // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
                 //  publication of any state to other threads and not be:
                 //   - long running
                 //   - re-entrant with the client
-                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    processor.process(header, buffer, offset, length)
-                }
+                val handler = FragmentAssembler(IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc))
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
@@ -349,19 +418,13 @@ internal object ServerHandshakePollers {
             )
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
 
             object : AeronPoller {
-                // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
-                //  we exclusively read from the DirectBuffer on a single thread.
-
                 // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
                 //  publication of any state to other threads and not be:
                 //   - long running
                 //   - re-entrant with the client
-                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    processor.process(header, buffer, offset, length)
-                }
+                val handler = FragmentAssembler(UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable))
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
@@ -399,20 +462,13 @@ internal object ServerHandshakePollers {
             )
 
             val subscription = driver.subscription
-            val processor = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
-
 
             object : AeronPoller {
-                // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
-                //  we exclusively read from the DirectBuffer on a single thread.
-
                 // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
                 //  publication of any state to other threads and not be:
                 //   - long running
                 //   - re-entrant with the client
-                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    processor.process(header, buffer, offset, length)
-                }
+                val handler = FragmentAssembler(UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable))
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
@@ -462,9 +518,7 @@ internal object ServerHandshakePollers {
                 //  publication of any state to other threads and not be:
                 //   - long running
                 //   - re-entrant with the client
-                val handler = FragmentAssembler { buffer: DirectBuffer, offset: Int, length: Int, header: Header ->
-                    processor.process(header, buffer, offset, length)
-                }
+                val handler = FragmentAssembler(processor)
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
