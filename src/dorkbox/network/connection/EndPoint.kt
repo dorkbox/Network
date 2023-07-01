@@ -709,7 +709,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
              */
             if (result == Publication.NOT_CONNECTED) {
                 if (abortEarly) {
-                    listenerManager.notifyError(newException("[${publication.sessionId()}] Error sending message. (Connection in non-connected state, aborted attempt! ${errorCodeName(result)})"))
+                    listenerManager.notifyError(newException("[${publication.sessionId()}] Unable to send message. (Connection in non-connected state, aborted attempt! ${errorCodeName(result)})"))
                     return false
                 }
 

@@ -406,7 +406,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         // notify the remote endPoint that we are closing
         // we send this AFTER we close our subscription (so that no more messages will be received, when the remote end ping-pong's this message back)
         if (publication.isConnected) {
-            // sometimes the remote end has already disconnected
+            // sometimes the remote end has already disconnected, THERE WILL BE ERRORS if this happens (but they are ok)
             send(DisconnectMessage.INSTANCE, true)
         }
 
