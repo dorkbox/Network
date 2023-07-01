@@ -42,8 +42,13 @@ import java.util.concurrent.*
 open class Connection(connectionParameters: ConnectionParams<*>) {
     private var messageHandler: FragmentAssembler
 
-    private val subscription = connectionParameters.connectionInfo.sub
-    private val publication = connectionParameters.connectionInfo.pub
+    /**
+     * the endpoint associated with this connection
+     */
+    internal val endPoint = connectionParameters.endPoint
+
+    internal val subscription = info.sub
+    internal val publication = info.pub
 
     /**
      * When publishing data, we cannot have concurrent publications for a single connection (per Aeron publication)
@@ -66,39 +71,40 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * The unique session id of this connection, assigned by the server.
      *
-     * Specifically this is the subscription session ID of the server
+     * Specifically this is the subscription session ID for the server
      */
-    val id = connectionParameters.connectionInfo.sessionIdSub
+    val id = if (endPoint::class.java == Client::class.java) {
+        info.sessionIdPub
+    } else {
+        info.sessionIdSub
+    }
 
     /**
      * The remote address, as a string. Will be null for IPC connections
      */
-    val remoteAddress = connectionParameters.connectionInfo.remoteAddress
+    val remoteAddress = info.remoteAddress
 
     /**
      * The remote address, as a string. Will be "IPC" for IPC connections
      */
-    val remoteAddressString = connectionParameters.connectionInfo.remoteAddressString
+    val remoteAddressString = info.remoteAddressString
 
     /**
      * The remote port. Will be 0 for IPC connections
      */
-    val remotePort = connectionParameters.connectionInfo.portPub
+    val remotePort = info.portPub
 
     /**
      * @return true if this connection is an IPC connection
      */
-    val isIpc = connectionParameters.connectionInfo.isIpc
+    val isIpc = info.isIpc
 
     /**
      * @return true if this connection is a network connection
      */
     val isNetwork = !isIpc
 
-    /**
-     * the endpoint associated with this connection
-     */
-    internal val endPoint = connectionParameters.endPoint
+
 
 
     private val listenerManager = atomic<ListenerManager<Connection>?>(null)
@@ -191,7 +197,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
 //     * @return the AES key. key=32 byte, iv=12 bytes (AES-GCM implementation).
 //     */
 //    fun cryptoKey(): SecretKey {
-//        TODO()
 ////        return channelWrapper.cryptoKey()
 //    }
 
@@ -234,8 +239,6 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
                 }
 
                 val listenerManager = listenerManager.value!!
-
-
 
                 if (message is MethodResponse && message.result is Exception) {
                     val result = message.result as Exception

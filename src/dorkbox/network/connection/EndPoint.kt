@@ -654,11 +654,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             logger.trace { "[${header.sessionId()}] received: ${message?.javaClass?.simpleName} $message" }
             processMessage(message, connection)
         } catch (e: Exception) {
-            // we must READ all bytes! If we don't the image won't go away. Kyro eagerly aborted the read!
-            for (i in 0..length) {
-                buffer.getByte(offset+i)
-            }
-
             listenerManager.notifyError(connection, newException("Error de-serializing message", e))
         }
     }
