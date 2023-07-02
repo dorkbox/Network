@@ -1712,21 +1712,6 @@
              Lightweight Java Game Library Project
              Riven
 
-         - Base64Fast - 
-           [BSD 3-Clause License]
-           https://git.dorkbox.com/dorkbox/Utilities
-           https://migbase64.sourceforge.net/
-           Copyright 2004
-             Mikael Grev, MiG InfoCom AB. (base64@miginfocom.com)
-
-         - BCrypt - 
-           [BSD 2-Clause "Simplified" or "FreeBSD" license]
-           https://git.dorkbox.com/dorkbox/Utilities
-           https://www.mindrot.org/projects/jBCrypt
-           Copyright 2006
-             Damien Miller (djm@mindrot.org)
-           GWT modified version
-
          - Modified hex conversion utility methods - 
            [The Apache Software License, Version 2.0]
            https://git.dorkbox.com/dorkbox/Utilities
@@ -1767,12 +1752,6 @@
              Tatu Saloranta (tatu.saloranta@iki.fi)
              Contributors. See source release-notes/CREDITS
 
-         - SLF4J - Simple facade or abstraction for various logging frameworks
-           [MIT License]
-           https://www.slf4j.org
-           Copyright 2023
-             QOS.ch
-
          - XZ for Java - Complete implementation of XZ data compression in pure Java
            [Public Domain, per Creative Commons CC0]
            https://tukaani.org/xz/java.html
@@ -1786,18 +1765,6 @@
            Copyright 2023
              The Netty Project
              Contributors. See source NOTICE
-
-         - Bouncy Castle Crypto - Lightweight cryptography API and JCE Extension
-           [The Apache Software License, Version 2.0]
-           https://www.bouncycastle.org
-           Copyright 2023
-             The Legion of the Bouncy Castle Inc
-
-         - Lightweight Java Game Library - Java library that enables cross-platform access to popular native APIs
-           [BSD 3-Clause License]
-           https://github.com/LWJGL/lwjgl3
-           Copyright 2023
-             Lightweight Java Game Library
 
          - TypeTools - A simple, zero-dependency library for working with types. Supports Java 1.6+ and Android.
            [The Apache Software License, Version 2.0]
