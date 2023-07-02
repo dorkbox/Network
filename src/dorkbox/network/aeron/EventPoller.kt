@@ -80,7 +80,7 @@ internal class EventPoller {
     fun configure(logger: KLogger, config: Configuration, endPoint: EndPoint<*>) = runBlocking {
         mutex.withLock {
             logger.debug { "Initializing the Network Event Poller..." }
-            configureEventsEndpoints.add(ByteArrayWrapper.wrap(endPoint.storage.publicKey)!!)
+            configureEventsEndpoints.add(ByteArrayWrapper.wrap(endPoint.storage.publicKey))
 
             if (!configured) {
                 logger.trace { "Configuring the Network Event Poller..." }

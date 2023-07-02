@@ -124,16 +124,24 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
         }
     }
 
+    /**
+     * @return true if both the private and public keys are non-null
+     */
+    fun validKeys(): Boolean {
+        val pubKey = store.get(local4Buffer) as ByteArray?
+        val privKey = store.get(privateKey_) as ByteArray?
+        return pubKey != null && privKey != null
+    }
 
     /**
      * the private key of the server
      *
      * @throws SecurityException
      */
-    var privateKey: ByteArray?
+    var privateKey: ByteArray
         get() {
             checkAccess(CryptoManagement::class.java)
-            return store[privateKey_]
+            return store[privateKey_]!!
         }
         set(value) {
             store[privateKey_] = value
@@ -144,8 +152,8 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
      *
      * @throws SecurityException
      */
-    var publicKey: ByteArray?
-        get() { return store[local4Buffer] }
+    var publicKey: ByteArray
+        get() { return store[local4Buffer]!! }
         set(value) {
             store[local4Buffer] = value
             store[local6Buffer] = value
@@ -411,4 +419,6 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
         }
         return true
     }
+
+
 }

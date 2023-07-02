@@ -82,10 +82,13 @@ internal class CryptoManagement(val logger: KLogger,
 
         // initialize the private/public keys used for negotiating ECC handshakes
         // these are ONLY used for IP connections. LOCAL connections do not need a handshake!
-        var privateKeyBytes = settingsStore.privateKey
-        var publicKeyBytes = settingsStore.publicKey
+        val privateKeyBytes: ByteArray
+        val publicKeyBytes: ByteArray
 
-        if (privateKeyBytes == null || publicKeyBytes == null) {
+        if (settingsStore.validKeys()) {
+            privateKeyBytes = settingsStore.privateKey
+            publicKeyBytes = settingsStore.publicKey
+        } else {
             try {
                 // seed our RNG based off of this and create our ECC keys
                 val seedBytes = Entropy["There are no ECC keys for the ${type.simpleName} yet"]
@@ -108,8 +111,6 @@ internal class CryptoManagement(val logger: KLogger,
                 throw SecurityException(message, e)
             }
         }
-
-        publicKeyBytes!!
 
         logger.info("ECC public key: ${publicKeyBytes.toHexString()}")
 
