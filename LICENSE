@@ -125,7 +125,7 @@
        Kotlin Compiler, Test Data+Libraries, and Tools repository contain third-party code, to which different licenses may apply
        See: https://github.com/JetBrains/kotlin/blob/master/license/README.md
 
-     - ByteUtilties - Byte manipulation and Unsigned Number Utilities
+     - ByteUtilities - Byte manipulation and SHA/xxHash utilities
        [The Apache Software License, Version 2.0]
        https://git.dorkbox.com/dorkbox/ByteUtilities
        Copyright 2023
@@ -182,13 +182,19 @@
 
              - Objenesis - 
                [The Apache Software License, Version 2.0]
-               http://objenesis.org
+               https://github.com/easymock/objenesis
                  Objenesis Team and all contributors
 
              - MinLog-SLF4J - 
                [BSD 3-Clause License]
                https://github.com/EsotericSoftware/minlog
                  Nathan Sweet
+
+         - Lightweight Java Game Library - Java library that enables cross-platform access to popular native APIs
+           [BSD 3-Clause License]
+           https://github.com/LWJGL/lwjgl3
+           Copyright 2023
+             Lightweight Java Game Library
 
          - Updates - Software Update Management
            [The Apache Software License, Version 2.0]
@@ -1685,23 +1691,6 @@
            Copyright 2003
              Sean Luke
              Michael Lecuyer (portions Copyright 1993
-
-         - FileUtil (code from FilenameUtils.java for normalize + dependencies) - 
-           [The Apache Software License, Version 2.0]
-           https://git.dorkbox.com/dorkbox/Utilities
-           https://commons.apache.org/proper/commons-io/
-           Copyright 2013
-             The Apache Software Foundation
-             Kevin A. Burton
-             Scott Sanders
-             Daniel Rall
-             Christoph.Reck
-             Peter Donald
-             Jeff Turner
-             Matthew Hawthorne
-             Martin Cooper
-             Jeremias Maerki
-             Stephen Colebourne
 
          - FastThreadLocal - 
            [BSD 3-Clause License]
