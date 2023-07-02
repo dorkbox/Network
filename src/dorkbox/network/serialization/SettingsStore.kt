@@ -39,16 +39,16 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
          *
          * Because we assigned BOTH to the same thing, it doesn't REALLY matter which one we use, so we use BOTH!
          */
-        internal val local4Buffer = IPv4.WILDCARD
-        internal val local6Buffer = IPv6.WILDCARD
+        private val local4Buffer = IPv4.WILDCARD
+        private val local6Buffer = IPv6.WILDCARD
 
-        internal const val saltKey = "_salt"
-        internal const val privateKey = "_private"
+        private const val saltKey = "_salt"
+        private const val privateKey_ = "_private"
     }
 
 
 
-    val store: Storage
+    private val store: Storage
 
     init {
         store = storageBuilder.logger(logger).apply {
@@ -61,7 +61,7 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
 
                     // we want the keys to be easy to read in case we are using string based storage
                     val xKey: Any? = when (key) {
-                        saltKey, privateKey -> key
+                        saltKey, privateKey_ -> key
                         else -> {
                             IP.toAddress(key)
                         }
@@ -77,7 +77,7 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
                 }.onSave { _, key, value, save ->
                     // we want the keys to be easy to read in case we are using string based storage
                     val xKey =  when (key) {
-                        saltKey, privateKey, Storage.versionTag -> key
+                        saltKey, privateKey_, Storage.versionTag -> key
                         is InetAddress -> IP.toString(key)
                         else -> null
                     }
@@ -126,47 +126,36 @@ class SettingsStore(storageBuilder: Storage.Builder, val logger: KLogger) : Auto
 
 
     /**
-     * @return the private key of the server
+     * the private key of the server
      *
      * @throws SecurityException
      */
-    fun getPrivateKey(): ByteArray? {
-        checkAccess(CryptoManagement::class.java)
-        return store[privateKey]
-    }
+    var privateKey: ByteArray?
+        get() {
+            checkAccess(CryptoManagement::class.java)
+            return store[privateKey_]
+        }
+        set(value) {
+            store[privateKey_] = value
+        }
 
     /**
-     * Saves the private key of the server
+     * the public key of the server
      *
      * @throws SecurityException
      */
-    fun savePrivateKey(serverPrivateKey: ByteArray) {
-        store[privateKey] = serverPrivateKey
-    }
-
-    /**
-     * @return the public key of the server
-     *
-     * @throws SecurityException
-     */
-    fun getPublicKey(): ByteArray? {
-        return store[local4Buffer]
-    }
-
-    /**
-     * Saves the public key of the server
-     *
-     * @throws SecurityException
-     */
-    fun savePublicKey(serverPublicKey: ByteArray) {
-        store[local4Buffer] = serverPublicKey
-        store[local6Buffer] = serverPublicKey
-    }
+    var publicKey: ByteArray?
+        get() { return store[local4Buffer] }
+        set(value) {
+            store[local4Buffer] = value
+            store[local6Buffer] = value
+        }
 
     /**
      * @return the server salt
      */
-    fun getSalt(): ByteArray {
+    val salt: ByteArray
+        get() {
         return store[saltKey]!!
     }
 

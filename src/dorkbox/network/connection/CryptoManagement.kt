@@ -78,12 +78,12 @@ internal class CryptoManagement(val logger: KLogger,
             logger.warn("WARNING: Disabling remote key validation is a security risk!!")
         }
 
-        secureRandom.setSeed(settingsStore.getSalt())
+        secureRandom.setSeed(settingsStore.salt)
 
         // initialize the private/public keys used for negotiating ECC handshakes
         // these are ONLY used for IP connections. LOCAL connections do not need a handshake!
-        var privateKeyBytes = settingsStore.getPrivateKey()
-        var publicKeyBytes = settingsStore.getPublicKey()
+        var privateKeyBytes = settingsStore.privateKey
+        var publicKeyBytes = settingsStore.publicKey
 
         if (privateKeyBytes == null || publicKeyBytes == null) {
             try {
@@ -100,8 +100,8 @@ internal class CryptoManagement(val logger: KLogger,
                 privateKeyBytes = xdhPrivate.scalar
 
                 // save to properties file
-                settingsStore.savePrivateKey(privateKeyBytes)
-                settingsStore.savePublicKey(publicKeyBytes)
+                settingsStore.privateKey = privateKeyBytes
+                settingsStore.publicKey = publicKeyBytes
             } catch (e: Exception) {
                 val message = "Unable to initialize/generate ECC keys. FORCED SHUTDOWN."
                 logger.error(message, e)
