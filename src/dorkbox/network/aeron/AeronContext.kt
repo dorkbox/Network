@@ -140,7 +140,7 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
         // we ONLY do this during the initial startup check because it will delete the directory, and we don't always want to do this.
         //
 
-        val isRunning = try {
+        var isRunning = try {
             context.isDriverActive(driverTimeout) { }
         } catch (e: DriverTimeoutException) {
             // we have to delete the directory, since it was corrupted, and we try again.
@@ -171,7 +171,19 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
                 Thread.sleep(timeoutInNanos)
             }
 
-            require(config.forceAllowSharedAeronDriver) { "Aeron is currently running, and this is the first instance created by this JVM. " +
+            isRunning = try {
+                context.isDriverActive(driverTimeout) { }
+            } catch (e: DriverTimeoutException) {
+                // we have to delete the directory, since it was corrupted, and we try again.
+                if (aeronDir.deleteRecursively()) {
+                    context.isDriverActive(driverTimeout) { }
+                } else {
+                    // unable to delete the directory
+                    throw e
+                }
+            }
+
+            require(!isRunning || config.forceAllowSharedAeronDriver) { "Aeron is currently running, and this is the first instance created by this JVM. " +
                     "You must use `config.forceAllowSharedAeronDriver` to be able to re-use a shared aeron process at: $aeronDir" }
         }
 
