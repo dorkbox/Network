@@ -15,6 +15,7 @@
  */
 package dorkbox.network
 
+import dorkbox.bytes.toHexString
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronPoller
 import dorkbox.network.aeron.EventPoller
@@ -179,6 +180,10 @@ open class Server<CONNECTION : Connection>(
     @Volatile
     var port: Int = 0
         private set
+
+    private val string0: String by lazy {
+        "EndPoint [Server: $${storage.publicKey!!.toHexString()}]"
+    }
 
     final override fun newException(message: String, cause: Throwable?): Throwable {
         // +2 because we do not want to see the stack for the abstract `newException`
@@ -392,7 +397,7 @@ open class Server<CONNECTION : Connection>(
     }
 
     override fun toString(): String {
-        return "EndPoint [Server]"
+       return string0
     }
 
     /**

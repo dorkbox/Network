@@ -205,6 +205,10 @@ open class Client<CONNECTION : Connection>(
     @Volatile
     private var connection0: CONNECTION? = null
 
+    private val string0: String by lazy {
+        "EndPoint [Client: $${storage.publicKey!!.toHexString()}]"
+    }
+
     final override fun newException(message: String, cause: Throwable?): Throwable {
         // +2 because we do not want to see the stack for the abstract `newException`
         val clientException = ClientException(message, cause)
@@ -907,7 +911,7 @@ open class Client<CONNECTION : Connection>(
     }
 
     override fun toString(): String {
-        return "EndPoint [Client: $${storage.publicKey!!.toHexString()}]"
+        return string0
     }
 
     fun <R> use(block: (Client<CONNECTION>) -> R): R {

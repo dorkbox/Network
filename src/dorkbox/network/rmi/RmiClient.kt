@@ -74,10 +74,8 @@ internal class RmiClient(val isGlobal: Boolean,
         @Suppress("UNCHECKED_CAST")
         private val EMPTY_ARRAY: Array<Any> = Collections.EMPTY_LIST.toTypedArray() as Array<Any>
 
-        private val safeAsyncState = object: ThreadLocal<Boolean?>() {
-            override fun initialValue(): Boolean? {
-                return null
-            }
+        private val safeAsyncState: ThreadLocal<Boolean?> = ThreadLocal.withInitial {
+            null
         }
 
         private const val charPrim = 0.toChar()
