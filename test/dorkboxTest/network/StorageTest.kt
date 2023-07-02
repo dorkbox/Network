@@ -38,8 +38,8 @@ class StorageTest : BaseTest() {
             settingsStore = sharedStore
         }
 
-        val serverSalt = Server<Connection>(serverConfig).use { it.storage.getSalt() }
-        val clientSalt = Client<Connection>(config).use { it.storage.getSalt() }
+        val serverSalt = Server<Connection>(serverConfig).use { it.storage.salt }
+        val clientSalt = Client<Connection>(config).use { it.storage.salt }
 
         Assert.assertTrue(serverSalt.contentEquals(clientSalt))
     }
@@ -47,10 +47,10 @@ class StorageTest : BaseTest() {
 
     @Test
     fun memoryTest() {
-        val salt1 = SettingsStore(Storage.Memory(), KotlinLogging.logger("test1")).use { it.getSalt() }
+        val salt1 = SettingsStore(Storage.Memory(), KotlinLogging.logger("test1")).use { it.salt }
 
-        val salt2 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Memory() }).use { it.storage.getSalt() }
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Memory() }).use { it.storage.getSalt() }
+        val salt2 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Memory() }).use { it.storage.salt }
+        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Memory() }).use { it.storage.salt }
 
         Assert.assertFalse(salt1.contentEquals(salt2))
         Assert.assertFalse(salt1.contentEquals(salt3))
@@ -82,14 +82,14 @@ class StorageTest : BaseTest() {
     fun propFileTest() {
         val file = File("test.db").absoluteFile
 
-        val salt1 = SettingsStore(Storage.Property(), KotlinLogging.logger("test1")).use { it.getSalt() }
-        val salt2 = SettingsStore(Storage.Property(), KotlinLogging.logger("test2")).use { it.getSalt() }
+        val salt1 = SettingsStore(Storage.Property(), KotlinLogging.logger("test1")).use { it.salt }
+        val salt2 = SettingsStore(Storage.Property(), KotlinLogging.logger("test2")).use { it.salt }
 
         Assert.assertArrayEquals(salt1, salt2)
         file.delete()
 
-        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Property().file(file) }).use { it.storage.getSalt() }
-        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Property().file(file) }).use { it.storage.getSalt() }
+        val salt3 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Property().file(file) }).use { it.storage.salt }
+        val salt4 = Server<Connection>(serverConfig().apply { settingsStore = Storage.Property().file(file) }).use { it.storage.salt }
 
         Assert.assertArrayEquals(salt3, salt4)
         Assert.assertFalse(salt1.contentEquals(salt4))
