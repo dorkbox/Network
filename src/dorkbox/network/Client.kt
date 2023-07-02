@@ -665,7 +665,7 @@ open class Client<CONNECTION : Connection>(
 
 
         // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
-        val connectionInfo = handshake.hello(handshakeConnection, connectionTimeoutSec, uuid)
+        val connectionInfo = handshake.hello(handshakeConnection, connectionTimeoutSec)
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
         val validateRemoteAddress = if (handshakeConnection.pubSub.isIpc) {
@@ -732,9 +732,9 @@ open class Client<CONNECTION : Connection>(
 
         val newConnection: CONNECTION
         if (handshakeConnection.pubSub.isIpc) {
-            newConnection = connectionFunc(ConnectionParams(uuid, this, clientConnection.connectionInfo, PublicKeyValidationState.VALID))
+            newConnection = connectionFunc(ConnectionParams(connectionInfo.publicKey, this, clientConnection.connectionInfo, PublicKeyValidationState.VALID))
         } else {
-            newConnection = connectionFunc(ConnectionParams(uuid, this, clientConnection.connectionInfo, validateRemoteAddress))
+            newConnection = connectionFunc(ConnectionParams(connectionInfo.publicKey, this, clientConnection.connectionInfo, validateRemoteAddress))
             address!!
 
             // NOTE: Client can ALWAYS connect to the server. The server makes the decision if the client can connect or not.
@@ -907,7 +907,7 @@ open class Client<CONNECTION : Connection>(
     }
 
     override fun toString(): String {
-        return "EndPoint [Client: $uuid]"
+        return "EndPoint [Client: $${storage.publicKey!!.toHexString()}]"
     }
 
     fun <R> use(block: (Client<CONNECTION>) -> R): R {

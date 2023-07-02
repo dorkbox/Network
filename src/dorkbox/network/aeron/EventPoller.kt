@@ -16,25 +16,19 @@
 
 package dorkbox.network.aeron
 
+import dorkbox.bytes.ByteArrayWrapper
 import dorkbox.collections.ConcurrentIterator
 import dorkbox.network.Configuration
 import dorkbox.network.connection.EndPoint
 import dorkbox.util.NamedThreadFactory
 import dorkbox.util.sync.CountDownLatch
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import mu.KotlinLogging
 import org.agrona.concurrent.IdleStrategy
-import java.util.*
 import java.util.concurrent.*
 
 /**
@@ -65,7 +59,7 @@ internal class EventPoller {
     // this is thread safe
     private val pollEvents = ConcurrentIterator<Pair<suspend EventPoller.()->Int, suspend ()->Unit>>()
     private val submitEvents = atomic(0)
-    private val configureEventsEndpoints = mutableSetOf<UUID>()
+    private val configureEventsEndpoints = mutableSetOf<ByteArrayWrapper>()
 
     @Volatile
     private var delayClose = false
@@ -86,7 +80,7 @@ internal class EventPoller {
     fun configure(logger: KLogger, config: Configuration, endPoint: EndPoint<*>) = runBlocking {
         mutex.withLock {
             logger.debug { "Initializing the Network Event Poller..." }
-            configureEventsEndpoints.add(endPoint.uuid)
+            configureEventsEndpoints.add(ByteArrayWrapper.wrap(endPoint.storage.publicKey)!!)
 
             if (!configured) {
                 logger.trace { "Configuring the Network Event Poller..." }
@@ -198,7 +192,8 @@ internal class EventPoller {
 
             // ONLY if there are no more poll-events do we ACTUALLY shut down.
             // when an endpoint closes its polling, it will automatically be removed from this datastructure.
-            configureEventsEndpoints.removeIf { it == endPoint.uuid }
+            val publicKeyWrapped = ByteArrayWrapper.wrap(endPoint.storage.publicKey)
+            configureEventsEndpoints.removeIf { it == publicKeyWrapped }
             val cEvents = configureEventsEndpoints.size
 
             // these prevent us from closing too early

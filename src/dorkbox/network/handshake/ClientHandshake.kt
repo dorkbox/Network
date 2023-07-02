@@ -28,7 +28,6 @@ import io.aeron.logbuffer.Header
 import kotlinx.coroutines.delay
 import mu.KLogger
 import org.agrona.DirectBuffer
-import java.util.*
 import java.util.concurrent.*
 
 internal class ClientHandshake<CONNECTION: Connection>(
@@ -88,7 +87,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
             // ugh, this is verbose -- but necessary
             val message = try {
-                val msg = handshaker.readMessage(buffer, offset, length, logInfo)
+                val msg = handshaker.readMessage(buffer, offset, length)
 
                 // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                 if (msg !is HandshakeMessage) {
@@ -178,7 +177,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    suspend fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutSec: Int, uuid: UUID) : ClientConnectionInfo {
+    suspend fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutSec: Int) : ClientConnectionInfo {
         val pubSub = handshakeConnection.pubSub
 
         // is our pub still connected??
@@ -190,17 +189,14 @@ internal class ClientHandshake<CONNECTION: Connection>(
         reset()
         connectKey = getSafeConnectKey()
 
-        val publicKey = client.storage.getPublicKey()!!
-
         try {
             // Send the one-time pad to the server.
             handshaker.writeMessage(pubSub.pub, handshakeConnection.details,
                                     HandshakeMessage.helloFromClient(
                                         connectKey = connectKey,
-                                        publicKey = publicKey,
+                                        publicKey = client.storage.publicKey!!,
                                         streamIdSub = pubSub.streamIdSub,
-                                        portSub = pubSub.portSub,
-                                        uuid = uuid
+                                        portSub = pubSub.portSub
                                     ))
         } catch (e: Exception) {
             handshakeConnection.close()

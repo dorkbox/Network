@@ -15,7 +15,6 @@
  */
 package dorkbox.network.connection
 
-import com.fasterxml.uuid.impl.RandomBasedGenerator
 import dorkbox.collections.ConcurrentIterator
 import dorkbox.netUtil.IP
 import dorkbox.network.Client
@@ -118,12 +117,6 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         }
     }
 
-    /**
-     * The UUID is a unique, in-memory instance that is created on object construction
-     */
-    val uuid = RandomBasedGenerator(CryptoManagement.secureRandom).generate()
-
-    // the ID would be different?? but the UUID would be the same??
     val logger: KLogger = KotlinLogging.logger(loggerName)
 
     // this is rather silly, BUT if there are more complex errors WITH the coroutine that occur, a regular try/catch WILL NOT catch it.

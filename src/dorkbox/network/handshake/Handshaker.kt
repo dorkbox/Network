@@ -165,7 +165,7 @@ internal class Handshaker<CONNECTION : Connection>(
      *
      * @return the message
      */
-    internal fun readMessage(buffer: DirectBuffer, offset: Int, length: Int, logInfo: String): Any? {
+    internal fun readMessage(buffer: DirectBuffer, offset: Int, length: Int): Any? {
         // NOTE: This ABSOLUTELY MUST be done on the same thread! This cannot be done on a new one, because the buffer could change!
        return handshakeReadKryo.read(buffer, offset, length)
     }

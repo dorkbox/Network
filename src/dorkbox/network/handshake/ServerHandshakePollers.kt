@@ -93,7 +93,7 @@ internal object ServerHandshakePollers {
 
             // ugh, this is verbose -- but necessary
             val message = try {
-                val msg = handshaker.readMessage(buffer, offset, length, logInfo)
+                val msg = handshaker.readMessage(buffer, offset, length)
 
                 // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                 if (msg !is HandshakeMessage) {
@@ -138,22 +138,28 @@ internal object ServerHandshakePollers {
                         return@launch
                     }
 
-                    val success = handshake.processIpcHandshakeMessageServer(
-                        server = server,
-                        handshaker = handshaker,
-                        aeronDriver = driver,
-                        handshakePublication = publication,
-                        clientUuid = HandshakeMessage.uuidReader(message.registrationData!!),
-                        message = message,
-                        aeronLogInfo = logInfo,
-                        connectionFunc = connectionFunc,
-                        logger = logger
-                    )
 
-                    if (success) {
-                        publications[connectKey] = publication
-                    } else {
+                    try {
+                        val success = handshake.processIpcHandshakeMessageServer(
+                            server = server,
+                            handshaker = handshaker,
+                            aeronDriver = driver,
+                            handshakePublication = publication,
+                            publicKey = message.publicKey!!,
+                            message = message,
+                            aeronLogInfo = logInfo,
+                            connectionFunc = connectionFunc,
+                            logger = logger
+                        )
+
+                        if (success) {
+                            publications[connectKey] = publication
+                        } else {
+                            driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
+                        }
+                    } catch (e: Exception) {
                         driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
+                        server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error processing IPC handshake", e))
                     }
                 } else {
                     val publication = publications.remove(connectKey)
@@ -259,7 +265,7 @@ internal object ServerHandshakePollers {
 
             // ugh, this is verbose -- but necessary
             val message = try {
-                val msg = handshaker.readMessage(buffer, offset, length, logInfo)
+                val msg = handshaker.readMessage(buffer, offset, length)
 
                 // VALIDATE:: a Registration object is the only acceptable message during the connection phase
                 if (msg !is HandshakeMessage) {
@@ -313,7 +319,7 @@ internal object ServerHandshakePollers {
                         server = server,
                         handshaker = handshaker,
                         handshakePublication = publication,
-                        clientUuid = HandshakeMessage.uuidReader(message.registrationData!!),
+                        publicKey = message.publicKey!!,
                         clientAddress = clientAddress,
                         clientAddressString = clientAddressString,
                         isReliable = isReliable,

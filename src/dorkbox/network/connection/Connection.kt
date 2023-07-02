@@ -75,7 +75,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
     /**
      * This is the client UUID. This is useful determine if the same client is connecting multiple times to a server (instead of only using IP address)
      */
-    val uuid = connectionParameters.clientUuid
+    val uuid = connectionParameters.publicKey
 
     /**
      * The unique session id of this connection, assigned by the server.

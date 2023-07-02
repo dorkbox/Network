@@ -16,10 +16,9 @@
 package dorkbox.network.connection
 
 import dorkbox.network.handshake.PubSub
-import java.util.*
 
 data class ConnectionParams<CONNECTION : Connection>(
-    val clientUuid: UUID,
+    val publicKey: ByteArray,
     val endPoint: EndPoint<CONNECTION>,
     val connectionInfo: PubSub,
     val publicKeyValidation: PublicKeyValidationState
