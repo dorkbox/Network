@@ -21,6 +21,7 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.joran.JoranConfigurator
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
+import dorkbox.bytes.toHexString
 import dorkbox.network.*
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.connection.Connection
@@ -184,11 +185,11 @@ abstract class BaseTest {
             }
         }
 
-        endPoint.onInit { logger.error { "UNIT TEST: init $id ($uuid)" } }
-        endPoint.onConnect { logger.error { "UNIT TEST: connect $id ($uuid)" } }
-        endPoint.onDisconnect { logger.error { "UNIT TEST: disconnect $id ($uuid)" } }
+        endPoint.onInit { logger.error { "UNIT TEST: init $id (${uuid.toHexString()})" } }
+        endPoint.onConnect { logger.error { "UNIT TEST: connect $id (${uuid.toHexString()})" } }
+        endPoint.onDisconnect { logger.error { "UNIT TEST: disconnect $id (${uuid.toHexString()})" } }
 
-        endPoint.onError { logger.error(it) { "UNIT TEST: ERROR! $id ($uuid)" } }
+        endPoint.onError { logger.error(it) { "UNIT TEST: ERROR! $id (${uuid.toHexString()})" } }
 
         endPointConnections.add(endPoint)
     }
