@@ -333,7 +333,7 @@ internal class ClientHandshakeDriver(
         streamIdAllocator.free(pubSub.streamIdSub)
 
         // on close, we want to make sure this file is DELETED!
-        aeronDriver.closeAndDeleteSubscription(pubSub.sub, logInfo)
-        aeronDriver.closeAndDeletePublication(pubSub.pub, logInfo)
+        aeronDriver.close(pubSub.sub, logInfo)
+        aeronDriver.close(pubSub.pub, logInfo)
     }
 }

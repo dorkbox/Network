@@ -90,10 +90,10 @@ class AeronPubSubTest : BaseTest() {
 
 
             clientPublications.forEachIndexed { index, (clientDriver, pub) ->
-                clientDriver.closeAndDeletePublication(pub, "client_$index")
+                clientDriver.close(pub, "client_$index")
             }
 
-            serverDriver.closeAndDeleteSubscription(sub, "server")
+            serverDriver.close(sub, "server")
 
 
             clientDrivers.forEach { clientDriver ->
@@ -180,10 +180,10 @@ class AeronPubSubTest : BaseTest() {
 
 
             clientPublications.forEachIndexed { index, (clientDriver, pub) ->
-                clientDriver.closeAndDeletePublication(pub, "client_$index")
+                clientDriver.close(pub, "client_$index")
             }
 
-            serverDriver.closeAndDeleteSubscription(sub, "server")
+            serverDriver.close(sub, "server")
 
 
             clientDrivers.forEach { clientDriver ->

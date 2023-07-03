@@ -63,7 +63,7 @@ internal class ServerHandshakeDriver(
     }
 
     suspend fun close() {
-        aeronDriver.closeAndDeleteSubscription(subscription, logInfo)
+        aeronDriver.close(subscription, logInfo)
     }
 
     override fun toString(): String {

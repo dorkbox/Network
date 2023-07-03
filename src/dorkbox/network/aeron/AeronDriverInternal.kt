@@ -511,7 +511,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      */
-    suspend fun closeAndDeletePublication(publication: Publication, logger: KLogger, logInfo: String) = stateMutex.withLock {
+    suspend fun close(publication: Publication, logger: KLogger, logInfo: String) = stateMutex.withLock {
         val name = if (publication is ConcurrentPublication) {
             "publication"
         } else {
@@ -562,7 +562,7 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     /**
      * Guarantee that the publication is closed AND the backing file is removed
      */
-    suspend fun closeAndDeleteSubscription(subscription: Subscription, logger: KLogger, logInfo: String) {
+    suspend fun close(subscription: Subscription, logger: KLogger, logInfo: String) {
         logger.trace { "Aeron Driver [$driverId]: Closing subscription [$logInfo] :: regId=${subscription.registrationId()}, sessionId=${subscription.images().firstOrNull()?.sessionId()}, streamId=${subscription.streamId()}" }
 
         val aeron1 = aeron
@@ -841,17 +841,17 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
 
 
     /**
-     * @return the aeron media driver log file for a specific publication. This should be removed when a publication is closed (but is not always!)
+     * @return the aeron media driver log file for a specific publication.
      */
-    private fun getMediaDriverFile(publication: Publication): File {
+    fun getMediaDriverFile(publication: Publication): File {
         return context.directory.resolve("publications").resolve("${publication.registrationId()}.logbuffer")
     }
 
     /**
-     * @return the aeron media driver log file for a specific subscription. This should be removed when a subscription is closed (but is not always!)
+     * @return the aeron media driver log file for a specific image (within a subscription, an image is the "connection" with a publication).
      */
-    private fun getMediaDriverFile(subscription: Subscription): File {
-        return context.directory.resolve("subscriptions").resolve("${subscription.registrationId()}.logbuffer")
+    fun getMediaDriverFile(image: Image): File {
+        return context.directory.resolve("images").resolve("${image.correlationId()}.logbuffer")
     }
 
     /**

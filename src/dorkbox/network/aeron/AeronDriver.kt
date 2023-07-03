@@ -477,7 +477,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
             delay(200L)
         }
 
-        closeAndDeletePublication(publication, logInfo)
+        close(publication, logInfo)
 
         val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Publication timed out in $handshakeTimeoutSec seconds while waiting for connection state: ${publication.channel()} streamId=${publication.streamId()}"))
         exception.cleanAllStackTrace()
@@ -527,8 +527,8 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * This can throw exceptions!
      */
-    suspend fun closeAndDeletePublication(publication: Publication, logInfo: String) {
-        internal.closeAndDeletePublication(publication, logger, logInfo)
+    suspend fun close(publication: Publication, logInfo: String) {
+        internal.close(publication, logger, logInfo)
     }
 
     /**
@@ -536,8 +536,8 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      *
      * This can throw exceptions!
      */
-    suspend fun closeAndDeleteSubscription(subscription: Subscription, logInfo: String) {
-        internal.closeAndDeleteSubscription(subscription, logger, logInfo)
+    suspend fun close(subscription: Subscription, logInfo: String) {
+        internal.close(subscription, logger, logInfo)
     }
 
 
@@ -564,6 +564,20 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
     suspend fun closed() = internal.closed()
 
     suspend fun isInUse(): Boolean = internal.isInUse(logger)
+
+    /**
+     * @return the aeron media driver log file for a specific publication.
+     */
+    fun getMediaDriverFile(publication: Publication): File {
+        return internal.getMediaDriverFile(publication)
+    }
+
+    /**
+     * @return the aeron media driver log file for a specific image (within a subscription, an image is the "connection" with a publication).
+     */
+    fun getMediaDriverFile(image: Image): File {
+        return internal.getMediaDriverFile(image)
+    }
 
     /**
      * expose the internal counters of the Aeron driver

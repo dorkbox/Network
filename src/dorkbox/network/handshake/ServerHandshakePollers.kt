@@ -77,7 +77,7 @@ internal object ServerHandshakePollers {
             .expirationPolicy(ExpirationPolicy.CREATED)
             .expirationListener<Long, Publication> { connectKey, publication ->
                 runBlocking {
-                    driver.closeAndDeletePublication(publication, "Server IPC Handshake ($connectKey)")
+                    driver.close(publication, "Server IPC Handshake ($connectKey)")
                 }
             }
             .build<Long, Publication>()
@@ -89,6 +89,8 @@ internal object ServerHandshakePollers {
             // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
             val sessionId = header.sessionId()
             val streamId = header.streamId()
+            val image = header.context() as Image
+
             val logInfo = "$sessionId/$streamId : IPC" // Server is the "source", client mirrors the server
 
             // ugh, this is verbose -- but necessary
@@ -105,7 +107,13 @@ internal object ServerHandshakePollers {
             } catch (e: Exception) {
                 server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error de-serializing handshake message!!", e))
                 null
-            } ?: return
+            } ?: run {
+                // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                driver.getMediaDriverFile(image).delete()
+
+                return
+            }
 
 
 
@@ -124,6 +132,10 @@ internal object ServerHandshakePollers {
                     val publication = try {
                         driver.addExclusivePublication(publicationUri, message.streamId, logInfo, true)
                     } catch (e: Exception) {
+                        // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                        // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                        driver.getMediaDriverFile(image).delete()
+
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
                         return@launch
                     }
@@ -134,6 +146,10 @@ internal object ServerHandshakePollers {
                             ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
                         }
                     } catch (e: Exception) {
+                        // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                        // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                        driver.getMediaDriverFile(image).delete()
+
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create IPC publication back to client remote process", e))
                         return@launch
                     }
@@ -155,16 +171,24 @@ internal object ServerHandshakePollers {
                         if (success) {
                             publications[connectKey] = publication
                         } else {
-                            driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
+                            driver.close(publication, "HANDSHAKE-IPC")
                         }
                     } catch (e: Exception) {
-                        driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
+                        // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                        // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                        driver.getMediaDriverFile(image).delete()
+
+                        driver.close(publication, "HANDSHAKE-IPC")
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error processing IPC handshake", e))
                     }
                 } else {
                     val publication = publications.remove(connectKey)
 
                     if (publication == null) {
+                        // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                        // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                        driver.getMediaDriverFile(image).delete()
+
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] No publication back to IPC"))
                         return@launch
                     }
@@ -179,7 +203,7 @@ internal object ServerHandshakePollers {
                         logger = logger
                     )
 
-                    driver.closeAndDeletePublication(publication, "HANDSHAKE-IPC")
+                    driver.close(publication, "HANDSHAKE-IPC")
                 }
             }
         }
@@ -215,7 +239,7 @@ internal object ServerHandshakePollers {
             .expirationPolicy(ExpirationPolicy.CREATED)
             .expirationListener<Long, Publication> { connectKey, publication ->
                 runBlocking {
-                    driver.closeAndDeletePublication(publication, "Server UDP Handshake ($connectKey)")
+                    driver.close(publication, "Server UDP Handshake ($connectKey)")
                 }
             }
             .build<Long, Publication>()
@@ -232,9 +256,10 @@ internal object ServerHandshakePollers {
             // for the handshake, the sessionId IS NOT GLOBALLY UNIQUE
             val sessionId = header.sessionId()
             val streamId = header.streamId()
+            val image = header.context() as Image
 
             // note: this address will ALWAYS be an IP:PORT combo  OR  it will be aeron:ipc  (if IPC, it will be a different handler!)
-            val remoteIpAndPort = (header.context() as Image).sourceIdentity()
+            val remoteIpAndPort = image.sourceIdentity()
 
             // split
             val splitPoint = remoteIpAndPort.lastIndexOf(':')
@@ -243,6 +268,10 @@ internal object ServerHandshakePollers {
             // this should never be null, because we are feeding it a valid IP address from aeron
             val clientAddress = IP.toAddress(clientAddressString)
             if (clientAddress == null) {
+                // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                driver.getMediaDriverFile(image).delete()
+
                 // Server is the "source", client mirrors the server
                 server.listenerManager.notifyError(ServerHandshakeException("[$sessionId/$streamId] Connection from $clientAddressString not allowed! Invalid IP address!"))
                 return
@@ -254,6 +283,10 @@ internal object ServerHandshakePollers {
                 clientAddressString = IP.toString(clientAddress)
 
                 if (ipInfo.ipType == IpInfo.Companion.IpListenType.IPv4Wildcard) {
+                    // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                    // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                    driver.getMediaDriverFile(image).delete()
+
                     // we DO NOT want to listen to IPv4 traffic, but we received IPv4 traffic!
                     server.listenerManager.notifyError(ServerHandshakeException("[$sessionId/$streamId] Connection from $clientAddressString not allowed! IPv4 connections not permitted!"))
                     return
@@ -277,7 +310,13 @@ internal object ServerHandshakePollers {
             } catch (e: Exception) {
                 server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Error de-serializing handshake message!!", e))
                 null
-            } ?: return
+            } ?: run {
+                // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                driver.getMediaDriverFile(image).delete()
+
+                return
+            }
 
 
 
@@ -301,6 +340,10 @@ internal object ServerHandshakePollers {
                     val publication = try {
                         driver.addExclusivePublication(publicationUri, message.streamId, logInfo, false)
                     } catch (e: Exception) {
+                        // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                        // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                        driver.getMediaDriverFile(image).delete()
+
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
                         return@launch
                     }
@@ -311,6 +354,10 @@ internal object ServerHandshakePollers {
                             ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
                         }
                     } catch (e: Exception) {
+                        // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                        // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                        driver.getMediaDriverFile(image).delete()
+
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] Cannot create publication back to $clientAddressString", e))
                         return@launch
                     }
@@ -332,7 +379,11 @@ internal object ServerHandshakePollers {
                     if (success) {
                         publications[connectKey] = publication
                     } else {
-                        driver.closeAndDeletePublication(publication, logInfo)
+                        // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                        // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                        driver.getMediaDriverFile(image).delete()
+
+                        driver.close(publication, logInfo)
                     }
 
                 } else {
@@ -341,6 +392,10 @@ internal object ServerHandshakePollers {
                     val publication = publications.remove(connectKey)
 
                     if (publication == null) {
+                        // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
+                        // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
+                        driver.getMediaDriverFile(image).delete()
+
                         server.listenerManager.notifyError(ServerHandshakeException("[$logInfo] No publication back to $clientAddressString"))
                         return@launch
                     }
@@ -355,7 +410,7 @@ internal object ServerHandshakePollers {
                         logger = logger
                     )
 
-                    driver.closeAndDeletePublication(publication, logInfo)
+                    driver.close(publication, logInfo)
                 }
             }
         }

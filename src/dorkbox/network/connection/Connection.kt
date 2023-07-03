@@ -401,7 +401,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         logger.debug {"[$toString0] connection closing"}
 
         // on close, we want to make sure this file is DELETED!
-        endPoint.aeronDriver.closeAndDeleteSubscription(subscription, toString0)
+        endPoint.aeronDriver.close(subscription, toString0)
 
         // notify the remote endPoint that we are closing
         // we send this AFTER we close our subscription (so that no more messages will be received, when the remote end ping-pong's this message back)
@@ -420,7 +420,7 @@ open class Connection(connectionParameters: ConnectionParams<*>) {
         }
 
         // on close, we want to make sure this file is DELETED!
-        endPoint.aeronDriver.closeAndDeletePublication(publication, toString0)
+        endPoint.aeronDriver.close(publication, toString0)
 
         // NOTE: any waiting RMI messages that are in-flight will terminate when they time-out (and then do nothing)
         // NOTE: notifyDisconnect() is called inside closeAction()!!
