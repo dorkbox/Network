@@ -267,7 +267,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         hook = Thread {
             runBlocking {
-                closeSuspending(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = true)
+                close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = true)
             }
         }
 
@@ -275,7 +275,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         SigInt.register {
             runBlocking {
-                closeSuspending(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
+                close(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
             }
         }
     }
@@ -901,10 +901,10 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
      *
      * @param closeEverything unless explicitly called, this is only false when a connection is closed in the client.
      */
-    internal suspend fun closeSuspending(
+    internal suspend fun close(
         closeEverything: Boolean,
-        initiatedByClientClose: Boolean = false,
-        initiatedByShutdown: Boolean = false)
+        initiatedByClientClose: Boolean,
+        initiatedByShutdown: Boolean)
     {
         // 1) endpoints can call close()
         // 2) client can close the endpoint if the connection is D/C from aeron (and the endpoint was not closed manually)

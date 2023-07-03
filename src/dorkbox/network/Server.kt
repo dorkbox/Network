@@ -392,7 +392,7 @@ open class Server<CONNECTION : Connection>(
      */
     fun close(closeEverything: Boolean = true) {
         runBlocking {
-            closeSuspending(closeEverything)
+            close(closeEverything = closeEverything, initiatedByClientClose = false, initiatedByShutdown = false)
         }
     }
 

@@ -808,7 +808,7 @@ open class Client<CONNECTION : Connection>(
 
             // we only need to run shutdown methods if there was a network outage or D/C
             if (!shutdownInProgress.value) {
-                this@Client.closeSuspending(
+                this@Client.close(
                     closeEverything = false,
                     initiatedByClientClose = true,
                     initiatedByShutdown = false)
@@ -917,7 +917,7 @@ open class Client<CONNECTION : Connection>(
      */
     fun close(closeEverything: Boolean = true) {
         runBlocking {
-            closeSuspending(closeEverything)
+            close(closeEverything = closeEverything, initiatedByClientClose = false, initiatedByShutdown = false)
         }
     }
 
