@@ -321,13 +321,25 @@ abstract class BaseTest {
             Assert.fail("Shutdown latch not triggered!")
         }
 
-        if (!AeronDriver.areAllInstancesClosed(logger)) {
-            throw RuntimeException("Unable to shutdown! There are still Aeron drivers loaded!")
+        // we must always make sure that aeron is shut-down before starting again.
+        clients.forEach { endPoint ->
+            endPoint.ensureStopped()
+
+            if (!Client.ensureStopped(endPoint.config.copy())) {
+                throw IllegalStateException("Unable to continue, AERON client was unable to stop.")
+            }
         }
 
-        // we must always make sure that aeron is shut-down before starting again.
-        if (!Server.ensureStopped(serverConfig()) || !Client.ensureStopped(clientConfig())) {
-            throw IllegalStateException("Unable to continue, AERON was unable to stop.")
+        servers.forEach { endPoint ->
+            endPoint.ensureStopped()
+
+            if (!Client.ensureStopped(endPoint.config.copy())) {
+                throw IllegalStateException("Unable to continue, AERON server was unable to stop.")
+            }
+        }
+
+        if (!AeronDriver.areAllInstancesClosed(logger)) {
+            throw RuntimeException("Unable to shutdown! There are still Aeron drivers loaded!")
         }
 
         AeronDriver.checkForMemoryLeaks()
