@@ -67,7 +67,7 @@ import java.util.concurrent.*
  *  @throws SecurityException if unable to initialize/generate ECC keys
 */
 abstract class EndPoint<CONNECTION : Connection> private constructor(val type: Class<*>,
-                     internal val config: Configuration,
+                     val config: Configuration,
                      internal val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION,
                      loggerName: String)
     {
@@ -224,7 +224,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         // NOTE: in the event that we are IPC -- only ONE SERVER can be running IPC at a time for a single driver!
         if (type == Server::class.java && config.enableIpc) {
             runBlocking {
-                val configuration = config.copy()
+                var configuration = config.copy()
                 if (AeronDriver.isLoaded(configuration, logger)) {
                     val e = ServerException("Only one server at a time can share a single aeron driver! Make the driver unique or change it's directory: ${configuration.aeronDirectory}")
                     listenerManager.notifyError(e)
@@ -232,6 +232,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
                 }
 
 
+                configuration = config.copy()
                 if (AeronDriver.isRunning(configuration, logger)) {
                     val e = ServerException("Only one server at a time can share a single aeron driver! Make the driver unique or change it's directory: ${configuration.aeronDirectory}")
                     listenerManager.notifyError(e)

@@ -93,7 +93,16 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         internal val driverConfigurations = IntMap<AeronDriverInternal>(4)
 
 
+        /**
+         * Ensures that an endpoint (using the specified configuration) is NO LONGER running.
+         *
+         * @return true if the media driver is STOPPED.
+         */
         suspend fun ensureStopped(configuration: Configuration, logger: KLogger, timeout: Long): Boolean {
+            if (!isLoaded(configuration.copy(), logger)) {
+                return true
+            }
+
             val stopped = AeronDriver(configuration, logger, null).use {
                 it.ensureStopped(timeout, 500)
             }
@@ -112,9 +121,6 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
         suspend fun isLoaded(configuration: Configuration, logger: KLogger): Boolean {
             // not EVERYTHING is used for the media driver. For ** REUSING ** the media driver, only care about those specific settings
             val mediaDriverConfig = getDriverConfig(configuration, logger)
-
-            // hacky, but necessary for multiple checks
-            configuration.contextDefined = false
 
             // assign the driver for this configuration. THIS IS GLOBAL for a JVM, because for a specific configuration, aeron only needs to be initialized ONCE.
             // we have INSTANCE of the "wrapper" AeronDriver, because we want to be able to have references to the logger when doing things,
