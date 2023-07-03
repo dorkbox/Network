@@ -207,6 +207,14 @@ internal object ServerHandshakePollers {
                 }
             }
         }
+
+        suspend fun close() {
+            publications.forEach { (connectKey, publication) ->
+                AeronDriver.sessionIdAllocator.free(publication.sessionId())
+                driver.close(publication, "Server Handshake ($connectKey)")
+            }
+            publications.clear()
+        }
     }
 
     class UdpProc<CONNECTION : Connection>(
@@ -382,7 +390,6 @@ internal object ServerHandshakePollers {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
                         // and connections occur too quickly (within the cleanup/linger period), we can run out of memory!
                         driver.getMediaDriverFile(image).delete()
-
                         driver.close(publication, logInfo)
                     }
 
@@ -414,6 +421,14 @@ internal object ServerHandshakePollers {
                 }
             }
         }
+
+        suspend fun close() {
+            publications.forEach { (connectKey, publication) ->
+                AeronDriver.sessionIdAllocator.free(publication.sessionId())
+                driver.close(publication, "Server Handshake ($connectKey)")
+            }
+            publications.clear()
+        }
     }
 
     suspend fun <CONNECTION : Connection> ipc(server: Server<CONNECTION>, handshake: ServerHandshake<CONNECTION>): AeronPoller {
@@ -432,21 +447,25 @@ internal object ServerHandshakePollers {
                 logInfo = "HANDSHAKE-IPC"
             )
 
-            val subscription = driver.subscription
-
             object : AeronPoller {
                 // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
                 //  publication of any state to other threads and not be:
                 //   - long running
                 //   - re-entrant with the client
-                val handler = FragmentAssembler(IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc))
+                val subscription = driver.subscription
+
+                val delegate = IpcProc(logger, server, server.aeronDriver, handshake, connectionFunc)
+                val handler = FragmentAssembler(delegate)
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
                 }
 
                 override suspend fun close() {
+                    delegate.close()
+                    handler.clear()
                     driver.close()
+                    logger.info { "Closed IPC poller" }
                 }
 
                 override val info = "IPC ${driver.info}"
@@ -478,21 +497,25 @@ internal object ServerHandshakePollers {
                 logInfo = "HANDSHAKE-IPv4"
             )
 
-            val subscription = driver.subscription
-
             object : AeronPoller {
                 // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
                 //  publication of any state to other threads and not be:
                 //   - long running
                 //   - re-entrant with the client
-                val handler = FragmentAssembler(UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable))
+                val subscription = driver.subscription
+
+                val delegate = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
+                val handler = FragmentAssembler(delegate)
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
                 }
 
                 override suspend fun close() {
+                    delegate.close()
+                    handler.clear()
                     driver.close()
+                    logger.info { "Closed IPv4 poller" }
                 }
 
                 override val info = "IPv4 ${driver.info}"
@@ -522,21 +545,25 @@ internal object ServerHandshakePollers {
                 logInfo = "HANDSHAKE-IPv6"
             )
 
-            val subscription = driver.subscription
-
             object : AeronPoller {
                 // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
                 //  publication of any state to other threads and not be:
                 //   - long running
                 //   - re-entrant with the client
-                val handler = FragmentAssembler(UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable))
+                val subscription = driver.subscription
+
+                val delegate = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
+                val handler = FragmentAssembler(delegate)
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
                 }
 
                 override suspend fun close() {
+                    delegate.close()
+                    handler.clear()
                     driver.close()
+                    logger.info { "Closed IPv4 poller" }
                 }
 
                 override val info = "IPv6 ${driver.info}"
@@ -567,26 +594,25 @@ internal object ServerHandshakePollers {
                 logInfo = "HANDSHAKE-IPv4+6"
             )
 
-
-            val subscription = driver.subscription
-            val processor = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
-
             object : AeronPoller {
-                // NOTE: subscriptions (ie: reading from buffers, etc) are not thread safe!  Because it is ambiguous HOW EXACTLY they are unsafe,
-                //  we exclusively read from the DirectBuffer on a single thread.
-
                 // NOTE: Handlers are called on the client conductor thread. The client conductor thread expects handlers to do safe
                 //  publication of any state to other threads and not be:
                 //   - long running
                 //   - re-entrant with the client
-                val handler = FragmentAssembler(processor)
+                val subscription = driver.subscription
+
+                val delegate = UdpProc(logger, server, server.aeronDriver, handshake, connectionFunc, isReliable)
+                val handler = FragmentAssembler(delegate)
 
                 override fun poll(): Int {
                     return subscription.poll(handler, 1)
                 }
 
                 override suspend fun close() {
+                    delegate.close()
+                    handler.clear()
                     driver.close()
+                    logger.info { "Closed IPv4+6 poller" }
                 }
 
                 override val info = "IPv4+6 ${driver.info}"
