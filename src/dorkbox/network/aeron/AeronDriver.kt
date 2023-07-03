@@ -562,6 +562,11 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
     fun isRunning(): Boolean = internal.isRunning()
 
     /**
+     * Deletes the entire context of the aeron directory in use.
+     */
+    fun deleteAeronDir() = internal.deleteAeronDir()
+
+    /**
      * Checks to see if an endpoint (using the specified configuration) was previously closed.
      *
      * @return true if the media driver was explicitly closed

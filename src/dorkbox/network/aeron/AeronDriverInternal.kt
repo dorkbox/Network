@@ -620,6 +620,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     }
 
     /**
+     * Deletes the entire context of the aeron directory in use.
+     */
+    fun deleteAeronDir(): Boolean {
+        return context.deleteAeronDir()
+    }
+
+    /**
      * Checks to see if an endpoint (using the specified configuration) is running.
      *
      * @return true if the media driver is active and running

@@ -107,6 +107,12 @@ internal class AeronContext(config: Configuration.MediaDriverConfig, aeronErrorH
             return context.aeronDirectory()
         }
 
+    fun deleteAeronDir(): Boolean {
+        // NOTE: We must be *super* careful trying to delete directories, because if we have multiple AERON/MEDIA DRIVERS connected to the
+        //   same directory, deleting the directory will cause any other aeron connection to fail! (which makes sense).
+        return directory.deleteRecursively()
+    }
+
     /**
      * Checks to see if an endpoint (using the specified configuration) is running.
      *
