@@ -267,7 +267,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         hook = Thread {
             runBlocking {
-                closeSuspending(true, true)
+                closeSuspending(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = true)
             }
         }
 
@@ -275,7 +275,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
 
         SigInt.register {
             runBlocking {
-                closeSuspending(true, false, false)
+                closeSuspending(closeEverything = true, initiatedByClientClose = false, initiatedByShutdown = false)
             }
         }
     }
@@ -925,7 +925,7 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
             return
         }
 
-        if (!shutdownPreviouslyStarted && initiatedByShutdown) {
+        if (!shutdownPreviouslyStarted && !initiatedByShutdown) {
             try {
                 Runtime.getRuntime().removeShutdownHook(hook)
             } catch (ignored: Exception) {
