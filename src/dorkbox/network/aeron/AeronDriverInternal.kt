@@ -937,6 +937,13 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     }
 
     /**
+     * @return Time in nanoseconds a publication will be considered not connected if no status messages are received.
+     */
+    fun publicationConnectionTimeoutNs(): Long {
+        return context.context.publicationConnectionTimeoutNs()
+    }
+
+    /**
      * Make sure that we DO NOT approach the Aeron linger timeout!
      */
     suspend fun delayDriverTimeout(multiplier: Number = 1) {
@@ -965,4 +972,6 @@ internal class AeronDriverInternal(endPoint: EndPoint<*>?, private val config: C
     override fun toString(): String {
         return "Aeron Driver [${driverId}]"
     }
+
+
 }

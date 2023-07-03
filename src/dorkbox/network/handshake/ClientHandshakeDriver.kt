@@ -31,6 +31,7 @@ import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInter
 import dorkbox.network.exceptions.ClientException
 import dorkbox.network.exceptions.ClientRetryException
 import dorkbox.network.exceptions.ClientTimedOutException
+import dorkbox.util.Sys
 import io.aeron.CommonContext
 import io.aeron.Subscription
 import mu.KLogger
@@ -61,7 +62,7 @@ internal class ClientHandshakeDriver(
             remoteAddressString: String,
             remotePort: Int,
             port: Int,
-            handshakeTimeoutSec: Int = 10,
+            handshakeTimeoutNs: Long,
             reliable: Boolean,
             logger: KLogger
         ): ClientHandshakeDriver {
@@ -104,7 +105,7 @@ internal class ClientHandshakeDriver(
                 try {
                     pubSub = buildIPC(
                         aeronDriver = aeronDriver,
-                        handshakeTimeoutSec = handshakeTimeoutSec,
+                        handshakeTimeoutNs = handshakeTimeoutNs,
                         sessionIdPub = sessionIdPub,
                         streamIdPub = streamIdPub,
                         streamIdSub = streamIdSub,
@@ -148,7 +149,7 @@ internal class ClientHandshakeDriver(
 
                 pubSub = buildUDP(
                     aeronDriver = aeronDriver,
-                    handshakeTimeoutSec = handshakeTimeoutSec,
+                    handshakeTimeoutNs = handshakeTimeoutNs,
                     remoteAddress = remoteAddress,
                     remoteAddressString = remoteAddressString,
                     portPub = remotePort,
@@ -181,7 +182,7 @@ internal class ClientHandshakeDriver(
         @Throws(ClientTimedOutException::class)
         private suspend fun buildIPC(
             aeronDriver: AeronDriver,
-            handshakeTimeoutSec: Int,
+            handshakeTimeoutNs: Long,
             sessionIdPub: Int,
             streamIdPub: Int, streamIdSub: Int,
             reliable: Boolean,
@@ -203,8 +204,8 @@ internal class ClientHandshakeDriver(
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            aeronDriver.waitForConnection(publication, handshakeTimeoutSec, logInfo) { cause ->
-                ClientTimedOutException("$logInfo publication cannot connect with server!", cause)
+            aeronDriver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
+                ClientTimedOutException("$logInfo publication cannot connect with server in ${Sys.getTimePrettyFull(handshakeTimeoutNs)}", cause)
             }
 
             // Create a subscription at the given address and port, using the given stream ID.
@@ -220,7 +221,7 @@ internal class ClientHandshakeDriver(
         @Throws(ClientTimedOutException::class)
         private suspend fun buildUDP(
             aeronDriver: AeronDriver,
-            handshakeTimeoutSec: Int,
+            handshakeTimeoutNs: Long,
             remoteAddress: InetAddress,
             remoteAddressString: String,
             portPub: Int,
@@ -257,9 +258,9 @@ internal class ClientHandshakeDriver(
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            aeronDriver.waitForConnection(publication, handshakeTimeoutSec, logInfo) { cause ->
+            aeronDriver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
                 streamIdAllocator.free(streamIdSub) // we don't continue, so close this as well
-                ClientTimedOutException("$logInfo publication cannot connect with server!", cause)
+                ClientTimedOutException("$logInfo publication cannot connect with server in ${Sys.getTimePrettyFull(handshakeTimeoutNs)}", cause)
             }
 
 

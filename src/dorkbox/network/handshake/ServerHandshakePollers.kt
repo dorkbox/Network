@@ -25,11 +25,15 @@ import dorkbox.network.ServerConfiguration
 import dorkbox.network.aeron.AeronDriver
 import dorkbox.network.aeron.AeronDriver.Companion.uriHandshake
 import dorkbox.network.aeron.AeronPoller
-import dorkbox.network.connection.*
+import dorkbox.network.connection.Connection
+import dorkbox.network.connection.ConnectionParams
+import dorkbox.network.connection.EventDispatcher
+import dorkbox.network.connection.IpInfo
 import dorkbox.network.exceptions.ServerException
 import dorkbox.network.exceptions.ServerHandshakeException
 import dorkbox.network.exceptions.ServerTimedoutException
 import dorkbox.util.NamedThreadFactory
+import dorkbox.util.Sys
 import io.aeron.CommonContext
 import io.aeron.FragmentAssembler
 import io.aeron.Image
@@ -61,18 +65,14 @@ internal object ServerHandshakePollers {
         val connectionFunc: (connectionParameters: ConnectionParams<CONNECTION>) -> CONNECTION
     ): FragmentHandler {
 
-        private val connectionTimeoutSec = server.config.connectionCloseTimeoutInSeconds
         private val isReliable = server.config.isReliable
         private val handshaker = server.handshaker
+        private val handshakeTimeoutNs = handshake.handshakeTimeoutNs
 
         // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
         private val publications = ExpiringMap.builder()
             .apply {
-                // connections are extremely difficult to diagnose when the connection timeout is short
-                val timeUnit = if (EndPoint.DEBUG_CONNECTIONS) { TimeUnit.HOURS } else { TimeUnit.NANOSECONDS }
-
-                // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
-                this.expiration(TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong() * 2) + driver.lingerNs(), timeUnit)
+                this.expiration(handshakeTimeoutNs, TimeUnit.NANOSECONDS)
             }
             .expirationPolicy(ExpirationPolicy.CREATED)
             .expirationListener<Long, Publication> { connectKey, publication ->
@@ -146,8 +146,8 @@ internal object ServerHandshakePollers {
 
                     try {
                         // we actually have to wait for it to connect before we continue
-                        driver.waitForConnection(publication, connectionTimeoutSec, logInfo) { cause ->
-                            ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
+                        driver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
+                            ServerTimedoutException("$logInfo publication cannot connect with client in ${Sys.getTimePrettyFull(handshakeTimeoutNs)}", cause)
                         }
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors
@@ -245,16 +245,13 @@ internal object ServerHandshakePollers {
 
         private val ipInfo = server.ipInfo
         private val handshaker = server.handshaker
-        private val connectionTimeoutSec = server.config.connectionCloseTimeoutInSeconds
+        private val handshakeTimeoutNs = handshake.handshakeTimeoutNs
 
         // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
         private val publications = ExpiringMap.builder()
             .apply {
-                // connections are extremely difficult to diagnose when the connection timeout is short
-                val timeUnit = if (EndPoint.DEBUG_CONNECTIONS) { TimeUnit.HOURS } else { TimeUnit.NANOSECONDS }
 
-                // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
-                this.expiration(TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong() * 2) + driver.lingerNs(), timeUnit)
+                this.expiration(handshakeTimeoutNs, TimeUnit.NANOSECONDS)
             }
             .expirationPolicy(ExpirationPolicy.CREATED)
             .expirationListener<Long, Publication> { connectKey, publication ->
@@ -373,8 +370,8 @@ internal object ServerHandshakePollers {
 
                     try {
                         // we actually have to wait for it to connect before we continue
-                        driver.waitForConnection(publication, connectionTimeoutSec, logInfo) { cause ->
-                            ServerTimedoutException("$logInfo publication cannot connect with client!", cause)
+                        driver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
+                            ServerTimedoutException("$logInfo publication cannot connect with client in ${Sys.getTimePrettyFull(handshakeTimeoutNs)}", cause)
                         }
                     } catch (e: Exception) {
                         // we should immediately remove the logbuffer for this! Aeron will **EVENTUALLY** remove the logbuffer, but if errors

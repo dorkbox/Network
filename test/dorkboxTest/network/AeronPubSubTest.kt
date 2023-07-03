@@ -25,6 +25,7 @@ import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import org.junit.Assert
 import org.junit.Test
+import java.util.concurrent.*
 
 class AeronPubSubTest : BaseTest() {
     @Test
@@ -36,7 +37,7 @@ class AeronPubSubTest : BaseTest() {
             val totalCount = 40
             val port = 3535
             val serverStreamId = 55555
-            val handshakeTimeoutSec = 10
+            val handshakeTimeoutNs = TimeUnit.SECONDS.toNanos(10)
 
 
 
@@ -81,7 +82,7 @@ class AeronPubSubTest : BaseTest() {
 
                 // can throw an exception! We catch it in the calling class
                 // we actually have to wait for it to connect before we continue
-                clientDriver.waitForConnection(publication, handshakeTimeoutSec, "client_$index") { cause ->
+                clientDriver.waitForConnection(publication, handshakeTimeoutNs, "client_$index") { cause ->
                     ClientTimedOutException("Client publication cannot connect with localhost server", cause)
                 }
 
@@ -121,7 +122,7 @@ class AeronPubSubTest : BaseTest() {
             val totalCount = 40
             val port = 3535
             val serverStreamId = 55555
-            val handshakeTimeoutSec = 10
+            val handshakeTimeoutNs = TimeUnit.SECONDS.toNanos(10)
 
 
 
@@ -168,7 +169,7 @@ class AeronPubSubTest : BaseTest() {
 
                     // can throw an exception! We catch it in the calling class
                     // we actually have to wait for it to connect before we continue
-                    clientDriver.waitForConnection(publication, handshakeTimeoutSec, "client_$index") { cause ->
+                    clientDriver.waitForConnection(publication, handshakeTimeoutNs, "client_$index") { cause ->
                         ClientTimedOutException("Client publication cannot connect with localhost server", cause)
                     }
 

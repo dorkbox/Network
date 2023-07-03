@@ -21,6 +21,7 @@ import dorkbox.network.connection.CryptoManagement
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.connection.ListenerManager.Companion.cleanStackTraceInternal
 import dorkbox.network.exceptions.*
+import dorkbox.util.Sys
 import io.aeron.FragmentAssembler
 import io.aeron.Image
 import io.aeron.logbuffer.FragmentHandler
@@ -28,7 +29,6 @@ import io.aeron.logbuffer.Header
 import kotlinx.coroutines.delay
 import mu.KLogger
 import org.agrona.DirectBuffer
-import java.util.concurrent.*
 
 internal class ClientHandshake<CONNECTION: Connection>(
     private val client: Client<CONNECTION>,
@@ -177,7 +177,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
     // called from the connect thread
     // when exceptions are thrown, the handshake pub/sub will be closed
-    suspend fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutSec: Int) : ClientConnectionInfo {
+    suspend fun hello(handshakeConnection: ClientHandshakeDriver, handshakeTimeoutNs: Long) : ClientConnectionInfo {
         val pubSub = handshakeConnection.pubSub
 
         // is our pub still connected??
@@ -205,9 +205,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
 
         // block until we receive the connection information from the server
 
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong()) + client.aeronDriver.lingerNs()
         val startTime = System.nanoTime()
-        while (System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < handshakeTimeoutNs) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             pubSub.sub.poll(handler, 1)
@@ -230,8 +229,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
         if (connectionHelloInfo == null) {
             handshakeConnection.close()
 
-            val timeout = TimeUnit.NANOSECONDS.toSeconds(client.aeronDriver.lingerNs()) + handshakeTimeoutSec
-            val exception = ClientTimedOutException("$handshakeConnection Waiting for registration response from server for more than $timeout seconds")
+            val exception = ClientTimedOutException("$handshakeConnection Waiting for registration response from server for more than ${Sys.getTimePrettyFull(handshakeTimeoutNs)}")
             throw exception
         }
 
@@ -243,7 +241,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
     suspend fun done(
         handshakeConnection: ClientHandshakeDriver,
         clientConnection: ClientConnectionDriver,
-        handshakeTimeoutSec: Int,
+        handshakeTimeoutNs: Long,
         aeronLogInfo: String
     ) {
         val pubSub = clientConnection.connectionInfo
@@ -273,9 +271,8 @@ internal class ClientHandshake<CONNECTION: Connection>(
         connectionDone = false
 
         // block until we receive the connection information from the server
-        val timoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong())
         var startTime = System.nanoTime()
-        while (System.nanoTime() - startTime < timoutInNanos) {
+        while (System.nanoTime() - startTime < handshakeTimeoutNs) {
             // NOTE: regarding fragment limit size. Repeated calls to '.poll' will reassemble a fragment.
             //   `.poll(handler, 4)` == `.poll(handler, 2)` + `.poll(handler, 2)`
             handshakePubSub.sub.poll(handler, 1)
@@ -305,7 +302,7 @@ internal class ClientHandshake<CONNECTION: Connection>(
             // since this failed, close everything
             handshakeConnection.close()
 
-            val exception = ClientTimedOutException("Timed out waiting for registration response from server: $handshakeTimeoutSec seconds")
+            val exception = ClientTimedOutException("Timed out waiting for registration response from server: ${Sys.getTimePrettyFull(handshakeTimeoutNs)}")
             throw exception
         }
     }

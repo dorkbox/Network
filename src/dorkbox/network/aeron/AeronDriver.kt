@@ -25,6 +25,7 @@ import dorkbox.network.connection.EndPoint
 import dorkbox.network.connection.ListenerManager.Companion.cleanAllStackTrace
 import dorkbox.network.exceptions.AllocationException
 import dorkbox.network.handshake.RandomId65kAllocator
+import dorkbox.util.Sys
 import io.aeron.*
 import io.aeron.driver.reports.LossReportReader
 import io.aeron.driver.reports.LossReportUtil
@@ -45,7 +46,6 @@ import org.agrona.concurrent.ringbuffer.RingBufferDescriptor
 import org.agrona.concurrent.status.CountersReader
 import org.slf4j.Logger
 import java.io.File
-import java.util.concurrent.*
 
 fun ChannelUriStringBuilder.endpoint(isIpv4: Boolean, addressString: String, port: Int): ChannelUriStringBuilder {
     this.endpoint(AeronDriver.address(isIpv4, addressString, port))
@@ -458,7 +458,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      */
     suspend fun waitForConnection(
         publication: Publication,
-        handshakeTimeoutSec: Int,
+        handshakeTimeoutNs: Long,
         logInfo: String,
         onErrorHandler: suspend (Throwable) -> Exception
     ) {
@@ -466,10 +466,9 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
             return
         }
 
-        val timeoutInNanos = TimeUnit.SECONDS.toNanos(handshakeTimeoutSec.toLong())
         val startTime = System.nanoTime()
 
-        while (System.nanoTime() - startTime < timeoutInNanos) {
+        while (System.nanoTime() - startTime < handshakeTimeoutNs) {
             if (publication.isConnected) {
                 return
             }
@@ -479,7 +478,7 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
 
         close(publication, logInfo)
 
-        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Publication timed out in $handshakeTimeoutSec seconds while waiting for connection state: ${publication.channel()} streamId=${publication.streamId()}"))
+        val exception = onErrorHandler(Exception("Aeron Driver [${internal.driverId}]: Publication timed out in ${Sys.getTimePrettyFull(handshakeTimeoutNs)} while waiting for connection state: ${publication.channel()} streamId=${publication.streamId()}"))
         exception.cleanAllStackTrace()
         throw exception
     }
@@ -645,6 +644,13 @@ class AeronDriver private constructor(config: Configuration, val logger: KLogger
      * @return Time in nanoseconds a publication will linger once it is drained to recover potential tail loss.
      */
     fun lingerNs(): Long = internal.lingerNs()
+
+    /**
+     * @return Time in nanoseconds a publication will be considered not connected if no status messages are received.
+     */
+    fun publicationConnectionTimeoutNs(): Long {
+        return internal.publicationConnectionTimeoutNs()
+    }
 
     /**
      * Make sure that we DO NOT approach the Aeron linger timeout!

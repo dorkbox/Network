@@ -41,7 +41,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
     companion object {
         suspend fun build(
             aeronDriver: AeronDriver,
-            connectionTimeoutSec: Int,
+            handshakeTimeoutNs: Long,
             handshakeConnection: ClientHandshakeDriver,
             connectionInfo: ClientConnectionInfo
         ): ClientConnectionDriver {
@@ -66,7 +66,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
                 pubSub = buildIPC(
                     aeronDriver = aeronDriver,
-                    handshakeTimeoutSec = connectionTimeoutSec,
+                    handshakeTimeoutNs = handshakeTimeoutNs,
                     sessionIdPub = sessionIdPub,
                     sessionIdSub = sessionIdSub,
                     streamIdPub = streamIdPub,
@@ -89,7 +89,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
                 pubSub = buildUDP(
                     aeronDriver = aeronDriver,
-                    handshakeTimeoutSec = connectionTimeoutSec,
+                    handshakeTimeoutNs = handshakeTimeoutNs,
                     sessionIdPub = sessionIdPub,
                     sessionIdSub = sessionIdSub,
                     streamIdPub = streamIdPub,
@@ -109,7 +109,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
         @Throws(ClientTimedOutException::class)
         private suspend fun buildIPC(
             aeronDriver: AeronDriver,
-            handshakeTimeoutSec: Int,
+            handshakeTimeoutNs: Long,
             sessionIdPub: Int,
             sessionIdSub: Int,
             streamIdPub: Int,
@@ -132,7 +132,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            aeronDriver.waitForConnection(publication, handshakeTimeoutSec, logInfo) { cause ->
+            aeronDriver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
                 ClientTimedOutException("$logInfo publication cannot connect with server!", cause)
             }
 
@@ -150,7 +150,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
         @Throws(ClientTimedOutException::class)
         private suspend fun buildUDP(
             aeronDriver: AeronDriver,
-            handshakeTimeoutSec: Int,
+            handshakeTimeoutNs: Long,
             sessionIdPub: Int,
             sessionIdSub: Int,
             streamIdPub: Int,
@@ -180,7 +180,7 @@ internal class ClientConnectionDriver(val connectionInfo: PubSub) {
 
             // can throw an exception! We catch it in the calling class
             // we actually have to wait for it to connect before we continue
-            aeronDriver.waitForConnection(publication, handshakeTimeoutSec, logInfo) { cause ->
+            aeronDriver.waitForConnection(publication, handshakeTimeoutNs, logInfo) { cause ->
                 ClientTimedOutException("$logInfo publication cannot connect with server $remoteAddressString", cause)
             }
 

@@ -48,6 +48,8 @@ internal class ServerHandshake<CONNECTION : Connection>(
     val aeronDriver: AeronDriver
 ) {
 
+
+
     // note: the expire time here is a LITTLE longer than the expire time in the client, this way we can adjust for network lag if it's close
     private val pendingConnections = ExpiringMap.builder()
         .apply {
@@ -70,6 +72,23 @@ internal class ServerHandshake<CONNECTION : Connection>(
 
 
     internal val connectionsPerIpCounts = ConnectionCounts()
+
+    /**
+     * how long does the initial handshake take to connect
+     */
+    internal var handshakeTimeoutNs: Long
+
+    init {
+        // we MUST include the publication linger timeout, otherwise we might encounter problems that are NOT REALLY problems
+        var handshakeTimeoutNs = aeronDriver.publicationConnectionTimeoutNs() + aeronDriver.lingerNs()
+
+        if (EndPoint.DEBUG_CONNECTIONS) {
+            // connections are extremely difficult to diagnose when the connection timeout is short
+            handshakeTimeoutNs = TimeUnit.HOURS.toNanos(1)
+        }
+
+        this.handshakeTimeoutNs = handshakeTimeoutNs
+    }
 
     /**
      * @return true if we should continue parsing the incoming message, false if we should abort (as we are DONE processing data)

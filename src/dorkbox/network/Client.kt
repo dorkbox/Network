@@ -517,19 +517,19 @@ open class Client<CONNECTION : Connection>(
             (config.enableIpc && (remoteAddress == null || isSelfMachine)) || (!config.enableIpc && remoteAddress == null)
 
         // how long does the initial handshake take to connect
-        var handshakeTimeoutSec = 5
+        var handshakeTimeoutNs = aeronDriver.publicationConnectionTimeoutNs() + aeronDriver.lingerNs()
         // how long before we COMPLETELY give up retrying. A '0' means try forever.
-        var connectionTimoutInNanos = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
+        var connectionTimoutInNs = TimeUnit.SECONDS.toNanos(connectionTimeoutSec.toLong())
 
         if (DEBUG_CONNECTIONS) {
             // connections are extremely difficult to diagnose when the connection timeout is short
-            connectionTimoutInNanos = TimeUnit.HOURS.toNanos(1).toLong()
-            handshakeTimeoutSec = TimeUnit.HOURS.toSeconds(1).toInt()
+            connectionTimoutInNs = TimeUnit.HOURS.toNanos(1)
+            handshakeTimeoutNs = TimeUnit.HOURS.toNanos(1)
         }
 
         val startTime = System.nanoTime()
         var success = false
-        while (connectionTimoutInNanos == 0L || System.nanoTime() - startTime < connectionTimoutInNanos) {
+        while (connectionTimoutInNs == 0L || System.nanoTime() - startTime < connectionTimoutInNs) {
             if (isShutdown()) {
                 resetOnError()
 
@@ -570,7 +570,7 @@ open class Client<CONNECTION : Connection>(
                     remoteAddressString = remoteAddressString,
                     remotePort = port,
                     port = config.port,
-                    handshakeTimeoutSec = handshakeTimeoutSec,
+                    handshakeTimeoutNs = handshakeTimeoutNs,
                     reliable = reliable,
                     logger = logger
                 )
@@ -584,7 +584,7 @@ open class Client<CONNECTION : Connection>(
                     logger.info { "Creating new handshake to $logInfo" }
                 }
 
-                connect0(handshake, handshakeConnection, handshakeTimeoutSec)
+                connect0(handshake, handshakeConnection, handshakeTimeoutNs)
                 success = true
                 slowDownForException = false
 
@@ -636,7 +636,7 @@ open class Client<CONNECTION : Connection>(
         if (!success) {
             endpointIsRunning.lazySet(false)
 
-            if (System.nanoTime() - startTime < connectionTimoutInNanos) {
+            if (System.nanoTime() - startTime < connectionTimoutInNs) {
 
                 val type = if (connection0 == null) {
                     "UNKNOWN"
@@ -664,12 +664,15 @@ open class Client<CONNECTION : Connection>(
 
 
     // the handshake process might have to restart this connection process.
-    private suspend fun connect0(handshake: ClientHandshake<CONNECTION>, handshakeConnection: ClientHandshakeDriver, connectionTimeoutSec: Int) {
+    private suspend fun connect0(handshake: ClientHandshake<CONNECTION>, handshakeConnection: ClientHandshakeDriver, handshakeTimeoutNs: Long) {
         // this will block until the connection timeout, and throw an exception if we were unable to connect with the server
 
 
         // throws(ConnectTimedOutException::class, ClientRejectedException::class, ClientException::class)
-        val connectionInfo = handshake.hello(handshakeConnection, connectionTimeoutSec)
+        val connectionInfo = handshake.hello(
+            handshakeConnection = handshakeConnection,
+            handshakeTimeoutNs = handshakeTimeoutNs
+        )
 
         // VALIDATE:: check to see if the remote connection's public key has changed!
         val validateRemoteAddress = if (handshakeConnection.pubSub.isIpc) {
@@ -723,7 +726,12 @@ open class Client<CONNECTION : Connection>(
 
 
         // we are now connected, so we can connect to the NEW client-specific ports
-        val clientConnection = ClientConnectionDriver.build(aeronDriver, connectionTimeoutSec, handshakeConnection, connectionInfo)
+        val clientConnection = ClientConnectionDriver.build(
+            aeronDriver = aeronDriver,
+            handshakeTimeoutNs = handshakeTimeoutNs,
+            handshakeConnection = handshakeConnection,
+            connectionInfo = connectionInfo
+        )
 
         val pubSub = clientConnection.connectionInfo
         val logInfo = pubSub.getLogInfo(logger.isDebugEnabled)
@@ -755,7 +763,10 @@ open class Client<CONNECTION : Connection>(
         // also closes the handshake (will also throw connect timeout exception)
 
         try {
-            handshake.done(handshakeConnection, clientConnection, connectionTimeoutSec, handshakeConnection.details)
+            handshake.done(handshakeConnection, clientConnection,
+                           handshakeTimeoutNs = handshakeTimeoutNs,
+                           aeronLogInfo = handshakeConnection.details
+            )
         } catch (e: Exception) {
             listenerManager.notifyError(ClientHandshakeException("[${handshakeConnection.details}] (${handshake.connectKey}) Connection (${newConnection.id}) to [$addressString] error during handshake", e))
             throw e
