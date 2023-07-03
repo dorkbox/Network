@@ -48,6 +48,7 @@ import mu.KotlinLogging
 import org.agrona.DirectBuffer
 import org.agrona.MutableDirectBuffer
 import org.agrona.concurrent.IdleStrategy
+import org.agrona.concurrent.SigInt
 import java.util.concurrent.*
 
 // If TCP and UDP both fill the pipe, THERE WILL BE FRAGMENTATION and dropped UDP packets!
@@ -270,6 +271,12 @@ abstract class EndPoint<CONNECTION : Connection> private constructor(val type: C
         }
 
         Runtime.getRuntime().addShutdownHook(hook)
+
+        SigInt.register {
+            runBlocking {
+                closeSuspending(true, false, false)
+            }
+        }
     }
 
     internal fun isServer(function: Server<CONNECTION>.() -> Unit) {
